@@ -1,0 +1,39 @@
+{
+  "title": "Audit Log",
+  "subtitle": "Operation trace and full-link correlation",
+  "tabs": {
+    "logs": "Log List",
+    "trace": "Trace View"
+  },
+  "log": {
+    "id": "Log ID",
+    "operator": "Operator",
+    "action": "Action",
+    "resource_type": "Resource Type",
+    "resource_id": "Resource ID",
+    "status": "Status",
+    "duration_ms": "Duration (ms)",
+    "trace_id": "Trace ID",
+    "client_ip": "Client IP",
+    "user_agent": "User-Agent",
+    "detail": "Detail",
+    "created_at": "Time",
+    "view": "View Detail",
+    "view_trace": "View Trace"
+  },
+  "filter": {
+    "operator": "Operator",
+    "resource_type": "Resource Type",
+    "status": "Status",
+    "action": "Action",
+    "trace_id": "Trace ID",
+    "time_range": "Time Range",
+    "keyword": "Keyword"
+  },
+  "trace": {
+    "title": "Trace Detail",
+    "input_placeholder": "Enter Trace ID to view the trace",
+    "timeline": "Timeline",
+    "empty": "Trace not found"
+  }
+}

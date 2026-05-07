@@ -1,0 +1,39 @@
+{
+  "name": "@harnessdg/web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src/ --ext .ts,.tsx --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.5.1",
+    "@harnessdg/design-tokens": "workspace:*",
+    "@harnessdg/dict-components": "workspace:*",
+    "@harnessdg/i18n": "workspace:*",
+    "@harnessdg/shared": "workspace:*",
+    "@tanstack/react-query": "^5.56.2",
+    "antd": "^5.22.0",
+    "i18next": "^24.0.0",
+    "axios": "^1.7.7",
+    "dayjs": "^1.11.13",
+    "framer-motion": "^12.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^15.0.2",
+    "react-router-dom": "^7.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react-swc": "^4.0.0",
+    "eslint": "^9.12.0",
+    "typescript": "^5.5.4",
+    "vite": "^6.0.0"
+  }
+}

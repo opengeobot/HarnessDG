@@ -1,0 +1,30 @@
+{
+  "action": {
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "save_success": "Saved",
+    "delete": "Delete",
+    "delete_success": "Deleted",
+    "edit": "Edit",
+    "view": "View",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "import": "Import",
+    "refresh": "Refresh",
+    "operate": "Operation",
+    "confirm": "Confirm",
+    "back": "Back"
+  },
+  "status": {
+    "loading": "Loading...",
+    "empty": "No data available",
+    "error": "Failed to load",
+    "success": "Operation successful"
+  },
+  "confirm": {
+    "delete_title": "Confirm Delete",
+    "delete_desc": "This cannot be undone. Are you sure?"
+  }
+}

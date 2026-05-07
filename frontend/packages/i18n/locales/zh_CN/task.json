@@ -1,0 +1,44 @@
+{
+  "center": {
+    "title": "业务任务中心",
+    "subtitle": "选择一个任务开始工作"
+  },
+  "card": {
+    "data_ingestion": {
+      "title": "接数据",
+      "description": "快速接入新数据源至平台"
+    },
+    "build_metric": {
+      "title": "建指标",
+      "description": "定义并发布标准化业务指标"
+    },
+    "ask_data": {
+      "title": "问数",
+      "description": "用自然语言查询数据"
+    },
+    "generate_report": {
+      "title": "生成周报",
+      "description": "自动生成经营分析报告"
+    },
+    "diagnose_exception": {
+      "title": "排查异常",
+      "description": "智能定位并修复数据问题"
+    },
+    "request_permission": {
+      "title": "申请权限",
+      "description": "按需申请数据访问权限"
+    }
+  },
+  "wizard": {
+    "step_basic": "基本信息",
+    "step_definition": "口径定义",
+    "step_dimension": "维度配置",
+    "step_schedule": "调度规则",
+    "step_preview": "预览提交",
+    "btn_next": "下一步",
+    "btn_prev": "上一步",
+    "btn_submit": "提交",
+    "btn_save_draft": "保存草稿",
+    "auto_saved": "已自动保存"
+  }
+}

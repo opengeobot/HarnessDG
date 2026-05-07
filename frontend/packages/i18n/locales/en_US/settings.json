@@ -1,0 +1,52 @@
+{
+  "title": "User Management",
+  "subtitle": "Manage accounts, roles and status",
+  "tabs": {
+    "users": "Users",
+    "roles": "Roles",
+    "profile": "My Account"
+  },
+  "user": {
+    "username": "Username",
+    "display_name": "Display Name",
+    "email": "Email",
+    "phone": "Phone",
+    "avatar": "Avatar",
+    "preferred_locale": "Preferred Language",
+    "roles": "Roles",
+    "status": "Status",
+    "last_login_at": "Last Login",
+    "created_at": "Created At",
+    "actions": "Actions",
+    "create": "New User",
+    "edit": "Edit User",
+    "reset_password": "Reset Password",
+    "password": "Password",
+    "new_password": "New Password",
+    "old_password": "Old Password",
+    "confirm_password": "Confirm Password",
+    "password_mismatch": "Passwords do not match",
+    "enable": "Enable",
+    "disable": "Disable",
+    "delete_confirm": "Delete this user? They will lose access to the system",
+    "assign_roles": "Assign Roles"
+  },
+  "role": {
+    "code": "Role Code",
+    "name": "Role Name",
+    "description": "Description",
+    "permission_count": "Permissions",
+    "user_count": "Users",
+    "is_system": "System Built-in",
+    "create": "New Role",
+    "edit": "Edit Role",
+    "assign_permissions": "Assign Permissions",
+    "permissions": "Permission List"
+  },
+  "profile": {
+    "basic": "Basic Info",
+    "change_password": "Change Password",
+    "update_success": "Updated successfully",
+    "password_changed": "Password changed"
+  }
+}

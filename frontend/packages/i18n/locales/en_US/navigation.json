@@ -1,0 +1,16 @@
+{
+  "menu": {
+    "task_center": "Task Center",
+    "ontology": "Ontology",
+    "governance": "Governance",
+    "query": "Semantic Query",
+    "diagnosis": "Diagnosis",
+    "settings": "Administration",
+    "settings_users": "Users",
+    "settings_roles": "Roles",
+    "settings_dictionary": "Data Dictionary",
+    "settings_config": "System Config",
+    "settings_audit": "Audit Log",
+    "settings_profile": "My Account"
+  }
+}

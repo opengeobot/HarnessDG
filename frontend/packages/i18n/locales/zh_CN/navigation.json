@@ -1,0 +1,16 @@
+{
+  "menu": {
+    "task_center": "业务任务中心",
+    "ontology": "本体建模",
+    "governance": "治理中心",
+    "query": "语义查询",
+    "diagnosis": "异常诊断",
+    "settings": "系统管理",
+    "settings_users": "用户管理",
+    "settings_roles": "角色管理",
+    "settings_dictionary": "数据字典",
+    "settings_config": "系统配置",
+    "settings_audit": "审计日志",
+    "settings_profile": "我的账号"
+  }
+}

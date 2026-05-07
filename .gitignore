@@ -1,0 +1,20 @@
+.qoder/
+.DS_Store
+.idea/
+.trae/
+.m2/
+docs/
+.env
+shared/.env
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/node_modules/
+infra/**/.dagster/
+infra/**/dagster_home/storage/
+infra/**/dagster_home/*.db
+
+**/target/
+
+# Windows 保留名误生成文件
+/nul

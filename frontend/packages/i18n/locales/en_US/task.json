@@ -1,0 +1,44 @@
+{
+  "center": {
+    "title": "Task Center",
+    "subtitle": "Choose a task to get started"
+  },
+  "card": {
+    "data_ingestion": {
+      "title": "Ingest Data",
+      "description": "Quickly connect new data sources"
+    },
+    "build_metric": {
+      "title": "Build Metric",
+      "description": "Define and publish standardized metrics"
+    },
+    "ask_data": {
+      "title": "Ask Data",
+      "description": "Query data using natural language"
+    },
+    "generate_report": {
+      "title": "Generate Report",
+      "description": "Auto-generate business analysis reports"
+    },
+    "diagnose_exception": {
+      "title": "Diagnose Issues",
+      "description": "Intelligently locate and fix data issues"
+    },
+    "request_permission": {
+      "title": "Request Access",
+      "description": "Request data access permissions on demand"
+    }
+  },
+  "wizard": {
+    "step_basic": "Basic Info",
+    "step_definition": "Definition",
+    "step_dimension": "Dimensions",
+    "step_schedule": "Schedule",
+    "step_preview": "Preview & Submit",
+    "btn_next": "Next",
+    "btn_prev": "Previous",
+    "btn_submit": "Submit",
+    "btn_save_draft": "Save Draft",
+    "auto_saved": "Auto-saved"
+  }
+}

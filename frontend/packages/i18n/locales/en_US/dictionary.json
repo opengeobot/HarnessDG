@@ -1,0 +1,62 @@
+{
+  "title": "Data Dictionary",
+  "subtitle": "Unified management of enumerations, categories and statuses",
+  "tabs": {
+    "groups": "Groups",
+    "items": "Items",
+    "audit": "Change History"
+  },
+  "group": {
+    "code": "Group Code",
+    "name": "Group Name",
+    "description": "Description",
+    "category": "Category",
+    "is_tree": "Tree Structure",
+    "is_multiple": "Multi-select",
+    "is_editable": "Editable",
+    "status": "Status",
+    "item_count": "Item Count",
+    "actions": "Actions",
+    "create": "New Group",
+    "edit": "Edit Group",
+    "manage_items": "Manage Items",
+    "delete_confirm": "All items under this group will be deleted. Continue?"
+  },
+  "item": {
+    "code": "Item Code",
+    "label": "Label",
+    "value": "Value",
+    "parent": "Parent",
+    "icon": "Icon",
+    "color": "Color",
+    "sort_order": "Sort",
+    "is_default": "Default",
+    "is_system": "System Builtin",
+    "status": "Status",
+    "extra": "Extra Attributes",
+    "create": "New Item",
+    "edit": "Edit Item",
+    "system_item_lock": "System builtin items cannot be deleted"
+  },
+  "category": {
+    "system": "System",
+    "business": "Business",
+    "model": "Model",
+    "ui": "UI"
+  },
+  "import_export": {
+    "import": "Import",
+    "export": "Export",
+    "import_title": "Import Dictionary",
+    "export_title": "Export Dictionary",
+    "overwrite": "Overwrite existing group",
+    "import_success": "Imported successfully",
+    "export_success": "Exported successfully",
+    "import_hint": "JSON format, auto-detects group and all items"
+  },
+  "search": {
+    "placeholder": "Search by code, label, or value",
+    "scope_all": "All Groups",
+    "result_count": "{{count}} results"
+  }
+}

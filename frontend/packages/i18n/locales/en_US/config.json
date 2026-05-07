@@ -1,0 +1,40 @@
+{
+  "title": "System Configuration",
+  "subtitle": "Unified management of runtime parameters, feature flags and environment variables",
+  "config": {
+    "key": "Key",
+    "value": "Value",
+    "value_type": "Type",
+    "category": "Category",
+    "environment": "Environment",
+    "description": "Description",
+    "is_readonly": "Read-only",
+    "is_encrypted": "Encrypted",
+    "last_updated_at": "Updated At",
+    "last_updated_by": "Updated By",
+    "create": "New Config",
+    "edit": "Edit Config",
+    "view_history": "Change History",
+    "view_value": "View Value",
+    "view_value_confirm": "This value is encrypted, confirm to view?",
+    "value_type_options": {
+      "string": "String",
+      "number": "Number",
+      "boolean": "Boolean",
+      "json": "JSON"
+    },
+    "environment_options": {
+      "dev": "Dev",
+      "test": "Test",
+      "prod": "Prod"
+    },
+    "delete_confirm": "Delete this config?"
+  },
+  "history": {
+    "title": "Change History",
+    "old_value": "Old Value",
+    "new_value": "New Value",
+    "changed_by": "Changed By",
+    "changed_at": "Changed At"
+  }
+}

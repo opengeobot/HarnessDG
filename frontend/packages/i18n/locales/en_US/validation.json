@@ -1,0 +1,6 @@
+{
+  "required": "{{field}} is required",
+  "min_length": "{{field}} must be at least {{min}} characters",
+  "max_length": "{{field}} cannot exceed {{max}} characters",
+  "invalid_format": "{{field}} format is invalid"
+}
