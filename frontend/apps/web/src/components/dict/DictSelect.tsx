@@ -3,6 +3,7 @@
  * 时间：2026-05-07
  * 作者：AxeXie
  */
+import { useMemo } from 'react';
 import { Select, type SelectProps } from 'antd';
 import { useDictionary } from '@/hooks/useDictionary';
 
@@ -21,12 +22,15 @@ export function DictSelect({
 }: DictSelectProps) {
   const { items, loading, getLabel } = useDictionary(groupCode);
 
-  const options = items
-    .filter((it) => it.status !== 'inactive')
-    .map((it) => ({
-      label: getLabel(it.code),
-      value: valueField === 'value' ? it.value : it.code,
-    }));
+  const options = useMemo(
+    () => items
+      .filter((it) => it.status !== 'inactive')
+      .map((it) => ({
+        label: getLabel(it.code),
+        value: valueField === 'value' ? it.value : it.code,
+      })),
+    [items, getLabel, valueField]
+  );
 
   return (
     <Select

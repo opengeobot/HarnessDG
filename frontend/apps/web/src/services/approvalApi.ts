@@ -6,14 +6,14 @@
 import api from './api';
 
 export const approvalApi = {
-  listTemplates: (params?: any) => api.get('/approval/templates', { params }),
-  createTemplate: (data: any) => api.post('/approval/templates', data),
-  listInstances: (params?: any) => api.get('/approval/instances', { params }),
-  getInstance: (id: number) => api.get(`/approval/instances/${id}`),
-  createInstance: (data: any) => api.post('/approval/instances', data),
+  listTemplates: (params?: any) => api.get('/v1/approval/templates', { params }),
+  createTemplate: (data: any) => api.post('/v1/approval/templates', data),
+  listInstances: (params?: any) => api.get('/v1/approval/instances', { params }),
+  getInstance: (id: number) => api.get(`/v1/approval/instances/${id}`),
+  createInstance: (data: any) => api.post('/v1/approval/instances', data),
   approveStep: (instanceId: number, stepId: number, data?: any) =>
-    api.post(`/approval/instances/${instanceId}/steps/${stepId}/approve`, data),
+    api.post(`/v1/approval/instances/${instanceId}/steps/${stepId}/approve`, data),
   rejectStep: (instanceId: number, stepId: number, data: any) =>
-    api.post(`/approval/instances/${instanceId}/steps/${stepId}/reject`, data),
-  myTodo: (params?: any) => api.get('/approval/my-todo', { params }),
+    api.post(`/v1/approval/instances/${instanceId}/steps/${stepId}/reject`, data),
+  myTodo: (params?: any) => api.get('/v1/approval/my-todo', { params }),
 };

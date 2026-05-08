@@ -29,6 +29,10 @@
         </dependency>
         <dependency>
             <groupId>com.harnessdg</groupId>
+            <artifactId>harness-ontology</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
             <artifactId>harness-agent-gateway</artifactId>
         </dependency>
     </dependencies>

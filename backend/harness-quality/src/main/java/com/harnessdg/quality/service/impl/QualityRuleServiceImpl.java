@@ -8,24 +8,34 @@ package com.harnessdg.quality.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.harnessdg.common.exception.BizException;
 import com.harnessdg.common.response.ErrorCode;
+import com.harnessdg.model.ontology.entity.OntEntity;
+import com.harnessdg.model.ontology.entity.OntMetric;
 import com.harnessdg.model.quality.dto.QualityRuleAutoGenerateRequest;
 import com.harnessdg.model.quality.dto.QualityRuleCreateRequest;
 import com.harnessdg.model.quality.dto.QualityRuleDTO;
 import com.harnessdg.model.quality.entity.QualityRule;
+import com.harnessdg.ontology.mapper.OntEntityMapper;
+import com.harnessdg.ontology.mapper.OntMetricMapper;
 import com.harnessdg.quality.mapper.QualityRuleMapper;
 import com.harnessdg.quality.service.QualityRuleService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class QualityRuleServiceImpl implements QualityRuleService {
 
     private final QualityRuleMapper qualityRuleMapper;
+    private final OntEntityMapper ontEntityMapper;
+    private final OntMetricMapper ontMetricMapper;
 
     @Override
     public List<QualityRuleDTO> listRules(Long entityId, String ruleType, String status) {
@@ -108,9 +118,119 @@ public class QualityRuleServiceImpl implements QualityRuleService {
     @Override
     @Transactional
     public List<QualityRuleDTO> autoGenerateRules(QualityRuleAutoGenerateRequest request) {
-        // TODO: 根据实体字段类型自动生成质量规则
-        // 当前返回空列表，后续实现自动生成逻辑
-        return List.of();
+        log.info("Auto-generating quality rules for entityId={}, metricId={}",
+                request.getEntityId(), request.getMetricId());
+
+        List<QualityRule> generatedRules = new ArrayList<>();
+
+        // 从实体获取字段元数据
+        if (request.getEntityId() != null) {
+            OntEntity entity = ontEntityMapper.selectById(request.getEntityId());
+            if (entity != null && entity.getTags() != null) {
+                generatedRules.addAll(generateRulesFromFields(entity.getTags(), entity.getId(), null));
+            }
+        }
+
+        // 从指标获取字段元数据
+        if (request.getMetricId() != null) {
+            OntMetric metric = ontMetricMapper.selectById(request.getMetricId());
+            if (metric != null && metric.getTags() != null) {
+                generatedRules.addAll(generateRulesFromFields(metric.getTags(), metric.getEntityId(), metric.getId()));
+            }
+        }
+
+        // 批量保存
+        if (!generatedRules.isEmpty()) {
+            qualityRuleMapper.insert(generatedRules);
+            log.info("Generated {} quality rules", generatedRules.size());
+        }
+
+        return generatedRules.stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 从字段元数据生成质量规则
+     */
+    @SuppressWarnings("unchecked")
+    private List<QualityRule> generateRulesFromFields(Map<String, Object> tags, Long entityId, Long metricId) {
+        List<QualityRule> rules = new ArrayList<>();
+
+        if (!tags.containsKey("fields")) {
+            return rules;
+        }
+
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) tags.get("fields");
+        for (Map<String, Object> field : fields) {
+            String fieldName = (String) field.get("name");
+            String fieldType = (String) field.getOrDefault("type", "string");
+            boolean isPrimaryKey = Boolean.TRUE.equals(field.get("is_primary_key"));
+            boolean notNull = Boolean.TRUE.equals(field.get("not_null"));
+
+            // 主键字段 -> 唯一性检查
+            if (isPrimaryKey) {
+                rules.add(createRule(entityId, metricId, "unique",
+                        fieldName + " 唯一性检查",
+                        String.format("{\"field\": \"%s\", \"check\": \"unique\"}", fieldName),
+                        null, "critical", fieldName + " 必须唯一"));
+            }
+
+            // 非空字段 -> 非空检查
+            if (notNull) {
+                rules.add(createRule(entityId, metricId, "not_null",
+                        fieldName + " 非空检查",
+                        String.format("{\"field\": \"%s\", \"check\": \"not_null\"}", fieldName),
+                        null, "warning", fieldName + " 不能为空"));
+            }
+
+            // 数值类型 -> 数值范围检查
+            if (List.of("int", "bigint", "decimal", "float", "double").contains(fieldType)) {
+                rules.add(createRule(entityId, metricId, "range",
+                        fieldName + " 数值范围检查",
+                        String.format("{\"field\": \"%s\", \"check\": \"range\", \"min\": 0}", fieldName),
+                        Map.of("min", 0), "warning", fieldName + " 数值应大于等于0"));
+            }
+
+            // 日期类型 -> 日期合法性检查
+            if (List.of("date", "timestamp", "datetime").contains(fieldType)) {
+                rules.add(createRule(entityId, metricId, "range",
+                        fieldName + " 日期合法性检查",
+                        String.format("{\"field\": \"%s\", \"check\": \"valid_date\"}", fieldName),
+                        Map.of("format", "valid_date"), "warning", fieldName + " 日期格式应合法"));
+            }
+
+            // 金额相关字段 -> 波动检查
+            if (fieldName.contains("amount") || fieldName.contains("price") ||
+                fieldName.contains("cost") || fieldName.contains("revenue")) {
+                rules.add(createRule(entityId, metricId, "fluctuation",
+                        fieldName + " 波动检查",
+                        String.format("{\"field\": \"%s\", \"check\": \"fluctuation\", \"threshold\": 0.5}", fieldName),
+                        Map.of("percent", 50), "critical", fieldName + " 日波动不应超过50%"));
+            }
+        }
+
+        return rules;
+    }
+
+    /**
+     * 创建质量规则实例
+     */
+    private QualityRule createRule(Long entityId, Long metricId, String ruleType,
+                                    String ruleName, String ruleExpression,
+                                    Map<String, Object> threshold, String severity, String description) {
+        QualityRule rule = new QualityRule();
+        rule.setEntityId(entityId);
+        rule.setMetricId(metricId);
+        rule.setRuleType(ruleType);
+        rule.setRuleName(ruleName);
+        rule.setRuleExpression(ruleExpression);
+        rule.setThreshold(threshold);
+        rule.setSeverity(severity);
+        rule.setDescription(description);
+        rule.setStatus("active");
+        rule.setAutoGenerated(true);
+        return rule;
     }
 
     private QualityRuleDTO toDTO(QualityRule entity) {

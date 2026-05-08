@@ -51,6 +51,26 @@
             <groupId>com.harnessdg</groupId>
             <artifactId>harness-integration</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-approval</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-quality</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-datasource</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-lineage</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-report</artifactId>
+        </dependency>
 
         <!-- Database -->
         <dependency>

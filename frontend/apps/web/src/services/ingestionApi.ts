@@ -6,11 +6,11 @@
 import api from './api';
 
 export const ingestionApi = {
-  listDataSources: (params?: any) => api.get('/datasources', { params }),
-  createDataSource: (data: any) => api.post('/datasources', data),
-  testConnection: (id: number) => api.post(`/datasources/${id}/test`),
-  listTasks: (params?: any) => api.get('/datasources/tasks', { params }),
-  createTask: (data: any) => api.post('/datasources/tasks', data),
-  syncTask: (id: number) => api.post(`/datasources/tasks/${id}/sync`),
-  getTaskStatus: (id: number) => api.get(`/datasources/tasks/${id}/status`),
+  listDataSources: (params?: any) => api.get('/v1/datasources', { params }),
+  createDataSource: (data: any) => api.post('/v1/datasources', data),
+  testConnection: (id: number) => api.post(`/v1/datasources/${id}/test`),
+  listTasks: (params?: any) => api.get('/v1/datasources/tasks', { params }),
+  createTask: (data: any) => api.post('/v1/datasources/tasks', data),
+  syncTask: (id: number) => api.post(`/v1/datasources/tasks/${id}/sync`),
+  getTaskStatus: (id: number) => api.get(`/v1/datasources/tasks/${id}/status`),
 };

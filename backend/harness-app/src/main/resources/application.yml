@@ -52,8 +52,15 @@ harnessdg:
     token-expire-seconds: 3600
     refresh-expire-seconds: 604800
   agent:
-    endpoint: http://localhost:8088
+    endpoint: http://localhost:8089  # Python Agent 服务
     timeout-ms: 30000
+  integration:
+    open-metadata:
+      endpoint: http://localhost:8585
+      api-path: /api/v1
+      api-key: ${OPENMETADATA_API_KEY:}
+      timeout-ms: 30000
+      enabled: ${OPENMETADATA_ENABLED:false}  # 默认关闭，需手动启用
 
 # 日志配置
 logging:

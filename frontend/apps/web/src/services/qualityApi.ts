@@ -6,11 +6,11 @@
 import api from './api';
 
 export const qualityApi = {
-  listRules: (params?: any) => api.get('/quality/rules', { params }),
-  getRule: (id: number) => api.get(`/quality/rules/${id}`),
-  createRule: (data: any) => api.post('/quality/rules', data),
-  updateRule: (id: number, data: any) => api.put(`/quality/rules/${id}`, data),
-  deleteRule: (id: number) => api.delete(`/quality/rules/${id}`),
-  autoGenerateRules: (data: any) => api.post('/quality/rules/auto-generate', data),
-  listChecks: (params?: any) => api.get('/quality/checks', { params }),
+  listRules: (params?: any) => api.get('/v1/quality/rules', { params }),
+  getRule: (id: number) => api.get(`/v1/quality/rules/${id}`),
+  createRule: (data: any) => api.post('/v1/quality/rules', data),
+  updateRule: (id: number, data: any) => api.put(`/v1/quality/rules/${id}`, data),
+  deleteRule: (id: number) => api.delete(`/v1/quality/rules/${id}`),
+  autoGenerateRules: (data: any) => api.post('/v1/quality/rules/auto-generate', data),
+  listChecks: (params?: any) => api.get('/v1/quality/checks', { params }),
 };
