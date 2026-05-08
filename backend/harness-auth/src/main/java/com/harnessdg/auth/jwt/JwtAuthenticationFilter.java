@@ -39,19 +39,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = header.substring(BEARER_PREFIX.length());
         try {
-            if (tokenProvider.validateToken(token)) {
-                String username = tokenProvider.getUsernameFromToken(token);
-                Long userId = tokenProvider.getUserIdFromToken(token);
-                List<String> roles = tokenProvider.getRolesFromToken(token);
-
-                List<SimpleGrantedAuthority> authorities = roles.stream()
-                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                        .toList();
-
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(username, userId, authorities);
-                SecurityContextHolder.getContext().setAuthentication(auth);
+            if (!tokenProvider.validateToken(token)) {
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write(objectMapper.writeValueAsString(
+                        R.fail(ErrorCode.TOKEN_INVALID)));
+                return;
             }
+
+            String username = tokenProvider.getUsernameFromToken(token);
+            Long userId = tokenProvider.getUserIdFromToken(token);
+            List<String> roles = tokenProvider.getRolesFromToken(token);
+
+            List<SimpleGrantedAuthority> authorities = roles.stream()
+                    .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                    .toList();
+
+            UsernamePasswordAuthenticationToken auth =
+                    new UsernamePasswordAuthenticationToken(username, userId, authorities);
+            SecurityContextHolder.getContext().setAuthentication(auth);
         } catch (Exception e) {
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

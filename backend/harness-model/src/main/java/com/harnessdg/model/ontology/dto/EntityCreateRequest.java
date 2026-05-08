@@ -17,10 +17,10 @@ public class EntityCreateRequest {
 
     private Map<String, String> description;
 
-    private String tableName;
+    private String entityType;
 
     @NotBlank
-    private String domain;
+    private String dataDomain;
 
     private String owner;
 

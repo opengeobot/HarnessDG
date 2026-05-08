@@ -22,9 +22,11 @@ public class OntEntity extends BaseEntity {
     @TableField(typeHandler = JacksonTypeHandler.class)
     private Map<String, String> description;
 
-    private String tableName;
+    @TableField("entity_type")
+    private String entityType;
 
-    private String domain;
+    @TableField("data_domain")
+    private String dataDomain;
 
     private String owner;
 

@@ -12,8 +12,8 @@ public class OntEntityDTO {
     private String code;
     private Map<String, String> name;
     private Map<String, String> description;
-    private String tableName;
-    private String domain;
+    private String entityType;
+    private String dataDomain;
     private String owner;
     private String status;
     private Map<String, Object> tags;

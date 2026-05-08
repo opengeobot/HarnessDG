@@ -58,6 +58,12 @@ public class DataSourceController {
 
     // === Ingestion Task APIs ===
 
+    @GetMapping("/tasks")
+    public R<List<IngestionTaskDTO>> listAllTasks(
+            @RequestParam(required = false) String status) {
+        return R.ok(dataSourceService.listAllTasks(status));
+    }
+
     @GetMapping("/{sourceId}/tasks")
     public R<List<IngestionTaskDTO>> listTasks(
             @PathVariable Long sourceId,

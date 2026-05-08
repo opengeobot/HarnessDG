@@ -16,6 +16,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.stream.Collectors;
 
@@ -50,11 +51,21 @@ public class GlobalExceptionHandler {
                 .traceId(TraceContext.getTraceId());
     }
 
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public R<Void> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String message = String.format("Invalid parameter '%s': %s", ex.getName(), ex.getValue());
+        log.warn("Type mismatch: {}", message);
+        return R.<Void>fail(ErrorCode.BAD_REQUEST, message)
+                .traceId(TraceContext.getTraceId());
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public R<Void> handleUnexpectedException(Exception ex) {
         log.error("Unexpected exception", ex);
-        return R.<Void>fail(ErrorCode.INTERNAL_ERROR, "An unexpected error occurred")
+        // 临时返回详细错误信息用于调试
+        return R.<Void>fail(ErrorCode.INTERNAL_ERROR, ex.getMessage())
                 .traceId(TraceContext.getTraceId());
     }
 }

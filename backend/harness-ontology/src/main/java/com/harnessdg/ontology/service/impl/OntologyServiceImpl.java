@@ -16,11 +16,19 @@ import com.harnessdg.ontology.mapper.OntEntityMapper;
 import com.harnessdg.ontology.mapper.OntMetricMapper;
 import com.harnessdg.ontology.service.OntologyService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * 功能：本体建模 Service 实现
+ * 时间：2026-05-08
+ * 作者：AxeXie
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OntologyServiceImpl implements OntologyService {
@@ -28,13 +36,14 @@ public class OntologyServiceImpl implements OntologyService {
     private final OntEntityMapper entityMapper;
     private final OntMetricMapper metricMapper;
     private final OntDimensionMapper dimensionMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResult<OntEntityDTO> listEntities(String domain, String status,
                                                   String keyword, PageRequest pageRequest) {
         LambdaQueryWrapper<OntEntity> wrapper = new LambdaQueryWrapper<>();
         if (domain != null && !domain.isBlank()) {
-            wrapper.eq(OntEntity::getDomain, domain);
+            wrapper.eq(OntEntity::getDataDomain, domain);
         }
         if (status != null && !status.isBlank()) {
             wrapper.eq(OntEntity::getStatus, status);
@@ -75,12 +84,16 @@ public class OntologyServiceImpl implements OntologyService {
         entity.setCode(request.getCode());
         entity.setName(request.getName());
         entity.setDescription(request.getDescription());
-        entity.setTableName(request.getTableName());
-        entity.setDomain(request.getDomain());
+        entity.setEntityType(request.getEntityType());
+        entity.setDataDomain(request.getDataDomain());
         entity.setOwner(request.getOwner());
         entity.setStatus("draft");
         entity.setTags(request.getTags());
         entityMapper.insert(entity);
+
+        // 发布事件：触发质量规则自动生成和 OpenMetadata 注册
+        eventPublisher.publishEvent(new OntologyCreatedEvent(this, entity.getId(), null, "entity"));
+
         return toEntityDTO(entity);
     }
 
@@ -94,8 +107,8 @@ public class OntologyServiceImpl implements OntologyService {
         entity.setCode(request.getCode());
         entity.setName(request.getName());
         entity.setDescription(request.getDescription());
-        entity.setTableName(request.getTableName());
-        entity.setDomain(request.getDomain());
+        entity.setEntityType(request.getEntityType());
+        entity.setDataDomain(request.getDataDomain());
         entity.setOwner(request.getOwner());
         entity.setTags(request.getTags());
         entityMapper.updateById(entity);
@@ -137,6 +150,10 @@ public class OntologyServiceImpl implements OntologyService {
         metric.setStatus("draft");
         metric.setTags(request.getTags());
         metricMapper.insert(metric);
+
+        // 发布事件：触发质量规则自动生成和 OpenMetadata 注册
+        eventPublisher.publishEvent(new OntologyCreatedEvent(this, metric.getEntityId(), metric.getId(), "metric"));
+
         return toMetricDTO(metric);
     }
 
@@ -233,8 +250,8 @@ public class OntologyServiceImpl implements OntologyService {
         dto.setCode(e.getCode());
         dto.setName(e.getName());
         dto.setDescription(e.getDescription());
-        dto.setTableName(e.getTableName());
-        dto.setDomain(e.getDomain());
+        dto.setEntityType(e.getEntityType());
+        dto.setDataDomain(e.getDataDomain());
         dto.setOwner(e.getOwner());
         dto.setStatus(e.getStatus());
         dto.setTags(e.getTags());
@@ -272,4 +289,15 @@ public class OntologyServiceImpl implements OntologyService {
         dto.setTags(d.getTags());
         return dto;
     }
+
+    /**
+     * 本体创建事件
+     * 用于解耦：监听器在 harness-app 模块中定义，避免循环依赖
+     */
+    public record OntologyCreatedEvent(
+            Object source,
+            Long entityId,
+            Long metricId,
+            String entityType
+    ) {}
 }

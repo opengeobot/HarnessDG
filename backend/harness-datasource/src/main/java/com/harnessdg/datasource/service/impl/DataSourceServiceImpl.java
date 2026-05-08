@@ -108,6 +108,18 @@ public class DataSourceServiceImpl implements DataSourceService {
     }
 
     @Override
+    public List<IngestionTaskDTO> listAllTasks(String status) {
+        LambdaQueryWrapper<IngestionTask> wrapper = new LambdaQueryWrapper<>();
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(IngestionTask::getStatus, status);
+        }
+        wrapper.orderByDesc(IngestionTask::getCreatedAt);
+        return ingestionTaskMapper.selectList(wrapper).stream()
+                .map(this::toTaskDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<IngestionTaskDTO> listTasks(Long sourceId, String status) {
         LambdaQueryWrapper<IngestionTask> wrapper = new LambdaQueryWrapper<>();
         if (sourceId != null) {

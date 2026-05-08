@@ -24,6 +24,8 @@ public interface DataSourceService {
 
     void deleteDataSource(Long id);
 
+    List<IngestionTaskDTO> listAllTasks(String status);
+
     List<IngestionTaskDTO> listTasks(Long sourceId, String status);
 
     IngestionTaskDTO getTask(Long id);

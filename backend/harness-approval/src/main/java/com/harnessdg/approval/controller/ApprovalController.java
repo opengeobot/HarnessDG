@@ -62,6 +62,9 @@ public class ApprovalController {
      */
     @GetMapping("/instances/{id}")
     public R<ApprovalInstanceDTO> getInstance(@PathVariable Long id) {
+        if (id == null || id <= 0) {
+            return R.fail(com.harnessdg.common.response.ErrorCode.BAD_REQUEST);
+        }
         return R.ok(approvalService.getInstanceById(id));
     }
 
