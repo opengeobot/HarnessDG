@@ -19,13 +19,37 @@ const UserList = lazy(() => import('@/pages/settings/users/UserList'));
 const RoleList = lazy(() => import('@/pages/settings/roles/RoleList'));
 const ProfilePage = lazy(() => import('@/pages/settings/profile/ProfilePage'));
 const DictionaryPage = lazy(() => import('@/pages/settings/dictionary/DictionaryPage'));
+const DictionaryAdmin = lazy(() => import('@/pages/settings/dictionary/DictionaryAdmin'));
 const SystemConfigPage = lazy(() => import('@/pages/settings/config/SystemConfigPage'));
 const AuditPage = lazy(() => import('@/pages/settings/audit/AuditPage'));
+const LoginPage = lazy(() => import('@/pages/login/LoginPage'));
+
+// Phase 2: 审批中心
+const ApprovalList = lazy(() => import('@/pages/approval/ApprovalList'));
+const ApprovalDetail = lazy(() => import('@/pages/approval/ApprovalDetail'));
+
+// Phase 2: 质量规则
+const QualityRules = lazy(() => import('@/pages/quality/index'));
+
+// Phase 2: 血缘图
+const LineageGraph = lazy(() => import('@/pages/lineage/index'));
+
+// Phase 2: 数据接入
+const DataIngestion = lazy(() => import('@/pages/data-ingestion/index'));
+const IngestionWizard = lazy(() => import('@/pages/data-ingestion/IngestionWizard'));
+
+// Phase 2: 周报
+const WeeklyReportList = lazy(() => import('@/pages/weekly-report/index'));
+const ReportView = lazy(() => import('@/pages/weekly-report/ReportView'));
 
 function AppRoutes() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <Routes>
+        {/* 登录页 - 不需要 AppLayout */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* 主应用路由 - 需要认证 */}
         <Route path="/" element={<AppLayout />}>
           <Route index element={<Navigate to="/tasks" replace />} />
           <Route path="tasks" element={<TaskCenter />} />
@@ -41,9 +65,29 @@ function AppRoutes() {
             <Route path="roles" element={<RoleList />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="dictionary" element={<DictionaryPage />} />
+            <Route path="dictionary-admin" element={<DictionaryAdmin />} />
             <Route path="config" element={<SystemConfigPage />} />
             <Route path="audit" element={<AuditPage />} />
           </Route>
+
+          {/* Phase 2: 审批中心 */}
+          <Route path="approval" element={<ApprovalList />} />
+          <Route path="approval/:id" element={<ApprovalDetail />} />
+
+          {/* Phase 2: 质量规则 */}
+          <Route path="quality" element={<QualityRules />} />
+
+          {/* Phase 2: 血缘图 */}
+          <Route path="lineage" element={<LineageGraph />} />
+
+          {/* Phase 2: 数据接入 */}
+          <Route path="data-ingestion" element={<DataIngestion />} />
+          <Route path="data-ingestion/wizard" element={<IngestionWizard />} />
+          <Route path="data-ingestion/wizard/:id" element={<IngestionWizard />} />
+
+          {/* Phase 2: 周报 */}
+          <Route path="weekly-report" element={<WeeklyReportList />} />
+          <Route path="weekly-report/:id" element={<ReportView />} />
         </Route>
       </Routes>
     </Suspense>

@@ -137,3 +137,95 @@ export const auditApi = {
   getLog: (id: number) => api.get(`/audit/logs/${id}`),
   getTrace: (traceId: string) => api.get(`/audit/trace/${traceId}`),
 };
+
+// Phase 2: 审批中心 API
+export const approvalApi = {
+  listTemplates: (params?: { page?: number; size?: number }) =>
+    api.get('/approval/templates', { params }),
+  getTemplate: (id: number) => api.get(`/approval/templates/${id}`),
+  createTemplate: (data: any) => api.post('/approval/templates', data),
+  updateTemplate: (id: number, data: any) => api.put(`/approval/templates/${id}`, data),
+  deleteTemplate: (id: number) => api.delete(`/approval/templates/${id}`),
+
+  listInstances: (params?: { templateId?: number; status?: string; applicantId?: number; page?: number; size?: number }) =>
+    api.get('/approval/instances', { params }),
+  getInstance: (id: number) => api.get(`/approval/instances/${id}`),
+  createInstance: (data: any) => api.post('/approval/instances', data),
+  approveInstance: (id: number, action: 'approve' | 'reject', comment?: string) =>
+    api.put(`/approval/instances/${id}/${action}`, { comment }),
+
+  listSteps: (instanceId: number) => api.get(`/approval/instances/${instanceId}/steps`),
+};
+
+// Phase 2: 质量规则 API
+export const qualityApi = {
+  listRules: (params?: { ruleType?: string; targetTable?: string; enabled?: boolean; page?: number; size?: number }) =>
+    api.get('/quality/rules', { params }),
+  getRule: (id: number) => api.get(`/quality/rules/${id}`),
+  createRule: (data: any) => api.post('/quality/rules', data),
+  updateRule: (id: number, data: any) => api.put(`/quality/rules/${id}`, data),
+  deleteRule: (id: number) => api.delete(`/quality/rules/${id}`),
+  toggleRule: (id: number, enabled: boolean) => api.put(`/quality/rules/${id}/enabled`, { enabled }),
+
+  listChecks: (params?: { ruleId?: number; status?: string; startTime?: string; endTime?: string; page?: number; size?: number }) =>
+    api.get('/quality/checks', { params }),
+  runCheck: (ruleId: number) => api.post(`/quality/rules/${ruleId}/check`),
+  getCheckResult: (id: number) => api.get(`/quality/checks/${id}`),
+};
+
+// Phase 2: 血缘图 API
+export const lineageApi = {
+  listNodes: (params?: { nodeType?: string; keyword?: string }) =>
+    api.get('/lineage/nodes', { params }),
+  getNode: (id: number) => api.get(`/lineage/nodes/${id}`),
+  createNode: (data: any) => api.post('/lineage/nodes', data),
+  updateNode: (id: number, data: any) => api.put(`/lineage/nodes/${id}`, data),
+  deleteNode: (id: number) => api.delete(`/lineage/nodes/${id}`),
+
+  listEdges: (params?: { upstreamNodeId?: number; downstreamNodeId?: number }) =>
+    api.get('/lineage/edges', { params }),
+  getEdge: (id: number) => api.get(`/lineage/edges/${id}`),
+  createEdge: (data: any) => api.post('/lineage/edges', data),
+  updateEdge: (id: number, data: any) => api.put(`/lineage/edges/${id}`, data),
+  deleteEdge: (id: number) => api.delete(`/lineage/edges/${id}`),
+
+  getLineageByMetric: (metricId: number) => api.get(`/lineage/metric/${metricId}`),
+  getLineageByEntity: (entityId: number) => api.get(`/lineage/entity/${entityId}`),
+};
+
+// Phase 2: 数据接入 API
+export const ingestionApi = {
+  listDataSources: (params?: { sourceType?: string; status?: string; page?: number; size?: number }) =>
+    api.get('/datasource/sources', { params }),
+  getDataSource: (id: number) => api.get(`/datasource/sources/${id}`),
+  createDataSource: (data: any) => api.post('/datasource/sources', data),
+  updateDataSource: (id: number, data: any) => api.put(`/datasource/sources/${id}`, data),
+  deleteDataSource: (id: number) => api.delete(`/datasource/sources/${id}`),
+  testConnection: (id: number) => api.post(`/datasource/sources/${id}/test`),
+
+  listTasks: (params?: { sourceId?: number; taskType?: string; status?: string; page?: number; size?: number }) =>
+    api.get('/datasource/tasks', { params }),
+  getTask: (id: number) => api.get(`/datasource/tasks/${id}`),
+  createTask: (data: any) => api.post('/datasource/tasks', data),
+  updateTask: (id: number, data: any) => api.put(`/datasource/tasks/${id}`, data),
+  deleteTask: (id: number) => api.delete(`/datasource/tasks/${id}`),
+  startTask: (id: number) => api.post(`/datasource/tasks/${id}/start`),
+  stopTask: (id: number) => api.post(`/datasource/tasks/${id}/stop`),
+};
+
+// Phase 2: 周报 API
+export const reportApi = {
+  listReports: (params?: { startDate?: string; endDate?: string; page?: number; size?: number }) =>
+    api.get('/report/weekly', { params }),
+  getReport: (id: number) => api.get(`/report/weekly/${id}`),
+  createReport: (data: any) => api.post('/report/weekly', data),
+  updateReport: (id: number, data: any) => api.put(`/report/weekly/${id}`, data),
+  deleteReport: (id: number) => api.delete(`/report/weekly/${id}`),
+};
+
+// Phase 2: 异常诊断 API (Agent)
+export const diagnosisApi = {
+  analyzeException: (data: any) => api.post('/agent/diagnosis/analyze', data),
+  getRecommendations: (diagnosisId: number) => api.get(`/agent/diagnosis/${diagnosisId}/recommendations`),
+  applyFix: (data: any) => api.post('/agent/diagnosis/apply-fix', data),
+};

@@ -1,0 +1,15 @@
+{
+  "lineage": {
+    "title": "血缘可视化",
+    "query_by_metric": "按指标查询",
+    "query_by_entity": "按实体查询",
+    "metric_id": "指标ID",
+    "entity_id": "实体ID",
+    "upstream": "上游血缘",
+    "downstream": "下游血缘",
+    "edges": "血缘关系",
+    "no_data": "请输入ID并点击查询",
+    "no_upstream": "无上游依赖",
+    "no_downstream": "无下游依赖"
+  }
+}

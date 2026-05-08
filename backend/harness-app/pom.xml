@@ -42,6 +42,15 @@
             <groupId>com.harnessdg</groupId>
             <artifactId>harness-agent-gateway</artifactId>
         </dependency>
+        <!-- Phase 2 新增模块 -->
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-relation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-integration</artifactId>
+        </dependency>
 
         <!-- Database -->
         <dependency>

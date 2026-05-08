@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  功能：HarnessDG 报告生成模块（Phase 2）
+  时间：2026-05-08
+  作者：AxeXie
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.harnessdg</groupId>
+        <artifactId>harnessdg-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>harness-report</artifactId>
+    <name>HarnessDG Report</name>
+    <description>Automated weekly/monthly report generation with AI analysis</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-model</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-agent-gateway</artifactId>
+        </dependency>
+    </dependencies>
+</project>

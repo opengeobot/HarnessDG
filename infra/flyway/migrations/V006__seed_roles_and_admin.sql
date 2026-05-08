@@ -10,9 +10,9 @@ INSERT INTO sys_role (code, name, description, is_system) VALUES
 ('analyst', '{"zh_CN":"业务分析师","en_US":"Business Analyst"}', '{"zh_CN":"负责口径定义、指标设计与分析","en_US":"Responsible for metric definition and analysis"}', TRUE),
 ('business_user', '{"zh_CN":"业务人员","en_US":"Business User"}', '{"zh_CN":"通过任务中心完成数据操作","en_US":"Complete data tasks through task center"}', TRUE);
 
--- 初始化管理员账号（密码: admin123, BCrypt hash）
+-- 初始化管理员账号（密码: admin123, BCrypt hash - $2b$12 版本）
 INSERT INTO sys_user (username, password_hash, display_name, email, locale, status) VALUES
-('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', '系统管理员', 'admin@harnessdg.local', 'zh_CN', 'active');
+('admin', '$2b$12$/9bXp6bMaucUtddkhWq5Ne.XK.jwa/TMyuJLLQ4ZmwqZR6V5I5rTS', '系统管理员', 'admin@harnessdg.local', 'zh_CN', 'active');
 
 -- 为管理员分配角色
 INSERT INTO sys_user_role (user_id, role_id, granted_by) VALUES

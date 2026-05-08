@@ -1,0 +1,23 @@
+{
+  "quality": {
+    "title": "Quality Rules",
+    "rule_name": "Rule Name",
+    "entity": "Entity",
+    "entity_id": "Entity ID",
+    "entity_id_placeholder": "Entity ID",
+    "rule_type": "Rule Type",
+    "severity": "Severity",
+    "expression": "Expression",
+    "status": "Status",
+    "status_active": "Active",
+    "status_inactive": "Inactive",
+    "created_at": "Created At",
+    "create": "Create Rule",
+    "edit": "Edit Rule",
+    "auto_generate": "Auto Generate Rules",
+    "auto_generate_success": "Auto generate rules succeeded",
+    "auto_generate_fail": "Auto generate rules failed",
+    "rule_types_to_generate": "Rule Types to Generate",
+    "select_rule_types": "Select rule types"
+  }
+}

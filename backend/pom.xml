@@ -34,6 +34,14 @@
         <module>harness-task</module>
         <module>harness-agent-gateway</module>
         <module>harness-app</module>
+        <!-- Phase 2 新增模块 -->
+        <module>harness-relation</module>
+        <module>harness-integration</module>
+        <module>harness-approval</module>
+        <module>harness-quality</module>
+        <module>harness-lineage</module>
+        <module>harness-datasource</module>
+        <module>harness-report</module>
     </modules>
 
     <properties>
@@ -98,6 +106,42 @@
             <dependency>
                 <groupId>com.harnessdg</groupId>
                 <artifactId>harness-agent-gateway</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- Phase 2 新增模块依赖管理 -->
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-relation</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-integration</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-approval</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-quality</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-lineage</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-datasource</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-report</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

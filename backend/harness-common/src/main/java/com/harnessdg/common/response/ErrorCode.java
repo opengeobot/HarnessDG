@@ -1,8 +1,3 @@
-/**
- * 功能：统一错误码定义
- * 时间：2026-05-07
- * 作者：AxeXie
- */
 package com.harnessdg.common.response;
 
 import lombok.Getter;
@@ -59,7 +54,32 @@ public enum ErrorCode {
     // 配置域 8xxx
     CONFIG_NOT_FOUND(8001, "Config not found"),
     CONFIG_KEY_EXISTS(8002, "Config key already exists"),
-    CONFIG_READONLY(8003, "Config is read only");
+    CONFIG_READONLY(8003, "Config is read only"),
+
+    // Phase 2 新增错误码 9xxx
+    // 审批域 91xx
+    APPROVAL_TEMPLATE_NOT_FOUND(9101, "Approval template not found"),
+    APPROVAL_INSTANCE_NOT_FOUND(9102, "Approval instance not found"),
+    APPROVAL_STEP_NOT_FOUND(9103, "Approval step not found"),
+    APPROVAL_ALREADY_COMPLETED(9104, "Approval already completed"),
+    APPROVAL_NOT_YOUR_TURN(9105, "Not your turn to approve"),
+
+    // 质量域 92xx
+    QUALITY_RULE_NOT_FOUND(9201, "Quality rule not found"),
+    QUALITY_CHECK_NOT_FOUND(9202, "Quality check not found"),
+
+    // 血缘域 93xx
+    LINEAGE_NODE_NOT_FOUND(9301, "Lineage node not found"),
+    LINEAGE_EDGE_NOT_FOUND(9302, "Lineage edge not found"),
+
+    // 数据源域 94xx
+    DATASOURCE_NOT_FOUND(9401, "Data source not found"),
+    DATASOURCE_CONNECT_FAILED(9402, "Data source connection failed"),
+    INGESTION_TASK_NOT_FOUND(9403, "Ingestion task not found"),
+
+    // 报告域 95xx
+    REPORT_NOT_FOUND(9501, "Report not found"),
+    REPORT_GENERATION_FAILED(9502, "Report generation failed");
 
     private final int code;
     private final String message;

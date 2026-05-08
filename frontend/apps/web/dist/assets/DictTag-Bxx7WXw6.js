@@ -1,0 +1,1 @@
+import{j as t}from"./query-Cz-34vkN.js";import{u}from"./useDictionary-BcDkjrZp.js";import{V as i}from"./antd-CkQM-U6T.js";function g({groupCode:n,code:o,fallback:s="-",children:a,...r}){const{getLabel:c,getColor:e}=u(n);if(!o)return t.jsx(i,{...r,children:s});const l=c(o),m=e(o);return t.jsx(i,{color:m||void 0,...r,children:a??l})}export{g as D};

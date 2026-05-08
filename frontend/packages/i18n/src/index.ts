@@ -15,6 +15,13 @@ import zhDictionary from '../locales/zh_CN/dictionary.json';
 import zhSettings from '../locales/zh_CN/settings.json';
 import zhConfig from '../locales/zh_CN/config.json';
 import zhAudit from '../locales/zh_CN/audit.json';
+import zhApproval from '../locales/zh_CN/approval.json';
+import zhQuality from '../locales/zh_CN/quality.json';
+import zhLineage from '../locales/zh_CN/lineage.json';
+import zhIngestion from '../locales/zh_CN/ingestion.json';
+import zhReport from '../locales/zh_CN/report.json';
+import zhDiagnosis from '../locales/zh_CN/diagnosis.json';
+import zhLogin from '../locales/zh_CN/login.json';
 
 import enCommon from '../locales/en_US/common.json';
 import enNavigation from '../locales/en_US/navigation.json';
@@ -24,6 +31,13 @@ import enDictionary from '../locales/en_US/dictionary.json';
 import enSettings from '../locales/en_US/settings.json';
 import enConfig from '../locales/en_US/config.json';
 import enAudit from '../locales/en_US/audit.json';
+import enApproval from '../locales/en_US/approval.json';
+import enQuality from '../locales/en_US/quality.json';
+import enLineage from '../locales/en_US/lineage.json';
+import enIngestion from '../locales/en_US/ingestion.json';
+import enReport from '../locales/en_US/report.json';
+import enDiagnosis from '../locales/en_US/diagnosis.json';
+import enLogin from '../locales/en_US/login.json';
 
 export function initI18n() {
   i18n
@@ -40,6 +54,13 @@ export function initI18n() {
           settings: zhSettings,
           config: zhConfig,
           audit: zhAudit,
+          approval: zhApproval,
+          quality: zhQuality,
+          lineage: zhLineage,
+          ingestion: zhIngestion,
+          report: zhReport,
+          diagnosis: zhDiagnosis,
+          login: zhLogin,
         },
         en_US: {
           common: enCommon,
@@ -50,11 +71,19 @@ export function initI18n() {
           settings: enSettings,
           config: enConfig,
           audit: enAudit,
+          approval: enApproval,
+          quality: enQuality,
+          lineage: enLineage,
+          ingestion: enIngestion,
+          report: enReport,
+          diagnosis: enDiagnosis,
+          login: enLogin,
         },
       },
       fallbackLng: 'zh_CN',
       defaultNS: 'common',
-      ns: ['common', 'navigation', 'task', 'validation', 'dictionary', 'settings', 'config', 'audit'],
+      ns: ['common', 'navigation', 'task', 'validation', 'dictionary', 'settings', 'config', 'audit',
+        'approval', 'quality', 'lineage', 'ingestion', 'report', 'diagnosis', 'login'],
       interpolation: {
         escapeValue: false,
       },

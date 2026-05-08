@@ -36,6 +36,14 @@ app.add_middleware(
 
 app.include_router(agent_router)
 
+# Phase 2 新增路由
+from app.routers import quality, diagnosis, report, ingestion
+
+app.include_router(quality.router)
+app.include_router(diagnosis.router)
+app.include_router(report.router)
+app.include_router(ingestion.router)
+
 
 @app.get("/")
 async def root():

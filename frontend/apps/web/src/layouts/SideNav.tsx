@@ -17,6 +17,12 @@ import {
   ControlOutlined,
   AuditOutlined,
   UserOutlined,
+  // Phase 2 新增图标
+  CheckCircleOutlined,
+  FieldTimeOutlined,
+  BranchesOutlined,
+  CloudUploadOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -81,6 +87,12 @@ function SideNav({ collapsed }: SideNavProps) {
     { key: '/governance', icon: <SafetyCertificateOutlined />, label: t('menu.governance') },
     { key: '/query', icon: <MessageOutlined />, label: t('menu.query') },
     { key: '/diagnosis', icon: <BugOutlined />, label: t('menu.diagnosis') },
+    // Phase 2 新增菜单
+    { key: '/approval', icon: <CheckCircleOutlined />, label: t('menu.approval') },
+    { key: '/quality', icon: <FieldTimeOutlined />, label: t('menu.quality') },
+    { key: '/lineage', icon: <BranchesOutlined />, label: t('menu.lineage') },
+    { key: '/data-ingestion', icon: <CloudUploadOutlined />, label: t('menu.data_ingestion') },
+    { key: '/weekly-report', icon: <FileTextOutlined />, label: t('menu.weekly_report') },
     {
       key: '/settings',
       icon: <SettingOutlined />,

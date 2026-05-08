@@ -1,0 +1,21 @@
+{
+  "report": {
+    "title": "Weekly Report Center",
+    "list": "Report List",
+    "create": "Create Weekly Report",
+    "create_success": "Created successfully",
+    "create_fail": "Creation failed",
+    "detail": "Report Detail",
+    "report_type": "Report Type",
+    "date_range": "Date Range",
+    "creator": "Creator",
+    "created_at": "Created At",
+    "content": "Report Content",
+    "metrics_snapshot": "Metrics Snapshot",
+    "no_data": "No data",
+    "no_content": "No report content yet",
+    "type_weekly": "Weekly",
+    "type_monthly": "Monthly",
+    "type_quarterly": "Quarterly"
+  }
+}

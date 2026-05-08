@@ -1,0 +1,13 @@
+{
+  "login": {
+    "title": "HarnessDG Login",
+    "success": "Login successful",
+    "fail": "Login failed, please check username and password",
+    "username_required": "Please enter username",
+    "password_required": "Please enter password",
+    "username_placeholder": "Username",
+    "password_placeholder": "Password",
+    "submit": "Login",
+    "hint": "Default admin account: admin / admin123"
+  }
+}

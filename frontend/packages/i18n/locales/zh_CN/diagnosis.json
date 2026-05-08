@@ -1,0 +1,21 @@
+{
+  "diagnosis": {
+    "title": "异常诊断",
+    "run": "运行诊断",
+    "run_success": "诊断完成",
+    "run_fail": "诊断失败",
+    "result": "诊断结果",
+    "target_type": "目标类型",
+    "target_id": "目标ID",
+    "status": "状态",
+    "root_causes": "根因分析",
+    "suggestions": "修复建议",
+    "one_click_fix": "一键修复",
+    "remediate_success": "修复已执行",
+    "remediate_fail": "修复失败",
+    "type_task": "任务",
+    "type_metric": "指标",
+    "type_entity": "实体",
+    "auto_fixable": "可自动修复"
+  }
+}
