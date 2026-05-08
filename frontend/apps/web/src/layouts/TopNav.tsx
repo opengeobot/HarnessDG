@@ -4,6 +4,7 @@
  * 作者：AxeXie
  */
 import { Layout, Input, Space, Button, Dropdown, Avatar } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   SearchOutlined,
   BellOutlined,
@@ -11,8 +12,12 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   UserOutlined,
+  LogoutOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/stores/authStore';
 
 const { Header } = Layout;
 
@@ -23,12 +28,60 @@ interface TopNavProps {
 
 function TopNav({ collapsed, onMenuToggle }: TopNavProps) {
   const { t, i18n } = useTranslation('common');
+  const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
 
   const handleLanguageSwitch = () => {
     const nextLang = i18n.language === 'zh_CN' ? 'en_US' : 'zh_CN';
     i18n.changeLanguage(nextLang);
     localStorage.setItem('harnessdg_locale', nextLang);
   };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const userMenuItems: MenuProps['items'] = [
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: user?.displayName || user?.username || t('user.profile'),
+      disabled: true,
+      style: {
+        fontWeight: 600,
+        color: 'var(--color-text-primary)',
+      },
+    },
+    {
+      key: 'email',
+      label: user?.email || '',
+      disabled: true,
+      style: {
+        fontSize: 12,
+        color: 'var(--color-text-secondary)',
+      },
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'settings',
+      icon: <SettingOutlined />,
+      label: t('user.settings'),
+      onClick: () => navigate('/settings/profile'),
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: t('user.logout'),
+      danger: true,
+      onClick: handleLogout,
+    },
+  ];
 
   return (
     <Header
@@ -79,7 +132,17 @@ function TopNav({ collapsed, onMenuToggle }: TopNavProps) {
         >
           {i18n.language === 'zh_CN' ? '中' : 'EN'}
         </Button>
-        <Avatar icon={<UserOutlined />} style={{ backgroundColor: 'var(--color-brand-primary)' }} />
+        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
+          <Avatar
+            icon={<UserOutlined />}
+            style={{
+              backgroundColor: 'var(--color-brand-primary)',
+              cursor: 'pointer',
+            }}
+          >
+            {user?.displayName?.charAt(0) || user?.username?.charAt(0) || 'U'}
+          </Avatar>
+        </Dropdown>
       </Space>
     </Header>
   );

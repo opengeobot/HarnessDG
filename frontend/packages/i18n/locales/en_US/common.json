@@ -26,5 +26,10 @@
   "confirm": {
     "delete_title": "Confirm Delete",
     "delete_desc": "This cannot be undone. Are you sure?"
+  },
+  "user": {
+    "profile": "User Profile",
+    "settings": "Settings",
+    "logout": "Logout"
   }
 }
