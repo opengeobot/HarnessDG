@@ -130,4 +130,78 @@ public class DagsterClient {
         Map<String, Object> variables = Map.of("runId", runId);
         return executeQuery(query, variables);
     }
+
+    /**
+     * 创建 Job（基于资产列表）
+     */
+    public Mono<Map<String, Object>> createJob(
+            String jobName,
+            String repositoryName,
+            String[] assetKeys,
+            String description
+    ) {
+        String query = """
+                mutation CreateJob($jobName: String!, $repositoryName: String!, $assetKeys: [String!]!, $description: String) {
+                  createJob(
+                    jobName: $jobName,
+                    repositoryName: $repositoryName,
+                    assetKeys: $assetKeys,
+                    description: $description
+                  ) {
+                    jobName
+                    repositoryName
+                    assetKeys
+                  }
+                }
+                """;
+        Map<String, Object> variables = Map.of(
+                "jobName", jobName,
+                "repositoryName", repositoryName,
+                "assetKeys", assetKeys,
+                "description", description
+        );
+        return executeQuery(query, variables);
+    }
+
+    /**
+     * 创建 Schedule
+     */
+    public Mono<Map<String, Object>> createSchedule(
+            String scheduleName,
+            String jobName,
+            String repositoryName,
+            String cronExpression,
+            String timezone
+    ) {
+        String query = """
+                mutation CreateSchedule(
+                  $scheduleName: String!,
+                  $jobName: String!,
+                  $repositoryName: String!,
+                  $cronExpression: String!,
+                  $timezone: String
+                ) {
+                  createSchedule(
+                    scheduleName: $scheduleName,
+                    jobName: $jobName,
+                    repositoryName: $repositoryName,
+                    cronExpression: $cronExpression,
+                    timezone: $timezone
+                  ) {
+                    scheduleName
+                    jobName
+                    cronExpression
+                    timezone
+                  }
+                }
+                """;
+        Map<String, Object> variables = Map.of(
+                "scheduleName", scheduleName,
+                "jobName", jobName,
+                "repositoryName", repositoryName,
+                "cronExpression", cronExpression,
+                "timezone", timezone
+        );
+        return executeQuery(query, variables);
+    }
 }

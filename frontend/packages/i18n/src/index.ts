@@ -21,6 +21,7 @@ import zhLineage from '../locales/zh_CN/lineage.json';
 import zhIngestion from '../locales/zh_CN/ingestion.json';
 import zhReport from '../locales/zh_CN/report.json';
 import zhDiagnosis from '../locales/zh_CN/diagnosis.json';
+import zhQuery from '../locales/zh_CN/query.json';
 import zhLogin from '../locales/zh_CN/login.json';
 
 import enCommon from '../locales/en_US/common.json';
@@ -37,6 +38,7 @@ import enLineage from '../locales/en_US/lineage.json';
 import enIngestion from '../locales/en_US/ingestion.json';
 import enReport from '../locales/en_US/report.json';
 import enDiagnosis from '../locales/en_US/diagnosis.json';
+import enQuery from '../locales/en_US/query.json';
 import enLogin from '../locales/en_US/login.json';
 
 export function initI18n() {
@@ -60,6 +62,7 @@ export function initI18n() {
           ingestion: zhIngestion,
           report: zhReport,
           diagnosis: zhDiagnosis,
+          query: zhQuery,
           login: zhLogin,
         },
         en_US: {
@@ -77,13 +80,14 @@ export function initI18n() {
           ingestion: enIngestion,
           report: enReport,
           diagnosis: enDiagnosis,
+          query: enQuery,
           login: enLogin,
         },
       },
       fallbackLng: 'zh_CN',
       defaultNS: 'common',
       ns: ['common', 'navigation', 'task', 'validation', 'dictionary', 'settings', 'config', 'audit',
-        'approval', 'quality', 'lineage', 'ingestion', 'report', 'diagnosis', 'login'],
+        'approval', 'quality', 'lineage', 'ingestion', 'report', 'diagnosis', 'query', 'login'],
       interpolation: {
         escapeValue: false,
       },

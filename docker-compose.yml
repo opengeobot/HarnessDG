@@ -1,0 +1,101 @@
+# HarnessDG 完整服务栈 Docker Compose
+# 功能：PostgreSQL + Backend + Agent + Frontend 统一部署
+# 时间：2026-05-09
+# 作者：AxeXie
+# 说明：所有服务在 harnessdg 分组下统一管理，全部通过 Docker Compose 启动
+
+name: harnessdg
+
+services:
+  # PostgreSQL 数据库（含 AGE + pgvector）
+  postgres:
+    image: harnessdg-postgres:latest
+    container_name: harnessdg-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: harnessdg
+      POSTGRES_USER: harness
+      POSTGRES_PASSWORD: harness_dev
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U harness -d harnessdg"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - harnessdg-network
+
+  # Backend API 服务（Java Spring Boot）
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: harnessdg-backend:latest
+    container_name: harnessdg-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/harnessdg
+      SPRING_DATASOURCE_USERNAME: harness
+      SPRING_DATASOURCE_PASSWORD: harness_dev
+      AGENT_SERVICE_URL: http://agent:8000
+      QWENPAW_ENDPOINT: http://host.docker.internal:8088
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - harnessdg-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Agent 服务（Python FastAPI）
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    image: harnessdg-agent:latest
+    container_name: harnessdg-agent
+    ports:
+      - "8000:8000"
+    environment:
+      BACKEND_API_URL: http://backend:8080
+      QWENPAW_ENDPOINT: http://host.docker.internal:8088
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - harnessdg-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Frontend 开发服务器（React + Vite）
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: harnessdg-frontend:latest
+    container_name: harnessdg-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://backend:8080
+      VITE_AGENT_URL: http://agent:8000
+    depends_on:
+      agent:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - harnessdg-network
+
+volumes:
+  pg_data:
+    driver: local
+
+networks:
+  harnessdg-network:
+    driver: bridge

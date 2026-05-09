@@ -1,0 +1,22 @@
+{
+  "query": {
+    "title": "AI 问数",
+    "placeholder": "输入你的问题，例如：最近30天各渠道收入如何？",
+    "send": "发送",
+    "thinking": "思考中...",
+    "error": "请求失败，请稍后再试",
+    "empty_reply": "AI 未返回有效结果",
+    "clear_chat": "清空对话",
+    "clear_confirm": "确定清空所有对话记录？",
+    "clear_success": "已清空对话",
+    "sources": "数据来源",
+    "sql": "生成 SQL",
+    "copy_sql": "复制 SQL",
+    "copy_success": "SQL 已复制",
+    "no_history": "暂无对话记录",
+    "start_hint": "试试问我：",
+    "example_metric": "最近7天的收入趋势",
+    "example_compare": "本月 vs 上月订单对比",
+    "example_top": "销量 Top 10 商品"
+  }
+}

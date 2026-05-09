@@ -18,3 +18,5 @@ infra/**/dagster_home/*.db
 
 # Windows 保留名误生成文件
 /nul
+
+**.log
