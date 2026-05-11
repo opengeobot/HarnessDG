@@ -20,3 +20,5 @@ infra/**/dagster_home/*.db
 /nul
 
 **.log
+
+.ai-code-tracking.json
