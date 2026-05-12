@@ -21,6 +21,22 @@ CREATE TABLE sys_config (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+COMMENT ON TABLE sys_config IS '系统配置表';
+COMMENT ON COLUMN sys_config.id IS '主键ID';
+COMMENT ON COLUMN sys_config.config_key IS '配置键（环境内唯一）';
+COMMENT ON COLUMN sys_config.config_value IS '配置值';
+COMMENT ON COLUMN sys_config.value_type IS '值类型（string/number/boolean/json）';
+COMMENT ON COLUMN sys_config.category IS '分类';
+COMMENT ON COLUMN sys_config.description IS '描述（多语言JSONB）';
+COMMENT ON COLUMN sys_config.is_encrypted IS '是否加密存储';
+COMMENT ON COLUMN sys_config.is_readonly IS '是否只读（不可修改）';
+COMMENT ON COLUMN sys_config.environment IS '环境（all/dev/test/prod）';
+COMMENT ON COLUMN sys_config.is_deleted IS '逻辑删除标识';
+COMMENT ON COLUMN sys_config.created_by IS '创建人';
+COMMENT ON COLUMN sys_config.updated_by IS '最后更新人';
+COMMENT ON COLUMN sys_config.created_at IS '创建时间';
+COMMENT ON COLUMN sys_config.updated_at IS '最后更新时间';
+
 CREATE UNIQUE INDEX uk_config_key_env ON sys_config(config_key, environment) WHERE is_deleted = FALSE;
 
 -- 审计日志表
@@ -41,6 +57,23 @@ CREATE TABLE sys_audit_log (
     duration_ms     BIGINT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+COMMENT ON TABLE sys_audit_log IS '审计日志表';
+COMMENT ON COLUMN sys_audit_log.id IS '主键ID';
+COMMENT ON COLUMN sys_audit_log.trace_id IS '追踪ID（全链路关联）';
+COMMENT ON COLUMN sys_audit_log.task_id IS '关联任务ID';
+COMMENT ON COLUMN sys_audit_log.operator IS '操作人';
+COMMENT ON COLUMN sys_audit_log.action IS '操作类型';
+COMMENT ON COLUMN sys_audit_log.resource_type IS '资源类型';
+COMMENT ON COLUMN sys_audit_log.resource_id IS '资源ID';
+COMMENT ON COLUMN sys_audit_log.resource_name IS '资源名称';
+COMMENT ON COLUMN sys_audit_log.detail IS '操作详情（JSONB）';
+COMMENT ON COLUMN sys_audit_log.agent_session_id IS 'Agent会话ID';
+COMMENT ON COLUMN sys_audit_log.ip_address IS '操作人IP地址';
+COMMENT ON COLUMN sys_audit_log.user_agent IS '用户代理（浏览器信息）';
+COMMENT ON COLUMN sys_audit_log.status IS '操作状态（success/failure）';
+COMMENT ON COLUMN sys_audit_log.duration_ms IS '操作耗时（毫秒）';
+COMMENT ON COLUMN sys_audit_log.created_at IS '创建时间';
 
 CREATE INDEX idx_audit_trace ON sys_audit_log(trace_id);
 CREATE INDEX idx_audit_task ON sys_audit_log(task_id) WHERE task_id IS NOT NULL;

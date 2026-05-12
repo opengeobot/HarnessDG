@@ -47,6 +47,18 @@ public class AuditServiceImpl implements AuditService {
             entity.setStatus("success");
             entity.setCreatedAt(OffsetDateTime.now());
 
+            // 填充 IP 地址
+            String ipAddress = TraceContext.getIpAddress();
+            if (StringUtils.hasText(ipAddress)) {
+                entity.setIpAddress(ipAddress);
+            }
+
+            // 填充 User-Agent
+            String userAgent = TraceContext.getUserAgent();
+            if (StringUtils.hasText(userAgent)) {
+                entity.setUserAgent(userAgent);
+            }
+
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated() && auth.getPrincipal() != null) {
                 Object principal = auth.getPrincipal();

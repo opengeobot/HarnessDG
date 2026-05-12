@@ -70,11 +70,11 @@ function AskData() {
       const assistantMessage: ChatMessage = {
         id: `assistant_${Date.now()}`,
         role: 'assistant',
-        content: res.reply || t('empty_reply'),
+        content: res.data.reply || t('empty_reply'),
         timestamp: Date.now(),
-        intent: res.intent,
-        sql: res.sql,
-        data: res.data,
+        intent: res.data.intent,
+        sql: res.data.sql,
+        data: res.data.data,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error: any) {

@@ -31,6 +31,33 @@ CREATE TABLE biz_task (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+COMMENT ON TABLE biz_task IS '业务任务实例表';
+COMMENT ON COLUMN biz_task.id IS '主键ID';
+COMMENT ON COLUMN biz_task.task_code IS '任务编码（唯一）';
+COMMENT ON COLUMN biz_task.task_type IS '任务类型';
+COMMENT ON COLUMN biz_task.title IS '任务标题（多语言JSONB）';
+COMMENT ON COLUMN biz_task.description IS '任务描述（多语言JSONB）';
+COMMENT ON COLUMN biz_task.status IS '任务状态';
+COMMENT ON COLUMN biz_task.priority IS '优先级（low/medium/high/urgent）';
+COMMENT ON COLUMN biz_task.input_params IS '输入参数（JSONB）';
+COMMENT ON COLUMN biz_task.execution_plan IS '执行计划（JSONB）';
+COMMENT ON COLUMN biz_task.result IS '执行结果（JSONB）';
+COMMENT ON COLUMN biz_task.initiator IS '发起人';
+COMMENT ON COLUMN biz_task.assignee IS '指派人';
+COMMENT ON COLUMN biz_task.data_domain IS '所属数据域';
+COMMENT ON COLUMN biz_task.entity_id IS '关联实体ID';
+COMMENT ON COLUMN biz_task.metric_id IS '关联指标ID';
+COMMENT ON COLUMN biz_task.dagster_run_id IS 'Dagster运行ID';
+COMMENT ON COLUMN biz_task.agent_session_id IS 'Agent会话ID';
+COMMENT ON COLUMN biz_task.trace_id IS '追踪ID（全链路关联）';
+COMMENT ON COLUMN biz_task.started_at IS '开始时间';
+COMMENT ON COLUMN biz_task.completed_at IS '完成时间';
+COMMENT ON COLUMN biz_task.is_deleted IS '逻辑删除标识';
+COMMENT ON COLUMN biz_task.created_by IS '创建人';
+COMMENT ON COLUMN biz_task.updated_by IS '最后更新人';
+COMMENT ON COLUMN biz_task.created_at IS '创建时间';
+COMMENT ON COLUMN biz_task.updated_at IS '最后更新时间';
+
 CREATE UNIQUE INDEX uk_task_code ON biz_task(task_code) WHERE is_deleted = FALSE;
 CREATE INDEX idx_task_type_status ON biz_task(task_type, status) WHERE is_deleted = FALSE;
 CREATE INDEX idx_task_initiator ON biz_task(initiator, created_at DESC) WHERE is_deleted = FALSE;

@@ -47,9 +47,16 @@ export const taskApi = {
   startTask: (id: number) => api.post(`/tasks/${id}/start`),
 };
 
+export interface AgentChatResponse {
+  reply: string;
+  intent?: string;
+  sql?: string;
+  data?: Record<string, any>;
+}
+
 export const agentApi = {
   chat: (sessionId: string, message: string, context?: Record<string, any>) =>
-    api.post('/agent/chat', { sessionId, message, context }),
+    api.post<any, { data: AgentChatResponse }>('/agent/chat', { sessionId, message, context }),
   intent: (query: string) => api.post('/agent/intent', { query }),
 };
 

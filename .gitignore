@@ -22,3 +22,9 @@ infra/**/dagster_home/*.db
 **.log
 
 .ai-code-tracking.json
+
+/frontend/apps/web/dist/
+/frontend/apps/web/.turbo/
+/frontend/apps/web/.dist/
+/frontend/.turbo/
+**/.turbo/

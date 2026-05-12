@@ -43,12 +43,12 @@ export default function AskData() {
 
     try {
       const res = await agentApi.chat(sessionId, userMessage.content, {});
-      const data = res.data || res;
+      const data = res.data;
 
       const assistantMessage: ChatMessage = {
         id: `msg_${Date.now()}_reply`,
         role: 'assistant',
-        content: data.reply || data.message || JSON.stringify(data),
+        content: data.reply || JSON.stringify(data),
         timestamp: new Date(),
         intent: data.intent,
       };

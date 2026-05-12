@@ -24,8 +24,34 @@
             <artifactId>harness-common</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-ontology</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.harnessdg</groupId>
+            <artifactId>harness-model</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- Test dependencies -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.5.4</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
