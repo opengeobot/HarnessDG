@@ -141,7 +141,9 @@ public class QualityRuleServiceImpl implements QualityRuleService {
 
         // 批量保存
         if (!generatedRules.isEmpty()) {
-            qualityRuleMapper.insert(generatedRules);
+            for (QualityRule rule : generatedRules) {
+                qualityRuleMapper.insert(rule);
+            }
             log.info("Generated {} quality rules", generatedRules.size());
         }
 

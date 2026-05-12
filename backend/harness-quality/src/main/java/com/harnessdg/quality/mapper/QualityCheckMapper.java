@@ -1,6 +1,6 @@
 /**
  * 功能：质量检查记录 Mapper
- * 时间：2026-05-08
+ * 时间：2026-05-12
  * 作者：AxeXie
  */
 package com.harnessdg.quality.mapper;

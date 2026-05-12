@@ -42,6 +42,7 @@
         <module>harness-lineage</module>
         <module>harness-datasource</module>
         <module>harness-report</module>
+        <module>harness-seatunnel</module>
     </modules>
 
     <properties>
@@ -142,6 +143,11 @@
             <dependency>
                 <groupId>com.harnessdg</groupId>
                 <artifactId>harness-report</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.harnessdg</groupId>
+                <artifactId>harness-seatunnel</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

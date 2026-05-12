@@ -37,25 +37,25 @@ public class MetricPublishedListener {
     @EventListener
     @Async
     public void handleMetricPublished(MetricPublishedEvent event) {
-        log.info("Handling metric published event: metricId={}", event.getMetricId());
+        log.info("Handling metric published event: metricId={}", event.metricId());
 
         try {
             // 自动生成质量规则
             QualityRuleAutoGenerateRequest request = new QualityRuleAutoGenerateRequest();
-            request.setMetricId(event.getMetricId());
+            request.setMetricId(event.metricId());
 
             var generatedRules = qualityRuleService.autoGenerateRules(request);
             log.info("Auto-generated {} quality rules for metric: metricId={}",
-                    generatedRules.size(), event.getMetricId());
+                    generatedRules.size(), event.metricId());
 
             // TODO: 后续可在此处触发质量检查执行
             // for (var rule : generatedRules) {
             //     qualityRuleService.runCheck(rule.getId());
             // }
 
-            log.info("Metric published event handled successfully: metricId={}", event.getMetricId());
+            log.info("Metric published event handled successfully: metricId={}", event.metricId());
         } catch (Exception e) {
-            log.error("Failed to handle metric published event: metricId={}", event.getMetricId(), e);
+            log.error("Failed to handle metric published event: metricId={}", event.metricId(), e);
         }
     }
 
