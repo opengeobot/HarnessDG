@@ -6,7 +6,7 @@
 import api from './api';
 
 export const reportApi = {
-  listReports: (params?: any) => api.get('/reports/weekly', { params }),
-  getReport: (id: number) => api.get(`/reports/weekly/${id}`),
-  createReport: (data: any) => api.post('/reports/weekly', data),
+  listReports: (params?: any) => api.get('/v1/reports', { params }),
+  getReport: (id: number) => api.get(`/v1/reports/${id}`),
+  createReport: (data: any) => api.post('/v1/reports', data),
 };

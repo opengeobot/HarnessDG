@@ -3,7 +3,7 @@
  * 时间：2026-05-07
  * 作者：AxeXie
  */
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DictionaryItem } from '@harnessdg/shared';
 import { useDictStore } from '@/stores/dictStore';
@@ -22,17 +22,23 @@ export function useDictionary(groupCode: string): UseDictionaryResult {
   const { i18n } = useTranslation();
   const locale = i18n.language || 'zh_CN';
 
-  const items = useDictStore((s) => s.cache[groupCode]?.items ?? []);
-  const loading = useDictStore((s) => !!s.loading[groupCode]);
-  const error = useDictStore((s) => s.error[groupCode] ?? null);
-  const loadGroup = useDictStore((s) => s.loadGroup);
+  // 缓存选择器函数以避免无限循环
+  const selectItems = useCallback((s: any) => s.cache[groupCode]?.items ?? [], [groupCode]);
+  const selectLoading = useCallback((s: any) => !!s.loading[groupCode], [groupCode]);
+  const selectError = useCallback((s: any) => s.error[groupCode] ?? null, [groupCode]);
+  const selectLoadGroup = useCallback((s: any) => s.loadGroup, []);
+
+  const items = useDictStore(selectItems);
+  const loading = useDictStore(selectLoading);
+  const error = useDictStore(selectError);
+  const loadGroup = useDictStore(selectLoadGroup);
 
   useEffect(() => {
     if (groupCode) loadGroup(groupCode);
   }, [groupCode, loadGroup]);
 
   return useMemo<UseDictionaryResult>(() => {
-    const getItem = (code: string) => items.find((i) => i.code === code);
+    const getItem = (code: string) => items.find((i: DictionaryItem) => i.code === code);
     return {
       items,
       loading,
@@ -60,7 +66,7 @@ export function useDictionaryBatch(groupCodes: string[]): Record<string, UseDict
   }, [codeKey]);
 
   const results: Record<string, UseDictionaryResult> = {};
-  // 逐个调用 useDictionary 以复用 selector；但 hooks 不能在循环中调用，这里改用 store 直接读
+  // 逐个调用 useDictionary 以复用 selector；但 hooks 不能在循环中调用，这里改用 store 直读
   const { i18n } = useTranslation();
   const locale = i18n.language || 'zh_CN';
   const cache = useDictStore((s) => s.cache);
@@ -70,7 +76,7 @@ export function useDictionaryBatch(groupCodes: string[]): Record<string, UseDict
 
   groupCodes.forEach((code) => {
     const items = cache[code]?.items ?? [];
-    const getItem = (c: string) => items.find((i) => i.code === c);
+    const getItem = (c: string) => items.find((i: DictionaryItem) => i.code === c);
     results[code] = {
       items,
       loading: !!loading[code],

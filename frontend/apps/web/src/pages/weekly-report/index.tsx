@@ -19,11 +19,10 @@ interface WeeklyReport {
   id: number;
   title: string;
   reportType: string;
-  startDate: string;
-  endDate: string;
-  creator: string;
-  createdAt: string;
-  status: string;
+  timeRangeStart?: string;
+  timeRangeEnd?: string;
+  generatedBy?: string;
+  status?: string;
 }
 
 export default function WeeklyReportList() {
@@ -40,6 +39,9 @@ export default function WeeklyReportList() {
     try {
       const res: any = await reportApi.listReports();
       setData(res.data || []);
+    } catch {
+      message.error(t('common:error.load_fail', '加载失败'));
+      setData([]);
     } finally {
       setLoading(false);
     }
@@ -51,9 +53,10 @@ export default function WeeklyReportList() {
     const v = await form.validateFields();
     try {
       const payload = {
-        ...v,
-        startDate: v.dateRange?.[0]?.format('YYYY-MM-DD'),
-        endDate: v.dateRange?.[1]?.format('YYYY-MM-DD'),
+        title: v.title,
+        reportType: v.reportType,
+        timeRangeStart: v.dateRange?.[0]?.toISOString(),
+        timeRangeEnd: v.dateRange?.[1]?.toISOString(),
       };
       await reportApi.createReport(payload);
       message.success(t('report.create_success', '创建成功'));
@@ -77,10 +80,13 @@ export default function WeeklyReportList() {
       width: 120,
       render: (v: string) => v,
     },
-    { title: t('report.date_range'), dataIndex: 'startDate', width: 220,
-      render: (_: any, r: WeeklyReport) => `${r.startDate} ~ ${r.endDate}` },
-    { title: t('report.creator'), dataIndex: 'creator', width: 120 },
-    { title: t('report.created_at'), dataIndex: 'createdAt', width: 180 },
+    { title: t('report.date_range'), dataIndex: 'timeRangeStart', width: 220,
+      render: (_: any, r: WeeklyReport) => {
+        const start = r.timeRangeStart ? new Date(r.timeRangeStart).toLocaleDateString() : '-';
+        const end = r.timeRangeEnd ? new Date(r.timeRangeEnd).toLocaleDateString() : '-';
+        return `${start} ~ ${end}`;
+      } },
+    { title: t('report.creator'), dataIndex: 'generatedBy', width: 140, render: (v?: string) => v || '-' },
     {
       title: t('common:action.title', '操作'),
       fixed: 'right',

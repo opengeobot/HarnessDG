@@ -4,21 +4,18 @@
  * 作者：AxeXie
  */
 import { useEffect, useState } from 'react';
-import { Card, Descriptions, Spin, Typography, Empty } from 'antd';
+import { Card, Descriptions, Spin, Empty } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { reportApi } from '@/services/reportApi';
-
-const { Title, Paragraph } = Typography;
 
 interface WeeklyReport {
   id: number;
   title: string;
   reportType: string;
-  startDate: string;
-  endDate: string;
-  creator: string;
-  createdAt: string;
-  status: string;
+  timeRangeStart?: string;
+  timeRangeEnd?: string;
+  generatedBy?: string;
+  status?: string;
   markdownContent?: string;
   metricsSnapshot?: Record<string, any>;
 }
@@ -26,26 +23,30 @@ interface WeeklyReport {
 export default function ReportView({ report: propReport }: { report?: WeeklyReport }) {
   const { t } = useTranslation(['report', 'common']);
   const [detail, setDetail] = useState<WeeklyReport | null>(propReport || null);
-  const [loading, setLoading] = useState(!propReport);
+  const [loading, setLoading] = useState(false);
   const reportId = propReport?.id;
 
   useEffect(() => {
-    if (propReport) {
-      setDetail(propReport);
-      setLoading(false);
+    if (!reportId) {
+      setDetail(propReport || null);
       return;
     }
+
+    let cancelled = false;
     const loadDetail = async () => {
       setLoading(true);
       try {
-        // If used standalone, fetch from API
-        const res: any = await reportApi.getReport(0);
-        setDetail(res.data);
+        const res: any = await reportApi.getReport(reportId);
+        if (!cancelled) setDetail(res.data || res);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    if (!propReport) loadDetail();
+
+    loadDetail();
+    return () => {
+      cancelled = true;
+    };
   }, [propReport, reportId]);
 
   if (loading) return <Spin />;
@@ -56,9 +57,12 @@ export default function ReportView({ report: propReport }: { report?: WeeklyRepo
       <Descriptions column={2} bordered style={{ marginBottom: 24 }}>
         <Descriptions.Item label={t('report.title')}>{detail.title}</Descriptions.Item>
         <Descriptions.Item label={t('report.report_type')}>{detail.reportType}</Descriptions.Item>
-        <Descriptions.Item label={t('report.date_range')}>{detail.startDate} ~ {detail.endDate}</Descriptions.Item>
-        <Descriptions.Item label={t('report.creator')}>{detail.creator}</Descriptions.Item>
-        <Descriptions.Item label={t('report.created_at')}>{detail.createdAt}</Descriptions.Item>
+        <Descriptions.Item label={t('report.date_range')}>
+          {(detail.timeRangeStart ? new Date(detail.timeRangeStart).toLocaleDateString() : '-')}&nbsp;~&nbsp;
+          {(detail.timeRangeEnd ? new Date(detail.timeRangeEnd).toLocaleDateString() : '-')}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('report.creator')}>{detail.generatedBy || '-'}</Descriptions.Item>
+        <Descriptions.Item label={t('report.status', '状态')}>{detail.status || '-'}</Descriptions.Item>
       </Descriptions>
 
       <Card title={t('report.content', '报告内容')} style={{ marginBottom: 16 }}>
