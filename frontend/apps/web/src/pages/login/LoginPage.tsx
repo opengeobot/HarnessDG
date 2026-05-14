@@ -4,7 +4,7 @@
  * 作者：AxeXie
  */
 import { useState } from 'react';
-import { Form, Input, Button, Card, message } from 'antd';
+import { App, Form, Input, Button, Card } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +20,7 @@ export default function LoginPage() {
   const { t } = useTranslation(['login', 'common']);
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
+  const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
 
   const onFinish = async (values: LoginFormValues) => {

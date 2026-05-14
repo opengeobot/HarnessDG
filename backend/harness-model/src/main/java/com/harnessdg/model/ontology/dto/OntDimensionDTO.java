@@ -13,8 +13,11 @@ public class OntDimensionDTO {
     private Map<String, String> description;
     private Long entityId;
     private String dimType;
+    private String dimensionType;
+    private String dataType;
     private String tableColumn;
     private String hierarchyLevel;
+    private Map<String, Object> hierarchyLevels;
     private String status;
     private Map<String, Object> tags;
     private String resolvedName;

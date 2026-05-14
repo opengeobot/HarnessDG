@@ -55,6 +55,10 @@ function AppRoutes() {
           <Route path="tasks" element={<TaskCenter />} />
           <Route path="tasks/build-metric" element={<BuildMetric />} />
           <Route path="tasks/ask-data" element={<AskData />} />
+          <Route path="tasks/data-ingestion" element={<Navigate to="/data-ingestion" replace />} />
+          <Route path="tasks/generate-report" element={<Navigate to="/weekly-report" replace />} />
+          <Route path="tasks/diagnose" element={<Navigate to="/diagnosis" replace />} />
+          <Route path="tasks/request-permission" element={<Navigate to="/approval" replace />} />
           <Route path="ontology" element={<Ontology />} />
           <Route path="governance" element={<Governance />} />
           <Route path="query" element={<Query />} />

@@ -12,6 +12,7 @@ import com.harnessdg.integration.openmetadata.OpenMetadataService;
 import com.harnessdg.quality.service.QualityCheckService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -29,7 +30,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class ApprovalCompleteListener {
 
-    private final OpenMetadataService openMetadataService;
+    private final ObjectProvider<OpenMetadataService> openMetadataServiceProvider;
     private final QualityCheckService qualityCheckService;
 
     /**
@@ -44,17 +45,16 @@ public class ApprovalCompleteListener {
                 event.resourceId(), event.resourceType());
 
         try {
+            OpenMetadataService openMetadataService = openMetadataServiceProvider.getIfAvailable();
             // 根据资源类型执行不同逻辑
             if ("metric".equals(event.resourceType()) && event.resourceId() != null) {
                 Long metricId = Long.parseLong(event.resourceId());
                 log.info("Metric approved, syncing to OpenMetadata: metricId={}", metricId);
-                openMetadataService.syncMetricToOpenMetadata(metricId);
+                syncMetricToOpenMetadata(openMetadataService, metricId);
             } else if ("entity".equals(event.resourceType()) && event.resourceId() != null) {
                 Long entityId = Long.parseLong(event.resourceId());
                 log.info("Entity approved, syncing to OpenMetadata: entityId={}", entityId);
-                openMetadataService.syncEntityToOpenMetadata(entityId);
-                openMetadataService.syncLineageFromPipeline(entityId);
-                openMetadataService.autoTagEntity(entityId);
+                syncEntityToOpenMetadata(openMetadataService, entityId);
 
                 // 触发质量规则检查
                 log.info("Triggering quality checks for entity: entityId={}", entityId);
@@ -70,6 +70,24 @@ public class ApprovalCompleteListener {
     /**
      * 审批完成事件定义
      */
+    private void syncMetricToOpenMetadata(OpenMetadataService openMetadataService, Long metricId) {
+        if (openMetadataService == null) {
+            log.info("OpenMetadata integration disabled, skip metric sync: metricId={}", metricId);
+            return;
+        }
+        openMetadataService.syncMetricToOpenMetadata(metricId);
+    }
+
+    private void syncEntityToOpenMetadata(OpenMetadataService openMetadataService, Long entityId) {
+        if (openMetadataService == null) {
+            log.info("OpenMetadata integration disabled, skip entity sync: entityId={}", entityId);
+            return;
+        }
+        openMetadataService.syncEntityToOpenMetadata(entityId);
+        openMetadataService.syncLineageFromPipeline(entityId);
+        openMetadataService.autoTagEntity(entityId);
+    }
+
     public record ApprovalCompleteEvent(
             String resourceId,
             String resourceType,

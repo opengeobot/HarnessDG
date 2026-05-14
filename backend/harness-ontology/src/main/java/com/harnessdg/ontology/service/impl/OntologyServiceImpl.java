@@ -205,9 +205,11 @@ public class OntologyServiceImpl implements OntologyService {
         dim.setName(request.getName());
         dim.setDescription(request.getDescription());
         dim.setEntityId(request.getEntityId());
-        dim.setDimType(request.getDimType());
+        dim.setDimType(resolveDimensionType(request));
+        dim.setDataType(request.getDataType() == null ? "string" : request.getDataType());
         dim.setTableColumn(request.getTableColumn());
         dim.setHierarchyLevel(request.getHierarchyLevel());
+        dim.setHierarchyLevels(request.getHierarchyLevels());
         dim.setStatus("draft");
         dim.setTags(request.getTags());
         dimensionMapper.insert(dim);
@@ -225,9 +227,11 @@ public class OntologyServiceImpl implements OntologyService {
         dim.setName(request.getName());
         dim.setDescription(request.getDescription());
         dim.setEntityId(request.getEntityId());
-        dim.setDimType(request.getDimType());
+        dim.setDimType(resolveDimensionType(request));
+        dim.setDataType(request.getDataType() == null ? "string" : request.getDataType());
         dim.setTableColumn(request.getTableColumn());
         dim.setHierarchyLevel(request.getHierarchyLevel());
+        dim.setHierarchyLevels(request.getHierarchyLevels());
         dim.setTags(request.getTags());
         dimensionMapper.updateById(dim);
         return toDimensionDTO(dim);
@@ -283,11 +287,27 @@ public class OntologyServiceImpl implements OntologyService {
         dto.setDescription(d.getDescription());
         dto.setEntityId(d.getEntityId());
         dto.setDimType(d.getDimType());
+        dto.setDimensionType(d.getDimType());
+        dto.setDataType(d.getDataType());
         dto.setTableColumn(d.getTableColumn());
         dto.setHierarchyLevel(d.getHierarchyLevel());
+        dto.setHierarchyLevels(d.getHierarchyLevels());
         dto.setStatus(d.getStatus());
         dto.setTags(d.getTags());
         return dto;
+    }
+
+    private String resolveDimensionType(DimensionCreateRequest request) {
+        if (request.getDimensionType() != null && !request.getDimensionType().isBlank()) {
+            return request.getDimensionType();
+        }
+        if (request.getDimType() != null && !request.getDimType().isBlank()) {
+            return request.getDimType();
+        }
+        return switch (request.getDataType() == null ? "" : request.getDataType()) {
+            case "date", "datetime", "timestamp" -> "time";
+            default -> "business";
+        };
     }
 
     /**

@@ -27,12 +27,12 @@ const taskIcons: Record<string, React.ReactNode> = {
 };
 
 const taskRoutes: Record<string, string> = {
-  data_ingestion: '/tasks/data-ingestion',
+  data_ingestion: '/data-ingestion',
   build_metric: '/tasks/build-metric',
   ask_data: '/tasks/ask-data',
-  generate_report: '/tasks/generate-report',
-  diagnose_exception: '/tasks/diagnose',
-  request_permission: '/tasks/request-permission',
+  generate_report: '/weekly-report',
+  diagnose_exception: '/diagnosis',
+  request_permission: '/approval',
 };
 
 const taskCodes = [

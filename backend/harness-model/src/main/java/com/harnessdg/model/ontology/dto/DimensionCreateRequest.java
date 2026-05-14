@@ -17,15 +17,19 @@ public class DimensionCreateRequest {
 
     private Map<String, String> description;
 
-    @NotNull
     private Long entityId;
 
-    @NotBlank
     private String dimType;
+
+    private String dimensionType;
+
+    private String dataType;
 
     private String tableColumn;
 
     private String hierarchyLevel;
+
+    private Map<String, Object> hierarchyLevels;
 
     private Map<String, Object> tags;
 }

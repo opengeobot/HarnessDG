@@ -24,14 +24,22 @@ public class OntDimension extends BaseEntity {
 
     private Long entityId;
 
+    @TableField("dimension_type")
     private String dimType;
 
+    private String dataType;
+
+    @TableField(exist = false)
     private String tableColumn;
 
+    @TableField(exist = false)
     private String hierarchyLevel;
+
+    @TableField(value = "hierarchy_levels", typeHandler = JacksonTypeHandler.class)
+    private Map<String, Object> hierarchyLevels;
 
     private String status;
 
-    @TableField(typeHandler = JacksonTypeHandler.class)
+    @TableField(exist = false)
     private Map<String, Object> tags;
 }

@@ -9,6 +9,7 @@ import com.harnessdg.integration.openmetadata.OpenMetadataService;
 import com.harnessdg.ontology.service.impl.OntologyServiceImpl.OntologyCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class OntologySyncListener {
 
-    private final OpenMetadataService openMetadataService;
+    private final ObjectProvider<OpenMetadataService> openMetadataServiceProvider;
 
     /**
      * 处理本体创建事件
@@ -35,6 +36,13 @@ public class OntologySyncListener {
     public void handleOntologyCreated(OntologyCreatedEvent event) {
         log.info("Received OntologyCreatedEvent: entityId={}, metricId={}, entityType={}",
                 event.entityId(), event.metricId(), event.entityType());
+
+        OpenMetadataService openMetadataService = openMetadataServiceProvider.getIfAvailable();
+        if (openMetadataService == null) {
+            log.info("OpenMetadata integration disabled, skip ontology sync: entityId={}, metricId={}",
+                    event.entityId(), event.metricId());
+            return;
+        }
 
         // 同步实体
         if (event.entityId() != null) {
