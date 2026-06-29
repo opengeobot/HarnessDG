@@ -33,6 +33,7 @@ class LayeredArchitectureTest {
             "com.aihub.version..",
             "com.aihub.transfer..",
             "com.aihub.integration..",
+            "com.aihub.platform..",
             "com.aihub.job..",
             "com.aihub.mcp..",
             "com.aihub.audit..",

@@ -21,7 +21,8 @@ paths:
       summary: 获取系统依赖与健康摘要（运维诊断）
       description: |
         返回平台关键依赖（PostgreSQL、Gitea、MinIO）的精简健康/依赖摘要，用于运维诊断。
-        对非管理员隐藏内部 Endpoint、凭据状态与网络拓扑。仅作为 P0 契约骨架的只读示例路径。
+        对非管理员隐藏内部 Endpoint、凭据状态与网络拓扑。P0 已实现 PostgreSQL 探测，
+        Gitea/MinIO 等依赖随对应集成适配器在 P1+ 注册接入。
       tags:
         - system
       responses:
