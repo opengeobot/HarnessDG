@@ -5,5 +5,9 @@
  */
 export { apiClient, API_BASE_URL } from './client';
 export { ApiError, isApiError } from './errors';
-export { fetchSystemHealth } from './endpoints';
-export type { HealthStatus } from './endpoints';
+export { fetchSystemDependencies } from './endpoints';
+export type {
+  DependencyHealth,
+  DependencyStatus,
+  SystemDependencySummary,
+} from './endpoints';

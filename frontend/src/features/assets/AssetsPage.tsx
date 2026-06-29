@@ -6,7 +6,7 @@
 import { useEffect } from 'react';
 import { PlaceholderPage } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
-import { fetchSystemHealth } from '@/shared/api';
+import { fetchSystemDependencies } from '@/shared/api';
 
 export function AssetsPage() {
   useDocumentTitle('资产目录');
@@ -16,7 +16,7 @@ export function AssetsPage() {
   useEffect(() => {
     const enabled = false;
     if (enabled) {
-      void fetchSystemHealth();
+      void fetchSystemDependencies();
     }
   }, []);
 
