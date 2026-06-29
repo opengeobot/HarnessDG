@@ -1,0 +1,5 @@
+# 功能: Docker 构建忽略项；时间: 2026-06-29；作者: AxeXie
+target/
+*.iml
+.idea/
+.vscode/

@@ -1,0 +1,31 @@
+# 功能: 前端忽略规则 / 时间: 2026-06-29 / 作者: AxeXie
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build output
+dist
+dist-ssr
+*.local
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Test / cache
+coverage
+.eslintcache
+*.tsbuildinfo

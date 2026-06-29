@@ -1,0 +1,10 @@
+# 功能: 前端 Docker 构建忽略规则
+# 时间: 2026-06-29
+# 作者: AxeXie
+node_modules
+dist
+.git
+.gitignore
+*.log
+coverage
+.eslintcache

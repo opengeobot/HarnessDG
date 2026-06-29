@@ -1,0 +1,177 @@
+# ============================================================================
+# 功能: AIHub 平台 Docker Compose 部署基线 (P0)。
+#       编排 postgres / minio / minio-init / gitea / backend / worker /
+#       frontend / nginx 八个服务，作为本地开发与功能验证基线。
+#       镜像 Tag 锁定到具体版本，避免裸 latest。
+# 时间: 2026-06-29
+# 作者: AxeXie
+# ============================================================================
+
+name: aihub
+
+services:
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:17.2-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:RELEASE.2024-12-18T13-15-44Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  minio-init:
+    image: docker.m.daocloud.io/minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/init/init.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      GITEA_MINIO_ACCESS_KEY: ${GITEA_MINIO_ACCESS_KEY}
+      GITEA_MINIO_SECRET_KEY: ${GITEA_MINIO_SECRET_KEY}
+      AIHUB_MINIO_ACCESS_KEY: ${AIHUB_MINIO_ACCESS_KEY}
+      AIHUB_MINIO_SECRET_KEY: ${AIHUB_MINIO_SECRET_KEY}
+      DVC_ACCESS_KEY: ${DVC_ACCESS_KEY}
+      DVC_SECRET_KEY: ${DVC_SECRET_KEY}
+    volumes:
+      - ./minio:/init:ro
+    restart: "no"
+
+  gitea:
+    image: docker.m.daocloud.io/gitea/gitea:1.24.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: postgres:5432
+      GITEA__database__NAME: gitea
+      GITEA__database__USER: ${POSTGRES_USER}
+      GITEA__database__PASSWD: ${POSTGRES_PASSWORD}
+      GITEA__server__ROOT_URL: ${GITEA_PUBLIC_URL}
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__storage__STORAGE_TYPE: minio
+      GITEA__storage__MINIO_ENDPOINT: minio:9000
+      GITEA__storage__MINIO_ACCESS_KEY_ID: ${GITEA_MINIO_ACCESS_KEY}
+      GITEA__storage__MINIO_SECRET_ACCESS_KEY: ${GITEA_MINIO_SECRET_KEY}
+      GITEA__storage__MINIO_BUCKET: gitea-storage
+      GITEA__storage__MINIO_USE_SSL: "false"
+      GITEA__storage__MINIO_BUCKET_LOOKUP_TYPE: path
+      GITEA__storage__SERVE_DIRECT: "true"
+    volumes:
+      - gitea-data:/data
+    ports:
+      - "127.0.0.1:2222:22"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../../backend
+      target: runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      gitea:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: compose,api
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      AIHUB_GITEA_BASE_URL: http://gitea:3000
+      AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
+      AIHUB_MINIO_ENDPOINT: http://minio:9000
+      AIHUB_MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_URL}
+      AIHUB_MINIO_ACCESS_KEY: ${AIHUB_MINIO_ACCESS_KEY}
+      AIHUB_MINIO_SECRET_KEY: ${AIHUB_MINIO_SECRET_KEY}
+      AIHUB_DVC_BUCKET: dvc-cache
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../../backend
+      target: worker
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: compose,worker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      AIHUB_GITEA_BASE_URL: http://gitea:3000
+      AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
+      AIHUB_MINIO_ENDPOINT: http://minio:9000
+      AIHUB_DVC_BUCKET: dvc-cache
+      AWS_ACCESS_KEY_ID: ${DVC_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${DVC_SECRET_KEY}
+    volumes:
+      - worker-cache:/var/lib/aihub-worker
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../../frontend
+      target: runtime
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: docker.m.daocloud.io/library/nginx:1.27.3-alpine
+    depends_on:
+      - frontend
+      - backend
+      - gitea
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:
+  gitea-data:
+  worker-cache:

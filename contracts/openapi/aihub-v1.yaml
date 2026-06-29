@@ -1,0 +1,153 @@
+# AIHub Platform API - OpenAPI 契约骨架
+# 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5.8、5.9、8.2、5.14 节
+# 说明：本文件为 P0 阶段的契约骨架，仅固化统一响应/错误结构与一个只读示例路径，
+#       不覆盖全部业务接口；业务路径在 P1+ 按"契约优先"流程逐步补充。
+# 作者：AxeXie
+openapi: 3.1.0
+info:
+  title: AIHub Platform API
+  version: v1
+  description: |
+    内部 AI 资产管理平台 REST API 契约。统一成功响应为 ApiResponse，统一失败响应为 ApiError。
+    Agent 不应依赖本地化 message 做分支判断，只依赖稳定的 code 与 retryable。
+servers:
+  - url: /api/v1
+    description: 统一 API 前缀
+
+paths:
+  /system/dependencies:
+    get:
+      operationId: getSystemDependencies
+      summary: 获取系统依赖与健康摘要（运维诊断）
+      description: |
+        返回平台关键依赖（PostgreSQL、Gitea、MinIO）的精简健康/依赖摘要，用于运维诊断。
+        对非管理员隐藏内部 Endpoint、凭据状态与网络拓扑。仅作为 P0 契约骨架的只读示例路径。
+      tags:
+        - system
+      responses:
+        '200':
+          description: 成功返回依赖摘要
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SystemDependencySummary'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  responses:
+    ErrorResponse:
+      description: 统一失败响应
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    ApiResponse:
+      type: object
+      description: 统一成功响应包装
+      required:
+        - requestId
+        - traceId
+        - timestamp
+      properties:
+        data:
+          description: 业务数据载荷，结构由具体接口定义
+          nullable: true
+        requestId:
+          type: string
+          description: 请求标识，回显 X-Request-Id
+          example: req_01J0000000000000000000000
+        traceId:
+          type: string
+          description: 分布式追踪标识
+          example: 4bf92f3577b34da6a3ce929d0e0e4736
+        timestamp:
+          type: string
+          format: date-time
+          description: 服务端 UTC 时间戳
+          example: '2026-06-29T08:00:00Z'
+
+    ApiError:
+      type: object
+      description: 统一失败响应
+      required:
+        - code
+        - message
+        - retryable
+        - requestId
+        - traceId
+      properties:
+        code:
+          type: string
+          description: 稳定的语义错误码，分支判断只依赖此字段
+          example: ASSET_VERSION_CONFLICT
+        message:
+          type: string
+          description: 默认（可本地化）错误消息，不用于分支判断
+          example: Version already exists
+        i18nKey:
+          type: string
+          description: 国际化文案 Key
+          example: error.asset.versionConflict
+        details:
+          type: object
+          description: 附加上下文，结构由错误码定义
+          additionalProperties: true
+        retryable:
+          type: boolean
+          description: 是否可重试；仅当为 true 时 Agent 才应按退避策略重试
+          example: false
+        requestId:
+          type: string
+          example: req_01J0000000000000000000000
+        traceId:
+          type: string
+          example: 4bf92f3577b34da6a3ce929d0e0e4736
+
+    SystemDependencySummary:
+      type: object
+      description: 系统依赖与健康摘要（精简）
+      required:
+        - status
+        - dependencies
+      properties:
+        status:
+          type: string
+          description: 总体就绪状态
+          enum: [UP, DEGRADED, DOWN]
+          example: UP
+        dependencies:
+          type: array
+          description: 各依赖组件状态
+          items:
+            $ref: '#/components/schemas/DependencyStatus'
+
+    DependencyStatus:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+          description: 依赖名称
+          enum: [postgres, gitea, minio]
+          example: postgres
+        status:
+          type: string
+          enum: [UP, DEGRADED, DOWN]
+          example: UP
+        latencyMs:
+          type: integer
+          format: int64
+          description: 探测延迟（毫秒）
+          example: 12

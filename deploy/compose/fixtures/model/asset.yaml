@@ -1,0 +1,19 @@
+schemaVersion: aihub/v1
+kind: Model
+metadata:
+  namespace: demo
+  name: tiny-model
+  displayName: 验证用极小模型
+  visibility: internal
+  owners:
+    - team-platform
+  tags:
+    - test-fixture
+spec:
+  framework: pytorch
+  task: text-generation
+  license: Apache-2.0
+  artifacts:
+    - path: tiny-model.bin
+      dvcFile: tiny-model.bin.dvc
+      mediaType: application/octet-stream

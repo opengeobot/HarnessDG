@@ -1,0 +1,17 @@
+/**
+ * 功能: 访问与凭据占位页面 (成员、Agent、Token、Scope)。骨架阶段无业务逻辑。
+ * 时间: 2026-06-29
+ * 作者: AxeXie
+ */
+import { PlaceholderPage } from '@/shared/components';
+import { useDocumentTitle } from '@/shared/hooks';
+
+export function AccessPage() {
+  useDocumentTitle('访问与凭据');
+  return (
+    <PlaceholderPage
+      title="访问与凭据"
+      description="成员、Agent、Token 与 Scope 管理将在 P1 实现。"
+    />
+  );
+}

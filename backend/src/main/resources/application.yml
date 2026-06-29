@@ -1,0 +1,98 @@
+#
+# 功能: 应用主配置——关闭自动 DDL、配置 Flyway、分层健康检查与多 Profile。
+# 时间: 2026-06-29
+# 作者: AxeXie
+#
+spring:
+  application:
+    name: aihub-backend
+  # 默认数据源占位；各 Profile 覆盖具体连接信息。
+  datasource:
+    url: ${AIHUB_DB_URL:jdbc:postgresql://localhost:5432/aihub}
+    username: ${AIHUB_DB_USER:aihub}
+    password: ${AIHUB_DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+  # Flyway 负责唯一的库结构演进，前向迁移、空库可基线化。
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+
+# MyBatis-Plus 不反向建表，仅作为查询/映射框架。
+mybatis-plus:
+  global-config:
+    db-config:
+      # 主键由业务 ID 生成器提供，禁用框架内置 ID 策略的自动赋值。
+      id-type: input
+    # 不在启动时执行任何 DDL/Banner 之外的库初始化。
+    banner: false
+  configuration:
+    map-underscore-to-camel-case: true
+
+# Actuator：分层健康检查（liveness / readiness），readiness 含 PostgreSQL 探测。
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+      show-details: when_authorized
+  health:
+    # 使用自定义的 db 健康指示器替代默认 DataSource 检查，便于精确控制 readiness 行为。
+    db:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8080}
+
+---
+#
+# compose Profile：Docker Compose 一体化开发/验收环境。
+#
+spring:
+  config:
+    activate:
+      on-profile: compose
+  datasource:
+    url: ${AIHUB_DB_URL:jdbc:postgresql://postgres:5432/aihub}
+    username: ${AIHUB_DB_USER:aihub}
+    password: ${AIHUB_DB_PASSWORD:}
+
+---
+#
+# api Profile：仅承载 REST/MCP 在线请求的实例角色。
+#
+spring:
+  config:
+    activate:
+      on-profile: api
+
+---
+#
+# worker Profile：承载可靠后台任务的实例角色（不对外暴露业务端口语义）。
+#
+spring:
+  config:
+    activate:
+      on-profile: worker
+
+---
+#
+# test Profile：供 Testcontainers 集成测试使用，数据源由容器动态注入。
+#
+spring:
+  config:
+    activate:
+      on-profile: test
+  flyway:
+    enabled: true
+    clean-disabled: true
