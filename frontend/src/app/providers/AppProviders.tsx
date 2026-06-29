@@ -5,7 +5,7 @@
  * 作者: AxeXie
  */
 import { useState, type ReactNode } from 'react';
-import { ConfigProvider } from 'antd';
+import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PermissionProvider } from '@/app/permission';
@@ -29,7 +29,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider locale={zhCN}>
-        <PermissionProvider>{children}</PermissionProvider>
+        <AntdApp>
+          <PermissionProvider>{children}</PermissionProvider>
+        </AntdApp>
       </ConfigProvider>
     </QueryClientProvider>
   );
