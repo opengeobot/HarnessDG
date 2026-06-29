@@ -1,0 +1,42 @@
+/*
+ * 功能: 创建资产命令，承载登记资产所需的输入与操作者。
+ * 时间: 2026-06-29
+ * 作者: AxeXie
+ */
+package com.aihub.asset.application;
+
+import com.aihub.asset.domain.AssetType;
+import com.aihub.asset.domain.DatasetProfile;
+import com.aihub.asset.domain.ModelProfile;
+import com.aihub.asset.domain.Visibility;
+import java.util.List;
+
+/**
+ * 创建资产命令。
+ *
+ * @param type        资产类型
+ * @param namespace   命名空间
+ * @param name        名称
+ * @param displayName 展示名称
+ * @param description 描述
+ * @param visibility  可见性
+ * @param owners      Owner 列表
+ * @param tags        标签列表
+ * @param license     许可证
+ * @param model       模型画像（仅模型类有效，可空）
+ * @param dataset     数据集画像（仅数据集类有效，可空）
+ * @param principalId 操作者主体 ID（可空，P1 未接入认证）
+ */
+public record CreateAssetCommand(AssetType type,
+                                 String namespace,
+                                 String name,
+                                 String displayName,
+                                 String description,
+                                 Visibility visibility,
+                                 List<String> owners,
+                                 List<String> tags,
+                                 String license,
+                                 ModelProfile model,
+                                 DatasetProfile dataset,
+                                 String principalId) {
+}

@@ -54,6 +54,14 @@ management:
 server:
   port: ${SERVER_PORT:8080}
 
+# 平台业务配置（部署期注入）。Gitea 仓库开通默认关闭，便于无 Gitea 的开发/测试环境使用 Noop 开通器。
+aihub:
+  gitea:
+    enabled: ${AIHUB_GITEA_ENABLED:false}
+    base-url: ${AIHUB_GITEA_BASE_URL:}
+    token: ${AIHUB_GITEA_TOKEN:}
+    default-branch: ${AIHUB_GITEA_DEFAULT_BRANCH:main}
+
 ---
 #
 # compose Profile：Docker Compose 一体化开发/验收环境。

@@ -42,6 +42,183 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  /assets:
+    post:
+      operationId: createAsset
+      summary: 登记新资产（模型/数据集）
+      description: 校验坐标唯一、开通 Git 仓库并写入初始卡片，返回资产详情。
+      tags: [assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetView'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+    get:
+      operationId: searchAssets
+      summary: 检索资产摘要（游标分页）
+      description: 精确字段过滤 + 关键词全文 + 权限可见性过滤；默认排除归档资产。
+      tags: [assets]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/AssetType' } }
+        - { name: namespace, in: query, schema: { type: string } }
+        - { name: framework, in: query, schema: { type: string } }
+        - { name: task, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string } }
+        - { name: modality, in: query, schema: { type: string } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: owner, in: query, schema: { type: string } }
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: 检索成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageAssetSummary'
+
+  /assets/{assetId}:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAsset
+      summary: 查询资产详情
+      tags: [assets]
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetView'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    patch:
+      operationId: updateAsset
+      summary: 更新资产可变元数据
+      tags: [assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAssetRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetView'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      operationId: deleteAsset
+      summary: 逻辑删除资产
+      tags: [assets]
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /models:
+    get:
+      operationId: searchModels
+      summary: 检索模型列表（固定类型语义入口）
+      tags: [assets]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: namespace, in: query, schema: { type: string } }
+        - { name: framework, in: query, schema: { type: string } }
+        - { name: task, in: query, schema: { type: string } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: owner, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 检索成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageAssetSummary'
+
+  /datasets:
+    get:
+      operationId: searchDatasets
+      summary: 检索数据集列表（固定类型语义入口）
+      tags: [assets]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: namespace, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string } }
+        - { name: modality, in: query, schema: { type: string } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: owner, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 检索成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageAssetSummary'
+
 components:
   responses:
     ErrorResponse:
@@ -152,3 +329,157 @@ components:
           format: int64
           description: 探测延迟（毫秒）
           example: 12
+
+    AssetType:
+      type: string
+      description: 资产类型稳定枚举
+      enum: [MODEL, DATASET]
+
+    Visibility:
+      type: string
+      description: 可见性稳定枚举
+      enum: [PRIVATE, INTERNAL, PUBLIC]
+
+    AssetStatus:
+      type: string
+      description: 资产目录条目状态稳定枚举
+      enum: [ACTIVE, DEPRECATED, ARCHIVED]
+
+    ModelProfile:
+      type: object
+      description: 模型画像
+      properties:
+        framework: { type: string, example: pytorch }
+        task: { type: string, example: text-generation }
+        architecture: { type: string }
+
+    DatasetProfile:
+      type: object
+      description: 数据集画像
+      properties:
+        format: { type: string, example: parquet }
+        modality: { type: string, example: text }
+
+    CreateAssetRequest:
+      type: object
+      required: [type, namespace, name, visibility]
+      properties:
+        type: { $ref: '#/components/schemas/AssetType' }
+        namespace:
+          type: string
+          description: 命名空间（小写 slug）
+          example: nlp
+        name:
+          type: string
+          description: 名称（小写 slug），namespace+type+name 唯一
+          example: qwen-domain-7b
+        displayName: { type: string, example: 领域问答模型 }
+        description: { type: string }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        owners:
+          type: array
+          items: { type: string }
+          example: [team-nlp]
+        tags:
+          type: array
+          items: { type: string }
+          example: [text-generation]
+        license: { type: string, example: Apache-2.0 }
+        model: { $ref: '#/components/schemas/ModelProfile' }
+        dataset: { $ref: '#/components/schemas/DatasetProfile' }
+
+    UpdateAssetRequest:
+      type: object
+      description: 更新可变元数据；坐标（namespace/type/name）不可变
+      properties:
+        displayName: { type: string }
+        description: { type: string }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        owners:
+          type: array
+          items: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        license: { type: string }
+        model: { $ref: '#/components/schemas/ModelProfile' }
+        dataset: { $ref: '#/components/schemas/DatasetProfile' }
+
+    AssetView:
+      type: object
+      description: 资产详情视图（非持久化实体）
+      required: [assetId, type, namespace, name, visibility, status]
+      properties:
+        assetId: { type: string, example: ast_01J... }
+        type: { $ref: '#/components/schemas/AssetType' }
+        namespace: { type: string }
+        name: { type: string }
+        displayName: { type: string }
+        description: { type: string }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        owners:
+          type: array
+          items: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        license: { type: string }
+        model:
+          allOf:
+            - $ref: '#/components/schemas/ModelProfile'
+          nullable: true
+        dataset:
+          allOf:
+            - $ref: '#/components/schemas/DatasetProfile'
+          nullable: true
+        repository:
+          type: object
+          nullable: true
+          properties:
+            fullName: { type: string }
+            htmlUrl: { type: string }
+            cloneUrl: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AssetSummary:
+      type: object
+      description: 资产检索摘要（小体积）
+      required: [assetId, type, namespace, name, visibility, status]
+      properties:
+        assetId: { type: string }
+        type: { $ref: '#/components/schemas/AssetType' }
+        namespace: { type: string }
+        name: { type: string }
+        displayName: { type: string }
+        description: { type: string }
+        visibility: { $ref: '#/components/schemas/Visibility' }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        owners:
+          type: array
+          items: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        license: { type: string }
+        framework: { type: string }
+        task: { type: string }
+        format: { type: string }
+        modality: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    CursorPageAssetSummary:
+      type: object
+      description: 资产摘要游标分页
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AssetSummary' }
+        nextCursor:
+          type: string
+          nullable: true
+          description: 下一页游标，null 表示末页
+        hasMore:
+          type: boolean

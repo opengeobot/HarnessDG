@@ -27,6 +27,17 @@ public enum ErrorCode {
     /** 资产不存在（亦用于私有资源防枚举）。 */
     ASSET_NOT_FOUND(HttpStatus.NOT_FOUND, "error.asset.notFound", false, AlertLevel.NONE),
 
+    /** 资产坐标已存在（namespace+type+name 冲突）。 */
+    ASSET_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.asset.alreadyExists", false, AlertLevel.NONE),
+
+    /** 资产仓库开通失败（Gitea 依赖异常，可重试）。 */
+    ASSET_REPOSITORY_PROVISION_FAILED(HttpStatus.BAD_GATEWAY, "error.asset.repositoryProvisionFailed",
+            true, AlertLevel.WARN),
+
+    /** 资产被并发修改（乐观锁冲突，可重试）。 */
+    ASSET_CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "error.asset.concurrentModification",
+            true, AlertLevel.NONE),
+
     /** 资产版本冲突，目标版本已存在。 */
     ASSET_VERSION_CONFLICT(HttpStatus.CONFLICT, "error.asset.versionConflict", false, AlertLevel.INFO),
 
