@@ -1,0 +1,40 @@
+/*
+ * 功能: 资产检索查询输入，应用层据此结合主体权限构造领域检索条件。
+ * 时间: 2026-06-29
+ * 作者: AxeXie
+ */
+package com.aihub.asset.application;
+
+import com.aihub.asset.domain.AssetType;
+
+/**
+ * 资产检索查询输入。
+ *
+ * @param keyword         关键词
+ * @param type            类型过滤（可空）
+ * @param namespace       命名空间过滤（可空）
+ * @param framework       模型框架过滤（可空）
+ * @param task            模型任务过滤（可空）
+ * @param format          数据格式过滤（可空）
+ * @param modality        数据模态过滤（可空）
+ * @param tag             标签过滤（可空）
+ * @param owner           Owner 过滤（可空）
+ * @param includeArchived 是否包含归档资产（默认否，需管理员）
+ * @param cursor          游标（首页为空）
+ * @param limit           每页大小（&lt;=0 使用默认）
+ * @param principalId     当前主体 ID（可空，P1 未接入认证）
+ */
+public record AssetSearchQuery(String keyword,
+                               AssetType type,
+                               String namespace,
+                               String framework,
+                               String task,
+                               String format,
+                               String modality,
+                               String tag,
+                               String owner,
+                               boolean includeArchived,
+                               String cursor,
+                               int limit,
+                               String principalId) {
+}

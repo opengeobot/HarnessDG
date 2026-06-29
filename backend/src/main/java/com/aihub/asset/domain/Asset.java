@@ -1,0 +1,411 @@
+/*
+ * 功能: 资产聚合根，维护目录条目的不变量与生命周期行为。
+ * 时间: 2026-06-29
+ * 作者: AxeXie
+ */
+package com.aihub.asset.domain;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.regex.Pattern;
+
+/**
+ * 资产聚合根。
+ *
+ * <p>封装资产目录条目的不变量（坐标格式、类型与画像一致性、状态流转）与可变元数据的受控修改。
+ * 领域层不依赖 Spring / MyBatis / 任何基础设施 SDK，由仓储适配器负责与持久化实体互转。
+ */
+public final class Asset {
+
+    /** 命名空间与名称统一为小写字母、数字与连字符，便于映射为 Git 仓库名与 URL 友好别名。 */
+    private static final Pattern SLUG_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$");
+
+    private final String assetId;
+    private final AssetType type;
+    private final String namespace;
+    private final String name;
+
+    private String displayName;
+    private String description;
+    private Visibility visibility;
+    private AssetStatus status;
+    private List<String> owners;
+    private List<String> tags;
+    private String license;
+    private ModelProfile modelProfile;
+    private DatasetProfile datasetProfile;
+    private AssetRepositoryRef repository;
+
+    private long rowVersion;
+    private final String createdBy;
+    private String updatedBy;
+    private final Instant createdAt;
+    private Instant updatedAt;
+
+    private Asset(Builder builder) {
+        this.assetId = builder.assetId;
+        this.type = builder.type;
+        this.namespace = builder.namespace;
+        this.name = builder.name;
+        this.displayName = builder.displayName;
+        this.description = builder.description;
+        this.visibility = builder.visibility;
+        this.status = builder.status;
+        this.owners = normalizeList(builder.owners);
+        this.tags = normalizeList(builder.tags);
+        this.license = builder.license;
+        this.modelProfile = builder.modelProfile;
+        this.datasetProfile = builder.datasetProfile;
+        this.repository = builder.repository;
+        this.rowVersion = builder.rowVersion;
+        this.createdBy = builder.createdBy;
+        this.updatedBy = builder.updatedBy;
+        this.createdAt = builder.createdAt;
+        this.updatedAt = builder.updatedAt;
+    }
+
+    /**
+     * 登记新资产，建立坐标不变量与类型/画像一致性，初始状态为 {@link AssetStatus#ACTIVE}。
+     *
+     * @param assetId        业务资产 ID
+     * @param type           资产类型
+     * @param namespace      命名空间
+     * @param name           名称
+     * @param displayName    展示名称
+     * @param description    描述
+     * @param visibility     可见性
+     * @param owners         Owner 列表
+     * @param tags           标签列表
+     * @param license        许可证
+     * @param modelProfile   模型画像（模型类必填语义，可空字段）
+     * @param datasetProfile 数据集画像（数据集类必填语义，可空字段）
+     * @param createdBy      创建者主体 ID
+     * @return 新建资产聚合
+     */
+    public static Asset create(String assetId,
+                               AssetType type,
+                               String namespace,
+                               String name,
+                               String displayName,
+                               String description,
+                               Visibility visibility,
+                               List<String> owners,
+                               List<String> tags,
+                               String license,
+                               ModelProfile modelProfile,
+                               DatasetProfile datasetProfile,
+                               String createdBy) {
+        requireSlug(namespace, "namespace");
+        requireSlug(name, "name");
+        Objects.requireNonNull(type, "type must not be null");
+        Objects.requireNonNull(visibility, "visibility must not be null");
+        Instant now = Instant.now();
+        Builder builder = new Builder()
+                .assetId(assetId)
+                .type(type)
+                .namespace(namespace)
+                .name(name)
+                .displayName(displayName)
+                .description(description)
+                .visibility(visibility)
+                .status(AssetStatus.ACTIVE)
+                .owners(owners)
+                .tags(tags)
+                .license(license)
+                .createdBy(createdBy)
+                .updatedBy(createdBy)
+                .createdAt(now)
+                .updatedAt(now)
+                .rowVersion(0L);
+        applyProfiles(builder, type, modelProfile, datasetProfile);
+        return new Asset(builder);
+    }
+
+    /**
+     * 修改可变元数据。坐标（namespace/type/name）与创建审计不可变。
+     */
+    public void updateMetadata(String displayName,
+                               String description,
+                               Visibility visibility,
+                               List<String> owners,
+                               List<String> tags,
+                               String license,
+                               ModelProfile modelProfile,
+                               DatasetProfile datasetProfile,
+                               String updatedBy) {
+        this.displayName = displayName;
+        this.description = description;
+        if (visibility != null) {
+            this.visibility = visibility;
+        }
+        if (owners != null) {
+            this.owners = normalizeList(owners);
+        }
+        if (tags != null) {
+            this.tags = normalizeList(tags);
+        }
+        this.license = license;
+        if (type == AssetType.MODEL && modelProfile != null) {
+            this.modelProfile = modelProfile;
+        }
+        if (type == AssetType.DATASET && datasetProfile != null) {
+            this.datasetProfile = datasetProfile;
+        }
+        touch(updatedBy);
+    }
+
+    /** 标记弃用：仍可访问但检索降权。 */
+    public void deprecate(String updatedBy) {
+        this.status = AssetStatus.DEPRECATED;
+        touch(updatedBy);
+    }
+
+    /** 归档：默认不返回。 */
+    public void archive(String updatedBy) {
+        this.status = AssetStatus.ARCHIVED;
+        touch(updatedBy);
+    }
+
+    /** 绑定已开通的 Git 仓库引用。 */
+    public void attachRepository(AssetRepositoryRef ref) {
+        this.repository = ref;
+    }
+
+    private void touch(String updatedBy) {
+        this.updatedBy = updatedBy;
+        this.updatedAt = Instant.now();
+    }
+
+    private static void applyProfiles(Builder builder,
+                                      AssetType type,
+                                      ModelProfile modelProfile,
+                                      DatasetProfile datasetProfile) {
+        if (type == AssetType.MODEL) {
+            builder.modelProfile(modelProfile == null ? ModelProfile.empty() : modelProfile);
+            builder.datasetProfile(null);
+            return;
+        }
+        builder.datasetProfile(datasetProfile == null ? DatasetProfile.empty() : datasetProfile);
+        builder.modelProfile(null);
+    }
+
+    private static List<String> normalizeList(List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .toList();
+    }
+
+    private static void requireSlug(String value, String field) {
+        if (value == null || !SLUG_PATTERN.matcher(value).matches()) {
+            throw new IllegalArgumentException(
+                    field + " must be a lowercase slug of letters, digits and dashes: " + value);
+        }
+    }
+
+    public String assetId() {
+        return assetId;
+    }
+
+    public AssetType type() {
+        return type;
+    }
+
+    public String namespace() {
+        return namespace;
+    }
+
+    public String name() {
+        return name;
+    }
+
+    public String displayName() {
+        return displayName;
+    }
+
+    public String description() {
+        return description;
+    }
+
+    public Visibility visibility() {
+        return visibility;
+    }
+
+    public AssetStatus status() {
+        return status;
+    }
+
+    public List<String> owners() {
+        return owners;
+    }
+
+    public List<String> tags() {
+        return tags;
+    }
+
+    public String license() {
+        return license;
+    }
+
+    public ModelProfile modelProfile() {
+        return modelProfile;
+    }
+
+    public DatasetProfile datasetProfile() {
+        return datasetProfile;
+    }
+
+    public AssetRepositoryRef repository() {
+        return repository;
+    }
+
+    public long rowVersion() {
+        return rowVersion;
+    }
+
+    public String createdBy() {
+        return createdBy;
+    }
+
+    public String updatedBy() {
+        return updatedBy;
+    }
+
+    public Instant createdAt() {
+        return createdAt;
+    }
+
+    public Instant updatedAt() {
+        return updatedAt;
+    }
+
+    /**
+     * 仓储水合用构建器；业务代码请使用 {@link #create} 工厂。
+     */
+    public static final class Builder {
+        private String assetId;
+        private AssetType type;
+        private String namespace;
+        private String name;
+        private String displayName;
+        private String description;
+        private Visibility visibility;
+        private AssetStatus status;
+        private List<String> owners;
+        private List<String> tags;
+        private String license;
+        private ModelProfile modelProfile;
+        private DatasetProfile datasetProfile;
+        private AssetRepositoryRef repository;
+        private long rowVersion;
+        private String createdBy;
+        private String updatedBy;
+        private Instant createdAt;
+        private Instant updatedAt;
+
+        public Builder assetId(String assetId) {
+            this.assetId = assetId;
+            return this;
+        }
+
+        public Builder type(AssetType type) {
+            this.type = type;
+            return this;
+        }
+
+        public Builder namespace(String namespace) {
+            this.namespace = namespace;
+            return this;
+        }
+
+        public Builder name(String name) {
+            this.name = name;
+            return this;
+        }
+
+        public Builder displayName(String displayName) {
+            this.displayName = displayName;
+            return this;
+        }
+
+        public Builder description(String description) {
+            this.description = description;
+            return this;
+        }
+
+        public Builder visibility(Visibility visibility) {
+            this.visibility = visibility;
+            return this;
+        }
+
+        public Builder status(AssetStatus status) {
+            this.status = status;
+            return this;
+        }
+
+        public Builder owners(List<String> owners) {
+            this.owners = owners;
+            return this;
+        }
+
+        public Builder tags(List<String> tags) {
+            this.tags = tags;
+            return this;
+        }
+
+        public Builder license(String license) {
+            this.license = license;
+            return this;
+        }
+
+        public Builder modelProfile(ModelProfile modelProfile) {
+            this.modelProfile = modelProfile;
+            return this;
+        }
+
+        public Builder datasetProfile(DatasetProfile datasetProfile) {
+            this.datasetProfile = datasetProfile;
+            return this;
+        }
+
+        public Builder repository(AssetRepositoryRef repository) {
+            this.repository = repository;
+            return this;
+        }
+
+        public Builder rowVersion(long rowVersion) {
+            this.rowVersion = rowVersion;
+            return this;
+        }
+
+        public Builder createdBy(String createdBy) {
+            this.createdBy = createdBy;
+            return this;
+        }
+
+        public Builder updatedBy(String updatedBy) {
+            this.updatedBy = updatedBy;
+            return this;
+        }
+
+        public Builder createdAt(Instant createdAt) {
+            this.createdAt = createdAt;
+            return this;
+        }
+
+        public Builder updatedAt(Instant updatedAt) {
+            this.updatedAt = updatedAt;
+            return this;
+        }
+
+        public Asset build() {
+            return new Asset(this);
+        }
+    }
+}
