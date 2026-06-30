@@ -24,13 +24,24 @@ deploy/compose/
 | postgres | 业务库 + Gitea 库 | 容器网络 |
 | minio | 对象存储数据面 | 控制台 127.0.0.1:9001 |
 | minio-init | 一次性初始化 Bucket 与账号 | 容器网络 |
-| gitea | 代码托管 | SSH 127.0.0.1:2222 |
+| gitea | 代码托管 | SSH 127.0.0.1:2222；Web 仅经 Nginx http://localhost:8080/git/ |
 | backend | REST/MCP 控制面 | 经 Nginx |
 | worker | 可靠任务（含 DVC 运行时） | 容器网络 |
 | frontend | React 静态资源 | 经 Nginx |
 | nginx | 单域名网关 | 127.0.0.1:8080 |
 
 Nginx 路由（见 `nginx/nginx.conf`）：`/` → 前端、`/api/` → 后端 REST、`/mcp` → 后端 MCP（关闭缓冲）、`/actuator/health` → 健康检查、`/git/` → Gitea。
+
+## Gitea 访问与未来 SSO 免登（预留）
+
+Gitea Web 仅通过 Nginx 子路径入口 `http://localhost:8080/git/` 访问，不再单独对外暴露 3000 端口。`GITEA__server__ROOT_URL`（由 `.env` 的 `GITEA_PUBLIC_URL` 提供）固定为该地址，确保页面静态资源与链接均带 `/git/` 前缀。
+
+“平台登录后免登跳转 Gitea”当前**未实现**，为预留项，待 P3 身份与权限阶段认证体系就绪后落地。候选方案：
+
+- **方案 A（推荐）**：平台作为 OIDC Provider，Gitea 配置为 OAuth2 客户端，用户登录平台后经标准授权码流程进入 Gitea，无需二次登录；回调地址以 `http://localhost:8080/git/` 为基准。
+- **方案 B**：在 Nginx `/git/` 前置 `auth_request` 校验平台会话，配合 Gitea `ENABLE_REVERSE_PROXY_AUTHENTICATION` 透传可信用户头实现免登。
+
+上述方案均以现有 `/git/` 入口为基准，接入时该入口地址保持不变。
 
 ## 启动流程
 

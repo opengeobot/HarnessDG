@@ -19,6 +19,8 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -75,6 +77,8 @@ services:
       GITEA__database__NAME: gitea
       GITEA__database__USER: ${POSTGRES_USER}
       GITEA__database__PASSWD: ${POSTGRES_PASSWORD}
+      # ROOT_URL 固定为 Nginx /git/ 子路径入口；Gitea Web 仅经此入口访问，不单独暴露 3000。
+      # 后期接入 SSO 免登时此入口保持不变，OAuth 回调/跳转均以该地址为基准。
       GITEA__server__ROOT_URL: ${GITEA_PUBLIC_URL}
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__service__DISABLE_REGISTRATION: "true"

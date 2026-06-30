@@ -73,6 +73,12 @@
             <artifactId>ulid-creator</artifactId>
             <version>${ulid-creator.version}</version>
         </dependency>
+        <!-- OpenAPI / Swagger UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.9</version>
+        </dependency>
 
         <!-- 测试 -->
         <dependency>
@@ -145,5 +151,31 @@
             </snapshots>
         </repository>
     </repositories>
+
+    <!-- 插件镜像源（HTTPS）：Maven 插件解析走 pluginRepositories，不复用 repositories -->
+    <pluginRepositories>
+        <pluginRepository>
+            <id>huaweicloud-plugin</id>
+            <name>HuaweiCloud Maven Plugin Repository</name>
+            <url>https://repo.huaweicloud.com/repository/maven/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+        <pluginRepository>
+            <id>aliyun-plugin</id>
+            <name>Aliyun Plugin Repository</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
 </project>
