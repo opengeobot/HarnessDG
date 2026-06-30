@@ -2,7 +2,10 @@
 
 ## Current phase
 
-This repository is currently in the architecture and product-design phase. Do not invent missing implementation details as if they already exist. When implementation begins, preserve the architecture and contracts defined below.
+This repository is in **P0-B platform-foundation remediation**. P0-A engineering baseline is complete; part of the P1 asset catalog exists but is frozen for security and compatibility remediation. Until the P0-B exit gate passes, do not add P1+ business features. Allowed asset work is limited to integrating the shared platform capabilities and correcting contract, authorization, governance, audit, consistency, or test gaps.
+
+Do not present planned P0 capabilities as implemented. The dated implementation snapshot is `docs/architecture/implementation-status-2026-06-30.md`.
+Use `docs/architecture/p0-platform-foundation-traceability.md` to check every P0-B task across module, data, API, permission, audit, UI, and verification.
 
 ## Required reading
 
@@ -10,7 +13,9 @@ Before planning or changing product code, read:
 
 1. `prd/DEEP_RESEARCH_内部AI资产管理平台设计.md`
 2. The current task and its acceptance criteria
-3. Relevant ADR, OpenAPI, MCP, Flyway, event schema, and module documentation once those files exist
+3. `docs/adr/ADR-0001-technology-baseline.md`
+4. `docs/adr/ADR-0002-p0-platform-foundation-gate.md`
+5. Relevant OpenAPI, MCP, Flyway, event schema, module, and runbook documentation
 
 The mandatory AI development rules are in section 15 of the design document. The platform-wide capabilities are in section 5.
 
@@ -24,6 +29,9 @@ The mandatory AI development rules are in section 15 of the design document. The
 - The frontend is React + TypeScript.
 - Docker Compose is the development and functional-verification baseline.
 - REST, MCP, and Worker adapters must reuse the same application services, authorization, state machines, and audit logic.
+- PostgreSQL local accounts are the P0 identity source; Web, REST, Agent, and MCP authenticate with platform-issued JWTs.
+- Dictionaries are for configurable classifications; stable workflow states remain code enums and database constraints.
+- Tags are governed platform/organization resources referenced by `tagId`, not free-form asset strings.
 
 Do not replace this technology route or change source-of-truth boundaries without an accepted ADR.
 
@@ -35,11 +43,15 @@ Do not replace this technology route or change source-of-truth boundaries withou
 - Never return persistence entities from APIs.
 - Never parse tokens inside business modules; use the shared principal context.
 - Enforce authorization in the backend and filter unauthorized data in database queries.
+- Authentication and authorization fail closed. Anonymous access is limited to user login, Agent/Client credential exchange, token refresh, and minimal health endpoints. A null principal, allow-all policy, or default all-scopes provider must never enter a deployable profile.
+- Business modules must reuse the platform identity, authorization, taxonomy, configuration, idempotency/job, audit/logging, notification, and observability APIs. Do not create local substitutes.
+- Owner fields reference Principal/Team IDs. Governed fields reference active dictionary `itemCode` values. Asset writes accept only registered `tagId` values.
 - Stable workflow states are code enums and database constraints, not dynamic dictionary entries.
 - Durable DVC, publish, webhook, preview, and reconciliation work goes through the persistent job system, not raw threads or `@Async`.
 - Cross-system consistency uses Saga, Inbox, Outbox, idempotency, and reconciliation.
 - Published versions are immutable and identified by Git Tag + Commit SHA + Manifest/DVC Digest.
 - Secrets, permanent object-store credentials, tokens, and presigned URLs must not enter Git, logs, test fixtures, or AI conversation output.
+- Browser access JWTs stay in memory; refresh JWTs use the shared secure-cookie/rotation implementation. Never store JWTs in LocalStorage, analytics, or error reports.
 - Database changes are forward-only Flyway migrations. Never edit an applied migration.
 - Do not weaken validation, authorization, database constraints, or tests to make a task pass.
 
@@ -48,12 +60,13 @@ Do not replace this technology route or change source-of-truth boundaries withou
 For behavior changes:
 
 1. Identify the use case, permission, preconditions, idempotency, errors, and audit event.
-2. Update OpenAPI/MCP/event contracts first when applicable.
-3. Add a forward Flyway migration when data changes.
-4. Implement application/domain behavior.
-5. Implement REST, MCP, Worker, frontend, and infrastructure adapters as required.
-6. Add unit, integration, contract, authorization, and failure-path tests.
-7. Update Compose fixtures/verification and affected design/runbook documentation.
+2. Identify use of identity/authorization, dictionary/tag/i18n, configuration, job/idempotency, logging/audit, notification, metrics, traces, and alerts.
+3. Update OpenAPI/MCP/event contracts first when applicable.
+4. Add a forward Flyway migration when data changes. Never modify `V1` or `V2`; remediation starts at `V3+`.
+5. Implement application/domain behavior through shared platform APIs.
+6. Implement REST, MCP, Worker, frontend, and infrastructure adapters as required.
+7. Add unit, integration, contract, authorization, audit, and failure-path tests.
+8. Update Compose fixtures/verification and affected design/runbook documentation.
 
 If code, contracts, ADRs, and the design disagree, report the conflict. Do not silently pick one.
 
@@ -73,6 +86,8 @@ docker compose config --quiet
 
 Use the repository-provided equivalent on Windows. Never claim a check passed unless it was actually run. If a check cannot run, state why.
 
+P0-B additionally requires OpenAPI lint/breaking-change checks and Compose verification for login/JWT lifecycle, user disablement, permission filtering, dictionaries/tags, log redaction, audit completeness, persistent jobs, notifications, and observability. A test skipped because Docker is unavailable is not a passing integration test.
+
 ## Definition of done
 
 A task is complete only when:
@@ -81,9 +96,11 @@ A task is complete only when:
 - architecture and module boundaries are preserved;
 - contracts, migrations, generated types, fixtures, and docs are synchronized;
 - authorization, idempotency, error mapping, audit, and observability are handled;
+- dictionary/tag/i18n, configuration, logging, notification, metrics, and trace impacts are handled;
 - normal, boundary, failure, and unauthorized paths are tested;
 - relevant validation results and any unverified items are reported;
 - no unrelated refactor, dependency upgrade, secret, backdoor, or placeholder implementation was added.
+- no null-principal, allow-all, all-scopes, free-form governed-value, or in-memory reliable-work fallback was added.
 
 End implementation reports with:
 

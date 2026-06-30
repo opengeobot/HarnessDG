@@ -1,6 +1,6 @@
 # Compose 部署与验证 Runbook
 
-本文档说明如何在本地通过 Docker Compose 启动 AIHub 平台基线环境并执行 P0 验收。Compose 仅用于本地开发、CI 功能验证与单机 PoC，不提供高可用，生产重要数据不得只保存在单机 Volume 中。
+本文档说明如何在本地通过 Docker Compose 启动 AIHub 平台基线环境并执行 P0 验收。Compose 仅用于本地开发、CI 功能验证与单机 PoC，不提供高可用，生产重要数据不得只保存在单机 Volume 中。当前脚本只覆盖已完成的 P0-A；P0-B 公共平台底座仍在整改，不能把 V01-V03 通过解释为整个 P0 完成。
 
 ## 目录
 
@@ -36,9 +36,9 @@ Nginx 路由（见 `nginx/nginx.conf`）：`/` → 前端、`/api/` → 后端 R
 
 Gitea Web 仅通过 Nginx 子路径入口 `http://localhost:8080/git/` 访问，不再单独对外暴露 3000 端口。`GITEA__server__ROOT_URL`（由 `.env` 的 `GITEA_PUBLIC_URL` 提供）固定为该地址，确保页面静态资源与链接均带 `/git/` 前缀。
 
-“平台登录后免登跳转 Gitea”当前**未实现**，为预留项，待 P3 身份与权限阶段认证体系就绪后落地。候选方案：
+平台本地账号与 JWT 属 P0-B，当前**尚未实现**。平台 JWT 也不等于 OIDC Provider；“平台登录后免登跳转 Gitea”仍是独立预留能力，需另行 ADR 后选择：
 
-- **方案 A（推荐）**：平台作为 OIDC Provider，Gitea 配置为 OAuth2 客户端，用户登录平台后经标准授权码流程进入 Gitea，无需二次登录；回调地址以 `http://localhost:8080/git/` 为基准。
+- **方案 A**：引入标准 Authorization Server/OIDC Provider，Gitea 作为 OAuth2/OIDC Client；回调地址以 `http://localhost:8080/git/` 为基准。
 - **方案 B**：在 Nginx `/git/` 前置 `auth_request` 校验平台会话，配合 Gitea `ENABLE_REVERSE_PROXY_AUTHENTICATION` 透传可信用户头实现免登。
 
 上述方案均以现有 `/git/` 入口为基准，接入时该入口地址保持不变。
@@ -71,7 +71,7 @@ docker compose up -d
 
 > `.env` 与 `.env.local` 已被 `.gitignore` 忽略，禁止提交。`GITEA_SERVICE_TOKEN` 由 bootstrap 后在 Gitea 中创建并写回，勿提交 Git。
 
-## P0 验收范围
+## 当前 P0-A 验收范围
 
 `verify.ps1` / `verify.sh` 当前覆盖：
 
@@ -79,7 +79,16 @@ docker compose up -d
 - **V02** 核心服务健康（postgres / minio / gitea / backend）
 - **V03** 四个 Bucket 存在且非匿名（gitea-storage / dvc-cache / asset-staging / asset-preview）
 
-业务端到端用例（V05–V21：创建资产、DVC 往返、发布、MCP、权限等）属 P1+ 阶段，脚本中以提示占位，不冒充已实现。
+业务端到端用例目前仍以提示占位，不冒充已实现。P0-B 退出前，Verify 必须新增并通过以下公共底座用例：
+
+- 本地账号登录、访问/刷新 JWT 轮换、登出、禁用用户和旧刷新令牌重放拒绝；
+- 角色/Scope/ACL 越权拒绝及资产列表数据库权限下推；
+- 字典、平台/组织标签、停用回显与自由标签拒绝；
+- JSON 日志上下文、Secret/JWT 脱敏和必审计事件完整性；
+- 持久化任务租约/重试/Dead、站内通知和签名 Webhook 故障恢复；
+- Prometheus Target、Trace 贯通和受保护的系统诊断端点。
+
+资产创建、DVC 往返、发布和 MCP 等后续业务用例分别由 P1-P4 在公共底座上补充。
 
 ## 健康检查分层
 

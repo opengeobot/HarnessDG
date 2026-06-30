@@ -1,12 +1,17 @@
-# AIHub Platform API - OpenAPI 契约骨架
-# 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5.8、5.9、8.2、5.14 节
-# 说明：本文件为 P0 阶段的契约骨架，仅固化统一响应/错误结构与一个只读示例路径，
-#       不覆盖全部业务接口；业务路径在 P1+ 按"契约优先"流程逐步补充。
+# AIHub Platform API - P0-B 目标契约
+# 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5、8、11、15、16 章
+# 说明：本文件同时描述 P0-B 目标公共契约与已存在但冻结整改的 P1 资产端点。
+#       x-implementation-status 用于区分 planned/partial，不能据此声称能力已经实现。
 # 作者：AxeXie
 openapi: 3.1.0
+x-contract-status: target-p0-b
+x-document-version: 2.2
 info:
   title: AIHub Platform API
   version: v1
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
   description: |
     内部 AI 资产管理平台 REST API 契约。统一成功响应为 ApiResponse，统一失败响应为 ApiError。
     Agent 不应依赖本地化 message 做分支判断，只依赖稳定的 code 与 retryable。
@@ -14,17 +19,1243 @@ servers:
   - url: /api/v1
     description: 统一 API 前缀
 
+tags:
+  - { name: auth, description: 本地身份与 JWT 生命周期 }
+  - { name: users, description: Principal 与本地用户管理 }
+  - { name: organizations, description: 组织、项目与成员作用域 }
+  - { name: authorization, description: 角色、权限、绑定与 ACL }
+  - { name: taxonomy, description: 字典、标签与国际化治理 }
+  - { name: configuration, description: 非敏感运行配置 }
+  - { name: jobs, description: 持久化任务管理 }
+  - { name: audit, description: 不可变审计查询 }
+  - { name: notifications, description: 站内通知 }
+  - { name: system, description: 系统观测与依赖诊断 }
+  - { name: assets, description: 冻结整改中的资产目录 }
+
+security:
+  - bearerAuth: []
+
 paths:
+  /auth/login:
+    post:
+      operationId: login
+      summary: 本地用户登录并签发 JWT
+      tags: [auth]
+      security: []
+      x-implementation-status: planned-p0-b
+      x-audit-event: AUTH_LOGIN_SUCCEEDED_OR_FAILED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: 登录成功；浏览器刷新 JWT 同时写入 Secure/HttpOnly/SameSite Cookie
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '423': { $ref: '#/components/responses/ErrorResponse' }
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: 轮换刷新 JWT 并签发新访问 JWT
+      tags: [auth]
+      security: []
+      x-implementation-status: planned-p0-b
+      x-audit-event: AUTH_TOKEN_REFRESHED_OR_REPLAY_REJECTED
+      requestBody:
+        required: false
+        description: 浏览器使用安全 Cookie；非浏览器客户端可在请求体提交刷新 JWT。
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '200':
+          description: 刷新成功，旧刷新 JWT 立即失效
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /auth/token:
+    post:
+      operationId: exchangeClientCredential
+      summary: Agent/Service/API Client 凭据换取 JWT
+      tags: [auth]
+      security: []
+      x-implementation-status: planned-p0-b
+      x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientCredentialTokenRequest' }
+      responses:
+        '200':
+          description: 凭据有效，签发访问与轮换刷新 JWT
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: 吊销当前 Token Family
+      tags: [auth]
+      x-implementation-status: planned-p0-b
+      x-audit-event: AUTH_LOGOUT
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /me:
+    get:
+      operationId: getCurrentPrincipal
+      summary: 获取当前主体、角色和粗粒度 Scope
+      tags: [auth]
+      x-implementation-status: planned-p0-b
+      responses:
+        '200':
+          description: 当前主体
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CurrentPrincipal' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /me/password:
+    put:
+      operationId: changeCurrentUserPassword
+      summary: 修改当前本地用户密码并吊销其他 Token Family
+      tags: [auth]
+      x-implementation-status: planned-p0-b
+      x-audit-event: USER_PASSWORD_CHANGED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '200':
+          description: 密码修改成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/principals:
+    get:
+      operationId: listPrincipals
+      summary: 查询统一访问主体
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:read]
+      parameters:
+        - { name: principalType, in: query, schema: { $ref: '#/components/schemas/PrincipalType' } }
+        - { name: keyword, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 主体列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/PrincipalSummary' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/users:
+    get:
+      operationId: listUsers
+      summary: 分页查询本地用户
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:read]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/UserStatus' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PageResultUser' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createUser
+      summary: 创建本地用户
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:manage]
+      x-audit-event: USER_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+      responses:
+        '201':
+          description: 用户创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserView' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/users/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, pattern: '^usr_' } }
+    get:
+      operationId: getUser
+      summary: 获取本地用户
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:read]
+      responses:
+        '200':
+          description: 用户详情
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    patch:
+      operationId: updateUser
+      summary: 更新本地用户资料
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:manage]
+      x-audit-event: USER_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateUserRequest' }
+      responses:
+        '200':
+          description: 用户更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UserView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/users/{userId}:enable':
+    post:
+      operationId: enableUser
+      summary: 启用本地用户
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:manage]
+      x-audit-event: USER_ENABLED
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, pattern: '^usr_' } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: 已启用, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/users/{userId}:disable':
+    post:
+      operationId: disableUser
+      summary: 禁用本地用户并吊销其 Token
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:manage]
+      x-audit-event: USER_DISABLED
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, pattern: '^usr_' } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: 已禁用, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/users/{userId}:reset-password':
+    post:
+      operationId: resetUserPassword
+      summary: 设置临时密码、强制下次修改并吊销现有 Token
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [user:manage]
+      x-audit-event: USER_PASSWORD_RESET
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, pattern: '^usr_' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200': { description: 已重置, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/agents:
+    get:
+      operationId: listAgents
+      summary: 查询 Agent 主体
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: Agent 列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/AgentView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createAgent
+      summary: 注册 Agent 主体
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [agent:register]
+      x-audit-event: AGENT_REGISTERED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAgentRequest' }
+      responses:
+        '201':
+          description: Agent 注册成功；长期凭据只在创建响应中出现一次
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CreatedAgent' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/agents/{agentId}:enable':
+    post:
+      operationId: enableAgent
+      summary: 启用 Agent
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [agent:authorize]
+      x-audit-event: AGENT_ENABLED
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string, pattern: '^agt_' } }
+      responses:
+        '200': { description: 已启用, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/agents/{agentId}:disable':
+    post:
+      operationId: disableAgent
+      summary: 禁用 Agent 并吊销凭据/Token
+      tags: [users]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [agent:authorize]
+      x-audit-event: AGENT_DISABLED
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string, pattern: '^agt_' } }
+      responses:
+        '200': { description: 已禁用, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/agents/{agentId}/tool-allowlist:
+    put:
+      operationId: updateAgentToolAllowlist
+      summary: 替换 Agent MCP Tool 白名单
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [agent:authorize]
+      x-audit-event: AGENT_TOOL_ALLOWLIST_UPDATED
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string, pattern: '^agt_' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateAgentToolAllowlistRequest' }
+      responses:
+        '200': { description: 白名单已更新, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations:
+    get:
+      operationId: listOrganizations
+      summary: 查询调用者可管理或可访问的组织
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [project:view]
+      responses:
+        '200':
+          description: 组织列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/OrganizationView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createOrganization
+      summary: 创建组织作用域
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [organization:manage]
+      x-audit-event: ORGANIZATION_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrganizationRequest' }
+      responses:
+        '201':
+          description: 组织创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/OrganizationView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/members:
+    parameters:
+      - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+    get:
+      operationId: listOrganizationMembers
+      summary: 查询组织成员
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [organization:manage]
+      responses:
+        '200':
+          description: 组织成员列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/OrganizationMemberView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: addOrganizationMember
+      summary: 添加组织成员
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [organization:manage]
+      x-audit-event: ORGANIZATION_MEMBER_ADDED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddOrganizationMemberRequest' }
+      responses:
+        '201':
+          description: 成员添加成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/OrganizationMemberView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/members/{principalId}:
+    delete:
+      operationId: removeOrganizationMember
+      summary: 移除组织成员并使其组织作用域授权失效
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [organization:manage]
+      x-audit-event: ORGANIZATION_MEMBER_REMOVED
+      parameters:
+        - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+        - { name: principalId, in: path, required: true, schema: { type: string, pattern: '^prn_' } }
+      responses:
+        '200': { description: 已移除, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/projects:
+    parameters:
+      - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+    get:
+      operationId: listOrganizationProjects
+      summary: 查询组织项目
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [project:view]
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/ProjectView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createProject
+      summary: 创建组织项目
+      tags: [organizations]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [project:manage]
+      x-audit-event: PROJECT_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProjectRequest' }
+      responses:
+        '201':
+          description: 项目创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ProjectView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/roles:
+    get:
+      operationId: listRoles
+      summary: 查询角色
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: 角色列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/RoleView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createRole
+      summary: 创建业务角色
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: ROLE_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRoleRequest' }
+      responses:
+        '201':
+          description: 角色创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RoleView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/permissions:
+    get:
+      operationId: listPermissions
+      summary: 查询系统权限定义
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: 权限列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/PermissionView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/roles/{roleId}:
+    patch:
+      operationId: updateRole
+      summary: 更新自定义角色名称和权限集合
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: ROLE_UPDATED
+      parameters:
+        - { name: roleId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateRoleRequest' }
+      responses:
+        '200':
+          description: 角色更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RoleView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      operationId: deleteRole
+      summary: 删除无有效绑定的自定义角色
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: ROLE_DELETED
+      parameters:
+        - { name: roleId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已删除, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/role-bindings:
+    get:
+      operationId: listRoleBindings
+      summary: 查询主体作用域角色绑定
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: 角色绑定列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/RoleBindingView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createRoleBinding
+      summary: 创建主体作用域角色绑定
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: ROLE_BINDING_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRoleBindingRequest' }
+      responses:
+        '201':
+          description: 绑定创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/RoleBindingView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/role-bindings/{bindingId}:
+    delete:
+      operationId: deleteRoleBinding
+      summary: 删除主体作用域角色绑定
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: ROLE_BINDING_DELETED
+      parameters:
+        - { name: bindingId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已删除, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/resource-acls:
+    get:
+      operationId: listResourceAcls
+      summary: 查询资源 ACL
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: ACL 列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/ResourceAclView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createResourceAcl
+      summary: 创建资源 ACL
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: RESOURCE_ACL_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateResourceAclRequest' }
+      responses:
+        '201':
+          description: ACL 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ResourceAclView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/resource-acls/{aclId}:
+    delete:
+      operationId: deleteResourceAcl
+      summary: 删除资源 ACL
+      tags: [authorization]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [authorization:manage]
+      x-audit-event: RESOURCE_ACL_DELETED
+      parameters:
+        - { name: aclId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已删除, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/dictionaries:
+    get:
+      operationId: listDictionaries
+      summary: 查询字典类型
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [dictionary:read]
+      responses:
+        '200':
+          description: 字典类型列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/DictionaryTypeView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/dictionaries/{dictCode}/items:
+    parameters:
+      - { name: dictCode, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listDictionaryItems
+      summary: 查询字典项
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [dictionary:read]
+      responses:
+        '200':
+          description: 字典项列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/DictionaryItemView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createDictionaryItem
+      summary: 新增字典项
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [dictionary:manage]
+      x-audit-event: DICTIONARY_ITEM_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDictionaryItemRequest' }
+      responses:
+        '201':
+          description: 字典项创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/DictionaryItemView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/dictionaries/{dictCode}/items/{itemCode}:
+    patch:
+      operationId: updateDictionaryItem
+      summary: 更新、启用或停用字典项
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [dictionary:manage]
+      x-audit-event: DICTIONARY_ITEM_UPDATED
+      parameters:
+        - { name: dictCode, in: path, required: true, schema: { type: string } }
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateDictionaryItemRequest' }
+      responses:
+        '200':
+          description: 字典项更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/DictionaryItemView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/tags:
+    get:
+      operationId: listTags
+      summary: 查询平台/组织受控标签
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [tag:read]
+      parameters:
+        - { name: scopeType, in: query, schema: { $ref: '#/components/schemas/TagScopeType' } }
+        - { name: scopeId, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/TaxonomyStatus' } }
+        - { name: keyword, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 标签列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/TagView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createTag
+      summary: 创建平台/组织受控标签
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [tag:manage]
+      x-audit-event: TAG_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTagRequest' }
+      responses:
+        '201':
+          description: 标签创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TagView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/tags/{tagId}:
+    patch:
+      operationId: updateTag
+      summary: 更新、启用或停用受控标签
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [tag:manage]
+      x-audit-event: TAG_UPDATED
+      parameters:
+        - { name: tagId, in: path, required: true, schema: { type: string, pattern: '^tag_' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTagRequest' }
+      responses:
+        '200':
+          description: 标签更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TagView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/tags/{tagId}:enable':
+    post:
+      operationId: enableTag
+      summary: 启用受控标签
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [tag:manage]
+      x-audit-event: TAG_ENABLED
+      parameters:
+        - { name: tagId, in: path, required: true, schema: { type: string, pattern: '^tag_' } }
+      responses:
+        '200': { description: 已启用, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/tags/{tagId}:disable':
+    post:
+      operationId: disableTag
+      summary: 停用受控标签，保留历史关联回显
+      tags: [taxonomy]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [tag:manage]
+      x-audit-event: TAG_DISABLED
+      parameters:
+        - { name: tagId, in: path, required: true, schema: { type: string, pattern: '^tag_' } }
+      responses:
+        '200': { description: 已停用, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/configurations:
+    get:
+      operationId: listConfigurations
+      summary: 查询非敏感运行配置
+      tags: [configuration]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [system:configure]
+      responses:
+        '200':
+          description: 配置列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/ConfigurationView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/configurations/{configKey}:
+    put:
+      operationId: updateConfiguration
+      summary: 更新非敏感运行配置
+      tags: [configuration]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [system:configure]
+      x-audit-event: SYSTEM_CONFIGURATION_UPDATED
+      parameters:
+        - { name: configKey, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateConfigurationRequest' }
+      responses:
+        '200':
+          description: 配置更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ConfigurationView' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/jobs:
+    get:
+      operationId: listJobs
+      summary: 游标查询持久化任务
+      tags: [jobs]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [job:read]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/JobStatus' } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 任务列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CursorPageJob' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/jobs/{jobId}:retry':
+    post:
+      operationId: retryJob
+      summary: 人工重试可重试任务
+      tags: [jobs]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [job:manage]
+      x-audit-event: JOB_MANUALLY_RETRIED
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, pattern: '^job_' } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: 已安排重试, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/jobs/{jobId}:cancel':
+    post:
+      operationId: cancelJob
+      summary: 取消尚未开始且允许取消的持久化任务
+      tags: [jobs]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [job:manage]
+      x-audit-event: JOB_MANUALLY_CANCELLED
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, pattern: '^job_' } }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      responses:
+        '200': { description: 已取消, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: 游标查询不可变审计记录
+      tags: [audit]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [audit:read]
+      parameters:
+        - { name: principalId, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: resourceId, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 审计记录
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CursorPageAuditLog' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/notifications:
+    get:
+      operationId: listCurrentNotifications
+      summary: 查询当前主体站内通知
+      tags: [notifications]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [notification:read]
+      parameters:
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 通知列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CursorPageNotification' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/notifications/{notificationId}:read':
+    post:
+      operationId: markNotificationRead
+      summary: 标记当前主体通知已读
+      tags: [notifications]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [notification:read]
+      x-audit-event: NOTIFICATION_MARKED_READ
+      parameters:
+        - { name: notificationId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已标记, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/metrics/summary:
+    get:
+      operationId: getMetricsSummary
+      summary: 获取受保护的平台指标摘要
+      tags: [system]
+      x-implementation-status: planned-p0-b
+      x-required-permissions: [system:observe]
+      responses:
+        '200':
+          description: 指标摘要
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MetricsSummary' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /system/dependencies:
     get:
       operationId: getSystemDependencies
       summary: 获取系统依赖与健康摘要（运维诊断）
       description: |
         返回平台关键依赖（PostgreSQL、Gitea、MinIO）的精简健康/依赖摘要，用于运维诊断。
-        对非管理员隐藏内部 Endpoint、凭据状态与网络拓扑。P0 已实现 PostgreSQL 探测，
-        Gitea/MinIO 等依赖随对应集成适配器在 P1+ 注册接入。
+        仅具有 system:observe 权限的主体可访问。P0-A 已实现 PostgreSQL 探测，
+        P0-B 补齐认证保护、Gitea/MinIO 探测和脱敏后的诊断信息。
       tags:
         - system
+      x-implementation-status: partial-p0-a
+      x-required-permissions: [system:observe]
       responses:
         '200':
           description: 成功返回依赖摘要
@@ -48,6 +1279,11 @@ paths:
       summary: 登记新资产（模型/数据集）
       description: 校验坐标唯一、开通 Git 仓库并写入初始卡片，返回资产详情。
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:create]
+      x-audit-event: ASSET_CREATED
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
       requestBody:
         required: true
         content:
@@ -75,6 +1311,8 @@ paths:
       summary: 检索资产摘要（游标分页）
       description: 精确字段过滤 + 关键词全文 + 权限可见性过滤；默认排除归档资产。
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: type, in: query, schema: { $ref: '#/components/schemas/AssetType' } }
@@ -83,7 +1321,7 @@ paths:
         - { name: task, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { type: string } }
         - { name: modality, in: query, schema: { type: string } }
-        - { name: tag, in: query, schema: { type: string } }
+        - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
         - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
@@ -100,6 +1338,10 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CursorPageAssetSummary'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
 
   /assets/{assetId}:
     parameters:
@@ -111,6 +1353,8 @@ paths:
       operationId: getAsset
       summary: 查询资产详情
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:read]
       responses:
         '200':
           description: 查询成功
@@ -129,6 +1373,9 @@ paths:
       operationId: updateAsset
       summary: 更新资产可变元数据
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:update]
+      x-audit-event: ASSET_UPDATED
       requestBody:
         required: true
         content:
@@ -155,6 +1402,9 @@ paths:
       operationId: deleteAsset
       summary: 逻辑删除资产
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:delete]
+      x-audit-event: ASSET_DELETED
       responses:
         '200':
           description: 删除成功
@@ -170,12 +1420,14 @@ paths:
       operationId: searchModels
       summary: 检索模型列表（固定类型语义入口）
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: namespace, in: query, schema: { type: string } }
         - { name: framework, in: query, schema: { type: string } }
         - { name: task, in: query, schema: { type: string } }
-        - { name: tag, in: query, schema: { type: string } }
+        - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20 } }
@@ -191,18 +1443,24 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CursorPageAssetSummary'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
 
   /datasets:
     get:
       operationId: searchDatasets
       summary: 检索数据集列表（固定类型语义入口）
       tags: [assets]
+      x-implementation-status: partial-p1-frozen
+      x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: namespace, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { type: string } }
         - { name: modality, in: query, schema: { type: string } }
-        - { name: tag, in: query, schema: { type: string } }
+        - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20 } }
@@ -218,8 +1476,32 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CursorPageAssetSummary'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        平台签发的短期访问 JWT。JWT 使用非对称签名和 kid；资源级权限由后端实时判断，
+        不以 JWT 内角色替代 RBAC/ACL/资源状态校验。
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 当前 Principal 范围内唯一的写请求幂等键。
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
   responses:
     ErrorResponse:
       description: 统一失败响应
@@ -239,7 +1521,7 @@ components:
       properties:
         data:
           description: 业务数据载荷，结构由具体接口定义
-          nullable: true
+          type: [object, array, string, number, integer, boolean, 'null']
         requestId:
           type: string
           description: 请求标识，回显 X-Request-Id
@@ -291,6 +1573,624 @@ components:
           type: string
           example: 4bf92f3577b34da6a3ce929d0e0e4736
 
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 12
+          maxLength: 128
+
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          format: password
+          writeOnly: true
+          description: 非浏览器客户端提交；浏览器优先使用 Secure/HttpOnly/SameSite Cookie。
+
+    ClientCredentialTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [grantType, subjectId, credential]
+      properties:
+        grantType:
+          type: string
+          const: client_credentials
+        subjectId:
+          type: string
+          description: Agent、Service 或 API Client 的稳定业务 ID。
+        credential:
+          type: string
+          format: password
+          writeOnly: true
+
+    TokenPair:
+      type: object
+      required: [tokenType, accessToken, expiresIn, refreshExpiresIn, principal]
+      properties:
+        tokenType:
+          type: string
+          const: Bearer
+        accessToken:
+          type: string
+          description: 默认 15 分钟有效；客户端不得写入持久化浏览器存储。
+        refreshToken:
+          type: string
+          description: 默认 7 天有效并在每次刷新时轮换；浏览器响应可仅通过安全 Cookie 返回。
+        expiresIn:
+          type: integer
+          description: 访问 JWT 剩余秒数。
+          example: 900
+        refreshExpiresIn:
+          type: integer
+          description: 刷新 JWT 剩余秒数。
+          example: 604800
+        principal:
+          $ref: '#/components/schemas/CurrentPrincipal'
+
+    PrincipalType:
+      type: string
+      enum: [USER, AGENT, SERVICE, API_CLIENT, WORKER]
+
+    CurrentPrincipal:
+      type: object
+      required: [principalId, principalType, subject, roles, scopes, locale]
+      properties:
+        principalId: { type: string, pattern: '^prn_' }
+        userId:
+          type: [string, 'null']
+          pattern: '^usr_'
+        principalType: { $ref: '#/components/schemas/PrincipalType' }
+        subject: { type: string }
+        displayName: { type: [string, 'null'] }
+        organizationId: { type: [string, 'null'] }
+        roles:
+          type: array
+          items: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        locale: { type: string, example: zh-CN }
+        forcePasswordChange: { type: boolean, default: false }
+
+    PrincipalStatus:
+      type: string
+      enum: [ACTIVE, LOCKED, DISABLED]
+
+    PrincipalSummary:
+      type: object
+      required: [principalId, principalType, subject, status]
+      properties:
+        principalId: { type: string, pattern: '^prn_' }
+        principalType: { $ref: '#/components/schemas/PrincipalType' }
+        subject: { type: string }
+        displayName: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PrincipalStatus' }
+
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          writeOnly: true
+        newPassword:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 12
+          maxLength: 128
+
+    UserStatus:
+      type: string
+      enum: [PENDING_ACTIVATION, ACTIVE, LOCKED, DISABLED]
+
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, temporaryPassword]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+          pattern: '^[a-zA-Z0-9._-]+$'
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        email: { type: [string, 'null'], format: email }
+        locale: { type: string, default: zh-CN }
+        temporaryPassword:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 12
+          maxLength: 128
+
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        email: { type: [string, 'null'], format: email }
+        locale: { type: string }
+
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [temporaryPassword]
+      properties:
+        temporaryPassword:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 12
+          maxLength: 128
+
+    UserView:
+      type: object
+      required: [userId, principalId, username, displayName, status, locale, createdAt, updatedAt]
+      properties:
+        userId: { type: string, pattern: '^usr_' }
+        principalId: { type: string, pattern: '^prn_' }
+        username: { type: string }
+        displayName: { type: string }
+        email: { type: [string, 'null'], format: email }
+        locale: { type: string }
+        status: { $ref: '#/components/schemas/UserStatus' }
+        forcePasswordChange: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PageResultUser:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UserView' }
+        page: { type: integer, minimum: 1 }
+        size: { type: integer, minimum: 1 }
+        total: { type: integer, format: int64, minimum: 0 }
+
+    CreateAgentRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, agentType, maxSensitivityLevel, scopes]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        agentType: { type: string, maxLength: 64 }
+        vendor: { type: [string, 'null'], maxLength: 64 }
+        maxSensitivityLevel: { type: integer, minimum: 0 }
+        scopes:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+
+    AgentView:
+      type: object
+      required: [agentId, principalId, displayName, agentType, status, maxSensitivityLevel, scopes, toolAllowlist]
+      properties:
+        agentId: { type: string, pattern: '^agt_' }
+        principalId: { type: string, pattern: '^prn_' }
+        displayName: { type: string }
+        agentType: { type: string }
+        vendor: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PrincipalStatus' }
+        maxSensitivityLevel: { type: integer, minimum: 0 }
+        scopes:
+          type: array
+          items: { type: string }
+        toolAllowlist:
+          type: array
+          items: { type: string }
+
+    CreatedAgent:
+      allOf:
+        - $ref: '#/components/schemas/AgentView'
+        - type: object
+          required: [credential]
+          properties:
+            credential:
+              type: string
+              format: password
+              description: 仅创建成功响应返回一次；服务端只保存摘要。
+
+    UpdateAgentToolAllowlistRequest:
+      type: object
+      additionalProperties: false
+      required: [tools]
+      properties:
+        tools:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            pattern: '^[a-z][a-z0-9_]{2,127}$'
+
+    CreateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$'
+        name: { type: string, minLength: 1, maxLength: 128 }
+        giteaOrganization: { type: [string, 'null'], maxLength: 128 }
+
+    OrganizationView:
+      type: object
+      required: [organizationId, code, name, status, createdAt]
+      properties:
+        organizationId: { type: string, pattern: '^org_' }
+        code: { type: string }
+        name: { type: string }
+        giteaOrganization: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PrincipalStatus' }
+        createdAt: { type: string, format: date-time }
+
+    AddOrganizationMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [principalId]
+      properties:
+        principalId: { type: string, pattern: '^prn_' }
+
+    OrganizationMemberView:
+      type: object
+      required: [organizationId, principalId, joinedAt]
+      properties:
+        organizationId: { type: string, pattern: '^org_' }
+        principalId: { type: string, pattern: '^prn_' }
+        joinedAt: { type: string, format: date-time }
+
+    CreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$'
+        name: { type: string, minLength: 1, maxLength: 128 }
+
+    ProjectView:
+      type: object
+      required: [projectId, organizationId, code, name, status, createdAt]
+      properties:
+        projectId: { type: string, pattern: '^prj_' }
+        organizationId: { type: string, pattern: '^org_' }
+        code: { type: string }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/PrincipalStatus' }
+        createdAt: { type: string, format: date-time }
+
+    PermissionView:
+      type: object
+      required: [permissionCode, resource, action, i18nKey]
+      properties:
+        permissionCode: { type: string, example: asset:read }
+        resource: { type: string, example: asset }
+        action: { type: string, example: read }
+        i18nKey: { type: string }
+
+    CreateRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [roleCode, roleName, permissionCodes]
+      properties:
+        roleCode:
+          type: string
+          pattern: '^[a-z][a-z0-9._-]{2,63}$'
+        roleName: { type: string, minLength: 1, maxLength: 128 }
+        permissionCodes:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+
+    UpdateRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        roleName: { type: string, minLength: 1, maxLength: 128 }
+        permissionCodes:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+        expectedVersion: { type: integer, minimum: 1 }
+
+    RoleView:
+      type: object
+      required: [roleId, roleCode, roleName, roleType, permissionCodes, version]
+      properties:
+        roleId: { type: string }
+        roleCode: { type: string }
+        roleName: { type: string }
+        roleType:
+          type: string
+          enum: [SYSTEM, CUSTOM]
+        permissionCodes:
+          type: array
+          items: { type: string }
+        version: { type: integer, minimum: 1 }
+
+    ScopeType:
+      type: string
+      enum: [PLATFORM, ORGANIZATION, PROJECT, ASSET]
+
+    CreateRoleBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [principalId, roleId, scopeType]
+      properties:
+        principalId: { type: string, pattern: '^prn_' }
+        roleId: { type: string }
+        scopeType: { $ref: '#/components/schemas/ScopeType' }
+        scopeId:
+          type: [string, 'null']
+          description: PLATFORM 作用域必须为空，其他作用域必须提供。
+
+    RoleBindingView:
+      type: object
+      required: [bindingId, principalId, roleId, scopeType, createdAt]
+      properties:
+        bindingId: { type: string }
+        principalId: { type: string }
+        roleId: { type: string }
+        scopeType: { $ref: '#/components/schemas/ScopeType' }
+        scopeId: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    CreateResourceAclRequest:
+      type: object
+      additionalProperties: false
+      required: [principalId, resourceType, resourceId, permissionCodes]
+      properties:
+        principalId: { type: string, pattern: '^prn_' }
+        resourceType: { type: string, example: ASSET }
+        resourceId: { type: string }
+        permissionCodes:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          items: { type: string }
+
+    ResourceAclView:
+      type: object
+      required: [aclId, principalId, resourceType, resourceId, permissionCodes, createdAt]
+      properties:
+        aclId: { type: string }
+        principalId: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: string }
+        permissionCodes:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    TaxonomyStatus:
+      type: string
+      enum: [ACTIVE, DISABLED]
+
+    DictionaryTypeView:
+      type: object
+      required: [dictCode, i18nKey, version, status]
+      properties:
+        dictCode: { type: string }
+        i18nKey: { type: string }
+        version: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/TaxonomyStatus' }
+
+    DictionaryItemView:
+      type: object
+      required: [dictCode, itemCode, i18nKey, sortOrder, status, version]
+      properties:
+        dictCode: { type: string }
+        itemCode: { type: string }
+        i18nKey: { type: string }
+        sortOrder: { type: integer }
+        status: { $ref: '#/components/schemas/TaxonomyStatus' }
+        version: { type: integer, minimum: 1 }
+
+    CreateDictionaryItemRequest:
+      type: object
+      additionalProperties: false
+      required: [itemCode, i18nKey]
+      properties:
+        itemCode:
+          type: string
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$'
+        i18nKey: { type: string }
+        sortOrder: { type: integer, default: 0 }
+
+    UpdateDictionaryItemRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        i18nKey: { type: string }
+        sortOrder: { type: integer }
+        status: { $ref: '#/components/schemas/TaxonomyStatus' }
+        expectedVersion: { type: integer, minimum: 1 }
+
+    TagScopeType:
+      type: string
+      enum: [PLATFORM, ORGANIZATION]
+
+    CreateTagRequest:
+      type: object
+      additionalProperties: false
+      required: [scopeType, tagCode, displayName, i18nKey]
+      properties:
+        scopeType: { $ref: '#/components/schemas/TagScopeType' }
+        scopeId:
+          type: [string, 'null']
+          description: PLATFORM 必须为空；ORGANIZATION 必须是调用者有权管理的 orgId。
+        tagCode:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        i18nKey: { type: string }
+        color: { type: [string, 'null'], example: '#1677ff' }
+
+    UpdateTagRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 128 }
+        i18nKey: { type: string }
+        color: { type: [string, 'null'] }
+        expectedVersion: { type: integer, minimum: 1 }
+
+    TagView:
+      type: object
+      required: [tagId, scopeType, tagCode, displayName, i18nKey, status, version]
+      properties:
+        tagId: { type: string, pattern: '^tag_' }
+        scopeType: { $ref: '#/components/schemas/TagScopeType' }
+        scopeId: { type: [string, 'null'] }
+        tagCode: { type: string }
+        displayName: { type: string }
+        i18nKey: { type: string }
+        color: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/TaxonomyStatus' }
+        version: { type: integer, minimum: 1 }
+
+    ConfigurationView:
+      type: object
+      required: [configKey, valueType, value, hotReloadable, version]
+      properties:
+        configKey: { type: string }
+        valueType:
+          type: string
+          enum: [STRING, INTEGER, LONG, BOOLEAN, DURATION, JSON]
+        value: {}
+        hotReloadable: { type: boolean }
+        version: { type: integer, minimum: 1 }
+
+    UpdateConfigurationRequest:
+      type: object
+      additionalProperties: false
+      required: [value, expectedVersion]
+      properties:
+        value: {}
+        expectedVersion: { type: integer, minimum: 1 }
+        confirmation:
+          type: [string, 'null']
+          description: 安全或发布策略配置按服务端要求提供二次确认值。
+
+    JobStatus:
+      type: string
+      enum: [PENDING, RUNNING, SUCCEEDED, RETRY_WAIT, DEAD, CANCELLED]
+
+    JobView:
+      type: object
+      required: [jobId, jobType, status, retryCount, createdAt, updatedAt]
+      properties:
+        jobId: { type: string, pattern: '^job_' }
+        jobType: { type: string }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        retryCount: { type: integer, minimum: 0 }
+        nextRunAt: { type: [string, 'null'], format: date-time }
+        errorCode: { type: [string, 'null'] }
+        traceId: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CursorPageJob:
+      type: object
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/JobView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+
+    AuditLogView:
+      type: object
+      required: [auditId, principalId, action, resourceType, resourceId, result, occurredAt]
+      properties:
+        auditId: { type: string, pattern: '^aud_' }
+        principalId: { type: string }
+        action: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: string }
+        result:
+          type: string
+          enum: [SUCCEEDED, FAILED, DENIED]
+        errorCode: { type: [string, 'null'] }
+        requestId: { type: [string, 'null'] }
+        traceId: { type: [string, 'null'] }
+        occurredAt: { type: string, format: date-time }
+
+    CursorPageAuditLog:
+      type: object
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AuditLogView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+
+    NotificationView:
+      type: object
+      required: [notificationId, eventType, i18nKey, status, createdAt]
+      properties:
+        notificationId: { type: string }
+        eventType: { type: string }
+        i18nKey: { type: string }
+        parameters:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [UNREAD, READ]
+        createdAt: { type: string, format: date-time }
+        readAt: { type: [string, 'null'], format: date-time }
+
+    CursorPageNotification:
+      type: object
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+
+    MetricsSummary:
+      type: object
+      required: [generatedAt, api, jobs, dependencies]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        api:
+          type: object
+          additionalProperties: true
+        jobs:
+          type: object
+          additionalProperties: true
+        dependencies:
+          type: object
+          additionalProperties: true
+
     SystemDependencySummary:
       type: object
       description: 系统依赖与健康摘要（精简）
@@ -337,7 +2237,7 @@ components:
 
     Visibility:
       type: string
-      description: 可见性稳定枚举
+      description: 可见性稳定枚举；PUBLIC 表示所有已认证主体可见，不代表互联网匿名访问。
       enum: [PRIVATE, INTERNAL, PUBLIC]
 
     AssetStatus:
@@ -349,19 +2249,43 @@ components:
       type: object
       description: 模型画像
       properties:
-        framework: { type: string, example: pytorch }
-        task: { type: string, example: text-generation }
+        framework:
+          type: string
+          description: model_framework 字典的有效 itemCode。
+          example: pytorch
+        task:
+          type: string
+          description: model_task 字典的有效 itemCode。
+          example: text-generation
         architecture: { type: string }
 
     DatasetProfile:
       type: object
       description: 数据集画像
       properties:
-        format: { type: string, example: parquet }
-        modality: { type: string, example: text }
+        format:
+          type: string
+          description: dataset_format 字典的有效 itemCode。
+          example: parquet
+        modality:
+          type: string
+          description: dataset_modality 字典的有效 itemCode。
+          example: text
+
+    TagReference:
+      type: object
+      required: [tagId, tagCode, displayName, scopeType]
+      properties:
+        tagId: { type: string, pattern: '^tag_' }
+        tagCode: { type: string }
+        displayName: { type: string }
+        scopeType: { $ref: '#/components/schemas/TagScopeType' }
+        scopeId: { type: [string, 'null'] }
+        color: { type: [string, 'null'] }
 
     CreateAssetRequest:
       type: object
+      additionalProperties: false
       required: [type, namespace, name, visibility]
       properties:
         type: { $ref: '#/components/schemas/AssetType' }
@@ -378,30 +2302,47 @@ components:
         visibility: { $ref: '#/components/schemas/Visibility' }
         owners:
           type: array
-          items: { type: string }
-          example: [team-nlp]
-        tags:
+          uniqueItems: true
+          description: 受权 Principal/Team 的稳定 ID。
+          items: { type: string, pattern: '^(prn|team)_' }
+          example: [team_01J0000000000000000000000]
+        tagIds:
           type: array
-          items: { type: string }
-          example: [text-generation]
-        license: { type: string, example: Apache-2.0 }
+          uniqueItems: true
+          description: 已启用且当前主体有权使用的平台/组织受控标签 ID。
+          items: { type: string, pattern: '^tag_' }
+          example: [tag_01J0000000000000000000000]
+        license:
+          type: string
+          description: license_catalog 字典的有效 itemCode。
+          example: Apache-2.0
         model: { $ref: '#/components/schemas/ModelProfile' }
         dataset: { $ref: '#/components/schemas/DatasetProfile' }
 
     UpdateAssetRequest:
       type: object
       description: 更新可变元数据；坐标（namespace/type/name）不可变
+      additionalProperties: false
+      required: [expectedVersion]
       properties:
+        expectedVersion:
+          type: integer
+          minimum: 0
+          description: 资产乐观锁版本，冲突返回 ASSET_CONCURRENT_MODIFICATION。
         displayName: { type: string }
         description: { type: string }
         visibility: { $ref: '#/components/schemas/Visibility' }
         owners:
           type: array
-          items: { type: string }
-        tags:
+          uniqueItems: true
+          items: { type: string, pattern: '^(prn|team)_' }
+        tagIds:
           type: array
-          items: { type: string }
-        license: { type: string }
+          uniqueItems: true
+          items: { type: string, pattern: '^tag_' }
+        license:
+          type: string
+          description: license_catalog 字典的有效 itemCode。
         model: { $ref: '#/components/schemas/ModelProfile' }
         dataset: { $ref: '#/components/schemas/DatasetProfile' }
 
@@ -423,19 +2364,18 @@ components:
           items: { type: string }
         tags:
           type: array
-          items: { type: string }
+          items: { $ref: '#/components/schemas/TagReference' }
         license: { type: string }
         model:
-          allOf:
+          oneOf:
             - $ref: '#/components/schemas/ModelProfile'
-          nullable: true
+            - type: 'null'
         dataset:
-          allOf:
+          oneOf:
             - $ref: '#/components/schemas/DatasetProfile'
-          nullable: true
+            - type: 'null'
         repository:
-          type: object
-          nullable: true
+          type: [object, 'null']
           properties:
             fullName: { type: string }
             htmlUrl: { type: string }
@@ -461,7 +2401,7 @@ components:
           items: { type: string }
         tags:
           type: array
-          items: { type: string }
+          items: { $ref: '#/components/schemas/TagReference' }
         license: { type: string }
         framework: { type: string }
         task: { type: string }
@@ -478,8 +2418,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/AssetSummary' }
         nextCursor:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: 下一页游标，null 表示末页
         hasMore:
           type: boolean

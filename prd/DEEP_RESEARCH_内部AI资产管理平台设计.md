@@ -1,9 +1,9 @@
 # 内部 AI 资产管理平台深度研究与设计说明书
 
-> 文档版本：v2.1  
-> 更新日期：2026-06-29  
-> 目标读者：架构师、技术负责人、后端/前端工程师、平台运维人员  
-> 核心技术路线：Gitea + DVC + MinIO + Java 21/Spring Boot/MyBatis-Plus + React  
+> 文档版本：v2.2
+> 更新日期：2026-06-30
+> 目标读者：架构师、技术负责人、后端/前端工程师、平台运维人员
+> 核心技术路线：Gitea + DVC + MinIO + Java 21/Spring Boot/MyBatis-Plus + React
 > 部署与验收基线：Docker Compose
 
 ## 0. 执行摘要
@@ -16,6 +16,29 @@
 - **自研后端**：采用 **Java 21 + Spring Boot + MyBatis-Plus**，提供业务 API、权限、发布工作流、搜索索引、Gitea/MinIO/DVC 编排、MCP Server 和审计。
 - **自研前端**：采用 **React + TypeScript**，提供模型与数据集的发现、详情、上传、版本、审批和接入配置页面。
 - **PostgreSQL**：存储业务元数据、查询投影、权限、任务、审计和 Outbox 事件。
+
+### 0.1 当前实施基线与重基线决策
+
+截至 2026-06-30，仓库已经完成工程骨架并提前实现了部分 P1 资产目录能力，但第 5 章公共平台能力尚未形成可供业务复用的安全底座：
+
+| 能力 | 当前状态 | 关键差距 |
+| --- | --- | --- |
+| 工程基线 | 已实现 | Maven/React/Compose/Flyway/CI/ArchUnit/健康检查已建立 |
+| Shared Kernel | 部分实现 | 统一响应、错误、ID、请求上下文已存在，但主体身份仍为空 |
+| 资产目录 | 部分实现，冻结整改 | CRUD、检索、Gitea 建仓和前端列表已存在，但依赖自由标签、字符串 Owner 和开放权限 |
+| 身份、用户与授权 | 未实现 | 无 Spring Security 和本地用户表；后端允许全部可见性，前端默认全部 Scope |
+| 字典、国际化与标签 | 未实现 | 治理字段为自由字符串，标签保存在资产 JSON 中，无平台/组织标签目录 |
+| 日志与审计 | 仅基础日志 | 无统一结构化字段注入、脱敏策略和持久化审计 |
+| 配置、幂等、任务、通知 | 未实现 | 仅有包骨架或设计约束 |
+| 观测 | 部分实现 | 有健康摘要，尚无完整指标、Trace、日志采集和 Dashboard 验收 |
+
+因此重新定义 P0：
+
+1. **P0-A 工程基线**：现有工程、契约目录、Compose、Flyway、CI 和健康检查，已经完成；
+2. **P0-B 公共平台底座**：第 5 章全部公共能力及其管理端，当前必须优先完成；
+3. P0-A 与 P0-B 的退出条件全部通过前，现有 P1 资产代码只允许安全整改，不允许继续扩展业务能力；
+4. 已应用的 `V1`、`V2` Migration 保持不可变，公共表和资产兼容整改只能通过 `V3+` 前向迁移完成；
+5. 后续 P1-P5 必须复用 P0 公共服务、契约和门禁，不得在业务模块内另建身份、权限、字典、标签、日志、审计、配置、任务或通知实现。
 
 关键设计不是简单地把三个开源组件拼起来，而是明确四类“事实源”：
 
@@ -181,7 +204,7 @@ Agent 调用 asset_search
 | Web 框架 | Spring Boot 4.1.x / Spring MVC | 当前稳定版本；具体 Patch 通过依赖锁定 |
 | 数据访问 | MyBatis-Plus 3.5.x Boot 4 Starter | CRUD 与分页提效，复杂 SQL 保留 XML/手写 SQL |
 | 数据库迁移 | Flyway | Schema 版本化，禁止应用启动时自动改表 |
-| 安全 | Spring Security + OAuth2 Resource Server | 用户、Agent、MCP 统一 Bearer Token |
+| 安全 | Spring Security + 平台本地身份 + JWT | Web、REST、Agent、MCP 统一 Bearer JWT |
 | MCP | Spring AI MCP Server WebMVC | 采用 Streamable HTTP；SSE 仅作为兼容路径 |
 | API 文档 | springdoc-openapi | 输出 OpenAPI 3.1 和 Agent 友好 Schema |
 | 数据库 | PostgreSQL 17 | 元数据、权限、任务、审计、Outbox |
@@ -319,8 +342,11 @@ flowchart TB
 ```text
 backend/
 ├─ bootstrap                 # Spring Boot 启动与配置
-├─ module-identity           # 用户、Agent、Token、Scope
+├─ module-identity           # 本地用户、Agent、凭据、JWT
+├─ module-authorization      # Permission、RBAC、Scope、ACL
 ├─ module-organization       # 组织、项目、成员、角色
+├─ module-taxonomy           # 字典、受控标签、国际化
+├─ module-configuration      # 类型化非敏感运行配置
 ├─ module-asset              # 资产、卡片、标签、检索
 ├─ module-version            # Commit/Tag/DVC/Manifest、发布状态机
 ├─ module-transfer           # 上传会话、预签名 URL、下载授权
@@ -329,6 +355,8 @@ backend/
 ├─ module-job                # PostgreSQL 任务队列、Worker、重试
 ├─ module-mcp                # MCP Tools/Resources/Prompts
 ├─ module-audit              # 审计、Outbox、操作记录
+├─ module-notification       # 站内信、签名 Webhook、渠道适配
+├─ platform-observability    # 日志、指标、Trace、健康和诊断
 └─ shared-kernel             # 错误码、鉴权上下文、ID、分页
 ```
 
@@ -389,7 +417,7 @@ flowchart TB
         GITEA[Gitea Adapter]
         DVC[DVC Adapter]
         MINIO[MinIO Adapter]
-        IDP[OIDC / LDAP Adapter]
+        IDP[本地身份 / JWT Adapter]
     end
 
     Experience --> Business
@@ -399,6 +427,8 @@ flowchart TB
 ```
 
 ### 5.2 功能域与优先级
+
+本章全部能力属于 **P0-B 公共平台底座**。其中身份、用户、授权、组织作用域、字典、标签、日志和审计是业务代码的硬前置；配置、幂等、任务、通知和观测也必须在 P0-B 形成可运行的公共实现与管理入口。禁止以“后续业务阶段再补”为由，在业务模块中引入临时替代实现。
 
 | 功能域 | 核心能力 | MVP | 增强阶段 |
 | --- | --- | --- | --- |
@@ -446,16 +476,24 @@ shared-kernel 禁止依赖任何业务模块和基础设施 SDK
 
 业务模块之间不允许直接访问对方 Mapper。跨模块查询通过 Application Service、只读 Query Port 或领域事件完成。
 
+P0-B 准入规则：
+
+- 公共模块对业务模块暴露稳定的 Application API、Query Port 或注解契约，业务模块不得依赖其 Mapper、Entity 和内部实现；
+- 所有在线入口默认拒绝匿名访问；显式匿名端点只允许用户登录、Agent/Client 凭据换 Token、刷新和最小健康检查；
+- 测试 Profile 可以注入测试主体，但不得把空主体、`allow-all` 策略或全 Scope Provider 带入任何可部署 Profile；
+- 公共能力契约、Migration、种子数据、管理 API、管理页面及正常/失败/越权测试全部通过后，P0-B 才能退出；
+- 任何绕过公共底座的临时方案必须由 accepted ADR 明确范围、到期条件和移除验证。
+
 ### 5.4 统一访问主体
 
 所有访问者统一抽象为 `Principal`：
 
 | 类型 | 说明 | 认证方式 |
 | --- | --- | --- |
-| `USER` | 企业普通用户和管理员 | OIDC/LDAP |
-| `AGENT` | OpenClaw、QwenPaw、自研 Agent | OAuth2/Agent Token |
-| `SERVICE` | 后端内部服务或外部业务系统 | Client Credentials |
-| `API_CLIENT` | SDK、CI/CD、批处理客户端 | OAuth2/PAT |
+| `USER` | 平台本地普通用户和管理员 | 用户名/密码换取访问与刷新 JWT |
+| `AGENT` | OpenClaw、QwenPaw、自研 Agent | Agent 凭据换取 JWT |
+| `SERVICE` | 后端内部服务或外部业务系统 | Client Credential 换取 JWT |
+| `API_CLIENT` | SDK、CI/CD、批处理客户端 | API Client/PAT 凭据换取 JWT |
 | `WORKER` | 平台受控后台 Worker | 工作负载身份 |
 
 `ADMIN` 是角色，不是 Principal 类型；Skill 只有在拥有独立凭据并直接调用平台时才注册为 `SERVICE` 或 `AGENT`，避免身份类型无限膨胀。
@@ -486,6 +524,17 @@ PrincipalContext
 - Token 只保存不可逆摘要、前缀、到期时间和最后使用时间；
 - 禁用 Principal 后，其 Token、会话和未执行写任务必须同步失效或冻结。
 
+P0 身份事实源与 JWT 约束：
+
+- PostgreSQL 是本地用户、凭据状态、Token 版本和刷新令牌吊销记录的权威事实源；
+- 密码只保存自适应哈希及参数，禁止可逆加密、明文日志、接口回显和测试固定生产口令；
+- 访问 JWT 使用部署 Secret 提供的非对称签名密钥，携带 `kid`，默认有效期 15 分钟；
+- 刷新 JWT 默认有效期 7 天，采用轮换与重放检测；数据库只保存 `jti`/Token Family 的摘要、状态和过期时间；
+- 用户禁用、密码重置、凭据泄露处置通过 `tokenVersion` 和刷新令牌吊销使后续请求失效；资源级权限仍由 `AuthorizationService` 实时判断，不能只相信 JWT 内角色；
+- JWT 至少包含 `iss`、`aud`、`sub=principalId`、`principalType`、`jti`、`iat`、`exp`、`tokenVersion` 和粗粒度 Scope；
+- 浏览器访问令牌仅保存在内存，刷新令牌使用 `Secure`、`HttpOnly`、`SameSite` Cookie；Token 不得写入 LocalStorage、埋点、错误上报或日志；
+- 首个管理员通过一次性 Bootstrap 流程创建，口令从交互输入或 Secret 文件读取，必须首次登录修改，禁止提交到 Git。
+
 ### 5.5 统一权限模型
 
 采用组合授权：
@@ -494,7 +543,7 @@ PrincipalContext
 RBAC
 + Organization / Project Membership
 + Asset ACL
-+ OAuth Scope / MCP Tool Allowlist
++ JWT Scope / MCP Tool Allowlist
 + Sensitivity and Visibility Policy
 + Operation Preconditions
 ```
@@ -522,6 +571,14 @@ AGENT agt_xxx
 organization:manage
 project:view
 project:manage
+user:read
+user:manage
+authorization:read
+authorization:manage
+dictionary:read
+dictionary:manage
+tag:read
+tag:manage
 asset:create
 asset:read
 asset:update
@@ -536,11 +593,15 @@ agent:register
 agent:authorize
 token:create
 audit:read
+job:read
+job:manage
+notification:read
 system:configure
+system:observe
 mcp:invoke
 ```
 
-OAuth Scope 是对客户端能力的粗粒度授权，业务 Permission 是资源级细粒度授权。示例：`asset:write` Scope 可映射到 `asset:create`、`asset:update` 和 `asset:upload`，但最终操作仍需通过角色、作用域、资产状态和策略判断。Scope 不能直接替代 Permission。
+JWT Scope 是对客户端能力的粗粒度授权，业务 Permission 是资源级细粒度授权。示例：`asset:write` Scope 可映射到 `asset:create`、`asset:update` 和 `asset:upload`，但最终操作仍需通过角色、作用域、资产状态和策略判断。Scope 不能直接替代 Permission。
 
 权限实现要求：
 
@@ -550,6 +611,7 @@ OAuth Scope 是对客户端能力的粗粒度授权，业务 Permission 是资�
 - `asset:publish`、`asset:delete`、`system:configure` 默认不授予 Agent；
 - 下载授权同时检查资产权限、版本状态、敏感等级和用途限制；
 - Gitea 权限由后端单向投影，不能代替业务授权判断。
+- `PUBLIC` 表示对所有已认证且状态正常的 Principal 可见，不代表允许互联网匿名访问。
 
 ### 5.6 字典、枚举、标签与国际化
 
@@ -594,6 +656,17 @@ deprecation_reason
 - 字典变更需要版本号和审计；
 - License、敏感等级等治理字典的修改需要管理员权限。
 
+#### 受控标签
+
+标签是独立治理对象，不等同于字典项，也不再作为业务模块可任意写入的字符串数组：
+
+- 标签作用域为 `PLATFORM` 或 `ORGANIZATION`，平台管理员维护全局标签，组织管理员只能维护本组织标签；
+- 标签具有稳定 `tagId`、作用域、`tagCode`、展示名、`i18nKey`、颜色、状态和乐观锁版本；
+- `(scopeType, scopeId, tagCode)` 唯一；组织标签不得通过同名覆盖改变全局标签语义；
+- 资产通过 `asset_tag` 关联表引用标签，写接口提交 `tagIds`，查询响应返回稳定 ID、Code 和展示元数据；
+- 停用标签保留历史关联和回显，但禁止建立新关联；合并、停用和删除都必须审计；
+- 业务模块不得创建私有标签表、接受未登记标签，或依据标签展示名执行业务分支。
+
 国际化范围包括菜单、按钮、字典项、错误消息、通知模板和接入向导。接口字段采用 camelCase；错误分支依赖稳定 `code`，不依赖本地化 `message`。首期支持 `zh-CN` 和 `en-US`。
 
 ### 5.7 统一配置
@@ -603,7 +676,7 @@ deprecation_reason
 | 层级 | 示例 | 存储 |
 | --- | --- | --- |
 | 构建期 | Maven/npm/DVC 版本、镜像 Digest | Git 与锁文件 |
-| 部署期 | 数据源、Gitea/MinIO Endpoint、OIDC Issuer | 环境变量/Secret |
+| 部署期 | 数据源、Gitea/MinIO Endpoint、JWT Issuer/Audience/签名密钥引用 | 环境变量/Secret |
 | 运行期 | 上传限额、URL 有效期、重试次数、功能开关 | `system_config` |
 | 作用域配置 | 项目配额、Agent Tool Allowlist | 业务配置表 |
 
@@ -641,6 +714,7 @@ notification.webhook.enabled
 | Agent | `agt_` | `agt_01J...` |
 | Organization | `org_` | `org_01J...` |
 | Project | `prj_` | `prj_01J...` |
+| Tag | `tag_` | `tag_01J...` |
 | Asset | `ast_` | `ast_01J...` |
 | Version | `ver_` | `ver_01J...` |
 | Upload Session | `upl_` | `upl_01J...` |
@@ -752,6 +826,8 @@ action, result, errorCode, durationMs
 
 公共字段由 Filter/Interceptor、TaskDecorator 和 OpenTelemetry 自动注入，业务代码不得手工拼接。
 
+P0-B 必须提供统一 JSON 日志编码、MDC/Trace Context 注入、HTTP/MCP/Worker 访问日志、字段级脱敏和输出大小限制。运行日志写入标准输出并由 Loki/OpenSearch 等采集；业务审计写入 PostgreSQL 追加表，二者不能互相替代。请求体、响应体默认不完整记录，认证头、Cookie、密码、JWT、预签名查询串和对象存储凭据必须在日志边界统一清除。
+
 必须审计：
 
 - 登录失败、Token 创建/吊销、Agent 注册/授权；
@@ -853,21 +929,57 @@ Trace 必须覆盖 Browser/Agent → Nginx → REST/MCP → Application Service 
 公共 API：
 
 ```http
+POST   /api/v1/auth/login
+POST   /api/v1/auth/token
+POST   /api/v1/auth/refresh
+POST   /api/v1/auth/logout
+GET    /api/v1/me
+PUT    /api/v1/me/password
+
 GET    /api/v1/system/principals
 GET    /api/v1/system/users
+POST   /api/v1/system/users
+GET    /api/v1/system/users/{userId}
+PATCH  /api/v1/system/users/{userId}
+POST   /api/v1/system/users/{userId}:enable
+POST   /api/v1/system/users/{userId}:disable
+POST   /api/v1/system/users/{userId}:reset-password
 GET    /api/v1/system/agents
 POST   /api/v1/system/agents
 POST   /api/v1/system/agents/{agentId}:enable
 POST   /api/v1/system/agents/{agentId}:disable
 PUT    /api/v1/system/agents/{agentId}/tool-allowlist
 
+GET    /api/v1/system/organizations
+POST   /api/v1/system/organizations
+GET    /api/v1/system/organizations/{organizationId}/members
+POST   /api/v1/system/organizations/{organizationId}/members
+DELETE /api/v1/system/organizations/{organizationId}/members/{principalId}
+GET    /api/v1/system/organizations/{organizationId}/projects
+POST   /api/v1/system/organizations/{organizationId}/projects
+
 GET    /api/v1/system/roles
+POST   /api/v1/system/roles
+PATCH  /api/v1/system/roles/{roleId}
+DELETE /api/v1/system/roles/{roleId}
 GET    /api/v1/system/permissions
-PUT    /api/v1/system/role-bindings/{bindingId}
+GET    /api/v1/system/role-bindings
+POST   /api/v1/system/role-bindings
+DELETE /api/v1/system/role-bindings/{bindingId}
+GET    /api/v1/system/resource-acls
+POST   /api/v1/system/resource-acls
+DELETE /api/v1/system/resource-acls/{aclId}
 
 GET    /api/v1/system/dictionaries
 GET    /api/v1/system/dictionaries/{dictCode}/items
 POST   /api/v1/system/dictionaries/{dictCode}/items
+PATCH  /api/v1/system/dictionaries/{dictCode}/items/{itemCode}
+
+GET    /api/v1/system/tags
+POST   /api/v1/system/tags
+PATCH  /api/v1/system/tags/{tagId}
+POST   /api/v1/system/tags/{tagId}:enable
+POST   /api/v1/system/tags/{tagId}:disable
 
 GET    /api/v1/system/configurations
 PUT    /api/v1/system/configurations/{configKey}
@@ -886,11 +998,16 @@ GET    /api/v1/system/dependencies
 管理页面：
 
 ```text
+/login
+/profile
 /admin/users
 /admin/agents
+/admin/organizations
+/admin/projects
 /admin/roles
 /admin/permissions
 /admin/dictionaries
+/admin/tags
 /admin/configurations
 /admin/jobs
 /admin/audit-logs
@@ -905,7 +1022,7 @@ GET    /api/v1/system/dependencies
 | 表 | 用途 |
 | --- | --- |
 | `iam_principal` | 统一主体 |
-| `iam_user` | 用户扩展 |
+| `iam_user` | 本地用户、密码哈希、锁定状态和 Token 版本 |
 | `iam_agent` | Agent 扩展与最大敏感等级 |
 | `iam_role` | 角色 |
 | `iam_permission` | 权限定义 |
@@ -913,9 +1030,14 @@ GET    /api/v1/system/dependencies
 | `iam_role_binding` | 主体在作用域内的角色 |
 | `iam_resource_acl` | 资产等资源的显式 ACL |
 | `iam_agent_tool` | Agent MCP Tool 白名单 |
-| `iam_token` | Token 摘要、Scope、状态与过期时间 |
+| `iam_token` | 刷新 JWT/PAT 摘要、Token Family、Scope、状态与过期时间 |
+| `organization` | 组织作用域 |
+| `project` | 项目作用域 |
+| `organization_member` | 用户/主体与组织成员关系 |
 | `system_dict_type` | 字典类型 |
 | `system_dict_item` | 字典项和 i18nKey |
+| `system_tag` | 平台/组织受控标签 |
+| `asset_tag` | 资产与受控标签关联 |
 | `system_i18n_message` | 可运营国际化文案 |
 | `system_config` | 非敏感运行配置 |
 | `job_task` | 可靠任务 |
@@ -939,6 +1061,9 @@ Flyway Migration 是表结构唯一变更入口；MyBatis-Plus Entity 不能反�
 6. API、任务和依赖调用统一传递 Request/Trace/Principal 上下文；
 7. 数据库指标不替代 Prometheus，审计日志不等同于运行日志；
 8. 公共能力只实现一次，并通过模块依赖、测试和 CI 强制执行。
+9. P0-B 未通过认证、越权、审计、公共管理端和 Compose 验收前，禁止继续 P1+ 功能开发。
+
+P0-B 的“能力—模块—表—API—权限—审计—页面—测试”追踪关系见 `docs/architecture/p0-platform-foundation-traceability.md`，任一行未完成都阻止阶段退出。
 
 ---
 
@@ -1083,17 +1208,19 @@ stateDiagram-v2
 | 表 | 关键字段 | 说明 |
 | --- | --- | --- |
 | `iam_principal` | `id,principal_id,type,subject,status` | 用户/Agent/服务统一主体 |
-| `iam_user` | `principal_id,username,display_name,email` | 用户扩展 |
+| `iam_user` | `principal_id,username,password_hash,status,token_version` | 平台本地用户与凭据状态 |
 | `iam_agent` | `principal_id,agent_type,vendor,max_sensitivity` | Agent 扩展 |
 | `iam_role` | `id,role_code,role_name,role_type` | 角色 |
 | `iam_permission` | `id,permission_code,resource,action` | 权限定义 |
 | `iam_role_permission` | `role_id,permission_id` | 角色权限 |
 | `iam_role_binding` | `principal_id,scope_type,scope_id,role_id` | 平台/组织/项目/资产授权 |
 | `iam_agent_tool` | `principal_id,tool_name,enabled` | MCP Tool 白名单 |
-| `iam_token` | `principal_id,token_digest,scopes,expires_at` | Token 摘要与生命周期 |
+| `iam_token` | `principal_id,jti_digest,token_family,scopes,status,expires_at` | 刷新 JWT/PAT 摘要与生命周期 |
 | `organization` | `id,code,name,gitea_org` | 组织映射 |
 | `project` | `id,org_id,code,name` | 业务隔离单元 |
 | `asset` | `id,type,namespace,name,status,visibility` | 统一资产 |
+| `system_tag` | `tag_id,scope_type,scope_id,tag_code,status` | 平台/组织受控标签 |
+| `asset_tag` | `asset_id,tag_id` | 资产标签关联 |
 | `asset_model` | `asset_id,framework,task,architecture` | 模型扩展 |
 | `asset_dataset` | `asset_id,format,modality,schema_json` | 数据集扩展 |
 | `asset_version` | `id,asset_id,version,status,commit_sha,tag` | 版本控制面 |
@@ -1316,12 +1443,12 @@ Agent 集成不能依赖“让 Agent 自己执行任意 Shell 并拿永久 MinIO
 ```text
 POST https://aihub.example.com/mcp
 Transport: Streamable HTTP
-Auth: OAuth 2.1 / Bearer Token
+Auth: Platform-issued Bearer JWT
 ```
 
 Spring AI MCP Server WebMVC 可暴露 Tools、Resources 和 Prompts，并支持 Streamable HTTP；旧 SSE 端点仅在兼容测试需要时启用。[R4]
 
-OAuth 模式下，平台作为资源服务器发布 `/.well-known/oauth-protected-resource`，并指向企业授权服务器元数据。若企业 IdP 不支持动态客户端注册，则为 OpenClaw、QwenPaw 预注册客户端；PoC 可使用短期 Bearer Token，但生产接入不把长期 Token 写入 Skill、配置仓库或命令历史。
+P4 接入时，OpenClaw、QwenPaw 或其他 Agent 使用 P0-B 注册的独立 Agent 凭据调用 `/api/v1/auth/token` 换取短期 JWT，再以 Bearer JWT 调用 MCP。平台校验 JWT Scope、业务 Permission、资源状态和 Tool Allowlist。长期 Agent 凭据、访问/刷新 JWT 都不得写入 Skill、配置仓库、命令历史或对话；未来如需标准 OAuth 2.1/OIDC 发现与授权流程，必须新增 ADR，不能把当前本地 JWT 接口伪装成 OAuth Authorization Server。
 
 ### 9.3 MCP Tools
 
@@ -1392,32 +1519,25 @@ Skill 中必须明确：
 
 ### 9.6 OpenClaw 接入示例
 
-OpenClaw 当前可管理远程 MCP Server 定义、OAuth、工具过滤，并可用 `doctor --probe` 做实时连接验证。[R6]
+OpenClaw 当前可管理远程 MCP Server 定义、认证、工具过滤，并可做实时连接验证。[R6] P4 兼容测试锁定具体客户端版本后，接入包必须提供经过验证的配置示例，流程固定为：
 
-```bash
-openclaw mcp add asset-hub \
-  --url https://aihub.example.com/mcp \
-  --transport streamable-http \
-  --auth oauth \
-  --oauth-scope "asset:read asset:download"
-
-openclaw mcp login asset-hub
-openclaw mcp doctor asset-hub --probe
-openclaw mcp tools asset-hub \
-  --include "asset_search,asset_get,asset_list_versions,asset_get_version,asset_request_download"
-```
+1. 在平台注册独立只读 Agent，并将长期凭据写入客户端 Secret Store；
+2. 客户端通过 `/api/v1/auth/token` 换取短期平台 JWT，不把凭据或 JWT 写入 Skill/Workspace；
+3. MCP URL 配置为 `https://aihub.example.com/mcp`，Transport 为 `streamable-http`；
+4. 白名单仅保留 `asset_search`、`asset_get`、`asset_list_versions`、`asset_get_version`、`asset_request_download`；
+5. 执行客户端连接探测并验证 JWT 过期/刷新和越权拒绝。
 
 再将平台提供的 `openclaw/asset-hub/SKILL.md` 安装到对应 Workspace。OpenClaw Skill 以带 YAML Frontmatter 的 `SKILL.md` 为核心，并支持 Agent Allowlist；生产环境应只向指定 Agent 暴露资产 Skill。[R7]
 
 ### 9.7 QwenPaw 接入示例
 
-QwenPaw 已提供 MCP 管理、OAuth 2.1 MCP 和 MCP Tool 白名单能力，并支持自定义 Skill。[R8]
+QwenPaw 已提供 MCP 管理、Bearer 认证、Tool 白名单能力和自定义 Skill。[R8]
 
 推荐流程：
 
 1. 在 QwenPaw Console 的 MCP 管理页面新增远程服务；
 2. Transport 选择 `streamable-http`，URL 填写 `https://aihub.example.com/mcp`；
-3. 通过 OAuth 2.1 或只读 Agent Token 完成认证；
+3. 使用独立 Agent 凭据换取平台短期 JWT，并通过客户端 Secret Store 注入 Bearer JWT；
 4. 白名单只保留 `asset_search`、`asset_get`、`asset_get_version`、`asset_request_download`；
 5. 导入平台提供的 QwenPaw Skill；
 6. 新建会话，验证搜索、精确版本解析和下载票据。
@@ -1443,7 +1563,7 @@ QwenPaw 已提供 MCP 管理、OAuth 2.1 MCP 和 MCP Tool 白名单能力，并�
 - Tool Schema 在 OpenClaw 和 QwenPaw 中能正常渲染；
 - 401、403、404、409、429 的行为；
 - Cursor 分页和最大响应体；
-- Token 过期与 OAuth 刷新；
+- 访问 JWT 过期、刷新轮换、旧刷新 JWT 重放拒绝；
 - 工具白名单不会泄露写操作；
 - 预签名 URL 过期后无法继续访问。
 
@@ -1484,14 +1604,16 @@ QwenPaw 已提供 MCP 管理、OAuth 2.1 MCP 和 MCP Tool 白名单能力，并�
 
 ### 11.1 身份与授权
 
-- 人类用户：企业 OIDC/LDAP 接入；
-- Agent：独立服务账号，不复用个人 Token；
-- REST/MCP：OAuth2 Access Token 或短期 Personal/Agent Token；
+- 人类用户：P0 使用 PostgreSQL 本地账号，用户名/密码只用于换取平台 JWT；
+- Agent：独立服务账号和凭据，不复用个人 Token，凭据换取短期 JWT；
+- REST/MCP：统一校验平台签发的 Bearer JWT；
 - Git：Gitea Token/SSH Key；
 - DVC：短期 STS/S3 凭据优先，MVP 可使用按项目隔离的服务账号；
 - 权限 Scope：`asset:read`、`asset:preview`、`asset:download`、`asset:write`、`asset:submit`、`asset:publish`、`asset:admin`。
 
 后端是业务授权事实源，并单向配置 Gitea Repository/Team 权限。定时 Reconciler 检测 Gitea 漂移，避免双向同步循环。
+
+平台 JWT 不是 OIDC Provider 承诺。未来若需为 Gitea 或企业系统提供标准 SSO，必须另行新增 ADR，选择引入 Authorization Server/OIDC 或可信反向代理认证；不得把当前 JWT 登录接口伪装成 OIDC。
 
 ### 11.2 Agent 安全
 
@@ -1849,6 +1971,9 @@ docker compose --profile observability up -d
 | V19 | 可靠通知 | 模拟通知渠道失败后恢复 | 核心事务不回滚，通知最终送达 |
 | V20 | Trace 贯通 | REST/MCP 触发后台任务 | Request/Trace/Principal 上下文可关联 |
 | V21 | AI Coding 门禁 | 执行契约、迁移、ArchUnit 和测试检查 | 破坏性或越界变更被 CI 阻断 |
+| V22 | 本地登录与 JWT | 登录、刷新轮换、登出、禁用用户、重放旧刷新令牌 | 仅有效 Token 可访问；吊销和重放被拒绝并审计 |
+| V23 | 字典与受控标签 | 平台/组织管理员维护，普通用户尝试自由标签或越权维护 | 仅有效 itemCode/tagId 可写，越权失败，历史停用项可回显 |
+| V24 | 结构化日志与审计 | 触发成功、失败、拒绝和后台任务 | 日志字段可关联且 Secret 脱敏，必审计事件 100% 入库 |
 
 ### 13.3 DVC 端到端验证
 
@@ -2093,6 +2218,14 @@ contracts/
 - 数据兼容/回填：
 - 回滚策略：
 
+## 公共能力影响
+- 身份与权限：
+- 字典/标签/国际化：
+- 配置与幂等：
+- 日志与审计：
+- 任务与通知：
+- 指标、Trace 与告警：
+
 ## 验收
 - 单元测试：
 - 集成测试：
@@ -2107,15 +2240,16 @@ contracts/
 新增或修改能力按以下顺序：
 
 1. 明确用例、权限、状态前置条件、幂等和审计要求；
-2. 更新 OpenAPI 或 MCP Tool Schema；
-3. 更新示例请求、响应和错误码；
-4. 如涉及数据，新增只向前的 Flyway Migration；
-5. 生成或更新前后端契约类型；
-6. 实现 Application Service 和领域规则；
-7. 实现 REST/MCP/Worker Adapter；
-8. 编写单元、集成和契约测试；
-9. 更新 Compose Fixture 与 Verify 用例；
-10. 更新本设计、ADR 或 Runbook。
+2. 识别并复用 P0 公共能力，禁止业务模块创建临时替代实现；
+3. 更新 OpenAPI 或 MCP Tool Schema；
+4. 更新示例请求、响应和错误码；
+5. 如涉及数据，新增只向前的 Flyway Migration；
+6. 生成或更新前后端契约类型；
+7. 实现 Application Service 和领域规则；
+8. 实现 REST/MCP/Worker Adapter；
+9. 编写单元、集成和契约测试；
+10. 更新 Compose Fixture 与 Verify 用例；
+11. 更新本设计、ADR 或 Runbook。
 
 禁止先凭感觉写 Controller/页面，最后再反推接口文档。
 
@@ -2126,8 +2260,9 @@ contracts/
 - Controller 只负责协议转换、参数校验和调用 Application Service；
 - MCP Tool 只是 Adapter，必须调用与 REST 相同的 Application Service；
 - Application Service 负责编排、事务边界、权限和审计；
+- Application Service 必须调用公共 `AuthorizationService`、`AuditService` 等接口，不得以空主体或环境开关跳过；
 - Domain 层保存状态机、不变量和值对象，不依赖 Spring、MyBatis、Gitea 或 MinIO SDK；
-- Infrastructure 层实现 Repository、Gitea、MinIO、DVC 和 OIDC Port；
+- Infrastructure 层实现 Repository、Gitea、MinIO、DVC 和身份/JWT Port；
 - Mapper 只在本模块 Infrastructure 内使用；
 - 跨模块禁止引用 Mapper、DO/Entity 和内部实现类。
 
@@ -2177,10 +2312,12 @@ External Gitea/MinIO DTO
 - TanStack Query 管理服务端状态，禁止把服务端列表复制进全局 Store；
 - 页面组件不直接拼 URL，不直接调用 `fetch`；
 - 权限通过统一 `usePermission`/Route Guard 表达，按钮隐藏不能代替后端鉴权；
+- 权限 Provider 必须来自已认证主体，禁止可部署构建默认注入全部 Scope；
 - 字典展示使用 `itemCode + i18nKey`，禁止页面硬编码后端状态文案；
 - 上传状态机独立于页面生命周期，支持刷新恢复和分片重试；
 - 所有异步页面具有 Loading、Empty、Error、Retry 状态；
 - 预签名 URL 和 Token 不写入 LocalStorage、埋点或错误上报；
+- JWT 访问令牌仅保存在内存，刷新令牌按统一安全 Cookie/轮换策略处理，页面不得自行实现 Token 存储；
 - 新增页面必须包含路由、权限点、国际化、错误处理和最小可访问性检查。
 
 ### 15.8 MCP 与 Agent 编码约束
@@ -2214,7 +2351,7 @@ AI 禁止为“让测试通过”而删除约束、放宽非空字段或绕过�
 | --- | --- | --- |
 | 单元测试 | 状态机、权限策略、值对象、错误码 | JUnit 5 |
 | 模块测试 | Application Service、事务、Mapper | Spring Boot Test + PostgreSQL Testcontainers |
-| Adapter 测试 | Gitea/MinIO/OIDC 协议和异常映射 | WireMock/MockWebServer + MinIO Container |
+| Adapter 测试 | Gitea/MinIO/JWT 协议、签名轮换和异常映射 | WireMock/MockWebServer + MinIO Container |
 | 契约测试 | OpenAPI、MCP Schema、错误响应 | Schema Validator + Snapshot |
 | 前端测试 | Hooks、关键表单、权限和上传状态 | Vitest + Testing Library |
 | E2E | 创建、DVC、发布、MCP、权限 | Docker Compose Verify |
@@ -2242,6 +2379,7 @@ Windows 本地可使用等价 PowerShell 脚本，但 CI 只维护一个权威�
 - ArchUnit 模块依赖通过；
 - 新增错误码、权限点、配置 Key 无重复；
 - Compose 端到端核心链路通过；
+- P0-B 期间必须通过登录/JWT、用户禁用、权限下推、字典/标签治理、日志脱敏、审计完整性、任务和通知可靠性验证；
 - Secret 扫描和依赖漏洞检查达到项目阈值。
 
 ### 15.11 Definition of Done
@@ -2258,6 +2396,7 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 - 文档、示例、Fixture 和 Runbook 已同步；
 - 未夹带无关重构、依赖升级或格式化；
 - 没有新增明文 Secret、临时后门、TODO 占位实现。
+- P0-B 未退出时，P1+ 只允许公共底座适配和安全整改，不允许新增业务能力。
 
 ### 15.12 禁止事项
 
@@ -2266,6 +2405,9 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 禁止新增 Python 业务服务绕过 Java 21/Spring Boot 控制面；
 禁止 REST、MCP、Worker 各自实现一套业务规则；
 禁止业务模块直接解析 Token 或自行判断管理员字符串；
+禁止空 Principal、allow-all 授权策略或默认全 Scope Provider 进入可部署 Profile；
+禁止业务模块自建用户、权限、字典、标签、配置、日志、审计、任务或通知实现；
+禁止资产写接口接受未登记自由标签，或用展示文案代替稳定 itemCode/tagId；
 禁止跨模块调用 Mapper 或返回数据库 Entity；
 禁止用动态字典驱动发布状态机；
 禁止用内存线程或 @Async 承担可靠任务；
@@ -2286,6 +2428,10 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 | 新增 MCP Tool | MCP Schema、Scope、审计、Tool 白名单、Agent Skill |
 | 新增资产状态 | Java Enum、状态机、DB 约束、前端类型、迁移、测试 |
 | 新增字典 | Seed Migration、i18n、管理页面、缓存刷新 |
+| 新增/修改标签 | 作用域、权限、唯一约束、资产关联、i18n、审计、管理页面 |
+| 修改登录/JWT | 密钥轮换、Token 吊销、刷新重放、前端存储、越权测试、安全审计 |
+| 新增用户操作 | Principal、角色绑定、状态失效、密码策略、审计、通知 |
+| 新增日志字段/审计事件 | 脱敏规则、Trace 关联、保留策略、查询权限、契约测试 |
 | 新增后台任务 | Job Type、幂等、租约、重试、指标、告警、运维页面 |
 | 修改 Gitea/MinIO 交互 | Adapter 契约、超时重试、依赖测试、对账 |
 | 修改发布流程 | Saga、Tag 保护、补偿、审计、E2E、ADR |
@@ -2312,16 +2458,19 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 
 ## 16. 实施路线
 
-| 阶段 | 建议周期 | 交付 |
-| --- | --- | --- |
-| P0：工程基线 | 1 周 | AGENTS/ADR/契约目录、Compose、CI、Java/React 骨架、Flyway、ArchUnit、健康检查 |
-| P1：资产目录 | 2 周 | 模型/数据集 CRUD、Gitea 仓库、卡片、搜索 |
-| P2：版本与数据面 | 2 周 | DVC/MinIO、CLI 路径、上传会话、Worker |
-| P3：发布与权限 | 2 周 | 状态机、审批、Tag 保护、RBAC、审计 |
-| P4：Agent 接入 | 2 周 | MCP、OpenAPI、Skill 包、OpenClaw/QwenPaw 验证 |
-| P5：质量与运维 | 2 周 | 预览、对账、指标、备份恢复、性能与安全验收 |
+阶段推进以退出条件为准，不再使用缺乏团队规模与依赖依据的固定周数：
 
-每阶段结束都更新 Compose 验证脚本，禁止把端到端验收留到最后。
+| 阶段 | 状态/准入 | 交付与退出条件 |
+| --- | --- | --- |
+| P0-A：工程基线 | 已完成 | AGENTS/ADR/契约目录、Compose、CI、Java/React 骨架、Flyway、ArchUnit、健康检查 |
+| P0-B：公共平台底座 | 当前阶段 | 第 5 章全部能力、最小组织/项目作用域、管理 API/页面、认证/越权/审计/可靠性/Compose 验收 |
+| P1：资产目录整改与完成 | 冻结，等待 P0-B | 现有 CRUD/Gitea/检索接入用户、授权、字典、受控标签、审计、任务和前向迁移 |
+| P2：版本与数据面 | 等待 P1 | DVC/MinIO、CLI 路径、上传会话、持久化 Worker |
+| P3：发布治理 | 等待 P2 | 状态机、审批、Tag 保护、Saga/Outbox、不可变发布；权限和审计直接复用 P0 |
+| P4：Agent 接入 | 等待 P3 | MCP、OpenAPI、Skill 包、OpenClaw/QwenPaw 验证 |
+| P5：质量与运维 | 等待 P4 | 预览、对账、备份恢复、性能与安全验收 |
+
+每阶段开始前检查上游退出条件，每阶段结束都更新 Compose 验证脚本。P0-B 未退出时，不得通过并行开发绕过公共能力准入门。
 
 ---
 
@@ -2339,6 +2488,8 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 | 发布 Tag 被手工覆盖 | 版本污染 | 受保护 Tag、服务账号独占发布、定时校验 |
 | MinIO 永久凭据下发客户端 | 凭据泄露 | STS/短期凭据或预签名 URL，按项目最小权限 |
 | Agent 平台快速演进 | 配置失效 | 以 MCP/REST 标准为核心，维护兼容矩阵和自动探测 |
+| 业务先于公共底座扩展 | 权限、标签、日志和审计分叉，返工扩大 | 冻结 P1，P0-B 退出后才允许新增业务 |
+| 本地账号与 JWT 管理不当 | 账号接管、Token 重放或无法吊销 | 自适应密码哈希、非对称签名、短期访问令牌、刷新轮换、Token 版本和审计 |
 
 最终技术决策：
 
@@ -2349,6 +2500,9 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 5. MCP 使用 Streamable HTTP，REST/OpenAPI 始终作为稳定后备；
 6. Agent 默认只读，发布与高风险写操作保留人工闸门；
 7. Compose 必须配套 Bootstrap、Verify 和恢复验证，而不是只交付一个 YAML。
+8. P0-B 完成全部公共平台能力后才能继续业务阶段，现有 P1 代码采用前向兼容整改。
+9. P0 用户事实源为 PostgreSQL 本地账号，所有在线入口统一使用平台签发的 JWT。
+10. 标签为平台/组织作用域的受控治理对象，资产不得继续写入自由标签。
 
 ---
 
@@ -2373,6 +2527,6 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 | Gitea 支持 MinIO/S3 兼容存储及签名直链 | 用于可选 LFS/附件，核心大文件仍由 DVC 管理 |
 | DVC 支持通过 `endpointurl` 连接 MinIO | MinIO 作为 DVC Remote |
 | Spring AI MCP Server 支持 Streamable HTTP、Tools、Resources、Prompts | Java 后端直接提供 MCP，不额外部署 Python MCP 服务 |
-| OpenClaw 支持远程 MCP 定义、OAuth、工具过滤和探测 | 提供一组最小只读工具及接入命令 |
-| QwenPaw 支持 MCP 管理、OAuth 2.1 和 Tool 白名单 | 通过 Console 快速接入并限制工具范围 |
+| OpenClaw 支持远程 MCP 定义、认证、工具过滤和探测 | P4 提供经锁定版本验证的平台 JWT 接入配置与最小只读工具 |
+| QwenPaw 支持 MCP 管理、Bearer 认证和 Tool 白名单 | 通过 Console 注入短期平台 JWT 并限制工具范围 |
 | OpenClaw/QwenPaw 都支持 Skill 扩展 | 发布统一接入仓库与平台专用 Skill |

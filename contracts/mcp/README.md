@@ -8,7 +8,9 @@ MCP Server、Agent 接入包（OpenClaw / QwenPaw Skill）与兼容测试的权�
 
 ## 状态
 
-P0 阶段仅建立目录骨架；具体 Tool Schema 在 **P1+（Agent 接入阶段）** 按"契约优先"流程填充。
+P0-A 仅建立目录骨架。具体业务 Tool Schema 仍在 P4 Agent 接入阶段按"契约优先"流程填充，
+但 P0-B 必须先提供统一 Principal/JWT、Scope/Permission、Tool Allowlist、审计、限流、错误响应
+和 Trace 契约。MCP 实现不得再假定身份权限可后补。
 
 ## 规划内容
 
@@ -26,3 +28,6 @@ P0 阶段仅建立目录骨架；具体 Tool Schema 在 **P1+（Agent 接入阶�
   的兼容性。
 - Tool 名称与 Schema 一经发布按 API 兼容策略维护；新增/变更 Tool 必须同步更新
   OpenClaw/QwenPaw 白名单示例与兼容测试。
+- MCP 只接受平台签发的 Bearer JWT，调用前同时校验 JWT Scope、业务 Permission、资源状态和
+  Agent Tool Allowlist；JWT 内角色不能替代实时授权。
+- Tool 调用统一写访问日志和审计，禁止记录 JWT、预签名 URL、永久凭据或大体积参数。
