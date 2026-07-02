@@ -32,6 +32,8 @@ function Get-EnvValue {
 }
 $AdminUser = Get-EnvValue "AIHUB_BOOTSTRAP_ADMIN_USERNAME" "admin"
 $AdminPass = Get-EnvValue "AIHUB_BOOTSTRAP_ADMIN_PASSWORD" "change-me-admin-01"
+$PgUser = Get-EnvValue "POSTGRES_USER" "aihub"
+$PgDb = Get-EnvValue "POSTGRES_DB" "aihub"
 
 function Test-Step {
     param([string]$Id, [string]$Name, [scriptblock]$Check)
@@ -90,22 +92,24 @@ function Test-BackendReachable {
 # 探测 postgres 容器是否在运行（用于 V04/V08 的 psql 检查）。
 function Test-PostgresReachable {
     try {
-        $state = (docker compose ps --format json postgres | ConvertFrom-Json)
-        return ($state -and $state.State -eq "running")
+        $state = (docker compose ps --format "{{.State}}" postgres | Select-Object -First 1)
+        return ("$state".Trim() -eq "running")
     } catch { return $false }
 }
 
 function Invoke-Psql {
     param([string]$Sql)
-    return docker compose exec -T postgres sh -c "psql -U `$POSTGRES_USER -d `$POSTGRES_DB -tAc `"$Sql`""
+    # 直接调用容器内 psql，避免 sh -c 的嵌套引号在 PowerShell 下被破坏。
+    $out = docker compose exec -T postgres psql -U $PgUser -d $PgDb -tAc $Sql
+    return ("" + $out).Trim()
 }
 
 # 探测指定服务容器是否在运行。
 function Test-ServiceRunning {
     param([string]$Service)
     try {
-        $state = (docker compose ps --format json $Service | ConvertFrom-Json)
-        return ($state -and $state.State -eq "running")
+        $state = (docker compose ps --format "{{.State}}" $Service | Select-Object -First 1)
+        return ("$state".Trim() -eq "running")
     } catch { return $false }
 }
 
@@ -126,10 +130,9 @@ if (-not (Test-ServiceRunning "postgres")) {
     Test-Step "V02" "核心服务健康" {
         $core = @("postgres", "minio", "gitea", "backend")
         foreach ($svc in $core) {
-            $state = (docker compose ps --format json $svc | ConvertFrom-Json)
-            if (-not $state) { throw "$svc 未运行" }
-            $health = $state.Health
-            $status = $state.State
+            $status = ("" + (docker compose ps --format "{{.State}}" $svc | Select-Object -First 1)).Trim()
+            $health = ("" + (docker compose ps --format "{{.Health}}" $svc | Select-Object -First 1)).Trim()
+            if (-not $status) { throw "$svc 未运行" }
             if ($status -ne "running") { throw "$svc 状态为 $status" }
             if ($health -and $health -ne "healthy") { throw "$svc 健康状态为 $health" }
         }
@@ -144,7 +147,9 @@ if (-not (Test-ServiceRunning "minio")) {
 } else {
     Test-Step "V03" "Bucket 初始化" {
         $buckets = @("gitea-storage", "dvc-cache", "asset-staging", "asset-preview")
-        $listing = docker compose exec -T minio sh -c "mc alias set local http://localhost:9000 `$MINIO_ROOT_USER `$MINIO_ROOT_PASSWORD >/dev/null 2>&1; mc ls local 2>/dev/null"
+        # 单引号 PS 字符串：$VAR 原样传入容器 shell 展开，避免 PowerShell 破坏引号。
+        $mcCmd = 'mc alias set local http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD >/dev/null 2>&1; mc ls local 2>/dev/null'
+        $listing = "" + (docker compose exec -T minio sh -c $mcCmd)
         foreach ($b in $buckets) {
             if ($listing -notmatch $b) { throw "Bucket $b 不存在" }
         }
@@ -236,20 +241,30 @@ if (-not $backendReachable) {
 }
 
 # ---------------------------------------------------------------------------
-# V08: 审计脱敏（audit_log 任何正文都不得包含明文口令）
-# 注意：identity 登录审计事件接入尚未统一（已知差距），故此处不断言登录事件计数，
-#       只校验脱敏这一恒定不变式；登录/写操作审计完整性由后端测试与后续整改覆盖。
+# V08: 审计脱敏 + identity 登录审计完整性
+# identity 登录/令牌/改密事件已接入权威 AuditService（IdentityAuditAdapter）。
+# 本用例校验：审计正文脱敏恒定不变式（无明文口令）；且 V05 登录成功后应产生登录审计事件。
 # ---------------------------------------------------------------------------
 if (-not $pgReachable) {
-    Skip-Step "V08" "审计脱敏" "postgres 不可达"
+    Skip-Step "V08" "审计脱敏与登录审计" "postgres 不可达"
 } else {
-    Test-Step "V08" "审计脱敏（无明文口令）" {
+    Test-Step "V08" "审计脱敏与登录审计（无明文口令 + 登录事件）" {
         # audit_log 表存在且可查询。
         $exists = (Invoke-Psql "select to_regclass('public.audit_log') is not null").Trim()
         if ($exists -ne "t") { throw "audit_log 表缺失" }
         # 审计正文不得包含明文口令（脱敏恒定不变式，空表亦成立）。
-        $leak = (Invoke-Psql "select count(*) from audit_log where detail::text like '%$AdminPass%'").Trim()
+        $leak = (Invoke-Psql "select count(*) from audit_log where request_summary::text like '%$AdminPass%'").Trim()
         if ([int]$leak -ne 0) { throw "audit_log 明文口令泄漏（脱敏失效）" }
+        # V05 登录成功后应产生登录审计事件（审计追加写可能异步，最多重试若干次）。
+        if ($backendReachable) {
+            $found = $false
+            for ($i = 0; $i -lt 10; $i++) {
+                $cnt = (Invoke-Psql "select count(*) from audit_log where event_type = 'AUTH_LOGIN_SUCCEEDED'").Trim()
+                if ([int]$cnt -ge 1) { $found = $true; break }
+                Start-Sleep -Milliseconds 500
+            }
+            if (-not $found) { throw "未发现 AUTH_LOGIN_SUCCEEDED 审计事件（identity 审计接入未生效）" }
+        }
     }
 }
 

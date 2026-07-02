@@ -48,6 +48,7 @@ public class AuditService {
         this(repository, idGenerator, clock, masker, objectMapper, null);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AuditService(AuditRepository repository, IdGenerator idGenerator, Clock clock,
                         SensitiveDataMasker masker, ObjectMapper objectMapper,
                         ObjectProvider<PlatformMetrics> platformMetricsProvider) {

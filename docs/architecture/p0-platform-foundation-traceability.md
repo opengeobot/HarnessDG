@@ -47,7 +47,7 @@
 | 配置 | `V8__configuration.sql`：`system_config` | `configuration/**/*Test`、`configuration/ConfigurationIT` | V06/V11（`system:configure`/`observe`） | 已实现 |
 | ID、上下文、响应、异常 | shared-kernel（无独立表） | `shared/SharedKernelTest`、`shared/logging/SensitiveDataMaskerTest`、`arch/LayeredArchitectureTest` | V05（错误体一致性） | 已实现 |
 | 幂等与可靠任务 | `V9__job.sql`：`api_idempotency`、`job_task`、`job_attempt` | `job/application/IdempotencyServiceTest`、`job/application/BackoffCalculatorTest`、`job/infrastructure/JobWorkerTest` | V09 | 已实现 |
-| 结构化日志与审计 | `V10__audit.sql`：`audit_log` | `audit/application/AuditServiceTest`、`audit/domain/AuditRepositoryImmutabilityTest`、`shared/logging/SensitiveDataMaskerTest` | V08（脱敏） | 部分（asset/taxonomy/authorization/configuration 已接入 AuditService；identity 登录审计接入待统一） |
+| 结构化日志与审计 | `V10__audit.sql`：`audit_log` | `audit/application/AuditServiceTest`、`audit/domain/AuditRepositoryImmutabilityTest`、`shared/logging/SensitiveDataMaskerTest`、`identity/application/AuthenticationApplicationServiceTest` | V08（脱敏 + 登录审计） | 已实现（asset/taxonomy/authorization/configuration/identity 均已接入 AuditService；identity 登录/刷新/重放/改密/凭据交换经 IdentityAuditAdapter 记录） |
 | 通知与外发 Webhook | `V11__notification.sql`：`notification`、`webhook_delivery`、`outbox_event` | `notification/application/NotificationServiceTest`、`notification/infrastructure/WebhookSignerTest`、`notification/infrastructure/SsrfGuardTest` | V10 | 已实现 |
 | 指标、Trace、健康与诊断 | 无业务表（Micrometer/OTel） | `platform/observability/**/*Test`（`MetricsSummaryServiceTest`、`SystemDependencyServiceTest`、`SystemDiagnosticsControllerTest`） | V11 | 已实现 |
 | 公共管理端 | 前端（不直接访问 DB） | 前端 `pnpm lint/typecheck/build`（见 `frontend/`） | 手动 UI；Verify 走 API 层 | 已实现 |
@@ -60,11 +60,11 @@
 | V01 | `docker compose config --quiet` | 始终执行 |
 | V02 | postgres/minio/gitea/backend 健康 | 容器未起时 SKIP |
 | V03 | 四个 Bucket 存在且非匿名 | minio 未起时 SKIP |
-| V04 | Flyway V1-V12 成功迁移、关键表存在 | postgres 未起时 SKIP |
+| V04 | Flyway V1-V13 成功迁移、关键表存在 | postgres 未起时 SKIP |
 | V05 | 登录签发 JWT、`/me` 200、无 Token→401（fail-closed） | backend 未起时 SKIP |
 | V06 | `/system/audit-logs`、`/metrics/summary` 无 Token→401、越权→403 | backend 未起时 SKIP |
 | V07 | `/system/dictionaries`、`/tags` 无 Token→401、越权→403 | backend 未起时 SKIP |
-| V08 | `audit_log` 存在、去检测无明文口令泄漏（脱敏恒定不变式） | postgres 未起时 SKIP |
+| V08 | `audit_log` 存在、无明文口令泄漏（脱敏）、登录成功产生 `AUTH_LOGIN_SUCCEEDED` 事件 | postgres 未起时 SKIP |
 | V09 | `/system/jobs` 默认拒绝 | backend 未起时 SKIP |
 | V10 | `/system/notifications` 默认拒绝 | backend 未起时 SKIP |
 | V11 | `/actuator/health` 200、`/system/dependencies` 默认拒绝 | backend 未起时 SKIP |

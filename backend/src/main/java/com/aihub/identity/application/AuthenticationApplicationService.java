@@ -9,6 +9,7 @@ import com.aihub.identity.domain.AgentIdentity;
 import com.aihub.identity.domain.AgentIdentityRepository;
 import com.aihub.identity.domain.LocalUser;
 import com.aihub.identity.domain.LocalUserRepository;
+import com.aihub.audit.domain.AuditResult;
 import com.aihub.identity.domain.RefreshTokenRecord;
 import com.aihub.identity.domain.RefreshTokenRepository;
 import com.aihub.shared.error.AuthenticationException;
@@ -55,6 +56,7 @@ public class AuthenticationApplicationService {
     private final PasswordPolicy passwordPolicy;
     private final IdGenerator idGenerator;
     private final Clock clock;
+    private final AuditPort auditPort;
 
     public AuthenticationApplicationService(LocalUserRepository userRepository,
                                             AgentIdentityRepository agentRepository,
@@ -64,7 +66,8 @@ public class AuthenticationApplicationService {
                                             PasswordHasher passwordHasher,
                                             PasswordPolicy passwordPolicy,
                                             IdGenerator idGenerator,
-                                            Clock clock) {
+                                            Clock clock,
+                                            AuditPort auditPort) {
         this.userRepository = userRepository;
         this.agentRepository = agentRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -74,6 +77,7 @@ public class AuthenticationApplicationService {
         this.passwordPolicy = passwordPolicy;
         this.idGenerator = idGenerator;
         this.clock = clock;
+        this.auditPort = auditPort;
     }
 
     /**
@@ -83,20 +87,32 @@ public class AuthenticationApplicationService {
     public TokenPairResult login(String username, String rawPassword) {
         LocalUser user = userRepository.findByUsername(username)
                 // 用户名不存在与口令错误统一返回 INVALID_CREDENTIALS，避免账号枚举。
-                .orElseThrow(() -> invalidCredentials());
+                .orElseThrow(() -> {
+                    audit("AUTH_LOGIN_FAILED", AuditResult.FAILED, null, null,
+                            ErrorCode.AUTH_INVALID_CREDENTIALS.name(), Map.of("username", username));
+                    return invalidCredentials();
+                });
 
         if (user.isDisabled()) {
+            audit("AUTH_LOGIN_FAILED", AuditResult.DENIED, user.principalId(), user.principalId(),
+                    ErrorCode.AUTH_ACCOUNT_DISABLED.name(), Map.of("username", username));
             throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_DISABLED, "account disabled", Map.of());
         }
         if (user.isLocked(clock.instant())) {
+            audit("AUTH_LOGIN_FAILED", AuditResult.DENIED, user.principalId(), user.principalId(),
+                    ErrorCode.AUTH_ACCOUNT_LOCKED.name(), Map.of("username", username));
             throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_LOCKED, "account locked", Map.of());
         }
         if (!user.matchesPassword(rawPassword, passwordHasher)) {
             user.recordLoginFailure(clock.instant());
             userRepository.update(user);
             if (user.isLocked(clock.instant())) {
+                audit("AUTH_LOGIN_FAILED", AuditResult.DENIED, user.principalId(), user.principalId(),
+                        ErrorCode.AUTH_ACCOUNT_LOCKED.name(), Map.of("username", username));
                 throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_LOCKED, "account locked", Map.of());
             }
+            audit("AUTH_LOGIN_FAILED", AuditResult.FAILED, user.principalId(), user.principalId(),
+                    ErrorCode.AUTH_INVALID_CREDENTIALS.name(), Map.of("username", username));
             throw invalidCredentials();
         }
 
@@ -104,7 +120,10 @@ public class AuthenticationApplicationService {
         userRepository.update(user);
 
         String family = idGenerator.generate(IdPrefix.TOKEN);
-        return issueUserTokenPair(user, family);
+        TokenPairResult result = issueUserTokenPair(user, family);
+        audit("AUTH_LOGIN_SUCCEEDED", AuditResult.SUCCEEDED, user.principalId(), user.principalId(),
+                null, Map.of("username", username));
+        return result;
     }
 
     /**
@@ -128,6 +147,8 @@ public class AuthenticationApplicationService {
             // 已轮换/已吊销的 refresh 再次出现 → 重放：吊销整族，拒绝。
             refreshTokenRepository.revokeFamily(record.tokenFamily());
             LOG.warn("refresh token replay detected, revoking family. principalId={}", record.principalId());
+            audit("AUTH_TOKEN_REPLAY_REJECTED", AuditResult.DENIED, record.principalId(), record.tokenFamily(),
+                    ErrorCode.AUTH_REFRESH_REPLAYED.name(), Map.of("tokenFamily", record.tokenFamily()));
             throw new AuthenticationException(ErrorCode.AUTH_REFRESH_REPLAYED, "refresh token replayed", Map.of());
         }
 
@@ -145,6 +166,8 @@ public class AuthenticationApplicationService {
         TokenPairResult result = issueUserTokenPair(user, record.tokenFamily());
         // 轮换：旧 jti 标记 ROTATED，记录后继 jti（新 refresh 的 jti）。
         refreshTokenRepository.markRotated(record.jti(), jtiOf(result.refreshToken()));
+        audit("AUTH_TOKEN_REFRESHED", AuditResult.SUCCEEDED, user.principalId(), record.tokenFamily(),
+                null, Map.of("tokenFamily", record.tokenFamily()));
         return result;
     }
 
@@ -154,12 +177,20 @@ public class AuthenticationApplicationService {
     @Transactional(readOnly = true)
     public TokenPairResult exchangeClientCredential(String subjectId, String rawCredential) {
         AgentIdentity agent = agentRepository.findByAgentId(subjectId)
-                .orElseThrow(() -> new AuthenticationException(
-                        ErrorCode.AUTH_INVALID_CREDENTIALS, "invalid credentials", Map.of()));
+                .orElseThrow(() -> {
+                    audit("CLIENT_TOKEN_REJECTED", AuditResult.FAILED, null, subjectId,
+                            ErrorCode.AUTH_INVALID_CREDENTIALS.name(), Map.of("subjectId", subjectId));
+                    return new AuthenticationException(
+                            ErrorCode.AUTH_INVALID_CREDENTIALS, "invalid credentials", Map.of());
+                });
         if (agent.isDisabled()) {
+            audit("CLIENT_TOKEN_REJECTED", AuditResult.DENIED, agent.principalId(), agent.principalId(),
+                    ErrorCode.AUTH_ACCOUNT_DISABLED.name(), Map.of("subjectId", subjectId));
             throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_DISABLED, "agent disabled", Map.of());
         }
         if (!agent.matchesCredential(rawCredential, passwordHasher)) {
+            audit("CLIENT_TOKEN_REJECTED", AuditResult.FAILED, agent.principalId(), agent.principalId(),
+                    ErrorCode.AUTH_INVALID_CREDENTIALS.name(), Map.of("subjectId", subjectId));
             throw new AuthenticationException(ErrorCode.AUTH_INVALID_CREDENTIALS, "invalid credentials", Map.of());
         }
 
@@ -169,6 +200,8 @@ public class AuthenticationApplicationService {
         CurrentPrincipalView principal = new CurrentPrincipalView(
                 agent.principalId(), null, PrincipalType.AGENT, agent.principalId(),
                 agent.displayName(), null, List.of(), List.copyOf(agent.scopes()), "zh-CN", false);
+        audit("CLIENT_TOKEN_ISSUED", AuditResult.SUCCEEDED, agent.principalId(), agent.principalId(),
+                null, Map.of("subjectId", subjectId));
         // Agent 凭据交换默认不签发刷新令牌（凭据可再次交换）。
         return new TokenPairResult(access.token(), null, expiresIn, 0L, principal);
     }
@@ -184,7 +217,11 @@ public class AuthenticationApplicationService {
         try {
             JwtClaims claims = tokenVerifier.verify(refreshToken);
             refreshTokenRepository.findByJti(claims.jwtId())
-                    .ifPresent(record -> refreshTokenRepository.revokeFamily(record.tokenFamily()));
+                    .ifPresent(record -> {
+                        refreshTokenRepository.revokeFamily(record.tokenFamily());
+                        audit("AUTH_LOGOUT", AuditResult.SUCCEEDED, record.principalId(), record.tokenFamily(),
+                                null, Map.of("tokenFamily", record.tokenFamily()));
+                    });
         } catch (AuthenticationException ex) {
             // 登出对无效/过期 token 幂等：不抛错。
             LOG.debug("logout with invalid refresh token, ignored");
@@ -227,6 +264,15 @@ public class AuthenticationApplicationService {
         userRepository.update(user);
         // 改密后吊销其全部刷新令牌（access 由 tokenVersion 递增自动失效）。
         refreshTokenRepository.revokeAllByPrincipal(principalId);
+        audit("USER_PASSWORD_CHANGED", AuditResult.SUCCEEDED, principalId, principalId, null, Map.of());
+    }
+
+    /**
+     * 记录一条 identity 审计事件（旁路，不影响主流程）。attributes 不得含凭据/令牌明文。
+     */
+    private void audit(String eventType, AuditResult result, String actorId, String targetId,
+                       String errorCode, Map<String, Object> attributes) {
+        auditPort.record(eventType, result, actorId, targetId, errorCode, attributes);
     }
 
     private TokenPairResult issueUserTokenPair(LocalUser user, String family) {

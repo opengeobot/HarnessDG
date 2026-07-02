@@ -175,15 +175,23 @@ check_taxonomy() {
   return 0
 }
 
-# ---- V08: 审计脱敏（audit_log 任何正文都不得包含明文口令）----
-# 注意：identity 登录审计事件接入尚未统一（已知差距），此处只校验脱敏恒定不变式，
-#       不断言登录事件计数；登录/写操作审计完整性由后端测试与后续整改覆盖。
+# ---- V08: 审计脱敏 + identity 登录审计完整性 ----
+# identity 登录/令牌/改密事件已接入权威 AuditService（IdentityAuditAdapter）。
+# 校验：审计正文脱敏恒定不变式（无明文口令）；且 V05 登录成功后应产生登录审计事件。
 check_audit() {
-  local exists leak
+  local exists leak cnt i
   exists="$(psql_q "select to_regclass('public.audit_log') is not null")"
   if [ "${exists}" != "t" ]; then echo "  audit_log 表缺失"; return 1; fi
-  leak="$(psql_q "select count(*) from audit_log where detail::text like '%${ADMIN_PASS}%'")"
+  leak="$(psql_q "select count(*) from audit_log where request_summary::text like '%${ADMIN_PASS}%'")"
   if [ "${leak}" != "0" ]; then echo "  audit_log 明文口令泄漏（脱敏失效）"; return 1; fi
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    for i in $(seq 1 10); do
+      cnt="$(psql_q "select count(*) from audit_log where event_type = 'AUTH_LOGIN_SUCCEEDED'")"
+      if [ "${cnt}" -ge 1 ] 2>/dev/null; then return 0; fi
+      sleep 0.5
+    done
+    echo "  未发现 AUTH_LOGIN_SUCCEEDED 审计事件（identity 审计接入未生效）"; return 1
+  fi
   return 0
 }
 
@@ -239,9 +247,9 @@ else
 fi
 
 if postgres_reachable; then
-  step V08 "审计脱敏（无明文口令）" check_audit
+  step V08 "审计脱敏与登录审计（无明文口令 + 登录事件）" check_audit
 else
-  skip V08 "审计脱敏" "postgres 不可达"
+  skip V08 "审计脱敏与登录审计" "postgres 不可达"
 fi
 
 if [ "${BACKEND_UP}" -eq 1 ]; then
