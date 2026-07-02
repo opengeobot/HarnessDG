@@ -1,3 +1,4 @@
 # 排查不需要的目录
 .trae/
 *.log
+issues/

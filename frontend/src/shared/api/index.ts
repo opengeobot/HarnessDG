@@ -23,4 +23,5 @@ export {
   setAccessToken,
   setRefreshHandler,
   setUnauthorizedHandler,
+  setPasswordChangeRequiredHandler,
 } from './tokenHolder';

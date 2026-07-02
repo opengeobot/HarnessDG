@@ -16,6 +16,9 @@ let refreshHandler: (() => Promise<string | null>) | null = null;
 /** 由 AuthProvider 注入的登出回调，用于刷新失败时清理内存会话 */
 let unauthorizedHandler: (() => void) | null = null;
 
+/** 由 AuthProvider 注入的强制改密回调，用于 PASSWORD_CHANGE_REQUIRED 时跳转 /profile */
+let passwordChangeRequiredHandler: (() => void) | null = null;
+
 /** 读取当前内存访问令牌 */
 export function getAccessToken(): string | null {
   return accessToken;
@@ -47,4 +50,14 @@ export function invokeRefresh(): Promise<string | null> {
 /** 触发未授权处理（清理会话并跳转登录） */
 export function invokeUnauthorized(): void {
   unauthorizedHandler?.();
+}
+
+/** 注册强制改密回调 */
+export function setPasswordChangeRequiredHandler(handler: (() => void) | null): void {
+  passwordChangeRequiredHandler = handler;
+}
+
+/** 触发强制改密处理（跳转 /profile） */
+export function invokePasswordChangeRequired(): void {
+  passwordChangeRequiredHandler?.();
 }

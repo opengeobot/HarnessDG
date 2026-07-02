@@ -4,7 +4,8 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
-import { App, Button, Card, Descriptions, Form, Input, Space, Tag, Typography } from 'antd';
+import { Alert, App, Button, Card, Descriptions, Form, Input, Space, Tag, Typography } from 'antd';
+import { ExclamationCircleOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth';
 import { changeCurrentUserPassword, isApiError } from '@/shared/api';
@@ -51,6 +52,16 @@ export function ProfilePage() {
       <Typography.Title level={4} style={{ margin: 0 }}>
         个人中心
       </Typography.Title>
+
+      {principal?.forcePasswordChange && (
+        <Alert
+          type="warning"
+          showIcon
+          icon={<ExclamationCircleOutlined />}
+          message="首次登录必须修改密码"
+          description="检测到当前密码为初始密码，请修改密码后方可使用平台功能。"
+        />
+      )}
 
       <Card title="账户信息">
         <Descriptions column={1} bordered size="small">

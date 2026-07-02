@@ -12,6 +12,7 @@ import {
   logout as logoutApi,
   refreshToken as refreshApi,
   setAccessToken,
+  setPasswordChangeRequiredHandler,
   setRefreshHandler,
   setUnauthorizedHandler,
 } from '@/shared/api';
@@ -88,9 +89,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnauthorizedHandler(() => {
       clearSession();
     });
+    // 强制改密：任何 API 返回 PASSWORD_CHANGE_REQUIRED 时跳转 /profile。
+    // AuthProvider 在 Router 外部，无法用 useNavigate；用 window.location 做硬跳转。
+    setPasswordChangeRequiredHandler(() => {
+      if (window.location.pathname !== '/profile') {
+        window.location.href = '/profile';
+      }
+    });
     return () => {
       setRefreshHandler(null);
       setUnauthorizedHandler(null);
+      setPasswordChangeRequiredHandler(null);
     };
   }, [clearSession]);
 

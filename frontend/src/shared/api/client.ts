@@ -17,6 +17,7 @@ import type { ApiErrorBody, ApiResponse } from '@/shared/types';
 import { ApiError } from './errors';
 import {
   getAccessToken,
+  invokePasswordChangeRequired,
   invokeRefresh,
   invokeUnauthorized,
 } from './tokenHolder';
@@ -77,12 +78,22 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
   _retried?: boolean;
 }
 
-// 响应拦截：401 且非认证端点时尝试刷新一次并重试
+// 响应拦截：403 PASSWORD_CHANGE_REQUIRED → 跳转改密；401 且非认证端点时尝试刷新一次并重试
 instance.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const config = error.config as RetriableConfig | undefined;
     const status = error.response?.status;
+    const body = error.response?.data as Partial<ApiErrorBody> | undefined;
+
+    // 强制改密：后端对 mustChangePassword 用户拦截受保护端点，跳转 /profile 引导改密
+    if (
+      status === 403 &&
+      body?.code === 'PASSWORD_CHANGE_REQUIRED'
+    ) {
+      invokePasswordChangeRequired();
+      return Promise.reject(error);
+    }
 
     if (
       status === 401 &&
