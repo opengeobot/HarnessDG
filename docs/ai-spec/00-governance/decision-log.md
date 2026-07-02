@@ -1,7 +1,7 @@
 # 已确认决策日志
 
 > 状态：`DRAFT`
-> 当前 Accepted Decision：7
+> 当前生效的 Accepted Decision：8（`DEC-005` 已被 `DEC-008` 替代）
 
 ## 1. 规则
 
@@ -120,11 +120,12 @@ requiresAdr: false
 ```yaml
 decisionId: DEC-005
 questionIds: [Q-006]
-status: ACCEPTED
+status: SUPERSEDED
 decision: 首批目标包含管理员初始化/用户治理、用户登录并创建资产、组织管理员治理字典和标签、普通用户仅检索有权资产、上传/审批/发布/下载闭环；不包含 Agent 获取只读 JWT 并调用 MCP。
 rationale: 用户明确选择除 Agent 只读 MCP 外的全部主要旅程。
 decidedBy: User
 decidedAt: "2026-07-02"
+supersededBy: DEC-008
 affected:
   journeys: [JRN-P0B-001, JRN-P0B-002, JRN-P0B-005, JRN-P1-001, JRN-P1-002, JRN-P2-002, JRN-P2-003, JRN-P3-001]
   documents: [03-use-cases/user-journey-catalog.md, 02-delivery/work-breakdown.md]
@@ -160,5 +161,88 @@ decidedBy: User
 decidedAt: "2026-07-02"
 affected:
   documents: [manifest.yaml, 06-ide/generic-execution-protocol.md, templates/task-card.md]
+requiresAdr: false
+```
+
+### DEC-008：数据集体验与 AI 数据工作流是必须交付的产品目标
+
+```yaml
+decisionId: DEC-008
+questionIds: [Q-006]
+status: ACCEPTED
+decision: >
+  最终可交付产品必须提供类似 ModelScope 的受治理数据集发现与详情体验，包括分类/受控标签、
+  Dataset Card、安全预览、精确版本文件和资产内交流反馈；同时必须让获授权 AI 通过标准搜索工具
+  找到数据集，经 REST 或最小平台 CLI 下载精确版本到本地，并能通过受限写工具或同源 Agent API
+  创建草稿和上传数据。正式发布、删除、扩权和配置仍由人工闸门控制。
+rationale: 用户明确把 AI 搜索、下载、创建与上传作为重点，并确认补齐 ModelScope 类数据集体验。
+decidedBy: User
+decidedAt: "2026-07-02"
+supersedes: DEC-005
+affected:
+  requirements:
+    - REQ-DST-TAX-001
+    - REQ-DST-DETAIL-001
+    - REQ-DST-DISC-001
+    - REQ-DST-CLI-001
+    - REQ-DST-AI-001
+    - REQ-DST-AIW-001
+    - REQ-PRE-001
+    - REQ-MCP-003
+    - REQ-MCP-004
+    - REQ-MCP-005
+  journeys: [JRN-P1-002, JRN-P1-005, JRN-P2-003, JRN-P2-004, JRN-P4-002, JRN-P4-005]
+  pages: [PAGE-AST-001, PAGE-AST-003, PAGE-DST-001, PAGE-DST-002, PAGE-VER-003]
+  acceptanceScenarios:
+    - AC-DST-TAX-001
+    - AC-DST-DETAIL-001
+    - AC-DST-DISC-001
+    - AC-DST-PRE-001
+    - AC-DST-CLI-001
+    - AC-DST-AI-001
+    - AC-DST-AIW-001
+  contracts:
+    - contracts/openapi/aihub-v1.yaml
+    - contracts/mcp/tools.yaml
+    - contracts/events/events-v1.yaml
+  documents:
+    - 01-requirements/dataset-experience.md
+    - 01-requirements/p1-asset-catalog.md
+    - 01-requirements/p2-version-transfer.md
+    - 01-requirements/p4-agent-integration.md
+    - 01-requirements/p5-quality-operations.md
+    - 03-use-cases/user-journey-catalog.md
+    - 04-ui/information-architecture.md
+    - 04-ui/page-catalog.md
+    - 05-acceptance/dataset-agent-exit-catalog.md
+requiresAdr: false
+```
+
+本决策改变产品优先级和阶段出口，不改变 ADR-0001/0002 的技术路线、事实源或 P0-B 准入门。
+实施顺序仍为 P0-B → P1 → P2 → P3 → P4；规格可以提前完成，产品代码不得跨阶段抢跑。
+
+### DEC-009：AI 编程 IDE 必须执行统一规格门禁
+
+```yaml
+decisionId: DEC-009
+questionIds: []
+status: ACCEPTED
+decision: >
+  Trae、Codex、Claude Code、Cursor、Qwen Code 等 AI 编程 IDE 在修改产品代码前，必须读取根
+  AGENTS.md、AI Spec manifest、统一执行协议和正式 Task Card；只有 Task、Requirement 和
+  Decision 状态、base Commit、allowed paths、阶段准入及预期 Evidence 全部通过机器校验后才能
+  实施。行为变更必须契约优先，完成声明必须逐条绑定 AC 与 Evidence Manifest。
+rationale: 用户确认设计文档不仅描述目标，还必须约束 AI 编程 IDE 按设计实施并留下可审计证据。
+decidedBy: User
+decidedAt: "2026-07-02"
+affected:
+  documents:
+    - AGENTS.md
+    - 06-ide/generic-execution-protocol.md
+    - 06-ide/trae-adapter.md
+    - templates/task-card.md
+    - templates/evidence-manifest.yaml
+    - tools/validate-spec.ps1
+    - tools/validate-task-card.ps1
 requiresAdr: false
 ```

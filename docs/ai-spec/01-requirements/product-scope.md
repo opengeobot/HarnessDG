@@ -2,7 +2,7 @@
 
 > 状态：`PROPOSED`
 > 依据：设计文档第 0、1、2、5、13、16 章及 ADR-0001/0002。
-> 已确认：`DEC-001`、`DEC-002`、`DEC-003`、`DEC-005`、`DEC-007`。
+> 已确认：`DEC-001` 至 `DEC-004`、`DEC-006` 至 `DEC-009`；`DEC-005` 已由 `DEC-008` 替代。
 > 当前焦点：P0 尚未完成，先保持产品代码冻结并重新验收；P1-P5 规格只作后续顺序规划。
 
 ## 1. 产品使命
@@ -30,6 +30,7 @@ HarnessDG 是公司内部模型和数据集的资产控制平面。它必须让�
 | `OUT-006` | 可靠工作可恢复 | 进程重启、临时依赖失败和重复事件不会丢任务或重复副作用 |
 | `OUT-007` | 管理操作可治理、可追责 | 用户、权限、标签、配置和高风险操作均有不可变审计 |
 | `OUT-008` | Compose 可复现完整验收 | 从空环境启动后，权威 E2E 集合全部 PASS 且无强制场景 SKIP |
+| `OUT-009` | 人类与 AI 完成数据集发现和交付闭环 | 分类/标签、Card、Preview、Files、Discussion、CLI/API、AI 搜索下载和受限创建上传均有 E4 |
 
 ## 3. 范围内能力
 
@@ -37,9 +38,9 @@ HarnessDG 是公司内部模型和数据集的资产控制平面。它必须让�
 
 - 本地用户、Agent、Service、API Client 和 Worker 身份；
 - 组织、项目、Team（待确认）和角色/ACL；
-- MODEL、DATASET 资产登记、卡片、治理字段和搜索；
+- MODEL、DATASET 资产登记、卡片、治理字段、分类 Facet、搜索和资产内交流反馈；
 - 版本、上传下载、审批发布、弃用归档和血缘；
-- MCP、REST/OpenAPI 和 Agent Skill 接入；
+- 安全数据预览、最小 `aih` CLI、MCP、REST/OpenAPI 和 Agent Skill 接入；
 - 字典、受控标签、配置、任务、审计、通知和观测管理端。
 
 ### 3.2 版本与数据面
@@ -60,7 +61,7 @@ HarnessDG 是公司内部模型和数据集的资产控制平面。它必须让�
 - 通用数据湖/湖仓；
 - 公网社区运营；
 - Compose 高可用或跨地域多活；
-- 完整复刻 Hugging Face/ModelScope SDK；
+- 完整复刻 Hugging Face/ModelScope SDK（不排除本产品必须的最小 `aih` CLI）；
 - 在 P0 使用平台 JWT 冒充 OAuth/OIDC Authorization Server。
 
 AI 不得因为“有助于未来”而在当前任务预埋上述业务能力。
@@ -71,11 +72,11 @@ AI 不得因为“有助于未来”而在当前任务预埋上述业务能力�
 | --- | --- | --- | --- |
 | P0-A | 可构建、可启动的工程与契约骨架 | 构建、Flyway、ArchUnit、Compose 配置 | 历史声明完成；非本轮重验重点 |
 | P0-B | 安全可复用的平台公共底座及管理端 | 身份、授权、治理、可靠性、审计、通知、观测和真实管理端 E4 | `INCOMPLETE / REVALIDATION_REQUIRED`（`DEC-003`） |
-| P1 | 可治理的 MODEL/DATASET 目录 | 创建、详情、搜索、修改、归档；Owner/权限/字典/标签/Gitea 一致性 E4 | `PARTIAL/FROZEN` |
-| P2 | 可复现的数据上传与下载 | DVC 往返、Multipart 恢复、短期下载票据、持久化 Worker E4 | `NOT_STARTED/PARTIAL_SKELETON` |
+| P1 | 可治理的 MODEL/DATASET 目录 | 创建、分类 Facet、Card、Discussion、搜索、修改、归档；Owner/权限/字典/标签/Gitea 一致性 E4 | `PARTIAL/FROZEN` |
+| P2 | 可复现的数据上传与下载 | DVC 往返、Multipart 恢复、安全预览、最小 CLI、短期下载票据、持久化 Worker E4 | `NOT_STARTED/PARTIAL_SKELETON` |
 | P3 | 不可变版本与发布治理 | 校验、提交、审批、Tag、Digest、Saga/Outbox/补偿 E4 | `NOT_STARTED/SKELETON` |
-| P4 | Agent 标准接入 | MCP 协议、Tool 双控、只读消费、越权审计、Skill 兼容 E4 | `NOT_STARTED/CONTRACT_DRAFT` |
-| P5 | 质量与运维闭环 | 预览、对账、备份恢复、性能和安全目标 E4/E5 | `NOT_STARTED` |
+| P4 | Agent 标准接入 | MCP 协议、Tool 双控、搜索下载、受限创建上传、越权审计、Skill 兼容 E4 | `NOT_STARTED/CONTRACT_DRAFT` |
+| P5 | 质量与运维闭环 | 预览格式扩展/加固、对账、备份恢复、性能和安全目标 E4/E5 | `NOT_STARTED` |
 
 “代码目录存在”“页面可访问”“Build 通过”均不能作为阶段出口。
 
@@ -87,6 +88,8 @@ AI 不得因为“有助于未来”而在当前任务预埋上述业务能力�
 4. 每个阶段至少有一个从浏览器/客户端入口到事实源的纵向 E4 旅程；
 5. 每次阶段评审必须绑定 Commit SHA 和 Evidence Manifest；
 6. 阶段结论更新到 `AGENTS.md` 前必须先同步契约、Runbook 和追踪矩阵。
+7. `DEC-008` 使数据集与 AI 工作流成为必须交付的纵向目标，但不改变 P0-B → P1 → P2 → P3 → P4
+   的实现准入顺序。
 
 ## 7. “达到设计要求”的判定
 

@@ -173,6 +173,22 @@ Team 是否进入 MVP 受 `Q-103` 阻塞。若接受，最低不变量为：
 - `INV-REL-004` 删除/归档目标前必须评估下游引用；
 - `INV-REL-005` Relation Type 为稳定枚举还是字典需单独确认。
 
+### 5.5 Dataset 分类、预览与讨论
+
+- `INV-DST-001` DATASET 的 task/modality/format/language/license/sensitivity 只引用对应字典 itemCode；
+- `INV-DST-002` DATASET 的 tagIds 只引用作用域内 ACTIVE 受控标签，永不回退自由字符串；
+- `INV-DST-003` sampleCount/totalBytes 保存原始非负数值，sizeBucketCode 由版本化服务端规则派生；
+- `INV-DST-004` Facet/count/autocomplete 与 items 使用同一授权、敏感度和状态 Predicate；
+- `INV-DST-005` Files、Preview、Schema、Split、统计和 download handle 必须绑定精确 versionId；
+- `INV-PRE-001` Preview 引用 source Version/Artifact digest，不能成为正式内容或替代 Artifact；
+- `INV-PRE-002` Preview 每次读取实时授权，Preview Bucket 永不匿名；
+- `INV-PRE-003` Preview 样例遵守格式、行列、大小、资源和脱敏上限；
+- `INV-DIS-001` Discussion 绑定一个 assetId，可选绑定精确 versionId，不能扩大 Asset 可见性；
+- `INV-DIS-002` Comment 修订追加 Revision，撤回/Moderation 不物理删除历史；
+- `INV-DIS-003` Discussion/Comment/Notification/Outbox 在同一 PostgreSQL 事务提交；
+- `INV-DIS-004` Discussion/Card 均为不可信内容，不能改变系统、Agent 或 Tool Policy；
+- `INV-DIS-005` 归档 Asset 的 Discussion 默认只读，恢复 Asset 不自动解锁 Thread。
+
 ## 6. Upload、Job、Inbox/Outbox、Notification 与 Audit
 
 ### 6.1 Upload Session

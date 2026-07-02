@@ -77,6 +77,7 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
 
 $allDefinitions = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $requirementFiles = @(Get-ChildItem -LiteralPath (Join-Path $specRoot '01-requirements') -Filter '*.md' -File)
+$acceptanceFiles = @(Get-ChildItem -LiteralPath (Join-Path $specRoot '05-acceptance') -Filter '*.md' -File)
 
 $definitionSpecs = @(
     @{
@@ -135,8 +136,8 @@ $definitionSpecs = @(
         Pattern = '\| `(?<id>PAGE(?:-[A-Z0-9]+)+-\d{3})` \|'
     },
     @{
-        Name = 'P0-B acceptance'
-        Paths = @((Join-Path $specRoot '05-acceptance/p0b-exit-catalog.md'))
+        Name = 'Acceptance'
+        Paths = @($acceptanceFiles.FullName)
         Pattern = '\| `(?<id>AC(?:-[A-Z0-9]+)+-\d{3})` \|'
     },
     @{
@@ -179,6 +180,86 @@ foreach ($file in $referenceFiles) {
 
 foreach ($id in ($unknown | Sort-Object)) {
     Add-Error "unknown ID reference: $id"
+}
+
+# AI execution policy is a mandatory machine gate under DEC-009.
+if (Test-Path -LiteralPath $manifestPath) {
+    $manifestContent = [IO.File]::ReadAllText($manifestPath, [Text.Encoding]::UTF8)
+    $requiredPolicyPatterns = @(
+        '(?m)^approvedSlices:\s*$',
+        '(?m)^\s+approvedSlicesNormative:\s+true\s*$',
+        '(?m)^\s+- id:\s+dataset-experience-and-agent-delivery\s*$',
+        '(?m)^\s+decision:\s+DEC-008\s*$',
+        '(?m)^\s+implementationStatus:\s+GATED_BY_P0B_AND_PHASE_ORDER\s*$',
+        '(?m)^aiExecutionPolicy:\s*$',
+        '(?m)^\s+decision:\s+DEC-009\s*$',
+        '(?m)^\s+requireTaskCardReady:\s+true\s*$',
+        '(?m)^\s+requireRequirementsReady:\s+true\s*$',
+        '(?m)^\s+requireAcceptedDecisions:\s+true\s*$',
+        '(?m)^\s+requireBaseCommit:\s+true\s*$',
+        '(?m)^\s+requireAllowedPaths:\s+true\s*$',
+        '(?m)^\s+requireStageGate:\s+true\s*$',
+        '(?m)^\s+requireAcceptanceEvidenceMap:\s+true\s*$',
+        '(?m)^\s+requireCrossCuttingPlan:\s+true\s*$',
+        '(?m)^\s+requireTaskSpecificValidation:\s+true\s*$',
+        '(?m)^\s+requirePathTriggeredValidationProfiles:\s+true\s*$',
+        '(?m)^\s+requireCompletionEvidenceValidation:\s+true\s*$',
+        '(?m)^\s+protectedCiEnforcementStatus:\s+MISSING_TASK_GOV_008\s*$',
+        '(?m)^\s+denyImplementationOnValidationFailure:\s+true\s*$'
+    )
+    foreach ($pattern in $requiredPolicyPatterns) {
+        if ($manifestContent -notmatch $pattern) {
+            Add-Error "manifest AI execution policy missing: $pattern"
+        }
+    }
+
+    $acceptedBlock = [regex]::Match(
+        $manifestContent,
+        '(?ms)^acceptedDecisions:\s*(?<body>.*?)(?=^\S|\z)'
+    )
+    if (-not $acceptedBlock.Success) {
+        Add-Error 'manifest acceptedDecisions block is missing'
+    } else {
+        $decisionLogPath = Join-Path $specRoot '00-governance/decision-log.md'
+        $decisionLogContent = [IO.File]::ReadAllText($decisionLogPath, [Text.Encoding]::UTF8)
+        foreach ($match in [regex]::Matches($acceptedBlock.Groups['body'].Value, '(?m)^\s+-\s+(?<id>DEC-\d{3})\s*$')) {
+            $decisionId = $match.Groups['id'].Value
+            $section = [regex]::Match(
+                $decisionLogContent,
+                "(?ms)^###\s+$([regex]::Escape($decisionId))\b(?<body>.*?)(?=^###\s+|\z)"
+            )
+            if (-not $section.Success -or
+                $section.Groups['body'].Value -notmatch '(?m)^status:\s*ACCEPTED\s*$') {
+                Add-Error "manifest accepted decision is not ACCEPTED: $decisionId"
+            }
+        }
+    }
+}
+
+$taskValidatorPath = Join-Path $specRoot 'tools/validate-task-card.ps1'
+if (-not (Test-Path -LiteralPath $taskValidatorPath -PathType Leaf)) {
+    Add-Error 'tools/validate-task-card.ps1 is missing'
+}
+
+# Validate relative Markdown links inside the AI specification package.
+$markdownFiles = @(Get-ChildItem -LiteralPath $specRoot -Recurse -Filter '*.md' -File)
+foreach ($file in $markdownFiles) {
+    $content = [IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)
+    foreach ($match in [regex]::Matches($content, '\[[^\]]*\]\((?<target>[^)]+)\)')) {
+        $target = $match.Groups['target'].Value.Trim().Trim('<', '>')
+        if ([string]::IsNullOrWhiteSpace($target) -or
+            $target -match '^(https?://|mailto:|#)') {
+            continue
+        }
+        $pathPart = ($target -split '#', 2)[0]
+        if ($pathPart -match '\s+"') {
+            $pathPart = ($pathPart -split '\s+"', 2)[0]
+        }
+        $resolved = [IO.Path]::GetFullPath((Join-Path $file.DirectoryName $pathPart))
+        if (-not (Test-Path -LiteralPath $resolved)) {
+            Add-Error "broken Markdown link in $($file.Name): $target"
+        }
+    }
 }
 
 if ($errors.Count -gt 0) {

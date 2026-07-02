@@ -30,7 +30,7 @@ Role Binding + Permission + Scope + ACL（当前能否执行）
 | `PER-004` | 资产 Owner | 对资产治理、维护者和生命周期负责 | ASSET/PROJECT | 发布审批是否可自审待确认 |
 | `PER-005` | 资产维护者 | 创建草稿、维护卡片、上传并提交版本 | PROJECT/ASSET | 默认不能审批或直接发布 |
 | `PER-006` | 审核者 | 查看风险材料并批准/驳回版本 | ORGANIZATION/PROJECT | 默认不能修改待审内容 |
-| `PER-007` | 普通用户 | 搜索、查看和下载获授权资产 | ORGANIZATION/PROJECT | 不得查看管理、审计和系统诊断 |
+| `PER-007` | 普通用户 | 搜索、查看、下载并按授权参与资产 Discussion | ORGANIZATION/PROJECT | 不得查看管理、审计和系统诊断 |
 | `PER-008` | 只读 Agent | 搜索、解析版本并申请下载 | PROJECT/ASSET | Tool 白名单；禁止发布、删除和配置 |
 | `PER-009` | 自动化写入 Agent | 创建草稿、上传或提交 | PROJECT | 写工具默认关闭，必须显式授权和幂等 |
 | `PER-010` | 平台 Worker | 执行持久化任务 | WORKLOAD | 只能处理已领取任务，不继承管理员权限 |
@@ -73,7 +73,10 @@ PLATFORM
 | 审批版本 | 紧急 A | V | - | - | R | - | - |
 | 发布版本 | 紧急 A | A（待确认） | - | - | R（待确认） | - | 默认禁止 |
 | 搜索/查看 | V | V | V | V | V | V（有权） | V（双控） |
+| 查看安全预览/文件 | V | V | V | V | V | V（有权） | V（双控） |
 | 下载 | V | V | V | V | V | V（有权） | V（双控） |
+| 创建/回复 Discussion | V | V | V | R | V | R（需 asset:discuss） | 默认禁止 |
+| Moderation/锁定 Discussion | A | A（组织范围） | R（项目范围，待确认） | - | - | - | - |
 | 查看审计/诊断 | A/R | 组织范围 V（待确认） | - | - | - | - | - |
 
 ## 5. 当前实现与草案的明显偏差

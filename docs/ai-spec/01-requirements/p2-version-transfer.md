@@ -3,6 +3,8 @@
 > 状态：`OPEN`
 > 阻塞：P1 VERIFIED；Q-205；Manifest 算法、上传限额和短期 DVC 凭据策略需确认。
 > 非目标：审批发布、受保护 Tag、MCP。
+> 数据集专项：`REQ-DST-CLI-001` 和 `REQ-PRE-001` 的最小安全预览属于 P2 MUST；
+> P5 负责格式扩展和 E5 加固，不得把最小预览无限延期。
 
 ## REQ-VER-001 资产版本草稿
 
@@ -110,6 +112,9 @@ minimumEvidenceLevel: E4
 
 - Journey：`JRN-P2-001`
 - NFR：`NFR-SEC-004/009`
+
+平台原生 `aih` CLI 的用户级命令、退出码、Secret Store 和 REST 复用规则由
+`REQ-DST-CLI-001` 定义；直接拼装 DVC 命令不能替代该 CLI 契约。
 
 ## REQ-UPL-001 Web Upload Session
 
@@ -234,6 +239,8 @@ minimumEvidenceLevel: E4
 - 检查 Principal ACTIVE、Scope、Permission、组织/项目/ACL/Visibility、Sensitivity、License/用途限制、Version 状态；
 - P2 草稿下载只允许维护协作者，普通消费仅 PUBLISHED/DEPRECATED；
 - 返回一种或多种方法：PRESIGNED_URL、GIT_DVC；
+- 支持按规范化 Artifact path 选择单文件/多文件/完整 Version，并为 CLI 的 include/exclude/resume
+  提供稳定清单；
 - 每个方法含 expiresAt、sha256/manifestDigest、精确 revision；
 - URL 最小对象权限、默认 15 分钟、不可 List；
 - GIT_DVC 不返回永久 S3 凭据，短期凭据另经受控接口；
@@ -272,6 +279,25 @@ minimumEvidenceLevel: E4
 - 两语言、键盘、错误/冲突/过期/越权完整状态；
 - 浏览器 E2E 使用多 Part 小 Fixture 和可控故障，不在常规 CI 上传 1 GiB；容量测试单独 E5。
 
+## REQ-CLI-001 平台数据集 CLI 适配
+
+```yaml
+status: READY
+priority: MUST
+phase: P2
+decisions: [DEC-008]
+sourceRequirement: REQ-DST-CLI-001
+minimumEvidenceLevel: E4
+```
+
+实现必须逐项领取 `REQ-DST-CLI-001` 与 `AC-DST-CLI-001..006`。CLI 是 REST/数据面 Adapter：
+
+- 不复制 Authorization、分类校验、状态机、幂等或审计；
+- pull 使用精确 Version、支持 include/exclude/resume/local-dir 并默认校验摘要；
+- create/push 复用 Asset/Create、Upload Session、Job 和 DVC 路径；
+- 认证来自 Secret Store/受保护引用，命令参数、JSON 输出和历史无 Token/URL；
+- CLI 与 REST 对同一 Principal/请求返回等价错误和业务结果。
+
 ## P2 出口
 
 1. CLI DVC push/pull SHA-256 一致；
@@ -281,5 +307,7 @@ minimumEvidenceLevel: E4
 5. 草稿/已发布下载权限和短期票据过期正确；
 6. 文件 bytes 不经过 Backend/Nginx；
 7. Secret/URL 不进入 Git、浏览器存储、日志、审计；
-8. 契约、Migration、Worker 镜像、Fixture、UI、Runbook 和 E4 同步。
+8. `aih dataset search/pull/create/push/status` 通过 `AC-DST-CLI-001..006`；
+9. 支持格式的最小安全 Preview 通过 `AC-DST-PRE-001..004`；
+10. 契约、Migration、Worker/CLI 构建、Fixture、UI、Runbook 和 E4 同步。
 

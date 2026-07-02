@@ -1,7 +1,7 @@
 # 内部 AI 资产管理平台深度研究与设计说明书
 
-> 文档版本：v2.2
-> 更新日期：2026-06-30
+> 文档版本：v2.3
+> 更新日期：2026-07-02
 > 目标读者：架构师、技术负责人、后端/前端工程师、平台运维人员
 > 核心技术路线：Gitea + DVC + MinIO + Java 21/Spring Boot/MyBatis-Plus + React
 > 部署与验收基线：Docker Compose
@@ -14,7 +14,8 @@
 - **DVC**：管理模型权重、数据集、多模态文件等大对象的内容版本及可复现依赖。
 - **MinIO**：承载 DVC Remote、上传暂存区、预览文件及可选的 Gitea LFS 对象。
 - **自研后端**：采用 **Java 21 + Spring Boot + MyBatis-Plus**，提供业务 API、权限、发布工作流、搜索索引、Gitea/MinIO/DVC 编排、MCP Server 和审计。
-- **自研前端**：采用 **React + TypeScript**，提供模型与数据集的发现、详情、上传、版本、审批和接入配置页面。
+- **自研前端**：采用 **React + TypeScript**，提供模型与数据集的发现、详情、预览、文件、交流反馈、
+  上传、版本、审批和接入配置页面。
 - **PostgreSQL**：存储业务元数据、查询投影、权限、任务、审计和 Outbox 事件。
 
 ### 0.1 当前实施基线与重基线决策
@@ -58,6 +59,10 @@
 
 首期通过 Docker Compose 部署 Gitea、MinIO、PostgreSQL、后端、任务 Worker、前端和 Nginx，并以“创建资产 → 上传 DVC 内容 → Git 提交 → 发布版本 → MCP 检索 → 下载校验”的端到端用例作为功能验收闭环。
 
+`DEC-008` 进一步确认：数据集分类/受控标签、Dataset Card、安全预览、精确版本文件、资产内交流
+反馈，以及 AI 搜索下载和受限创建上传，都是最终产品 MUST。该确认不改变 P0-B → P1 → P2 → P3
+→ P4 的阶段门禁。
+
 ---
 
 ## 1. 背景、目标与边界
@@ -85,6 +90,8 @@
 6. 支持大文件直传、分片、校验、短期预签名下载和本地缓存；
 7. 支持 OpenClaw、QwenPaw 等平台在 30 分钟内完成只读接入；
 8. 提供可重复的 Docker Compose 部署与端到端验证脚本。
+9. 提供数据集分类 Facet、安全预览、精确版本文件和资产内交流反馈；
+10. 提供最小 `aih` CLI，并让获授权 AI 完成搜索、精确下载、创建草稿和上传；正式发布仍由人工闸门控制。
 
 ### 1.3 非目标
 
@@ -188,9 +195,10 @@ Agent 调用 asset_search
 | 版本选择 | Git Tag + Commit + DVC Digest | 版本别名、兼容性矩阵 |
 | 多路径下载 | DVC/Git + 预签名 URL + REST/MCP | Python/Java SDK、本地缓存代理 |
 | 数据集预览 | 脱敏样例、Schema、基础统计 | Parquet 流式查询和可视化分析 |
+| 交流反馈 | 继承资产权限的 Discussion/Comment、通知与 Moderation | 订阅、运营分析 |
 | 组织协作 | 组织/项目/资产 RBAC | 企业策略引擎、跨组织共享审批 |
 | 搜索发现 | PostgreSQL 字段与全文搜索 | OpenSearch、语义检索和推荐 |
-| Agent 接入 | MCP + OpenAPI + Skill | Agent 事件订阅和工作流编排 |
+| Agent 接入 | MCP + OpenAPI + Skill + 最小 `aih` CLI；只读与受限贡献 | Agent 事件订阅和工作流编排 |
 
 ---
 
@@ -347,7 +355,7 @@ backend/
 ├─ module-organization       # 组织、项目、成员、角色
 ├─ module-taxonomy           # 字典、受控标签、国际化
 ├─ module-configuration      # 类型化非敏感运行配置
-├─ module-asset              # 资产、卡片、标签、检索
+├─ module-asset              # 资产、卡片、标签、检索、Discussion
 ├─ module-version            # Commit/Tag/DVC/Manifest、发布状态机
 ├─ module-transfer           # 上传会话、预签名 URL、下载授权
 ├─ module-integration-gitea  # Gitea Client、Webhook、对账
@@ -432,14 +440,14 @@ flowchart TB
 
 | 功能域 | 核心能力 | MVP | 增强阶段 |
 | --- | --- | --- | --- |
-| 资产目录 | 模型/数据集登记、卡片、标签、Owner、可见性 | 必须 | 扩展资产类型、推荐 |
+| 资产目录 | 模型/数据集登记、卡片、分类、标签、Owner、可见性、交流反馈 | 必须 | 扩展资产类型、推荐 |
 | 版本中心 | Commit/Tag/DVC Digest、版本比较、弃用/归档 | 必须 | 版本别名、兼容矩阵 |
-| 上传下载 | CLI/DVC、Multipart、预签名 URL、校验和 | 必须 | 边缘缓存、跨地域分发 |
+| 上传下载 | 最小 `aih` CLI、DVC、Multipart、预签名 URL、校验和、安全预览 | 必须 | 边缘缓存、跨地域分发 |
 | 发布治理 | 完整性校验、审批、受保护 Tag、不可变版本 | 必须 | 策略引擎、多级审批 |
 | 搜索发现 | 字段检索、全文检索、权限过滤 | 必须 | 语义检索、推荐 |
 | 依赖血缘 | Base Model、训练数据、派生版本关系 | 基础 | 可视化影响分析 |
 | 身份权限 | 用户、Agent、服务账号、RBAC、Scope | 必须 | 条件策略、临时授权 |
-| Agent 接入 | MCP、OpenAPI、Skill、Tool 白名单 | 必须 | 事件订阅、工作流 |
+| Agent 接入 | MCP、OpenAPI、Skill、Tool 白名单、搜索下载和受限创建上传 | 必须 | 事件订阅、工作流 |
 | 系统治理 | 字典、配置、国际化、通知、审计 | 必须 | 配置审批、运营报表 |
 | 运维观测 | 健康、指标、Trace、任务、对账 | 必须 | 自动扩缩、容量预测 |
 
@@ -583,7 +591,10 @@ asset:create
 asset:read
 asset:update
 asset:upload
+asset:preview
 asset:download
+asset:discuss
+asset:moderate
 asset:submit
 asset:review
 asset:publish
@@ -641,6 +652,8 @@ model_task
 model_framework
 dataset_modality
 dataset_format
+dataset_task
+dataset_language
 industry_tag
 license_catalog
 sensitivity_level
@@ -685,6 +698,9 @@ deprecation_reason
 ```text
 transfer.web.maxSessionBytes
 transfer.presignedUrl.ttlSeconds
+preview.dataset.maxRows
+preview.dataset.maxColumns
+preview.dataset.maxResponseBytes
 version.publish.requireApproval
 job.dvc.maxRetries
 job.webhook.maxRetries
@@ -790,6 +806,10 @@ ASSET_NOT_FOUND
 ASSET_VERSION_CONFLICT
 VERSION_STATE_NOT_ALLOWED
 UPLOAD_SESSION_EXPIRED
+PREVIEW_UNSUPPORTED_FORMAT
+DISCUSSION_NOT_FOUND
+DISCUSSION_LOCKED
+COMMENT_TOO_LARGE
 DVC_OBJECT_MISSING
 GITEA_DEPENDENCY_UNAVAILABLE
 MINIO_DEPENDENCY_UNAVAILABLE
@@ -833,6 +853,7 @@ P0-B 必须提供统一 JSON 日志编码、MDC/Trace Context 注入、HTTP/MCP/
 - 登录失败、Token 创建/吊销、Agent 注册/授权；
 - 成员、角色、ACL 和 Tool Allowlist 变更；
 - 资产创建、修改、上传、下载授权、删除；
+- Discussion/Comment 创建、修订、撤回、锁定和 Moderation；
 - 版本提交、审批、发布、弃用、Tag 操作；
 - 系统配置、治理字典、Webhook 和存储策略变更；
 - MCP 写工具及被拒绝的高风险工具调用；
@@ -880,6 +901,8 @@ VERSION_REJECTED
 VERSION_PUBLISHED
 VERSION_DEPRECATED
 UPLOAD_FAILED
+DISCUSSION_REPLIED
+DISCUSSION_MENTIONED
 JOB_DEAD
 AGENT_ACCESS_DENIED
 STORAGE_QUOTA_WARNING
@@ -1143,7 +1166,7 @@ spec:
 
 ### 6.4 数据集扩展字段
 
-- 数据格式、模态、语言、Split；
+- 任务、数据格式、模态、语言、Split；
 - 行数/样本数、总大小、Schema；
 - 采集来源、许可证、敏感级别；
 - 质量指标、去重比例、脱敏状态；
@@ -1225,7 +1248,12 @@ stateDiagram-v2
 | `asset_dataset` | `asset_id,format,modality,schema_json` | 数据集扩展 |
 | `asset_version` | `id,asset_id,version,status,commit_sha,tag` | 版本控制面 |
 | `asset_artifact` | `version_id,path,dvc_hash,sha256,size` | 正式文件清单 |
+| `asset_preview` | `version_id,source_digest,format,status,expires_at` | 安全预览投影，内容在 MinIO preview Bucket |
 | `asset_relation` | `source_version_id,target_version_id,type` | 血缘/派生关系 |
+| `asset_discussion` | `asset_id,version_id,status,row_version` | 资产/精确版本交流 Thread |
+| `asset_comment` | `discussion_id,author_id,status,row_version` | 回复及 Tombstone 状态 |
+| `asset_comment_revision` | `comment_id,revision_no,body_digest` | 不可变修订历史 |
+| `asset_subscription` | `asset_id,principal_id,events` | 回复/mention 通知订阅 |
 | `upload_session` | `id,asset_id,state,expires_at` | 分片上传会话 |
 | `upload_part` | `session_id,part_no,etag,size` | 分片记录 |
 | `publish_request` | `version_id,status,reviewer_id` | 发布审批 |
@@ -1302,6 +1330,16 @@ POST   /assets/{assetId}/versions/{version}:deprecate
 # 文件和下载
 GET    /assets/{assetId}/versions/{version}/artifacts
 POST   /assets/{assetId}/versions/{version}/download-tickets
+GET    /assets/{assetId}/versions/{version}/preview
+
+# 交流反馈
+GET    /assets/{assetId}/discussions
+POST   /assets/{assetId}/discussions
+GET    /discussions/{discussionId}
+POST   /discussions/{discussionId}/comments
+POST   /discussions/{discussionId}:lock
+POST   /comments/{commentId}:retract
+POST   /comments/{commentId}:moderate
 
 # 上传
 POST   /assets/{assetId}/upload-sessions
@@ -1362,6 +1400,23 @@ Agent 不应依赖中文 `message` 做分支判断，只依赖稳定的 `code` �
 当资产规模或多语言检索超过 PostgreSQL 能力后，再引入 OpenSearch；API 不变。
 
 ### 8.4 上传策略
+
+#### 平台 `aih` CLI
+
+平台提供最小稳定 CLI，作为人类、CI/API Client 和受信任 Agent 本地数据通道：
+
+```text
+aih dataset search --query <text> --output json
+aih dataset inspect aih://<namespace>/dataset/<name>@<version> --output json
+aih dataset pull aih://<namespace>/dataset/<name>@<version> --local-dir <path> --resume --verify
+aih dataset create --manifest <asset.yaml> --output json
+aih dataset push aih://<namespace>/dataset/<name>@<draft-version> <local-path> --resume
+aih dataset status <operation-id> --output json
+```
+
+CLI 必须复用 REST Application Service，不复制授权、分类校验、状态机或审计。凭据来自 Secret
+Store/受保护引用，不进入命令参数或历史；pull 默认校验 Manifest/SHA-256。大目录由 CLI 切换到
+受控 DVC 路径，小/中型内容复用 Upload Session/Multipart。
 
 #### CLI/DVC 路径
 
@@ -1470,11 +1525,15 @@ P4 接入时，OpenClaw、QwenPaw 或其他 Agent 使用 P0-B 注册的独立 Ag
 | `asset_create_draft` | 创建草稿和 Gitea 仓库 | `asset:write` | 可选 |
 | `asset_create_upload_session` | 创建直传会话 | `asset:write` | 否 |
 | `asset_complete_upload` | 完成上传并触发 Worker | `asset:write` | 否 |
+| `asset_get_upload_status` | 查询上传/物化 Job 的非敏感状态 | `asset:write` | 否 |
 | `asset_submit_version` | 提交发布审核 | `asset:submit` | 否 |
 | `asset_publish_version` | 正式发布 | `asset:publish` | 默认需要 |
 | `asset_deprecate_version` | 标记弃用 | `asset:admin` | 默认需要 |
 
-Tool 名称和 JSON Schema 一经发布按 API 兼容策略维护。优先使用平面对象、枚举和显式必填字段，避免复杂 `oneOf/anyOf` 降低不同 Agent 运行时的工具兼容性。
+显式授权的写 Agent 必须在 P4 验证“创建草稿 → 上传 → Worker 物化 → 状态查询”；全局写开关仍
+默认关闭。发布、删除、扩权、Token 和配置不属于自动化贡献范围。Tool 名称和 JSON Schema 一经发布
+按 API 兼容策略维护。优先使用平面对象、枚举和显式必填字段，避免复杂 `oneOf/anyOf` 降低不同
+Agent 运行时的工具兼容性。
 
 ### 9.4 MCP Resources
 
@@ -1577,7 +1636,7 @@ QwenPaw 已提供 MCP 管理、Bearer 认证、Tool 白名单能力和自定义 
 | --- | --- |
 | 首页/资产发现 | 全局搜索、模型/数据集切换、标签与任务筛选 |
 | 模型详情 | Model Card、版本、文件清单、加载示例、血缘、权限 |
-| 数据集详情 | Dataset Card、Schema、Split、脱敏样例、统计、血缘 |
+| 数据集详情 | Dataset Card、分类/标签、版本、Schema、Split、脱敏样例、统计、文件、交流反馈、血缘 |
 | 创建资产 | 元数据表单、仓库创建、CLI/Web 上传方式选择 |
 | 上传中心 | Multipart、暂停/恢复、进度、校验、失败重试 |
 | 版本中心 | Commit/Tag/DVC 摘要、版本 Diff、校验和发布 |
@@ -1974,6 +2033,10 @@ docker compose --profile observability up -d
 | V22 | 本地登录与 JWT | 登录、刷新轮换、登出、禁用用户、重放旧刷新令牌 | 仅有效 Token 可访问；吊销和重放被拒绝并审计 |
 | V23 | 字典与受控标签 | 平台/组织管理员维护，普通用户尝试自由标签或越权维护 | 仅有效 itemCode/tagId 可写，越权失败，历史停用项可回显 |
 | V24 | 结构化日志与审计 | 触发成功、失败、拒绝和后台任务 | 日志字段可关联且 Secret 脱敏，必审计事件 100% 入库 |
+| V25 | 数据集详情 | 筛选数据集并切换精确版本 | Card/Preview/Files 使用同一版本，Discussion 继承资产权限 |
+| V26 | 数据集 CLI | search/pull 中断恢复/verify、create/push | 内容摘要一致、幂等、稳定退出码、命令/日志无 Secret |
+| V27 | AI 数据消费 | MCP 搜索候选、选择精确版本并调用可信 CLI 下载 | 不臆测版本、对话无 URL/Token、下载校验成功 |
+| V28 | AI 数据贡献 | 显式授权 Agent 创建草稿并上传，尝试自动发布 | 创建上传成功且可恢复；发布在人工闸门前被拒绝并审计 |
 
 ### 13.3 DVC 端到端验证
 
@@ -2184,6 +2247,13 @@ contracts/
 ```
 
 `AGENTS.md` 只保留高频强约束并链接本设计，不能复制整份 PRD；否则两份内容会逐渐漂移。
+
+`DEC-009` 要求所有 AI 编程 IDE 在产品编辑前运行 AI Spec 与 Task Card 校验。没有位于
+`docs/ai-spec/tasks/` 的 READY/已授权 Task、真实 base Commit、上游阶段证据、窄 allowedPaths、
+READY Requirement、ACCEPTED Decision 和 AC→Evidence 映射时，只允许只读调查或补规格。
+交接前必须校验实际变更路径；只有当前干净 Commit 的完整 PASS Evidence 达到最低等级、没有
+SKIP/notProven 且经验证责任方接受，完成门禁才可通过。受保护 CI 未接入这些 required checks 前，
+不得把本地协议描述为不可绕过的组织级门禁。
 
 ### 15.4 任务卡规范
 
@@ -2464,11 +2534,11 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 | --- | --- | --- |
 | P0-A：工程基线 | 已完成 | AGENTS/ADR/契约目录、Compose、CI、Java/React 骨架、Flyway、ArchUnit、健康检查 |
 | P0-B：公共平台底座 | 当前阶段 | 第 5 章全部能力、最小组织/项目作用域、管理 API/页面、认证/越权/审计/可靠性/Compose 验收 |
-| P1：资产目录整改与完成 | 冻结，等待 P0-B | 现有 CRUD/Gitea/检索接入用户、授权、字典、受控标签、审计、任务和前向迁移 |
-| P2：版本与数据面 | 等待 P1 | DVC/MinIO、CLI 路径、上传会话、持久化 Worker |
+| P1：资产目录整改与完成 | 冻结，等待 P0-B | CRUD/Gitea/检索接入公共能力，并完成数据集分类 Facet、Card、Discussion 和前向迁移 |
+| P2：版本与数据面 | 等待 P1 | DVC/MinIO、最小 `aih` CLI、安全预览、上传会话、持久化 Worker |
 | P3：发布治理 | 等待 P2 | 状态机、审批、Tag 保护、Saga/Outbox、不可变发布；权限和审计直接复用 P0 |
-| P4：Agent 接入 | 等待 P3 | MCP、OpenAPI、Skill 包、OpenClaw/QwenPaw 验证 |
-| P5：质量与运维 | 等待 P4 | 预览、对账、备份恢复、性能与安全验收 |
+| P4：Agent 接入 | 等待 P3 | MCP、OpenAPI、Skill、搜索下载、受限创建上传、OpenClaw/QwenPaw 验证 |
+| P5：质量与运维 | 等待 P4 | 预览格式扩展/加固、对账、备份恢复、性能与安全验收 |
 
 每阶段开始前检查上游退出条件，每阶段结束都更新 Compose 验证脚本。P0-B 未退出时，不得通过并行开发绕过公共能力准入门。
 
@@ -2503,6 +2573,10 @@ AI 只有在以下条件全部满足时才能声明任务完成：
 8. P0-B 完成全部公共平台能力后才能继续业务阶段，现有 P1 代码采用前向兼容整改。
 9. P0 用户事实源为 PostgreSQL 本地账号，所有在线入口统一使用平台签发的 JWT。
 10. 标签为平台/组织作用域的受控治理对象，资产不得继续写入自由标签。
+11. 数据集详情必须覆盖 Card、精确版本文件、安全预览和继承资产权限的交流反馈。
+12. AI 默认只读；显式授权后可创建草稿和上传，但发布/删除/扩权/配置始终保留人工闸门。
+13. 最小 `aih` CLI 是受支持的 REST/数据面适配器，不等同于复刻完整第三方 SDK。
+14. 所有 AI 编程 IDE 必须通过正式 Task Card、阶段、范围和 Evidence 机器门禁后才能实施。
 
 ---
 

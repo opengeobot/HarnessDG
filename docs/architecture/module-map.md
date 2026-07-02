@@ -18,7 +18,7 @@ backend/
 ├─ module-organization       # 组织、项目、成员、角色
 ├─ module-taxonomy           # 字典、受控标签、国际化
 ├─ module-configuration      # 类型化非敏感运行配置
-├─ module-asset              # 资产、卡片、受控标签引用、检索
+├─ module-asset              # 资产、卡片、受控标签引用、检索、Discussion
 ├─ module-version            # Commit/Tag/DVC/Manifest、发布状态机
 ├─ module-transfer           # 上传会话、预签名 URL、下载授权
 ├─ module-integration-gitea  # Gitea Client、Webhook、对账
@@ -39,7 +39,7 @@ backend/
 | `module-organization` | 组织、项目、成员、业务角色与作用域 | P0-B 提供授权与组织标签所需的最小 Query Port |
 | `module-taxonomy` | 字典、平台/组织受控标签、国际化 | 稳定枚举不进入字典；标签由关联表引用 |
 | `module-configuration` | 类型化、可审计、非敏感运行配置 | Secret 不进入配置表 |
-| `module-asset` | 资产登记、卡片、受控标签引用、可见性、检索投影 | `MODEL`/`DATASET` 为首期类型，P1 当前冻结整改 |
+| `module-asset` | 资产登记、卡片、受控标签引用、可见性、检索投影、资产内 Discussion | `MODEL`/`DATASET` 为首期类型；Discussion 继承资产授权并复用通知/审计，P1 当前冻结 |
 | `module-version` | 版本三元组、发布状态机、审批流转 | 状态机以代码枚举与 DB 约束表达 |
 | `module-transfer` | 上传会话、Multipart 预签名、下载票据 | 不代理大文件数据流，只签发与校验 |
 | `module-integration-gitea` | Gitea API、Webhook Inbox、Gitea 权限单向投影、对账 | 实现业务模块定义的 Gitea Port |

@@ -3,6 +3,8 @@
 > 状态：`OPEN`
 > 阻塞：P3 VERIFIED；目标 OpenClaw/QwenPaw 最低版本需在实施时锁定。
 > 原则：Agent 与人使用同一业务授权；MCP/REST 只是 Adapter。
+> 产品决策：`DEC-008` 已将 AI 数据集搜索、下载、创建草稿和上传设为 P4 MUST；
+> 发布/删除/扩权/配置仍不在 Agent 自动化范围。
 
 ## REQ-MCP-001 MCP Streamable HTTP 端点与会话
 
@@ -116,10 +118,12 @@ minimumEvidenceLevel: E4
 ### asset_search
 
 - 复用 `REQ-AST-003` 的 Application Query；
-- 输入 keyword/type/namespace/tagId/受控 filter/cursor/limit；
+- DATASET 输入和输出完整复用 `REQ-DST-TAX-001` 与 `REQ-DST-AI-001`；
+- 输入 query/type/namespace/tagId/受控分类 filter/cursor/limit；
 - 默认只返回 Agent 有权的 PUBLISHED 资产/版本摘要；
 - 是否返回无发布版本资产由权限/用途明确，普通只读 Agent 不返回；
 - 返回 assetId、坐标、类型、显示名、治理摘要、latestPublished 精确 version；
+- 返回服务端计算的 matchedFields，不让 Agent 编造匹配原因；
 - 最多配置 `mcp.maxResultItems` 且 ≤ REST 最大值；
 - 不返回完整 README、文件清单或 URL；
 - 无结果返回空 items，不暴露不可见数量。
@@ -155,7 +159,8 @@ minimumEvidenceLevel: E4
 - request download 复用 `REQ-DL-001`；
 - 下载 Tool 返回授权句柄/短期方法，不返回二进制；
 - 结果携带 expiresAt、sha256/manifestDigest 和精确 revision；
-- Tool 输出预签名 URL 的协议必要性与“不进入聊天”存在天然张力：建议返回一次性 ticketId，再由非 LLM 数据通道兑换 URL；最终方案需决策；
+- Tool 只返回不透明 `downloadHandle`、精确资产 URI、expiresAt、sha256/manifestDigest 和方法类型；
+  预签名 URL 由受信任 `aih dataset pull` 数据通道兑换，不进入 MCP 文本结果或对话；
 - Agent/Skill 指示下载后校验 SHA-256；
 - DEPRECATED 返回明确警告，ARCHIVED 默认不返回。
 
@@ -171,27 +176,31 @@ Tool 调用、授权决定和下载授权可关联同一 trace/session；审计�
 ## REQ-MCP-005 写 Tools 与人工闸门
 
 ```yaml
-status: OPEN
-priority: SHOULD for P4, MAY be deferred
+status: READY
+priority: MUST
 phase: P4
-blockedBy: product decision for write-agent scope
+decisions: [DEC-008]
 minimumEvidenceLevel: E4
 ```
 
 ### 默认策略
 
 - `mcp.writeTools.enabled=false`；
-- P4 最小出口只要求只读 Tools；
-- create draft/upload/submit 若启用，逐项显式开关、Scope、Permission、allowlist、Idempotency-Key；
+- P4 出口同时要求只读 Agent 消费旅程和一个显式授权写 Agent 的创建/上传旅程；
+- MUST 写工具为 `asset_create_draft`、`asset_create_upload_session`、`asset_complete_upload`、
+  `asset_get_upload_status`；逐项显式开关、Scope、Permission、allowlist、Idempotency-Key；
+- `asset_submit_version` 可按组织策略显式开放，但不等于批准或发布；
 - publish/deprecate/delete/token/permission/config 默认不授予 Agent；
 - “人工确认”不能只依赖 Agent 文字声称已确认，必须是平台可验证 Approval/Confirmation Token；
 - Confirmation Token 绑定 Principal、Tool、规范化参数摘要、资源、过期时间和单次使用；
 - 写 Tool 调用同一 Application Command，不直接调用 Mapper/SDK；
 - 可靠工作返回 job/request ID；
+- Tool 不接收本地路径、任意 Shell、Bucket 或 Git URL；数据 bytes 由受信任 CLI/Multipart 通道传输；
 - 成功/失败/拒绝全部审计；
 - 对 Card Prompt Injection 不改变确认策略。
 
-如果 P4 不交付写 Tool，应从 Tool Catalog 中完全不发布，而不是留一个 `enabled:false` 的伪实现被误判完成。
+写工具未实际通过 `AC-DST-AIW-001..006` 时不得把 P4 标为完成；默认关闭只是一项安全默认，
+不能再作为延期该 MUST 的理由。
 
 ## REQ-MCP-006 MCP Resources
 
@@ -269,11 +278,12 @@ minimumEvidenceLevel: E4
 ```
 
 - 从权威 OpenAPI 生成 `/agent-api/v1` 裁剪契约，不复制业务实现；
-- 默认只含搜索、详情、版本、下载授权；
+- 默认只读包包含搜索、详情、版本、下载授权；另生成显式授权的 contribution profile，
+  只包含创建草稿、上传 Session、complete、状态查询和可选 submit；
 - Schema 使用稳定 Operation ID、平面参数、明确 required/enum、统一 Error；
 - 相同 Agent JWT/Scope/Permission/ACL/Sensitivity；
 - 大文件仍走授权句柄；
-- write 端点默认不在裁剪契约；
+- write 端点不进入默认只读包，contribution profile 仍复用同一 Application Service；
 - Client Credentials 换短期 JWT，不把平台描述成 OAuth Authorization Server；
 - breaking diff、示例和目标 Function Calling 导入测试；
 - REST 与 MCP 对同一输入/Principal 得到等价授权和业务结果。
@@ -311,9 +321,11 @@ minimumEvidenceLevel: E4
 2. Tool Catalog 阶段/读写标记/Schema/权限无漂移；
 3. REST/MCP 复用同一 Application Service；
 4. 只读 Agent 完成搜索→精确版本→下载校验；
-5. Tool 列表和调用双控，高风险拒绝审计；
-6. 30 分钟接入；
-7. Skill/示例/对话/日志无 Secret；
-8. Agent OpenAPI 导入通过；
-9. 所有兼容证据绑定版本和 Commit。
+5. 显式授权写 Agent 完成受控元数据创建→上传→Worker 物化→状态查询，不能自动发布；
+6. Tool 列表和调用双控，高风险拒绝审计；
+7. MCP 下载只返回 handle，本地 `aih` 数据通道完成校验且对话无 URL；
+8. 30 分钟接入；
+9. Skill/示例/对话/日志无 Secret；
+10. 默认只读与 contribution 两个 Agent OpenAPI Profile 导入通过；
+11. `AC-DST-AI-*`、`AC-DST-AIW-*` 和所有兼容证据绑定版本与 Commit。
 

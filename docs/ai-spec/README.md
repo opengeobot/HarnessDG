@@ -23,9 +23,12 @@
 本规格包仍处于需求澄清阶段：
 
 - 标记为 `OPEN` 的决策不得被 AI 自行假设；
-- `DEC-001` 至 `DEC-007` 已确认当前先完成并重验 P0、保留代码整改、单公司多组织/项目、
-  主要适配 Trae、首批不含 Agent/MCP，且规格批准前只修改文档；
+- 当前生效的 `DEC-001` 至 `DEC-004`、`DEC-006` 至 `DEC-009` 已确认先完成并重验 P0、
+  保留代码整改、单公司多组织/项目、主要适配 Trae、数据集与 AI 数据工作流为必须目标，
+  且规格批准前只修改文档；`DEC-005` 已被 `DEC-008` 替代；
 - 本目录中的审计结论用于发现证据缺口，不等同于批准重写产品代码；
+- `manifest.yaml.approvedSlices` 中的数据集/AI 目标和 AI IDE 门禁已具规范效力；前者仍受 P0-B
+  与阶段顺序阻止实现，后者立即约束所有 AI 实施会话；
 - 在范围、阶段和组织模型得到确认前，不得据此启动 P1+ 功能开发；
 - 现有代码、任务勾选或历史状态报告都不是产品需求的权威来源。
 
@@ -46,6 +49,7 @@
 | `01-requirements/p0b-identity-authorization.md` | 身份、JWT、Agent、组织、Team、RBAC/ACL 的逐条可执行需求 |
 | `01-requirements/p0b-platform-services.md` | 字典、标签、配置、幂等、任务、日志审计、通知和观测需求 |
 | `01-requirements/p1-asset-catalog.md` | MODEL/DATASET 登记、搜索、详情、更新、归档和 Gitea 一致性需求 |
+| `01-requirements/dataset-experience.md` | 数据集分类/标签、详情、讨论、CLI、AI 搜索下载和受限创建上传的 READY 纵向规格 |
 | `01-requirements/p2-version-transfer.md` | 版本草稿、Manifest/DVC、Web 上传和下载票据需求 |
 | `01-requirements/p3-release-governance.md` | 校验、审批、受保护 Tag、不可变发布和弃用归档需求 |
 | `01-requirements/p4-agent-integration.md` | MCP、Agent OpenAPI、Tool 双控、Skill 和客户端兼容需求 |
@@ -60,11 +64,14 @@
 | `04-ui/page-catalog.md` | 登记每个页面的目的、权限、数据、动作与完成证据 |
 | `04-ui/page-spec-template.md` | 单页面详细交互规格模板 |
 | `05-acceptance/p0b-exit-catalog.md` | 把 P0-B 出口拆为不可用窄断言冒充的验收场景 |
+| `05-acceptance/dataset-agent-exit-catalog.md` | 数据集详情、CLI/API 和 AI 读写旅程的 P1-P5 E4/E5 验收 |
+| `05-acceptance/ai-execution-gate-catalog.md` | AI IDE Task/状态/阶段/范围/Evidence 门禁正反例 |
 | `06-ide/generic-execution-protocol.md` | 规定任意 AI 编程 IDE 的会话输入、执行顺序和停止条件 |
 | `06-ide/trae-adapter.md` | 将正式规格映射到 Trae spec/tasks/checklist，避免复制产品语义 |
 | `templates/task-card.md` | 交给 AI 编程 IDE 的原子任务模板 |
 | `templates/evidence-manifest.yaml` | 每次验证必须填写的机器可读证据模板 |
 | `tools/validate-spec.ps1` | 校验 manifest 路径、稳定 ID 重复和悬空引用 |
+| `tools/validate-task-card.ps1` | 在产品编辑前拒绝未批准、越阶段、引用不完整或范围过宽的 AI Task |
 
 需求确认后还需补齐：
 
@@ -96,9 +103,11 @@ AI 开始任何实现任务前必须按顺序：
 2. 读取本文件和 `source-and-status-policy.md`；
 3. 读取任务卡引用的需求、ADR、OpenAPI/MCP/Event Schema 和 Flyway；
 4. 确认任务引用的所有决策均为 `ACCEPTED`，需求均为 `READY`；
-5. 先更新机器契约，再实现代码；
-6. 生成任务要求的测试与运行证据；
-7. 只在证据达到需求声明的最低等级后更新状态。
+5. 运行 `validate-spec.ps1` 和 `validate-task-card.ps1`，任何失败都禁止产品编辑；
+6. 先更新机器契约，再实现代码；
+7. 生成任务要求的测试与运行证据；
+8. 交接前运行 `-CheckChangedPaths`；声明完成前运行 `-CheckCompletion`；
+9. 只在证据达到需求声明的最低等级且由验证责任方接受后更新状态。
 
 若任一规范事实冲突，AI 必须停止受影响部分并登记冲突；不得选择最容易实现的一份继续开发。
 
@@ -106,7 +115,13 @@ AI 开始任何实现任务前必须按顺序：
 
 ```powershell
 ./docs/ai-spec/tools/validate-spec.ps1
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-....md
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-....md -CheckChangedPaths
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-....md -CheckCompletion
 ```
+
+当前本地门禁已可执行，但 `.github/workflows/ci.yml` 尚未接入这些检查；在 `TASK-GOV-008` 完成前，
+只能称“合规 IDE 可执行”，不能称“所有提交都被服务端强制”。
 
 ## 5. 完成判定
 

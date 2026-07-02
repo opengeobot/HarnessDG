@@ -200,7 +200,27 @@ PENDING → DELIVERED
 - Delivery ID 对接收方稳定，重试不生成新业务事件；
 - Outbox processed 不能在 Delivery 真正进入确定终态前错误标记。
 
-## 12. AuditResult
+## 12. DiscussionStatus 与 CommentStatus
+
+Discussion 使用稳定枚举：
+
+```text
+OPEN ↔ LOCKED
+```
+
+- OPEN 允许有权主体回复；LOCKED 只读；
+- lock/unlock 需要 `asset:moderate`、expected rowVersion 和审计；
+- Asset ARCHIVED 时 Discussion 有效能力被资源策略收紧为只读，不篡改原状态；
+- 删除 Thread 不作为普通业务动作，Moderator 采用可审计隐藏策略。
+
+Comment 使用 `ACTIVE/RETRACTED/HIDDEN`：
+
+- 作者撤回 ACTIVE→RETRACTED；Moderator 可 ACTIVE/RETRACTED→HIDDEN 并按策略恢复；
+- Revision 是追加历史，不通过状态覆盖正文历史；
+- RETRACTED/HIDDEN 对普通读取返回 Tombstone，不返回受限正文；
+- 状态变化与 Notification/Outbox/Audit 在同一 PostgreSQL 事务提交。
+
+## 13. AuditResult
 
 `SUCCEEDED/FAILED/DENIED` 是事件结果而非可变状态：
 

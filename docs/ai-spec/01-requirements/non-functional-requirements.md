@@ -38,6 +38,7 @@
 | `NFR-SEC-007` | 上传内容安全 | 路径穿越、恶意压缩包、类型/大小、Pickle/动态代码风险按策略检测 | `E5` |
 | `NFR-SEC-008` | Webhook SSRF/重放 | 目标校验；签名、时间戳、Delivery ID；重复投递幂等 | `E4` |
 | `NFR-SEC-009` | 供应链 | Secret 扫描；镜像和依赖锁定；漏洞检查达到待确认阈值 | `E5` |
+| `NFR-SEC-010` | 预览与协作内容安全 | Preview/Discussion/Card 均按不可信内容处理；PII/Secret canary 在响应、日志、审计中出现次数为 0 | `E4/E5` |
 
 安全场景必须包含攻击输入和被拒绝后的审计/告警证据，不能只检查配置文件。
 
@@ -53,6 +54,7 @@
 | `NFR-REL-006` | 通知隔离 | 渠道失败不回滚核心事务，恢复后最终送达或进入 DEAD 并告警 | `E4` |
 | `NFR-REL-007` | 备份恢复 | 恢复后随机发布版本能 Git Clone+DVC Pull+SHA-256 校验 | `E5` |
 | `NFR-REL-008` | RPO/RTO | PostgreSQL、Gitea、MinIO 和 Secret 的目标值 | `OPEN` |
+| `NFR-REL-009` | CLI 传输恢复 | pull/push 中断后只恢复缺失 Part/Artifact；不重复资产、Session、Job 或 Git Commit | `E4` |
 
 ## 5. 可观测性
 
@@ -75,6 +77,7 @@
 | `NFR-COMP-003` | 数据库升级 | 空库迁移和从上一支持版本升级均通过 PostgreSQL 测试 | `E3` |
 | `NFR-COMP-004` | 事件兼容 | Schema 版本明确；新增字段向后兼容；重复投递可处理 | `E3` |
 | `NFR-COMP-005` | Shell/PowerShell 等价 | 两个 Verify 包装执行同一权威断言并产生相同结果语义 | `E4` |
+| `NFR-COMP-006` | `aih` CLI 兼容 | 命令、JSON 字段、退出码、精确版本和 include/exclude 语义有版本并通过兼容测试 | `E3/E4` |
 
 Breaking diff 作为 `continue-on-error` 的“评审信号”不足以成为强制门禁；允许的破坏变更必须关联 Accepted
 ADR/Decision。
@@ -97,6 +100,7 @@ ADR/Decision。
 | --- | --- | --- | --- |
 | `NFR-MNT-001` | 模块边界 | Controller/MCP/Worker 不调 Mapper；Domain 不依赖框架；跨模块只走 API/Port | `E1/E2` |
 | `NFR-MNT-002` | 单一业务内核 | 同一 REST/MCP/Worker 用例引用同一 Application Service、授权和审计 | `E2/E4` |
+| `NFR-MNT-006` | AI 实施门禁 | 未通过正式 Task/REQ/DEC/阶段/base Commit/allowedPaths/Evidence 校验的 AI 会话不能修改产品 | `E1` |
 | `NFR-MNT-003` | 契约生成 | 前端 DTO 不手工漂移；生成结果可复现并有 diff | `E1` |
 | `NFR-MNT-004` | 状态一致性 | 需求、契约、迁移、测试和状态报告由追踪矩阵绑定 | `E1` |
 | `NFR-MNT-005` | 无占位完成 | 生产 Profile 不含 Noop/allow-all/空主体/内存可靠任务/默认全 Scope | `E3/E4` |

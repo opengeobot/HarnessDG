@@ -2,7 +2,8 @@
 
 > 状态：`PROPOSED`
 > 注意：这是任务候选目录，不是实施授权。只有关联需求 READY、决策 ACCEPTED 后才能生成正式 Task Card。
-> 当前：`DEC-001` 至 `DEC-007` 已确认第一轮方向；`Q-007` 和第二轮组织/权限问题仍阻止实施。
+> 当前：`DEC-001` 至 `DEC-004`、`DEC-006` 至 `DEC-009` 为生效决策；`DEC-005` 已被替代。
+> `Q-007` 和第二轮组织/权限问题仍阻止产品实现，数据集/AI 规格可 READY 但不得跨阶段领取。
 
 ## 1. 切分规则
 
@@ -48,6 +49,8 @@ GOV（决策与基线）
 | `TASK-GOV-004` | UI、容量、部署、E2E 工具形成 DEC | Q-301..305 + RPO/RTO | 规格一致性检查 |
 | `TASK-GOV-005` | PRD/ADR/AI Spec/AGENTS 的阶段与事实源一致 | GOV-001..004 | E1 文档/链接/状态检查 |
 | `TASK-GOV-006` | 每条正式 Requirement 和 AC 进入机器索引 | GOV-005 | Schema/ID/引用 lint |
+| `TASK-GOV-007` | AI IDE Task Card 的状态、base Commit、allowed paths、REQ/AC/DEC 和阶段门禁可机器拒绝 | DEC-009 | task-card validator 正反例 |
+| `TASK-GOV-008` | AI Spec/Task/范围/完成证据及契约 breaking 门禁接入受保护 CI | TASK-GOV-007、AC-AI-IDE-008 | PR 正反例与 required check 证据 |
 
 ## 4. Wave P0B-R：P0-B 重验与确定性修复
 
@@ -116,6 +119,9 @@ GOV（决策与基线）
 | `TASK-P1-007` | 弃用/归档/恢复与引用检查 | JRN-P1-004、E4 |
 | `TASK-P1-008` | 资产创建/发现/详情/设置/访问 UI 完整状态与两语言 | PAGE-AST-*、E2/E4 |
 | `TASK-P1-009` | 干净 Compose 完成两主体权限差异的资产纵向旅程 | JRN-P1-001..004、E4 |
+| `TASK-P1-010` | DATASET 多值分类、受控标签、权限过滤 Facet 和 matchedFields | REQ-DST-TAX-001、AC-DST-TAX-* |
+| `TASK-P1-011` | Dataset Card 详情外壳和精确版本导航，不展示后续 Placeholder | REQ-DST-DETAIL-001、AC-DST-DETAIL-* |
+| `TASK-P1-012` | Asset Discussion/Comment/Revision/Moderation/Notification 纵向闭环 | REQ-DST-DISC-001、JRN-P1-005、E4 |
 
 ## 6. Wave P2：版本与数据面
 
@@ -128,6 +134,9 @@ GOV（决策与基线）
 | `TASK-P2-005` | Materialization Worker 完成校验→DVC→Git→投影 Saga | 故障注入 E4 |
 | `TASK-P2-006` | 下载票据按权限/状态/敏感度签发，过期和日志脱敏 | JRN-P2-003、E4 |
 | `TASK-P2-007` | CLI/Web 上传和下载校验的干净 Compose 出口 | P2 全旅程 E4 |
+| `TASK-P2-008` | CSV/JSONL/Parquet 最小安全预览 Job、API 和页面 | REQ-PRE-001、AC-DST-PRE-* |
+| `TASK-P2-009` | `aih dataset search/inspect/pull/create/push/status` 薄 CLI 与稳定退出码 | REQ-DST-CLI-001、AC-DST-CLI-* |
+| `TASK-P2-010` | Dataset 详情的 Version/Files/Preview/CLI 纵向旅程 | JRN-P2-004、E4 |
 
 ## 7. Wave P3：发布治理
 
@@ -153,13 +162,16 @@ GOV（决策与基线）
 | `TASK-P4-005` | 裁剪 OpenAPI Agent API 复用同一内核 | JRN-P4-004 |
 | `TASK-P4-006` | OpenClaw/QwenPaw Skill、Secret Store、版本兼容探测 | 锁定客户端 E4 |
 | `TASK-P4-007` | 30 分钟接入和无凭据泄漏出口 | NFR-PERF-004、E4 |
+| `TASK-P4-008` | asset_search 分类/Facet/matchedFields 与 downloadHandle→可信 CLI 数据通道 | REQ-DST-AI-001、AC-DST-AI-* |
+| `TASK-P4-009` | 写 Tool Catalog、contribution OpenAPI Profile 和显式授权 Agent | REQ-DST-AIW-001、REQ-MCP-005 |
+| `TASK-P4-010` | AI 创建草稿→上传→Worker→状态→人工审核的完整旅程 | JRN-P4-005、AC-DST-AIW-*、E4 |
 
 ## 9. Wave P5：质量与运维
 
 | Task 候选 | 可观察结果 | 关键证据 |
 | --- | --- | --- |
 | `TASK-P5-001` | Gitea Webhook Inbox 和所有 Reconciler | JRN-P5-001 |
-| `TASK-P5-002` | 预览/样例按敏感策略生成和授权 | E4 安全 |
+| `TASK-P5-002` | 在 P2 最小预览上扩展格式、资源隔离、压力和安全 E5 | REQ-PRE-001、AC-DST-PRE-* |
 | `TASK-P5-003` | PostgreSQL/Gitea/MinIO/Secret 备份恢复 | JRN-P5-002、E5 |
 | `TASK-P5-004` | 目标规模性能基线和回归阈值 | JRN-P5-003、NFR-PERF-* |
 | `TASK-P5-005` | 上传/SSRF/凭据/Prompt 注入安全测试 | JRN-P5-004、E5 |
@@ -179,3 +191,4 @@ GOV（决策与基线）
 7. 生成初始 Evidence Manifest；
 8. 由产品/架构责任人把 Task 从 DRAFT 变为 READY；
 9. AI 才能开始产品代码修改。
+10. 运行 `tools/validate-task-card.ps1`；任何失败都使 Task 保持 DRAFT/不可实施。

@@ -1,18 +1,19 @@
 schemaVersion: harnessdg.ai-spec/v1
-packageVersion: 0.1.0
+packageVersion: 0.2.0
 status: DRAFT
 language: zh-CN
 createdAt: "2026-07-02"
 baseRevision:
   branch: ai
-  commitSha: 5b5f56c05609ceed1db2acde319541ca180b5522
+  commitSha: e490857bf889bf04976f5a012585dc8ecbd2600a
 
 purpose: >
   将 HarnessDG 产品设计拆成 AI 编程 IDE 可读取、可实施、可追踪、可自动验收的规格包。
 
 authority:
   normativeAfterApproval: false
-  reason: 第一轮策略已确认，但组织/Owner、资产发布、UI 与非功能决策仍未全部关闭。
+  approvedSlicesNormative: true
+  reason: 整包仍有组织/Owner、资产发布、UI 与非功能决策未关闭；approvedSlices 已由 DEC-008/009 确认并具规范效力，但实现仍受阶段与 Task 门禁约束。
   sourcePriorityPolicy: 00-governance/source-and-status-policy.md
 
 acceptedDecisions:
@@ -20,9 +21,10 @@ acceptedDecisions:
   - DEC-002
   - DEC-003
   - DEC-004
-  - DEC-005
   - DEC-006
   - DEC-007
+  - DEC-008
+  - DEC-009
 
 confirmedDirection:
   implementationFocus: P0
@@ -31,7 +33,43 @@ confirmedDirection:
   tenancy: SINGLE_COMPANY_MULTI_ORGANIZATION_MULTI_PROJECT
   primaryIde: TRAE
   productCodeFrozenUntilSpecApproval: true
-  firstBatchIncludesAgentMcp: false
+  datasetExperienceTarget: MODELSCOPE_LIKE_GOVERNED_INTERNAL
+  firstBusinessReleaseIncludesAgentDataWorkflow: true
+  agentWriteScope: DRAFT_AND_UPLOAD_ONLY
+
+approvedSlices:
+  - id: dataset-experience-and-agent-delivery
+    decision: DEC-008
+    requirementDocument: 01-requirements/dataset-experience.md
+    acceptanceDocument: 05-acceptance/dataset-agent-exit-catalog.md
+    specificationStatus: READY
+    implementationStatus: GATED_BY_P0B_AND_PHASE_ORDER
+  - id: ai-ide-execution-gate
+    decision: DEC-009
+    requirement: REQ-AI-IDE-001
+    acceptanceDocument: 05-acceptance/ai-execution-gate-catalog.md
+    policyStatus: ACTIVE
+
+aiExecutionPolicy:
+  decision: DEC-009
+  protocol: 06-ide/generic-execution-protocol.md
+  requiredTaskSchema: harnessdg.task/v1
+  requireTaskCardReady: true
+  requireRequirementsReady: true
+  requireAcceptedDecisions: true
+  requireBaseCommit: true
+  requireAllowedPaths: true
+  requireStageGate: true
+  requireAcceptanceEvidenceMap: true
+  requireCrossCuttingPlan: true
+  requireTaskSpecificValidation: true
+  requirePathTriggeredValidationProfiles: true
+  requireCompletionEvidenceValidation: true
+  validateTaskCommand: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <task-card>
+  validateCompletionCommand: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <task-card> -CheckCompletion
+  denyImplementationOnValidationFailure: true
+  localEnforcementStatus: ACTIVE
+  protectedCiEnforcementStatus: MISSING_TASK_GOV_008
 
 entrypoints:
   human: README.md
@@ -77,6 +115,9 @@ documents:
   - path: 01-requirements/p1-asset-catalog.md
     kind: requirements
     status: OPEN
+  - path: 01-requirements/dataset-experience.md
+    kind: requirements
+    status: READY
   - path: 01-requirements/p2-version-transfer.md
     kind: requirements
     status: OPEN
@@ -119,21 +160,33 @@ documents:
   - path: 05-acceptance/p0b-exit-catalog.md
     kind: acceptance
     status: PROPOSED
+  - path: 05-acceptance/dataset-agent-exit-catalog.md
+    kind: acceptance
+    status: READY
+  - path: 05-acceptance/ai-execution-gate-catalog.md
+    kind: acceptance
+    status: READY
   - path: 06-ide/generic-execution-protocol.md
     kind: ai-protocol
-    status: DRAFT
+    status: ACTIVE
   - path: 06-ide/trae-adapter.md
     kind: ai-adapter
-    status: DRAFT
+    status: ACTIVE
   - path: templates/task-card.md
     kind: template
-    status: DRAFT
+    status: ACTIVE
   - path: templates/evidence-manifest.yaml
     kind: template
-    status: DRAFT
+    status: ACTIVE
+  - path: tasks/README.md
+    kind: task-governance
+    status: ACTIVE
   - path: tools/validate-spec.ps1
     kind: validation-tool
-    status: DRAFT
+    status: ACTIVE
+  - path: tools/validate-task-card.ps1
+    kind: validation-tool
+    status: ACTIVE
 
 openDecisionSets:
   - ids: [Q-007]
@@ -151,6 +204,8 @@ executionGates:
   requireReadyRequirements: true
   requireTaskCard: true
   requireEvidenceManifest: true
+  requireAcceptedCompletionEvidence: true
+  protectedCiGateActive: false
   skippedChecksCountAsPass: false
   historicalCompletionClaimsAreNormative: false
   allowProductCodeChangesFromDraft: false

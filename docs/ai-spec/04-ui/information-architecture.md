@@ -24,7 +24,9 @@
 │     ├─ overview
 │     ├─ versions
 │     │  └─ /:version
-│     ├─ files
+│     │     ├─ files
+│     │     └─ preview
+│     ├─ discussions
 │     ├─ lineage
 │     ├─ access
 │     └─ settings
@@ -58,6 +60,10 @@
 
 当前 `/version`、`/upload`、`/access` 是脱离具体资源的占位路由。正式实现前应按上方任务归属确认，
 避免生成一个无法表达 asset/version/session 上下文的“大杂烩页面”。
+
+Dataset 详情的 Overview/Versions/Files/Preview/Discussions 是同一资产外壳下的任务入口。Files 和
+Preview 必须绑定 URL 中的精确 Version；Discussions 继承资产权限。阶段能力未实现时不展示可点击
+Placeholder。
 
 ## 3. 全局应用外壳
 

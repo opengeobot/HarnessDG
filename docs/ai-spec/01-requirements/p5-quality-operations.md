@@ -71,13 +71,16 @@ minimumEvidenceLevel: E4
 ## REQ-PRE-001 数据集/模型安全预览
 
 ```yaml
-status: OPEN
-priority: SHOULD
-phase: P5
-blockedBy: preview formats and privacy policy
+status: READY
+priority: MUST
+phase: P2/P5
+decisions: [DEC-008]
 minimumEvidenceLevel: E4/E5
 ```
 
+- P2 最小支持 CSV、JSONL、Parquet；每个格式的解析器版本、字符编码、压缩白名单和失败错误固定；
+- P2 默认最多返回 100 行、50 列和 1 MiB 脱敏响应；服务端可通过类型化配置收紧，不能放宽到无界；
+- 不支持的格式返回 `PREVIEW_UNSUPPORTED_FORMAT`，不得以空 items 冒充成功；
 - 预览由持久化 Job 生成到 `asset-preview`，不从请求线程读取大对象；
 - 只从精确 Version/Artifact 生成并保存 source digest；
 - Dataset 支持的格式/采样算法/最大行列/字段类型白名单明确；
@@ -89,6 +92,11 @@ minimumEvidenceLevel: E4/E5
 - 预览失败不影响 Published Version，但可产生质量警告；
 - UI 明确“样例，不代表完整数据”，显示来源版本和生成时间；
 - 泄露测试包含 PII/Secret canary，预览/日志出现次数必须为 0。
+- REST：`GET /assets/{assetId}/versions/{version}/preview`；MCP：`dataset_get_preview`；
+  页面：`PAGE-DST-001`；
+- 目标投影表 `asset_preview` 只保存 version/source digest/格式/状态/生命周期和对象引用，不保存完整样本；
+- P2 通过 `AC-DST-PRE-001..004` 后交付最小安全预览；P5 扩展更多格式、资源隔离、压力与安全 E5，
+  不得把 P2 已通过能力回写成 P5 才存在。
 
 ## REQ-BKR-001 备份、恢复与演练
 
@@ -272,7 +280,7 @@ minimumEvidenceLevel: E5
 ## P5 出口
 
 - Inbox/Reconciler 对所有权威事实源闭环；
-- 预览（若范围内）满足隐私和授权；
+- 预览 MUST 满足隐私、授权、资源隔离和支持格式矩阵；
 - 真实恢复演练达 RPO/RTO；
 - 性能和安全门禁通过；
 - Dashboard/Alert/Runbook 经故障演练；

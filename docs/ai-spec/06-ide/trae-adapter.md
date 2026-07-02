@@ -1,7 +1,7 @@
 # Trae 规格适配规则
 
-> 状态：`DRAFT`
-> 方向：`DEC-006` 已确认 Trae 为主要 IDE；本适配层待规格包整体批准后生效。
+> 状态：`ACTIVE`
+> 方向：`DEC-006` 已确认 Trae 为主要 IDE；`DEC-009` 使统一 AI 执行门禁立即适用于 Trae。
 
 ## 1. 定位
 
@@ -18,8 +18,9 @@ docs/ai-spec/                 产品与工程语义事实
 Trae 目录不得重新定义产品规则。若 `.trae` 与 `docs/ai-spec` 冲突，以已批准的 AI Spec/ADR/机器契约为准，
 并登记冲突，而不是静默选择。
 
-现有 `.trae/specs/bootstrap-p0-baseline` 与 `establish-p0b-platform-foundation` 是历史执行材料。它们的
-勾选不构成当前完成证据，尤其是 P0-B tasks 全勾选而 checklist 仍有 51 项未勾选的状态。
+当前检出中 `.trae/` 被 `.gitignore` 排除且目录不存在，因此本适配文档只是创建新 Trae Task 时的
+规范，不构成 Trae 已安装或已验证的证据。任何外部/本地历史 `.trae/specs` 即使存在，其勾选也不能
+替代正式 Task Card、仓库 Evidence 或 CI 产物。
 
 ## 2. 创建 Trae Task 的前置
 
@@ -30,6 +31,7 @@ Trae 目录不得重新定义产品规则。若 `.trae` 与 `docs/ai-spec` 冲�
 5. 允许路径、Migration 下界和证据等级明确；
 6. 工作树重叠变更已确认；
 7. `.trae/specs/<slug>` 不存在或明确为同一 Task。
+8. `validate-spec.ps1` 与 `validate-task-card.ps1` 均退出 0。
 
 ## 3. spec.md 格式
 
@@ -130,21 +132,25 @@ Trae 开始时：
 2. 读取 AI Spec manifest/通用协议；
 3. 读取当前 `.trae/spec` 引用；
 4. 检查 READY/ACCEPTED/base Commit；
-5. 输出 AC→实现→证据计划；
-6. 才开始编辑。
+5. 执行两条强制校验并保留输出；
+6. 输出 AC→契约/数据/实现/测试/证据计划；
+7. 才开始编辑 allowedPaths 内文件。
 
 Trae 结束时：
 
-1. 逐项更新真实 Evidence；
-2. 未达到 E4 的需求保持 IMPLEMENTED_UNVERIFIED；
-3. 不自动把阶段标为完成；
-4. 使用仓库完成报告格式；
-5. 报告 FAIL/SKIP/未运行；
-6. 保留下一任务依赖，不顺手扩展。
+1. 运行 Task Card `-CheckChangedPaths` 结束门禁；
+2. 逐项更新真实 Evidence；
+3. 未达到 E4 的需求保持 IMPLEMENTED_UNVERIFIED；
+4. 不自动把阶段标为完成；
+5. 使用仓库完成报告格式；
+6. 报告 FAIL/SKIP/未运行；
+7. 保留下一任务依赖，不顺手扩展；
+8. 列出实际变更路径并与 Task Card allowedPaths 做差异检查。
+9. 只有 `-CheckCompletion` 退出 0 才能写“完成”；否则明确为 `IMPLEMENTED_UNVERIFIED`。
 
 ## 8. 迁移现有 Trae Specs
 
-用户确认规格包后，按以下方式处理旧目录：
+若后续从外部归档恢复旧 Trae Spec，按以下方式处理：
 
 1. 标记为 `HISTORICAL`，不删除历史；
 2. 在顶部链接当前 AI Spec 审计；

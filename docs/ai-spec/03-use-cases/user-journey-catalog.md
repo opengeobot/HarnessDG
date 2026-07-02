@@ -5,7 +5,7 @@
 
 ## 1. 推荐的首批验收顺序
 
-依据 `DEC-001`、`DEC-003`、`DEC-005`，首批目标按阶段依赖顺序为：
+依据 `DEC-001`、`DEC-003`、`DEC-008`，目标按阶段依赖顺序为：
 
 1. `JRN-P0B-001` Bootstrap 管理员与安全登录；
 2. `JRN-P0B-002` 用户登录、刷新、登出和禁用；
@@ -15,9 +15,11 @@
 6. `JRN-P1-002` 普通用户只发现有权资产；
 7. `JRN-P2-002`、`JRN-P2-003` Web 上传和下载；
 8. `JRN-P3-001` 校验、审批和发布闭环。
+9. `JRN-P4-001`、`JRN-P4-002` AI 获取 JWT、搜索精确版本并下载；
+10. `JRN-P4-005` 显式授权 AI 创建草稿并上传，最终进入人工审核。
 
-P4 `JRN-P4-001` Agent 获取 JWT 并调用 MCP 不进入首批实施，但规格保留为后续阶段。以上不是并行绕过
-阶段门禁的许可；P1/P2/P3 仍分别等待上游 VERIFIED。
+`DEC-008` 替代了原“首批不含 Agent/MCP”的 `DEC-005`，但不是并行绕过阶段门禁的许可；
+P1/P2/P3/P4 仍分别等待上游 VERIFIED。
 
 ## 2. P0-B 公共底座旅程
 
@@ -42,6 +44,7 @@ P4 `JRN-P4-001` Agent 获取 JWT 并调用 MCP 不进入首批实施，但规格
 | `JRN-P1-002` | 不同权限主体 | 搜索/筛选 → 只获得有权结果 → 查看详情 | PRIVATE/INTERNAL/PUBLIC、防枚举、Cursor、停用治理项回显 | `E4` |
 | `JRN-P1-003` | Owner/维护者 | 更新卡片和治理字段 → Gitea/投影一致 | 乐观锁、外部失败、审计、历史别名 | `E4` |
 | `JRN-P1-004` | Owner/管理员 | 删除/归档草稿资产 → 引用与保留策略生效 | 正式版本不可物理删、越权、幂等、恢复 | `E4` |
+| `JRN-P1-005` | 获权用户 | 打开 Dataset Card → 参与 Discussion → 接收回复通知 | 资产权限继承、不可信内容、修订/撤回/Moderation、Outbox | `E4` |
 
 ## 4. P2 版本与数据面旅程
 
@@ -50,6 +53,7 @@ P4 `JRN-P4-001` Agent 获取 JWT 并调用 MCP 不进入首批实施，但规格
 | `JRN-P2-001` | 研发用户 | Git/DVC 配置 → DVC push → 清理本地 → pull 校验 | 最小凭据、SHA-256、无永久 Secret 入库/日志 | `E4` |
 | `JRN-P2-002` | Web 用户 | 创建上传会话 → Multipart → 刷新恢复 → Worker 转存 | Part 重试、限额、过期、路径安全、DVC 指针提交 | `E4` |
 | `JRN-P2-003` | 获权用户/Agent | 请求下载票据 → 直连下载 → 校验 → 票据过期 | 状态/敏感度/用途限制、URL 脱敏、过期拒绝 | `E4` |
+| `JRN-P2-004` | 数据使用者 | 数据集详情 → 选择精确版本 → Preview/Files → CLI pull/resume/verify | 同版本聚合、安全预览、路径过滤、摘要一致、无 Secret | `E4` |
 
 ## 5. P3 发布治理旅程
 
@@ -67,6 +71,7 @@ P4 `JRN-P4-001` Agent 获取 JWT 并调用 MCP 不进入首批实施，但规格
 | `JRN-P4-002` | 只读 Agent | 搜索 → 精确版本 → 下载票据 → 校验内容 | 小响应、Cursor、License/敏感度、URL 不进对话 | `E4` |
 | `JRN-P4-003` | 越权 Agent | 调用隐藏/高风险 Tool → 被拒绝并审计 | tools/list 不泄露、403/Tool Error、AGENT_ACCESS_DENIED | `E4` |
 | `JRN-P4-004` | OpenAPI Client | 导入裁剪契约 → 调用 Agent API → 下载 | 与 MCP 同一服务/权限/审计 | `E4` |
+| `JRN-P4-005` | 显式授权写 Agent | 受控元数据创建草稿 → CLI 数据通道上传 → complete → 查询 Job → 提交人工审核 | 写 Tool 双控、幂等、无 URL/二进制进对话、禁止自动发布 | `E4` |
 
 ## 7. P5 质量与运维旅程
 

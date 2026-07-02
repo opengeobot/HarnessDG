@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | 代码、资产卡片、清单、版本标签 | **Gitea** | `README.md`、`asset.yaml`、配置、脚本、`.dvc`、`dvc.yaml`、`dvc.lock`、Commit、Tag | Git Commit/Tag 是可审计版本锚点；受保护 Tag 阻止绕过发布流程覆盖正式版本 |
 | 模型/数据集实际内容 | **DVC + MinIO** | 模型权重、数据集目录、多模态大文件的内容版本 | DVC Hash 标识内容并寻址，MinIO（`dvc-cache`）保存对象 |
-| 业务状态、权限、搜索与统计 | **PostgreSQL** | 工作流状态、授权、任务、审计、查询投影、Outbox/Inbox/幂等 | 是查询与流程投影，不替代 Git/DVC 的版本事实 |
+| 业务状态、权限、搜索、统计与协作讨论 | **PostgreSQL** | 工作流状态、授权、Discussion/Comment、任务、审计、查询投影、Outbox/Inbox/幂等 | 是业务协作、查询与流程投影，不替代 Git/DVC 的版本事实 |
 | 临时上传与预览产物 | **MinIO** | 上传暂存（`asset-staging`）、预览/缩略图/统计（`asset-preview`） | 有生命周期策略，不属于正式版本 |
 
 ### 一致性要求
@@ -51,4 +51,6 @@
 - 不得把业务发布状态写回 Gitea 作为权威来源（Gitea 权限由后端单向投影，定时 Reconciler
   检测漂移，避免双向同步循环）。
 - 不得用 MinIO 暂存/预览对象替代正式版本。
+- Asset Discussion/Comment 是 PostgreSQL 业务状态并继承资产授权；不得把 Gitea Issue 或通知表
+  静默当作讨论事实源。
 - 任何对上述事实源与平面边界的调整都必须先新增 ADR（见 ADR-0001 的变更治理条款）。

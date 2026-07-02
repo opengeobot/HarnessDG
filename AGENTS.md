@@ -12,12 +12,43 @@ Use `docs/architecture/p0-platform-foundation-traceability.md` to check every P0
 Before planning or changing product code, read:
 
 1. `prd/DEEP_RESEARCH_内部AI资产管理平台设计.md`
-2. The current task and its acceptance criteria
-3. `docs/adr/ADR-0001-technology-baseline.md`
-4. `docs/adr/ADR-0002-p0-platform-foundation-gate.md`
-5. Relevant OpenAPI, MCP, Flyway, event schema, module, and runbook documentation
+2. `docs/ai-spec/manifest.yaml` and `docs/ai-spec/06-ide/generic-execution-protocol.md`
+3. The formal `docs/ai-spec/tasks/TASK-*.md` Task Card and every referenced REQ/AC/DEC
+4. `docs/adr/ADR-0001-technology-baseline.md`
+5. `docs/adr/ADR-0002-p0-platform-foundation-gate.md`
+6. Relevant OpenAPI, MCP, Flyway, event schema, module, and runbook documentation
 
 The mandatory AI development rules are in section 15 of the design document. The platform-wide capabilities are in section 5.
+
+## AI implementation gate
+
+`DEC-009` makes the AI Spec execution protocol mandatory for Trae, Codex, Claude Code, Cursor, Qwen Code,
+and other AI programming IDEs.
+
+Before editing product code, contracts, Flyway, deployment, or tests:
+
+```powershell
+./docs/ai-spec/tools/validate-spec.ps1
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <formal-task-card>
+```
+
+Implementation is forbidden when the Task Card is missing or validation fails. A valid implementation Task must
+be `READY`, have `implementationAuthorized: true`, reference only `READY` requirements and `ACCEPTED`
+decisions, bind a real base Commit, list narrow allowed paths, prove its upstream stage gate, and map every
+acceptance scenario to expected evidence. AI may draft specifications and Task Cards but must not approve or
+authorize its own Task in the same implementation session.
+
+Before handoff, rerun the Task validator with `-CheckChangedPaths`; any changed file outside approved
+`allowedPaths` blocks handoff. A completion claim additionally requires `-CheckCompletion`, a clean current
+Commit, full AC-linked PASS Evidence at the required level, no SKIP/notProven, redaction confirmation, and
+acceptance by the verification authority. A failed completion check means `IMPLEMENTED_UNVERIFIED`, not done.
+
+Local validators guide every IDE, but they are not a security boundary. Until `TASK-GOV-008` connects them to
+protected CI and removes non-blocking contract checks, bypass by a non-compliant IDE remains a known gate gap.
+
+The accepted end-state for dataset experience and AI data workflows is
+`docs/ai-spec/01-requirements/dataset-experience.md` (`DEC-008`). It is a future P1-P4 target, not permission
+to bypass the current P0-B gate.
 
 ## Fixed architecture baseline
 

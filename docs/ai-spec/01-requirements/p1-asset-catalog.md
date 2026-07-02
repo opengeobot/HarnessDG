@@ -3,6 +3,8 @@
 > 状态：`OPEN`
 > 阻塞：P0-B 必须 VERIFIED；Q-101..106、Q-201/202 需确认。
 > 范围：MODEL、DATASET 的目录与 Gitea 仓库，不含 DVC 上传、发布审批和 MCP。
+> 数据集专项：`dataset-experience.md` 中 `REQ-DST-TAX-001`、`REQ-DST-DETAIL-001`、
+> `REQ-DST-DISC-001` 已由 `DEC-008` 确认为 MUST；本文件不得用通用 Asset 字段削弱其要求。
 
 ## REQ-AST-001 资产坐标、类型与责任模型
 
@@ -34,8 +36,9 @@ runtime、knownRisks、usageRestrictions 的必填与格式需形成字段表。
 
 ### DATASET 字段
 
-format/modality/license/sensitivity 使用 itemCode；language/splits/schema/source/sampleCount/size/
-deidentification/quality 的必填与格式需形成字段表。
+按 `REQ-DST-TAX-001` 使用 `taskCodes/modalityCodes/formatCodes/languageCodes/licenseCode/
+sensitivityCode/sampleCount/totalBytes/sizeBucketCode/tagIds`。Split、Schema、来源、脱敏与质量属于
+精确 Version 或 Card 投影；不得继续以自由 `format/modality` 字符串作为最终契约。
 
 ### 追踪
 
@@ -113,6 +116,7 @@ minimumEvidenceLevel: E4/E5
 
 支持 keyword、type、namespace、organizationId、projectId、ownerId/teamId、visibility、status、
 license/framework/task/format/modality itemCode、tagId、updated/published time（阶段适用）和受控 sort。
+DATASET 还必须完整实现 `REQ-DST-TAX-001` 的多值分类、权限过滤 Facet、匹配字段和维度组合语义。
 
 ### 行为
 
@@ -125,6 +129,7 @@ license/framework/task/format/modality itemCode、tagId、updated/published time
 - Cursor 绑定 filter/sort/Principal scope，默认 20、最大 100；
 - 返回小型 AssetSummary，不返回完整 Card/文件；
 - tag 查询只用 tagId；
+- DATASET 的 Facet/count/autocomplete 与 items 使用同一授权 Predicate，禁止因聚合查询泄漏；
 - 达到 10 万数据时 P95 ≤ 500 ms 的数据分布和并发按 NFR 执行。
 
 ### 错误
@@ -160,6 +165,8 @@ minimumEvidenceLevel: E4
 - 外链、图片、HTML、脚本和 Prompt Injection 按内容安全策略处理；
 - DISABLED item/tag 仍显示 code/历史文案/停用标记；
 - P1 不伪造 latestPublished 或 Version 列表；
+- DATASET 详情外壳遵守 `REQ-DST-DETAIL-001`；P2/P3 未交付的 Files/Preview/Version 不展示可点击
+  Placeholder；
 - Gitea 暂时不可用时可返回已标注时间的最后投影，是否允许实时 Card 失败降级需确认；
 - 不返回 Gitea Service Token、内部 clone credential 或 MinIO 信息。
 
@@ -332,5 +339,7 @@ P1 只有在以下结果同时可复现时退出：
 6. 更新并发冲突不覆盖；
 7. Owner/Team、字典、标签停用的历史/新写语义正确；
 8. 弃用/归档/恢复不修改版本事实；
-9. UI 完整状态和两语言 E4；
-10. OpenAPI、V14+、事件、类型、Fixture、Runbook、Evidence 同步。
+9. 数据集分类/Facet、Dataset Card 和 Discussion 按 `AC-DST-TAX-*`、`AC-DST-DETAIL-*`、
+   `AC-DST-DISC-*` 完成 E4；
+10. UI 完整状态和两语言 E4；
+11. OpenAPI、V14+、事件、类型、Fixture、Runbook、Evidence 同步。

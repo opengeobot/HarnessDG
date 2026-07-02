@@ -52,6 +52,10 @@
 
 禁止使用没有验收含义的 `done`、`mostly done`、`基本完成` 或 `已落地`。
 
+`READY` 只表示需求语义可实施，不自动授予当前阶段实施权限。产品编辑还必须同时满足 `DEC-009`：
+正式 Task Card READY、`implementationAuthorized=true`、上游 stage gate、base Commit、窄
+allowedPaths、AC/Evidence 映射和两个 validator 全部通过。
+
 ## 4. 证据等级
 
 | 等级 | 证据 | 可以证明 | 不能证明 |
@@ -111,4 +115,6 @@ AI 不得：
 - 仅凭代码存在把需求改为 `VERIFIED`；
 - 替用户决定产品范围、组织模型、审批语义或风险接受；
 - 删除失败或 SKIP 记录来获得绿色状态。
+- 批准或授权自己起草的 Task，伪造阶段出口、批准人或 Evidence；
+- 在 Task validator 失败或实际变更越出 allowedPaths 时继续产品编辑。
 

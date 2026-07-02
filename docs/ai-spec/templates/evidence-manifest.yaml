@@ -7,6 +7,20 @@ task:
   requirements: [REQ-...]
   scenarios: [AC-...]
 
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: null
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <task-card>
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <task-card> -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <task-card> -CheckCompletion
+    result: null
+
 source:
   branch: ...
   commitSha: ...

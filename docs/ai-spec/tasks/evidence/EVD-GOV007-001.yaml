@@ -1,0 +1,125 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-GOV007-001
+status: PASS
+
+task:
+  taskId: TASK-GOV-007
+  requirements: [REQ-AI-IDE-001]
+  scenarios:
+    - AC-AI-IDE-001
+    - AC-AI-IDE-002
+    - AC-AI-IDE-003
+    - AC-AI-IDE-004
+    - AC-AI-IDE-005
+    - AC-AI-IDE-006
+    - AC-AI-IDE-007
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-GOV-007.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-GOV-007.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-GOV-007.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: e490857bf889bf04976f5a012585dc8ecbd2600a
+  dirtyWorktree: true
+  dirtyPaths:
+    - AGENTS.md
+    - prd/DEEP_RESEARCH_内部AI资产管理平台设计.md
+    - docs/architecture/data-ownership.md
+    - docs/architecture/module-map.md
+    - docs/ai-spec/00-governance
+    - docs/ai-spec/01-requirements
+    - docs/ai-spec/02-domain
+    - docs/ai-spec/02-delivery
+    - docs/ai-spec/03-use-cases/user-journey-catalog.md
+    - docs/ai-spec/04-ui
+    - docs/ai-spec/05-acceptance
+    - docs/ai-spec/06-ide
+    - docs/ai-spec/templates
+    - docs/ai-spec/tasks
+    - docs/ai-spec/tools
+    - docs/ai-spec/README.md
+    - docs/ai-spec/manifest.yaml
+
+environment:
+  observedAt: 2026-07-02T21:46:47+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  powershell: 5.1.26100.8655
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: E:/workspace/opengeobot/HarnessDG
+  command: >
+    git diff --check; validate-spec.ps1; validate-task-card.ps1 positive;
+    validate-task-card.ps1 -CheckChangedPaths; validate-task-card.ps1
+    -CheckCompletion expected failure; DRAFT, incomplete-plan, and
+    stale-base/OPEN-REQ/unaccepted-DEC/broad-scope negative checks;
+    frontend scope without pnpm test negative check
+  startedAt: 2026-07-02T21:36:39+08:00
+  finishedAt: 2026-07-02T22:21:37+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
+
+coverage:
+  proven:
+    - scenarioId: AC-AI-IDE-001
+      assertion: READY/authorized formal Task with valid references and scope passes.
+    - scenarioId: AC-AI-IDE-002
+      assertion: DRAFT template outside tasks with implementationAuthorized=false is rejected.
+    - scenarioId: AC-AI-IDE-003
+      assertion: OPEN REQ-AST-001 and SUPERSEDED DEC-005 negative fixture is rejected.
+    - scenarioId: AC-AI-IDE-004
+      assertion: Non-current base Commit negative fixture is rejected.
+    - scenarioId: AC-AI-IDE-005
+      assertion: Broad docs allowedPath is rejected; actual changed paths pass approved scope comparison.
+    - scenarioId: AC-AI-IDE-006
+      assertion: Completion validation rejects dirty, incomplete, unreviewed or insufficient Evidence.
+    - scenarioId: AC-AI-IDE-007
+      assertion: Preflight requires one evidence plan per AC, explicit cross-cutting rows, and path-triggered backend/frontend/OpenAPI/Compose commands.
+  notProven:
+    - Product runtime behavior; this is a specification-only task.
+    - P0-B, dataset, CLI or MCP implementation.
+    - AC-AI-IDE-008 protected CI enforcement; reserved for TASK-GOV-008.
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-GOV-007.md
+    - docs/ai-spec/01-requirements/dataset-experience.md
+    - docs/ai-spec/05-acceptance/dataset-agent-exit-catalog.md
+    - docs/ai-spec/05-acceptance/ai-execution-gate-catalog.md
+    - docs/ai-spec/00-governance/current-state-audit-2026-07-02.md
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - Product code and machine contracts intentionally unchanged under DEC-007.
+    - Local validators are active; protected CI enforcement is not implemented.
+
+review:
+  recordedBy: Codex
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

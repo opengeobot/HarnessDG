@@ -1,7 +1,61 @@
+---
+schemaVersion: harnessdg.task/v1
+taskId: TASK-<PHASE>-<number>
+status: DRAFT
+implementationAuthorized: false
+phase: P0-B
+baseCommit: <40-char-git-sha>
+stageGatePassed: false
+stageGateEvidence: <human-readable-summary>
+stageGateEvidenceRefs:
+  - DEC-...
+requirements:
+  - REQ-...
+acceptanceScenarios:
+  - AC-...
+decisions:
+  - DEC-...
+scenarioEvidencePlan:
+  - AC-...|E4|<expected-test-report-or-runtime-artifact>
+crossCuttingPlan:
+  - AUTHN|<requirement-or-N/A-with-reason>
+  - AUTHZ|<requirement-or-N/A-with-reason>
+  - DB_FILTER|<requirement-or-N/A-with-reason>
+  - STATE|<requirement-or-N/A-with-reason>
+  - IDEMPOTENCY|<requirement-or-N/A-with-reason>
+  - CONSISTENCY|<requirement-or-N/A-with-reason>
+  - ERRORS|<requirement-or-N/A-with-reason>
+  - AUDIT|<requirement-or-N/A-with-reason>
+  - NOTIFICATION|<requirement-or-N/A-with-reason>
+  - TAXONOMY_I18N|<requirement-or-N/A-with-reason>
+  - CONFIG|<requirement-or-N/A-with-reason>
+  - OBSERVABILITY|<requirement-or-N/A-with-reason>
+  - SECRETS|<requirement-or-N/A-with-reason>
+allowedPaths:
+  - <narrow/file/or/module/path>
+  - docs/ai-spec/tasks/evidence/EVD-<task>-001.yaml
+preExistingDirtyPaths: []
+forbiddenPaths:
+  - backend/src/main/resources/db/migration/V1__baseline.sql
+  - backend/src/main/resources/db/migration/V2__asset_catalog.sql
+requiredEvidenceLevel: E4
+evidenceTemplate: docs/ai-spec/templates/evidence-manifest.yaml
+evidenceManifests:
+  - docs/ai-spec/tasks/evidence/EVD-<task>-001.yaml
+requiredValidationCommands:
+  - ./docs/ai-spec/tools/validate-spec.ps1
+  - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-<PHASE>-<number>.md
+  - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-<PHASE>-<number>.md -CheckChangedPaths
+  - <task-specific-test-command>
+approvedBy: <human-or-controlled-approval>
+approvedAt: <UTC-timestamp>
+---
+
 # TASK-<phase>-<number>：<一个可观察结果>
 
 > 状态：`DRAFT`
 > 规则：一个任务只交付一个可独立验收的纵向结果。
+> 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 
 ## 1. 目标
 
@@ -21,6 +75,10 @@ flywayBaseline: V...
 ```
 
 所有需求必须是 `READY`，所有决策必须是 `ACCEPTED`。否则任务不得进入实施。
+正文 ID 必须与 Front Matter 完全一致。AI 可以起草 DRAFT，但不得填写批准人并授权自身实施。
+`stageGateEvidenceRefs` 只能引用本 Task 已声明的 Accepted Decision 或仓库内真实 Evidence 文件。
+`scenarioEvidencePlan` 必须以 `AC-ID|E1-E5|预期产物` 逐条覆盖 Front Matter 的全部 AC。
+`crossCuttingPlan` 使用模板中的 13 个稳定机器键；每项必须写具体要求，或写 `N/A -` 加理由。
 
 ## 3. 范围
 
@@ -109,6 +167,32 @@ flywayBaseline: V...
 - 所需依赖；
 - SKIP 判定；
 - 报告或产物路径。
+
+精确命令同时写入 Front Matter `requiredValidationCommands`；至少包含三条治理校验和一条本任务
+专用测试/验收命令。正文描述不能替代机器字段。
+
+路径触发强制命令：修改 backend 必须包含 Maven wrapper `verify`；修改 frontend 必须包含
+`pnpm lint/typecheck/test/build`；修改 OpenAPI 必须包含 lint 和 blocking diff；修改 Compose 必须
+包含 config 与仓库 verify 脚本。任务领取前如果项目还没有这些命令，先建立并批准测试基线，不能
+用构建命令替代行为测试。
+
+实施前固定执行：
+
+```powershell
+./docs/ai-spec/tools/validate-spec.ps1
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <this-task-card>
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <this-task-card> -CheckChangedPaths
+```
+
+需要声明“完成”时还必须执行：
+
+```powershell
+./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath <this-task-card> -CheckCompletion
+```
+
+`-CheckCompletion` 要求工作树干净、Evidence Commit 等于当前 HEAD、每条 AC 均有足够等级的 PASS
+证据、没有 SKIP/notProven、已完成 Secret 检查并由验证责任方接受。未通过时最多交接为
+`IMPLEMENTED_UNVERIFIED`。
 
 ## 9. 停止条件
 

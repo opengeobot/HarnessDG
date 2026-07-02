@@ -6,6 +6,7 @@
 ## 1. 状态说明
 
 - `OPEN`：产品决策缺失；
+- `READY`：产品行为和验收已明确，但仍可能被上游阶段门禁阻止实施；
 - `PARTIAL`：存在实现片段，但需求闭环明显缺失；
 - `IMPLEMENTED_UNVERIFIED`：实现较完整，仍缺规定等级的证据；
 - `VERIFIED`：尚无任何能力在本初始审计中获得该状态。
@@ -30,6 +31,12 @@
 | `CAP-OBS-001` | 指标、Trace、健康、诊断 | PRD 5.13、ADR-0002 | diagnostics API | Micrometer/诊断代码和单测 | OTel 范围冲突；REST/MCP/Worker Trace E4；Prometheus Target | `OPEN` |
 | `CAP-UI-001` | 公共管理端 | PRD 5.14、15.7 | 页面路由/API | 多个管理页面可构建 | 无前端测试/浏览器 E2E；无运行时 i18n；受控值仍自由输入 | `PARTIAL` |
 | `CAP-ASSET-001` | 资产目录安全整改 | PRD 6/8、ADR-0002 | V12、asset OpenAPI | 资产 CRUD/搜索、单测/IT、页面 | Team Owner、Gitea 一致性、授权全矩阵、完整治理与 E4 | `PARTIAL` |
+| `CAP-DST-001` | DATASET 分类、Card 与 Facet | REQ-DST-TAX-001/DETAIL-001 | 目标 OpenAPI/字典/V14+ | 当前仅通用 Asset 和 format/modality 片段 | P1 契约、迁移、页面和 AC-DST-TAX/DETAIL E4 | `READY / IMPLEMENTATION_GATED` |
+| `CAP-DST-002` | Asset Discussion | REQ-DST-DISC-001 | 目标 Discussion API/Event/V14+ | 无当前实现 | P1 表/API/权限/通知/Moderation/不可信内容 E4 | `READY / IMPLEMENTATION_GATED` |
+| `CAP-DST-003` | 精确版本安全 Preview | REQ-PRE-001 | 目标 Preview API/Job/asset-preview | Bucket 存在，无业务闭环 | P2 最小格式 E4；P5 格式扩展与安全 E5 | `READY / IMPLEMENTATION_GATED` |
+| `CAP-DST-004` | 最小 `aih` CLI | REQ-DST-CLI-001 | 目标 REST/CLI JSON Schema | 无当前 CLI | search/pull/resume/verify/create/push 与无 Secret E4 | `READY / IMPLEMENTATION_GATED` |
+| `CAP-DST-005` | AI 搜索下载与受限贡献 | REQ-DST-AI-001/AIW-001、P4 | 目标 MCP/Agent OpenAPI | MCP 仅错误阶段草案 | 只读与写 Agent 两条 E4、Tool 双控、人工发布闸门 | `READY / IMPLEMENTATION_GATED` |
+| `CAP-AI-001` | AI 编程 IDE 实施门禁 | REQ-AI-IDE-001、DEC-009 | manifest/task schema/validator | 本地 preflight/scope/completion 校验已具备；受保护 CI 未接入 | AC-AI-IDE-001..008；本地正反例 + PR required check | `READY / CI_GAP` |
 
 ## 3. 后续补全规则
 
