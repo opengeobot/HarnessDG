@@ -1,0 +1,156 @@
+schemaVersion: harnessdg.ai-spec/v1
+packageVersion: 0.1.0
+status: DRAFT
+language: zh-CN
+createdAt: "2026-07-02"
+baseRevision:
+  branch: ai
+  commitSha: 5b5f56c05609ceed1db2acde319541ca180b5522
+
+purpose: >
+  将 HarnessDG 产品设计拆成 AI 编程 IDE 可读取、可实施、可追踪、可自动验收的规格包。
+
+authority:
+  normativeAfterApproval: false
+  reason: 第一轮策略已确认，但组织/Owner、资产发布、UI 与非功能决策仍未全部关闭。
+  sourcePriorityPolicy: 00-governance/source-and-status-policy.md
+
+acceptedDecisions:
+  - DEC-001
+  - DEC-002
+  - DEC-003
+  - DEC-004
+  - DEC-005
+  - DEC-006
+  - DEC-007
+
+confirmedDirection:
+  implementationFocus: P0
+  p0Status: INCOMPLETE_REVALIDATION_REQUIRED
+  codeStrategy: PRESERVE_AND_REMEDIATE
+  tenancy: SINGLE_COMPANY_MULTI_ORGANIZATION_MULTI_PROJECT
+  primaryIde: TRAE
+  productCodeFrozenUntilSpecApproval: true
+  firstBatchIncludesAgentMcp: false
+
+entrypoints:
+  human: README.md
+  ai: 06-ide/generic-execution-protocol.md
+  requirementSchema: 01-requirements/requirement-schema.md
+  taskTemplate: templates/task-card.md
+  evidenceTemplate: templates/evidence-manifest.yaml
+
+documents:
+  - path: 00-governance/source-and-status-policy.md
+    kind: governance
+    status: DRAFT
+  - path: 00-governance/open-questions.md
+    kind: decisions
+    status: OPEN
+  - path: 00-governance/decision-log.md
+    kind: decisions
+    status: DRAFT
+  - path: 00-governance/current-state-audit-2026-07-02.md
+    kind: evidence-audit
+    status: DRAFT
+  - path: 01-requirements/requirement-schema.md
+    kind: schema
+    status: DRAFT
+  - path: 01-requirements/product-scope.md
+    kind: product
+    status: PROPOSED
+  - path: 01-requirements/glossary.md
+    kind: domain
+    status: PROPOSED
+  - path: 01-requirements/personas-and-scope.md
+    kind: authorization
+    status: PROPOSED
+  - path: 01-requirements/non-functional-requirements.md
+    kind: quality
+    status: PROPOSED
+  - path: 01-requirements/p0b-identity-authorization.md
+    kind: requirements
+    status: PROPOSED
+  - path: 01-requirements/p0b-platform-services.md
+    kind: requirements
+    status: PROPOSED
+  - path: 01-requirements/p1-asset-catalog.md
+    kind: requirements
+    status: OPEN
+  - path: 01-requirements/p2-version-transfer.md
+    kind: requirements
+    status: OPEN
+  - path: 01-requirements/p3-release-governance.md
+    kind: requirements
+    status: OPEN
+  - path: 01-requirements/p4-agent-integration.md
+    kind: requirements
+    status: OPEN
+  - path: 01-requirements/p5-quality-operations.md
+    kind: requirements
+    status: OPEN
+  - path: 02-domain/entity-invariants.md
+    kind: domain
+    status: PROPOSED
+  - path: 02-domain/state-machines.md
+    kind: domain
+    status: PROPOSED
+  - path: 02-domain/consistency-and-compensation.md
+    kind: consistency
+    status: PROPOSED
+  - path: 02-delivery/traceability-matrix.md
+    kind: traceability
+    status: DRAFT
+  - path: 02-delivery/work-breakdown.md
+    kind: delivery-plan
+    status: PROPOSED
+  - path: 03-use-cases/user-journey-catalog.md
+    kind: use-case-index
+    status: PROPOSED
+  - path: 04-ui/information-architecture.md
+    kind: ui
+    status: PROPOSED
+  - path: 04-ui/page-catalog.md
+    kind: ui
+    status: PROPOSED
+  - path: 04-ui/page-spec-template.md
+    kind: template
+    status: DRAFT
+  - path: 05-acceptance/p0b-exit-catalog.md
+    kind: acceptance
+    status: PROPOSED
+  - path: 06-ide/generic-execution-protocol.md
+    kind: ai-protocol
+    status: DRAFT
+  - path: 06-ide/trae-adapter.md
+    kind: ai-adapter
+    status: DRAFT
+  - path: templates/task-card.md
+    kind: template
+    status: DRAFT
+  - path: templates/evidence-manifest.yaml
+    kind: template
+    status: DRAFT
+  - path: tools/validate-spec.ps1
+    kind: validation-tool
+    status: DRAFT
+
+openDecisionSets:
+  - ids: [Q-007]
+    blocks: [exact-p0-exit-boundary]
+  - ids: [Q-102, Q-103, Q-104, Q-105, Q-106]
+    blocks: [organization-requirements, permission-matrix, asset-owner-contract]
+  - ids: [Q-201, Q-202, Q-203, Q-204, Q-205, Q-206]
+    blocks: [asset-version-release-requirements]
+  - ids: [Q-301, Q-302, Q-303, Q-304, Q-305]
+    blocks: [ui-acceptance, non-functional-baseline]
+
+executionGates:
+  requireRootAgentsMd: true
+  requireAcceptedDecisions: true
+  requireReadyRequirements: true
+  requireTaskCard: true
+  requireEvidenceManifest: true
+  skippedChecksCountAsPass: false
+  historicalCompletionClaimsAreNormative: false
+  allowProductCodeChangesFromDraft: false

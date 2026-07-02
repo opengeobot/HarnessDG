@@ -1,0 +1,63 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-<task>-<sequence>
+status: DRAFT
+
+task:
+  taskId: TASK-...
+  requirements: [REQ-...]
+  scenarios: [AC-...]
+
+source:
+  branch: ...
+  commitSha: ...
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: ...
+  os: ...
+  timezone: ...
+  java: ...
+  node: ...
+  pnpm: ...
+  docker: ...
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: ...
+  command: ...
+  startedAt: ...
+  finishedAt: ...
+  exitCode: null
+  result: PASS # PASS | FAIL | SKIP
+  evidenceLevel: E1 # E1 | E2 | E3 | E4 | E5
+
+coverage:
+  proven:
+    - scenarioId: AC-...
+      assertion: ...
+  notProven: []
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: false
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: ...
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
