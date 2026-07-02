@@ -36,6 +36,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *
  * <p>使用真实 PostgreSQL 验证 Flyway 迁移、MyBatis-Plus CRUD、jsonb 类型处理与显式 SQL 检索协同工作。
  * 无 Docker 时整体跳过，不阻断 {@code ./mvnw verify}。默认 Noop 仓库开通器使流程无需 Gitea。
+ *
+ * <p>注意：本 IT 依赖授权/字典/标签治理 Bean 的完整上下文；无 Docker 时跳过。
  */
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest
@@ -60,9 +62,9 @@ class AssetCatalogIT {
     private AssetApplicationService assetService;
 
     private CreateAssetCommand modelCommand(String name) {
-        return new CreateAssetCommand(AssetType.MODEL, "nlp", name, name + " 展示名",
+        return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", name, name + " 展示名",
                 "领域问答模型，关键词 qwendomain", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation", "llm"), "Apache-2.0",
+                List.of("text-generation", "llm"), null, "Apache-2.0",
                 new ModelProfile("pytorch", "text-generation", "decoder-only"), null, "usr_01");
     }
 
@@ -76,18 +78,18 @@ class AssetCatalogIT {
         assertThat(fetched.model().framework()).isEqualTo("pytorch");
         assertThat(fetched.tags()).contains("llm");
 
-        // 关键词 + 框架 + 标签过滤命中。
+        // 关键词 + 框架 + owner 过滤命中。
         CursorPage<?> hit = assetService.searchAssets(new AssetSearchQuery("qwendomain", AssetType.MODEL,
-                "nlp", "pytorch", null, null, null, "llm", "team-nlp", false, null, 10, "usr_01"));
+                "nlp", null, "pytorch", null, null, null, null, "team-nlp", false, null, 10, "usr_01"));
         assertThat(hit.items()).hasSize(1);
 
         // 不匹配的框架过滤为空。
         CursorPage<?> miss = assetService.searchAssets(new AssetSearchQuery(null, AssetType.MODEL,
-                null, "tensorflow", null, null, null, null, null, false, null, 10, "usr_01"));
+                null, null, "tensorflow", null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(miss.items()).isEmpty();
 
-        assetService.updateAsset(created.assetId(), new UpdateAssetCommand("改名后", "新描述",
-                Visibility.PUBLIC, List.of("team-platform"), List.of("chat"), "MIT",
+        assetService.updateAsset(created.assetId(), new UpdateAssetCommand(null, null, "改名后", "新描述",
+                Visibility.PUBLIC, List.of("team-platform"), List.of("chat"), null, "MIT",
                 new ModelProfile("vllm", "chat", null), null, "usr_02"));
         AssetView updated = assetService.getAsset(created.assetId(), "usr_02");
         assertThat(updated.displayName()).isEqualTo("改名后");
@@ -105,13 +107,14 @@ class AssetCatalogIT {
         assertThatThrownBy(() -> assetService.createAsset(modelCommand("dup-model")))
                 .isInstanceOf(ConflictException.class);
 
-        AssetView dataset = assetService.createAsset(new CreateAssetCommand(AssetType.DATASET, "vision",
-                "defect-images", "缺陷图像", "图像数据集", Visibility.PRIVATE, List.of("team-cv"),
-                List.of("vision"), "CC-BY-4.0", null, new DatasetProfile("parquet", "image"), "usr_01"));
+        AssetView dataset = assetService.createAsset(new CreateAssetCommand(AssetType.DATASET, null, null,
+                "vision", "defect-images", "缺陷图像", "图像数据集", Visibility.PRIVATE,
+                List.of("team-cv"), List.of("vision"), null, "CC-BY-4.0", null,
+                new DatasetProfile("parquet", "image"), "usr_01"));
         assertThat(dataset.dataset().format()).isEqualTo("parquet");
 
         CursorPage<?> datasets = assetService.searchAssets(new AssetSearchQuery(null, AssetType.DATASET,
-                null, null, "parquet", "image", null, null, null, false, null, 10, "usr_01"));
+                null, null, null, null, "parquet", "image", null, null, false, null, 10, "usr_01"));
         assertThat(datasets.items()).hasSize(1);
     }
 }

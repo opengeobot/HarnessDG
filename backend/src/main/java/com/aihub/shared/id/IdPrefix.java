@@ -28,6 +28,39 @@ public enum IdPrefix {
     /** 项目。 */
     PROJECT("prj"),
 
+    /** 组织/项目成员关系。 */
+    MEMBER("mbr"),
+
+    /** 受控标签。 */
+    TAG("tag"),
+
+    /** 角色。 */
+    ROLE("rol"),
+
+    /** 权限。 */
+    PERMISSION("prm"),
+
+    /** 角色绑定。 */
+    ROLE_BINDING("rbd"),
+
+    /** 资源 ACL。 */
+    RESOURCE_ACL("acl"),
+
+    /** 字典项。 */
+    DICT("dct"),
+
+    /** 配置项。 */
+    CONFIG("cfg"),
+
+    /** 通知。 */
+    NOTIFICATION("ntf"),
+
+    /** Webhook。 */
+    WEBHOOK("whk"),
+
+    /** 凭据 / Token（仅承载摘要标识，非 Token 明文）。 */
+    TOKEN("tok"),
+
     /** 资产。 */
     ASSET("ast"),
 

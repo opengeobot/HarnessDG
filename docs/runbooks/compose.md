@@ -1,6 +1,6 @@
 # Compose 部署与验证 Runbook
 
-本文档说明如何在本地通过 Docker Compose 启动 AIHub 平台基线环境并执行 P0 验收。Compose 仅用于本地开发、CI 功能验证与单机 PoC，不提供高可用，生产重要数据不得只保存在单机 Volume 中。当前脚本只覆盖已完成的 P0-A；P0-B 公共平台底座仍在整改，不能把 V01-V03 通过解释为整个 P0 完成。
+本文档说明如何在本地通过 Docker Compose 启动 AIHub 平台基线环境并执行验收。Compose 仅用于本地开发、CI 功能验证与单机 PoC，不提供高可用，生产重要数据不得只保存在单机 Volume 中。脚本现覆盖 P0-A（V01-V03）与 P0-B 公共底座冒烟（V04-V11）；未启动全栈时相关用例只标 SKIP，SKIP 不等于 PASS，不能把部分通过解释为整个 P0 完成。
 
 ## 目录
 
@@ -12,7 +12,7 @@ deploy/compose/
 ├─ postgres/init/01-create-gitea-db.sql
 ├─ minio/init.sh                      # 创建 4 个 Bucket 与最小权限账号
 ├─ scripts/bootstrap.ps1              # 引导（准备 .env、构建、启动）
-├─ scripts/verify.ps1                 # P0 验收（V01-V03）
+├─ scripts/verify.ps1                # 验收（V01-V11）
 ├─ scripts/verify.sh                  # 同上，Shell 等价
 └─ fixtures/model/                    # 验证用最小资产 fixture
 ```
@@ -89,6 +89,61 @@ docker compose up -d
 - Prometheus Target、Trace 贯通和受保护的系统诊断端点。
 
 资产创建、DVC 往返、发布和 MCP 等后续业务用例分别由 P1-P4 在公共底座上补充。
+
+## P0-B 验收范围（V04-V11）
+
+自 P0-B 起，`verify.ps1` / `verify.sh` 在 V01-V03 之外新增公共底座冒烟用例。脚本以网关基址
+`http://localhost:8080` 访问 REST，用例编号与覆盖点如下：
+
+| 用例 | 覆盖 | 前置 |
+| --- | --- | --- |
+| **V04** | Flyway V1-V12 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`audit_log`/`notification`）存在 | postgres 容器运行 |
+| **V05** | 用登录 bootstrap 管理员签发 JWT、携带 access token 调 `/me` 返回 200、无 Token 调 `/system/users` 返回 401（fail-closed） | backend readiness 就绪、bootstrap 管理员已创建 |
+| **V06** | `/system/audit-logs`、`/system/metrics/summary` 无 Token→401、越权 Token→403 | backend 就绪 |
+| **V07** | `/system/dictionaries`、`/system/tags` 无 Token→401、越权 Token→403 | backend 就绪 |
+| **V08** | `audit_log` 表存在且任何正文都不含明文口令（脱敏恒定不变式）；identity 登录审计接入待统一，故不断言登录事件计数 | postgres 就绪 |
+| **V09** | `/system/jobs` 默认拒绝 | backend 就绪 |
+| **V10** | `/system/notifications` 默认拒绝 | backend 就绪 |
+| **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）默认拒绝 | backend 就绪 |
+
+### 前置：bootstrap 管理员凭据
+
+V05-V08 需要一个可登录的管理员。Compose `backend` 服务通过 `.env` 的
+`AIHUB_BOOTSTRAP_ADMIN_USERNAME` / `AIHUB_BOOTSTRAP_ADMIN_PASSWORD` 引导首个管理员
+（`.env.example` 提供开发默认 `admin` / `change-me-admin-01`；生产须改用 Secret 文件并强制首登改密）。
+脚本按 `.env` → `.env.example` → 内置默认的顺序读取该凭据。首登强制改密不影响 `/me`（改密门放行认证与 `/me`）。
+
+由于 bootstrap 管理员默认仅持 `ADMIN_SCOPES`（user/authorization/agent），V06-V11 以
+“无 Token→401、越权 Token→403”验证**默认拒绝**语义，而非以管理员令牌断言 200。完整“有权限 200”
+路径由后端集成测试（如 `AuthorizationIT`）覆盖。
+
+### 运行方式
+
+完整验收需先启动全栈，再运行脚本：
+
+```powershell
+cd deploy/compose
+Copy-Item .env.example .env
+docker compose up -d          # 拉取镜像并构建 backend/frontend，首次较慢
+./scripts/verify.ps1
+```
+
+```bash
+cd deploy/compose
+cp .env.example .env
+docker compose up -d
+./scripts/verify.sh
+```
+
+### Docker / 服务不可用时的行为
+
+脚本对每个用例先探测依赖服务是否在运行：
+
+- 未执行 `docker compose up` 时，V02-V11 会逐项输出 **SKIP** 并附原因（如“backend 不可达”“postgres 容器未运行”），
+  **不会**误报为 PASS，也不会因缺少服务而 FAIL 崩溃。
+- 只有真实断言失败（如迁移缺失、fail-closed 被绕过、审计缺失或明文口令泄漏）才记为 **FAIL** 并以非零码退出。
+- 因此“仅 `docker compose config` 通过”与“全栈就绪后全部 PASS”是两种不同结果；SKIP 数量会在结尾汇总提示，
+  提醒必须在服务就绪后补验，SKIP 绝不等同于通过。
 
 ## 健康检查分层
 

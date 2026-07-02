@@ -25,6 +25,8 @@ final class AssetRequestMapper {
     static CreateAssetCommand toCreateCommand(CreateAssetRequest request, String principalId) {
         return new CreateAssetCommand(
                 request.type(),
+                request.organizationId(),
+                request.projectId(),
                 request.namespace(),
                 request.name(),
                 request.displayName(),
@@ -32,6 +34,7 @@ final class AssetRequestMapper {
                 request.visibility(),
                 request.owners(),
                 request.tags(),
+                request.tagIds(),
                 request.license(),
                 toModelProfile(request.model()),
                 toDatasetProfile(request.dataset()),
@@ -40,11 +43,14 @@ final class AssetRequestMapper {
 
     static UpdateAssetCommand toUpdateCommand(UpdateAssetRequest request, String principalId) {
         return new UpdateAssetCommand(
+                request.organizationId(),
+                request.projectId(),
                 request.displayName(),
                 request.description(),
                 request.visibility(),
                 request.owners(),
                 request.tags(),
+                request.tagIds(),
                 request.license(),
                 toModelProfile(request.model()),
                 toDatasetProfile(request.dataset()),
@@ -54,18 +60,19 @@ final class AssetRequestMapper {
     static AssetSearchQuery toSearchQuery(String keyword,
                                           AssetType type,
                                           String namespace,
+                                          String organizationId,
                                           String framework,
                                           String task,
                                           String format,
                                           String modality,
-                                          String tag,
+                                          String tagId,
                                           String owner,
                                           boolean includeArchived,
                                           String cursor,
                                           int limit,
                                           String principalId) {
-        return new AssetSearchQuery(keyword, type, namespace, framework, task, format, modality,
-                tag, owner, includeArchived, cursor, limit, principalId);
+        return new AssetSearchQuery(keyword, type, namespace, organizationId, framework, task,
+                format, modality, tagId, owner, includeArchived, cursor, limit, principalId);
     }
 
     private static ModelProfile toModelProfile(CreateAssetRequest.ModelInput input) {

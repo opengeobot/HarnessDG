@@ -25,6 +25,8 @@ import java.util.List;
  * @param dataset     数据集画像（数据集类有效）
  */
 public record CreateAssetRequest(AssetType type,
+                                 String organizationId,
+                                 String projectId,
                                  String namespace,
                                  String name,
                                  String displayName,
@@ -32,6 +34,7 @@ public record CreateAssetRequest(AssetType type,
                                  Visibility visibility,
                                  List<String> owners,
                                  List<String> tags,
+                                 List<String> tagIds,
                                  String license,
                                  ModelInput model,
                                  DatasetInput dataset) {

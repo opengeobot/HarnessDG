@@ -9,6 +9,7 @@ import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.shared.logging.LogFields;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +17,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -25,13 +27,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * HTTP 入口请求上下文过滤器。
  *
- * <p>作为入口适配器统一建立请求关联上下文：接收或生成 {@code X-Request-Id}，从 {@code traceparent}
- * 提取或生成 traceId，并解析 {@code Accept-Language}。设计要求所有入口（Controller/MCP/Worker）
- * 统一建立 {@link PrincipalContext}，业务代码只读取不解析底层凭据。
+ * <p>作为最先执行的入口适配器，统一建立请求关联上下文：接收或生成 {@code X-Request-Id}，从
+ * {@code traceparent} 提取或生成 traceId，并解析 {@code Accept-Language}，写入 MDC 供结构化日志使用。
  *
- * <p>P0 阶段尚未接入身份认证，本过滤器仅承载请求关联信息（requestId/traceId/locale），
- * 主体身份字段留空；真实主体解析在 P3 身份与权限阶段由认证适配器填充。
- * 过滤器最先执行并在请求结束后清理 ThreadLocal，避免线程复用导致上下文串台。
+ * <p>本过滤器只承载请求关联信息（requestId/traceId/locale），不解析任何凭据、不建立已认证主体；
+ * 真实主体身份由后续 {@code JwtAuthenticationFilter} 在 Token 校验通过后补全。绝不注入全 Scope。
+ * 过滤器在请求结束后清理 ThreadLocal 与 MDC，避免线程复用导致上下文串台。
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -60,6 +61,7 @@ public class PrincipalContextFilter extends OncePerRequestFilter {
         String traceId = resolveTraceId(request);
         String locale = resolveLocale(request);
 
+        // 仅承载请求关联信息：principalId/principalType 留空，scopes 为空集合（非全 Scope）。
         PrincipalContextHolder.set(new PrincipalContext(
                 null,
                 null,
@@ -73,6 +75,9 @@ public class PrincipalContextFilter extends OncePerRequestFilter {
                 requestId,
                 traceId));
 
+        MDC.put(LogFields.REQUEST_ID, requestId);
+        MDC.put(LogFields.TRACE_ID, traceId);
+
         // 回显关联标识，便于客户端与网关串联日志与 Trace。
         response.setHeader(REQUEST_ID_HEADER, requestId);
         response.setHeader(TRACE_ID_HEADER, traceId);
@@ -80,6 +85,7 @@ public class PrincipalContextFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             PrincipalContextHolder.clear();
+            MDC.clear();
         }
     }
 

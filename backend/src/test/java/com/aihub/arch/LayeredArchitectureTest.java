@@ -28,8 +28,11 @@ class LayeredArchitectureTest {
 
     private static final String[] BUSINESS_MODULES = {
             "com.aihub.identity..",
+            "com.aihub.authorization..",
             "com.aihub.organization..",
             "com.aihub.asset..",
+            "com.aihub.taxonomy..",
+            "com.aihub.configuration..",
             "com.aihub.version..",
             "com.aihub.transfer..",
             "com.aihub.integration..",
@@ -37,6 +40,7 @@ class LayeredArchitectureTest {
             "com.aihub.job..",
             "com.aihub.mcp..",
             "com.aihub.audit..",
+            "com.aihub.notification..",
             "com.aihub.bootstrap.."
     };
 

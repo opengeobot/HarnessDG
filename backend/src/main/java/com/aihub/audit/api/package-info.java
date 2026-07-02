@@ -5,6 +5,6 @@
  */
 
 /**
- * audit 模块（审计、Outbox、操作记录）的 api 适配层。当前为骨架占位。
+ * audit 模块的 api 适配层——审计记录查询的 REST 端点。
  */
 package com.aihub.audit.api;

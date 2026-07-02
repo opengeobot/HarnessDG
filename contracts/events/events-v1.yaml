@@ -1,0 +1,250 @@
+# AIHub 平台事件契约 - P0-B 目标
+# 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5.12、6.7、14.1 节
+# 说明：定义统一事件信封（Envelope）与各 eventType 的脱敏负载（payload）Schema，
+#       作为 Outbox 可靠投递、站内通知、Webhook 外发与 Inbox 幂等消费的权威来源。
+#       本文件仅描述 P0-B 目标契约，x-implementation-status 区分 planned/partial，
+#       不能据此声称能力已经实现。
+# 作者：AxeXie
+openapi: 3.1.0
+x-contract-status: target-p0-b
+x-document-version: 1.0
+info:
+  title: AIHub Platform Event Contracts
+  version: v1
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: |
+    平台事件 Schema。所有事件统一封装为 EventEnvelope，通过 Outbox 异步发布，模板与渠道解耦。
+    事件负载必须脱敏：禁止携带明文密码、JWT、刷新令牌、预签名 URL、对象存储凭据或完整敏感样本。
+    消费方依赖稳定的 eventType 与 schemaVersion 做分支与兼容演进，不依赖本地化文案。
+
+# 事件投递与签名约定见文件末尾 x-delivery-conventions 扩展，以及 contracts/events/README.md。
+x-delivery-conventions:
+  outbox:
+    description: |
+      事件先在产生事件的同一数据库事务内写入 outbox_event 表（与核心业务变更原子提交），
+      再由后台可靠任务（job_task + Worker）轮询发布到站内通知、邮件、Webhook 与 Agent Callback。
+      发布失败不回滚已完成的核心业务事务，但必须可重试、可观测；超过阈值的投递进入 DEAD 并告警。
+    ordering: 同一 aggregateId 的事件按 occurredAt 单调递增；消费方按 eventId 幂等去重。
+    idempotency: 消费方以 eventId 作为幂等键；入站 Webhook 以 deliveryId 写入 webhook_inbox 去重。
+  webhookSignature:
+    description: |
+      对外 Webhook 投递带签名头，防止伪造与重放，并在出站侧做 SSRF 防护（禁止内网地址、限制协议与端口）。
+    headers:
+      X-AIHub-Event: 事件类型（eventType）。
+      X-AIHub-Delivery: 投递唯一 ID（deliveryId），用于接收方幂等。
+      X-AIHub-Timestamp: 投递 Unix 时间戳（秒），接收方拒绝超出容忍窗口的请求。
+      X-AIHub-Signature: 'HMAC-SHA256 签名，格式 sha256=<hex>，对 {timestamp}.{rawBody} 计算。'
+    note: 签名密钥属于部署安全配置，不进入数据库配置中心、Git、日志或事件负载。
+
+components:
+  schemas:
+    EventType:
+      type: string
+      description: 稳定事件类型枚举。新增类型按兼容策略追加，不复用或重命名既有值。
+      enum:
+        - VERSION_REVIEW_REQUESTED
+        - VERSION_APPROVED
+        - VERSION_REJECTED
+        - VERSION_PUBLISHED
+        - VERSION_DEPRECATED
+        - UPLOAD_FAILED
+        - JOB_DEAD
+        - AGENT_ACCESS_DENIED
+        - STORAGE_QUOTA_WARNING
+        - SYSTEM_DEPENDENCY_UNHEALTHY
+
+    AggregateType:
+      type: string
+      description: 事件聚合根类型，用于路由、订阅与对账。
+      enum: [ASSET_VERSION, UPLOAD_SESSION, JOB, AGENT, STORAGE, SYSTEM_DEPENDENCY]
+
+    EventEnvelope:
+      type: object
+      description: |
+        统一事件信封。payload 结构由 eventType + schemaVersion 决定，
+        见各 *Payload Schema 与 EventPayload 的 discriminator 映射。
+      additionalProperties: false
+      required:
+        - eventId
+        - eventType
+        - schemaVersion
+        - occurredAt
+        - aggregateType
+        - aggregateId
+        - payload
+      properties:
+        eventId:
+          type: string
+          description: 事件全局唯一 ID，消费方据此幂等去重。
+          pattern: '^evt_'
+          example: evt_01J0000000000000000000000
+        eventType:
+          $ref: '#/components/schemas/EventType'
+        schemaVersion:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 事件负载 Schema 版本，用于兼容演进。
+        occurredAt:
+          type: string
+          format: date-time
+          description: 事件业务发生时间（UTC）。
+        traceId:
+          type: [string, 'null']
+          description: 关联分布式追踪 ID，异步发布通过 Span Link 关联。
+          example: 4bf92f3577b34da6a3ce929d0e0e4736
+        principalId:
+          type: [string, 'null']
+          description: 触发事件的主体 ID；系统自发事件可为 null。
+          pattern: '^prn_'
+        aggregateType:
+          $ref: '#/components/schemas/AggregateType'
+        aggregateId:
+          type: string
+          description: 聚合根稳定业务 ID（如 versionId、jobId、agentId）。
+        payload:
+          $ref: '#/components/schemas/EventPayload'
+
+    EventPayload:
+      description: 事件负载多态联合，按 eventType 区分。
+      oneOf:
+        - $ref: '#/components/schemas/VersionReviewRequestedPayload'
+        - $ref: '#/components/schemas/VersionApprovedPayload'
+        - $ref: '#/components/schemas/VersionRejectedPayload'
+        - $ref: '#/components/schemas/VersionPublishedPayload'
+        - $ref: '#/components/schemas/VersionDeprecatedPayload'
+        - $ref: '#/components/schemas/UploadFailedPayload'
+        - $ref: '#/components/schemas/JobDeadPayload'
+        - $ref: '#/components/schemas/AgentAccessDeniedPayload'
+        - $ref: '#/components/schemas/StorageQuotaWarningPayload'
+        - $ref: '#/components/schemas/SystemDependencyUnhealthyPayload'
+
+    VersionReviewRequestedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, version, requestedBy]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        version: { type: string, description: 语义版本标签，如 1.2.0。 }
+        requestedBy: { type: string, pattern: '^prn_' }
+        reviewers:
+          type: array
+          items: { type: string, pattern: '^prn_' }
+        note: { type: [string, 'null'], maxLength: 1024 }
+
+    VersionApprovedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, version, approvedBy]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        version: { type: string }
+        approvedBy: { type: string, pattern: '^prn_' }
+        comment: { type: [string, 'null'], maxLength: 1024 }
+
+    VersionRejectedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, version, rejectedBy, reasonCode]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        version: { type: string }
+        rejectedBy: { type: string, pattern: '^prn_' }
+        reasonCode: { type: string, description: 稳定拒绝原因码，便于分支与统计。 }
+        comment: { type: [string, 'null'], maxLength: 1024 }
+
+    VersionPublishedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, version, gitTag, commitSha, publishedBy]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        version: { type: string }
+        gitTag: { type: string, description: 发布不可变标识之一：Git Tag。 }
+        commitSha: { type: string, description: 发布不可变标识之一：Commit SHA。 }
+        manifestDigest: { type: [string, 'null'], description: Manifest/DVC 摘要。 }
+        publishedBy: { type: string, pattern: '^prn_' }
+
+    VersionDeprecatedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, version, deprecatedBy]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        version: { type: string }
+        deprecatedBy: { type: string, pattern: '^prn_' }
+        replacementVersion: { type: [string, 'null'] }
+        reason: { type: [string, 'null'], maxLength: 1024 }
+
+    UploadFailedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, uploadSessionId, errorCode]
+      properties:
+        assetId: { type: string }
+        versionId: { type: [string, 'null'] }
+        uploadSessionId: { type: string }
+        errorCode: { type: string, description: 语义错误码，对齐 ErrorCode 枚举。 }
+        retryable: { type: boolean, default: false }
+        failedAt: { type: string, format: date-time }
+
+    JobDeadPayload:
+      type: object
+      additionalProperties: false
+      required: [jobId, jobType, retryCount, errorCode]
+      properties:
+        jobId: { type: string, pattern: '^job_' }
+        jobType: { type: string }
+        retryCount: { type: integer, minimum: 0 }
+        errorCode: { type: string }
+        lastAttemptAt: { type: [string, 'null'], format: date-time }
+
+    AgentAccessDeniedPayload:
+      type: object
+      additionalProperties: false
+      required: [agentId, deniedReason]
+      properties:
+        agentId: { type: string, pattern: '^agt_' }
+        tool: { type: [string, 'null'], description: 被拒绝的 MCP Tool 名称（非敏感）。 }
+        requiredScope: { type: [string, 'null'] }
+        requiredPermission: { type: [string, 'null'] }
+        resourceId: { type: [string, 'null'] }
+        deniedReason:
+          type: string
+          description: 稳定拒绝原因码。
+          enum: [SCOPE_MISSING, PERMISSION_DENIED, TOOL_NOT_ALLOWED, SENSITIVITY_EXCEEDED, PRINCIPAL_DISABLED]
+
+    StorageQuotaWarningPayload:
+      type: object
+      additionalProperties: false
+      required: [scopeType, scopeId, usedBytes, quotaBytes, usageRatio]
+      properties:
+        scopeType:
+          type: string
+          enum: [PLATFORM, ORGANIZATION, PROJECT]
+        scopeId: { type: [string, 'null'] }
+        usedBytes: { type: integer, format: int64, minimum: 0 }
+        quotaBytes: { type: integer, format: int64, minimum: 0 }
+        usageRatio: { type: number, minimum: 0, maximum: 1, description: 使用率，达到告警阈值时发出。 }
+
+    SystemDependencyUnhealthyPayload:
+      type: object
+      additionalProperties: false
+      required: [dependency, status]
+      properties:
+        dependency:
+          type: string
+          enum: [postgres, gitea, minio]
+        status:
+          type: string
+          enum: [DEGRADED, DOWN]
+        latencyMs: { type: [integer, 'null'], format: int64 }
+        errorCode: { type: [string, 'null'] }
+        detectedAt: { type: string, format: date-time }

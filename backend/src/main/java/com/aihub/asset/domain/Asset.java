@@ -23,6 +23,8 @@ public final class Asset {
 
     private final String assetId;
     private final AssetType type;
+    private String organizationId;
+    private String projectId;
     private final String namespace;
     private final String name;
 
@@ -32,6 +34,7 @@ public final class Asset {
     private AssetStatus status;
     private List<String> owners;
     private List<String> tags;
+    private List<String> tagIds;
     private String license;
     private ModelProfile modelProfile;
     private DatasetProfile datasetProfile;
@@ -46,6 +49,8 @@ public final class Asset {
     private Asset(Builder builder) {
         this.assetId = builder.assetId;
         this.type = builder.type;
+        this.organizationId = builder.organizationId;
+        this.projectId = builder.projectId;
         this.namespace = builder.namespace;
         this.name = builder.name;
         this.displayName = builder.displayName;
@@ -54,6 +59,7 @@ public final class Asset {
         this.status = builder.status;
         this.owners = normalizeList(builder.owners);
         this.tags = normalizeList(builder.tags);
+        this.tagIds = normalizeList(builder.tagIds);
         this.license = builder.license;
         this.modelProfile = builder.modelProfile;
         this.datasetProfile = builder.datasetProfile;
@@ -70,6 +76,8 @@ public final class Asset {
      *
      * @param assetId        业务资产 ID
      * @param type           资产类型
+     * @param organizationId 所属组织 ID
+     * @param projectId      所属项目 ID
      * @param namespace      命名空间
      * @param name           名称
      * @param displayName    展示名称
@@ -85,6 +93,8 @@ public final class Asset {
      */
     public static Asset create(String assetId,
                                AssetType type,
+                               String organizationId,
+                               String projectId,
                                String namespace,
                                String name,
                                String displayName,
@@ -92,6 +102,7 @@ public final class Asset {
                                Visibility visibility,
                                List<String> owners,
                                List<String> tags,
+                               List<String> tagIds,
                                String license,
                                ModelProfile modelProfile,
                                DatasetProfile datasetProfile,
@@ -104,6 +115,8 @@ public final class Asset {
         Builder builder = new Builder()
                 .assetId(assetId)
                 .type(type)
+                .organizationId(organizationId)
+                .projectId(projectId)
                 .namespace(namespace)
                 .name(name)
                 .displayName(displayName)
@@ -112,6 +125,7 @@ public final class Asset {
                 .status(AssetStatus.ACTIVE)
                 .owners(owners)
                 .tags(tags)
+                .tagIds(tagIds)
                 .license(license)
                 .createdBy(createdBy)
                 .updatedBy(createdBy)
@@ -125,15 +139,20 @@ public final class Asset {
     /**
      * 修改可变元数据。坐标（namespace/type/name）与创建审计不可变。
      */
-    public void updateMetadata(String displayName,
+    public void updateMetadata(String organizationId,
+                               String projectId,
+                               String displayName,
                                String description,
                                Visibility visibility,
                                List<String> owners,
                                List<String> tags,
+                               List<String> tagIds,
                                String license,
                                ModelProfile modelProfile,
                                DatasetProfile datasetProfile,
                                String updatedBy) {
+        this.organizationId = normalizeNullable(organizationId);
+        this.projectId = normalizeNullable(projectId);
         this.displayName = displayName;
         this.description = description;
         if (visibility != null) {
@@ -144,6 +163,9 @@ public final class Asset {
         }
         if (tags != null) {
             this.tags = normalizeList(tags);
+        }
+        if (tagIds != null) {
+            this.tagIds = normalizeList(tagIds);
         }
         this.license = license;
         if (type == AssetType.MODEL && modelProfile != null) {
@@ -202,6 +224,13 @@ public final class Asset {
                 .toList();
     }
 
+    private static String normalizeNullable(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
     private static void requireSlug(String value, String field) {
         if (value == null || !SLUG_PATTERN.matcher(value).matches()) {
             throw new IllegalArgumentException(
@@ -215,6 +244,14 @@ public final class Asset {
 
     public AssetType type() {
         return type;
+    }
+
+    public String organizationId() {
+        return organizationId;
+    }
+
+    public String projectId() {
+        return projectId;
     }
 
     public String namespace() {
@@ -247,6 +284,10 @@ public final class Asset {
 
     public List<String> tags() {
         return tags;
+    }
+
+    public List<String> tagIds() {
+        return tagIds;
     }
 
     public String license() {
@@ -291,6 +332,8 @@ public final class Asset {
     public static final class Builder {
         private String assetId;
         private AssetType type;
+        private String organizationId;
+        private String projectId;
         private String namespace;
         private String name;
         private String displayName;
@@ -299,6 +342,7 @@ public final class Asset {
         private AssetStatus status;
         private List<String> owners;
         private List<String> tags;
+        private List<String> tagIds;
         private String license;
         private ModelProfile modelProfile;
         private DatasetProfile datasetProfile;
@@ -316,6 +360,16 @@ public final class Asset {
 
         public Builder type(AssetType type) {
             this.type = type;
+            return this;
+        }
+
+        public Builder organizationId(String organizationId) {
+            this.organizationId = normalizeNullable(organizationId);
+            return this;
+        }
+
+        public Builder projectId(String projectId) {
+            this.projectId = normalizeNullable(projectId);
             return this;
         }
 
@@ -356,6 +410,11 @@ public final class Asset {
 
         public Builder tags(List<String> tags) {
             this.tags = tags;
+            return this;
+        }
+
+        public Builder tagIds(List<String> tagIds) {
+            this.tagIds = tagIds;
             return this;
         }
 

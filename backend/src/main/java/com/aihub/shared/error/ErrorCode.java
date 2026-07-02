@@ -21,8 +21,117 @@ public enum ErrorCode {
     /** 认证 Token 已过期。 */
     AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "error.auth.tokenExpired", false, AlertLevel.INFO),
 
+    /** 未认证或凭据无效（缺失/伪造/签名校验失败 Token）。 */
+    AUTH_UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "error.auth.unauthenticated", false, AlertLevel.INFO),
+
     /** 无访问权限。 */
     AUTH_PERMISSION_DENIED(HttpStatus.FORBIDDEN, "error.auth.permissionDenied", false, AlertLevel.INFO),
+
+    /** 用户名或口令错误（登录失败，不区分以防枚举）。 */
+    AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "error.auth.invalidCredentials", false, AlertLevel.INFO),
+
+    /** 账户因连续登录失败被锁定。 */
+    AUTH_ACCOUNT_LOCKED(HttpStatus.LOCKED, "error.auth.accountLocked", false, AlertLevel.WARN),
+
+    /** 账户已禁用。 */
+    AUTH_ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "error.auth.accountDisabled", false, AlertLevel.WARN),
+
+    /** 刷新令牌重放被拒（已轮换/已吊销的刷新令牌被再次使用，整族吊销）。 */
+    AUTH_REFRESH_REPLAYED(HttpStatus.UNAUTHORIZED, "error.auth.refreshReplayed", false, AlertLevel.WARN),
+
+    /** 必须先修改口令才能访问其他受保护资源。 */
+    PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "error.auth.passwordChangeRequired", false, AlertLevel.INFO),
+
+    /** 新口令不满足强度策略。 */
+    PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "error.auth.passwordPolicyViolation", false, AlertLevel.NONE),
+
+    /** 用户名已存在。 */
+    USER_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.user.alreadyExists", false, AlertLevel.NONE),
+
+    /** 用户不存在。 */
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.user.notFound", false, AlertLevel.NONE),
+
+    /** Agent 不存在。 */
+    AGENT_NOT_FOUND(HttpStatus.NOT_FOUND, "error.agent.notFound", false, AlertLevel.NONE),
+
+    /** 角色不存在。 */
+    ROLE_NOT_FOUND(HttpStatus.NOT_FOUND, "error.role.notFound", false, AlertLevel.NONE),
+
+    /** 角色编码已存在。 */
+    ROLE_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.role.alreadyExists", false, AlertLevel.NONE),
+
+    /** 内置角色不可改名/删除。 */
+    ROLE_BUILTIN_IMMUTABLE(HttpStatus.CONFLICT, "error.role.builtinImmutable", false, AlertLevel.NONE),
+
+    /** 角色仍被绑定引用，不可删除。 */
+    ROLE_IN_USE(HttpStatus.CONFLICT, "error.role.inUse", false, AlertLevel.NONE),
+
+    /** 引用了未注册的权限编码。 */
+    PERMISSION_UNKNOWN(HttpStatus.BAD_REQUEST, "error.permission.unknown", false, AlertLevel.NONE),
+
+    /** 角色绑定不存在。 */
+    ROLE_BINDING_NOT_FOUND(HttpStatus.NOT_FOUND, "error.roleBinding.notFound", false, AlertLevel.NONE),
+
+    /** 角色绑定已存在。 */
+    ROLE_BINDING_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.roleBinding.alreadyExists", false, AlertLevel.NONE),
+
+    /** 资源 ACL 不存在。 */
+    RESOURCE_ACL_NOT_FOUND(HttpStatus.NOT_FOUND, "error.resourceAcl.notFound", false, AlertLevel.NONE),
+
+    /** 资源 ACL 已存在。 */
+    RESOURCE_ACL_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.resourceAcl.alreadyExists", false, AlertLevel.NONE),
+
+    /** 组织不存在（亦用于非成员访问组织资源的防枚举）。 */
+    ORGANIZATION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.organization.notFound", false, AlertLevel.NONE),
+
+    /** 组织编码已存在。 */
+    ORGANIZATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.organization.alreadyExists", false, AlertLevel.NONE),
+
+    /** 组织成员不存在。 */
+    ORGANIZATION_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.organization.memberNotFound", false, AlertLevel.NONE),
+
+    /** 组织成员已存在。 */
+    ORGANIZATION_MEMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.organization.memberAlreadyExists",
+            false, AlertLevel.NONE),
+
+    /** 项目不存在。 */
+    PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "error.project.notFound", false, AlertLevel.NONE),
+
+    /** 项目编码在组织内已存在。 */
+    PROJECT_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.project.alreadyExists", false, AlertLevel.NONE),
+
+    /** 访问主体不存在。 */
+    PRINCIPAL_NOT_FOUND(HttpStatus.NOT_FOUND, "error.principal.notFound", false, AlertLevel.NONE),
+
+    /** 资源被并发修改（乐观锁冲突，可重试）。 */
+    CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "error.common.concurrentModification", true, AlertLevel.NONE),
+
+    /** 字典项不存在。 */
+    DICTIONARY_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "error.dictionary.itemNotFound", false, AlertLevel.NONE),
+
+    /** 字典项在该字典下已存在。 */
+    DICTIONARY_ITEM_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.dictionary.itemAlreadyExists", false, AlertLevel.NONE),
+
+    /** 治理字段引用了未知或已停用的字典项（拒绝新建引用）。 */
+    DICTIONARY_VALUE_INVALID(HttpStatus.BAD_REQUEST, "error.dictionary.valueInvalid", false, AlertLevel.NONE),
+
+    /** 受控标签不存在。 */
+    TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "error.tag.notFound", false, AlertLevel.NONE),
+
+    /** 受控标签在该作用域下已存在。 */
+    TAG_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.tag.alreadyExists", false, AlertLevel.NONE),
+
+    /** 引用了未登记/已停用/作用域不允许的标签（拒绝自由标签）。 */
+    TAG_VALUE_INVALID(HttpStatus.BAD_REQUEST, "error.tag.valueInvalid", false, AlertLevel.NONE),
+
+    /** 配置项不存在。 */
+    CONFIG_NOT_FOUND(HttpStatus.NOT_FOUND, "error.config.notFound", false, AlertLevel.NONE),
+
+    /** 配置键命中敏感模式，禁止写入（密码/Token/私钥/凭据等）。 */
+    CONFIG_SECRET_FORBIDDEN(HttpStatus.BAD_REQUEST, "error.config.secretForbidden", false, AlertLevel.WARN),
+
+    /** 配置提交值不满足类型或校验器要求。 */
+    CONFIG_VALUE_INVALID(HttpStatus.BAD_REQUEST, "error.config.valueInvalid", false, AlertLevel.NONE),
 
     /** 资产不存在（亦用于私有资源防枚举）。 */
     ASSET_NOT_FOUND(HttpStatus.NOT_FOUND, "error.asset.notFound", false, AlertLevel.NONE),
@@ -61,6 +170,21 @@ public enum ErrorCode {
 
     /** 任务重试次数耗尽。 */
     JOB_RETRY_EXHAUSTED(HttpStatus.INTERNAL_SERVER_ERROR, "error.job.retryExhausted", false, AlertLevel.CRITICAL),
+
+    /** 任务不存在。 */
+    JOB_NOT_FOUND(HttpStatus.NOT_FOUND, "error.job.notFound", false, AlertLevel.NONE),
+
+    /** 任务当前状态不允许该操作。 */
+    JOB_STATE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.job.stateNotAllowed", false, AlertLevel.INFO),
+
+    /** 通知不存在或不属于当前主体。 */
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.notification.notFound", false, AlertLevel.NONE),
+
+    /** 幂等键冲突（同键不同请求体）。 */
+    IDEMPOTENCY_KEY_CONFLICT(HttpStatus.CONFLICT, "error.idempotency.keyConflict", false, AlertLevel.NONE),
+
+    /** Webhook 投递目标地址不安全（内网/保留地址被 SSRF 防护拒绝）。 */
+    WEBHOOK_TARGET_FORBIDDEN(HttpStatus.BAD_REQUEST, "error.webhook.targetForbidden", false, AlertLevel.WARN),
 
     /** 未归类的内部错误，对外不暴露细节。 */
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "error.common.internal", false, AlertLevel.CRITICAL);

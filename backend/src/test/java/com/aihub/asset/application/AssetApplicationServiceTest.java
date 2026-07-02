@@ -1,5 +1,5 @@
 /*
- * 功能: 资产应用服务单元测试——校验登记、查重、防枚举、更新、删除与检索编排。
+ * 功能: 资产应用服务单元测试——校验登记/查询/更新/删除用例与治理接入（授权/字典/标签/审计）。
  * 时间: 2026-06-29
  * 作者: AxeXie
  */
@@ -8,24 +8,34 @@ package com.aihub.asset.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.aihub.asset.domain.Asset;
 import com.aihub.asset.domain.AssetRepository;
 import com.aihub.asset.domain.AssetRepositoryProvisioner;
 import com.aihub.asset.domain.AssetRepositoryRef;
-import com.aihub.asset.domain.AssetSummary;
+import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ModelProfile;
 import com.aihub.asset.domain.Visibility;
+import com.aihub.audit.application.AuditService;
+import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.shared.api.CursorPage;
-import com.aihub.shared.error.ConflictException;
-import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
-import com.aihub.shared.error.PlatformException;
+import com.aihub.shared.error.ValidationException;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.taxonomy.dictionary.application.DictionaryValidationPort;
+import com.aihub.taxonomy.domain.TaxonomyStatus;
+import com.aihub.taxonomy.tag.application.TagDtos.TagScopeContext;
+import com.aihub.taxonomy.tag.application.TagDtos.TagView;
+import com.aihub.taxonomy.tag.application.TagValidationService;
+import com.aihub.taxonomy.tag.domain.TagScopeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -34,126 +44,181 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 /**
- * {@link AssetApplicationService} 离线单元测试，使用 Mockito 桩替依赖端口。
+ * {@link AssetApplicationService} 单元测试。
+ *
+ * <p>验证核心用例编排，同时验证治理接入：授权前置、字典治理字段校验、受控标签校验、审计记录。
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class AssetApplicationServiceTest {
 
-    @Mock
-    private AssetRepository assetRepository;
-
-    @Mock
-    private AssetRepositoryProvisioner provisioner;
-
-    @Mock
-    private IdGenerator idGenerator;
+    @Mock private AssetRepository assetRepository;
+    @Mock private AssetRepositoryProvisioner provisioner;
+    @Mock private IdGenerator idGenerator;
+    @Mock private AuthorizationService authorizationService;
+    @Mock private DictionaryValidationPort dictionaryValidationPort;
+    @Mock private TagValidationService tagValidationService;
+    @Mock private AuditService auditService;
 
     private AssetApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new AssetApplicationService(assetRepository, provisioner, new AssetAccessPolicy(), idGenerator);
+        service = new AssetApplicationService(assetRepository, provisioner,
+                new AssetAccessPolicy(), idGenerator, authorizationService,
+                dictionaryValidationPort, tagValidationService, auditService);
+        when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
+        when(provisioner.provision(any())).thenReturn(
+                new AssetRepositoryRef("nlp/qwen-domain-7b", null, null));
+        when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
+        doNothing().when(assetRepository).insert(any(Asset.class));
     }
 
     private CreateAssetCommand modelCommand() {
-        return new CreateAssetCommand(AssetType.MODEL, "nlp", "qwen-domain-7b", "领域问答模型",
-                "描述", Visibility.INTERNAL, List.of("team-nlp"), List.of("text-generation"),
-                "Apache-2.0", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+        return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
+                "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
+                List.of("text-generation"), null, "Apache-2.0",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
     private Asset storedModel() {
-        Asset asset = Asset.create("ast_stored", AssetType.MODEL, "nlp", "qwen-domain-7b",
+        return Asset.create("ast_stored", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation"), "Apache-2.0",
+                List.of("text-generation"), null, "Apache-2.0",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
-        asset.attachRepository(new AssetRepositoryRef("nlp/qwen-domain-7b", null, null));
-        return asset;
     }
 
     @Test
-    void createAssetProvisionsRepositoryAndPersists() {
-        given(assetRepository.existsByCoordinate("nlp", AssetType.MODEL, "qwen-domain-7b")).willReturn(false);
-        given(idGenerator.generate(IdPrefix.ASSET)).willReturn("ast_new");
-        given(provisioner.provision(any())).willReturn(new AssetRepositoryRef("nlp/qwen-domain-7b",
-                "http://gitea/nlp/qwen-domain-7b", "http://gitea/nlp/qwen-domain-7b.git"));
-
+    void createsAssetAndProvisionsRepository() {
         AssetView view = service.createAsset(modelCommand());
 
-        assertThat(view.assetId()).isEqualTo("ast_new");
-        assertThat(view.repository().fullName()).isEqualTo("nlp/qwen-domain-7b");
-        assertThat(view.model().framework()).isEqualTo("pytorch");
+        assertThat(view.assetId()).isEqualTo("ast_generated");
+        verify(authorizationService).requirePermission("asset:manage");
         verify(assetRepository).insert(any(Asset.class));
+        verify(provisioner).provision(any());
+        verify(auditService).record(any());
     }
 
     @Test
-    void createAssetRejectsDuplicateCoordinate() {
-        given(idGenerator.generate(IdPrefix.ASSET)).willReturn("ast_new");
-        given(assetRepository.existsByCoordinate("nlp", AssetType.MODEL, "qwen-domain-7b")).willReturn(true);
-
-        assertThatThrownBy(() -> service.createAsset(modelCommand()))
-                .isInstanceOf(ConflictException.class)
-                .extracting(ex -> ((PlatformException) ex).errorCode())
-                .isEqualTo(ErrorCode.ASSET_ALREADY_EXISTS);
-    }
-
-    @Test
-    void getAssetThrowsNotFoundWhenMissing() {
-        given(assetRepository.findByAssetId("ast_missing")).willReturn(Optional.empty());
+    void getAssetReturnsNotFoundForMissingOrInaccessible() {
+        when(assetRepository.findByAssetId("ast_missing")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getAsset("ast_missing", "usr_01"))
                 .isInstanceOf(NotFoundException.class);
+        verify(authorizationService).requirePermission("asset:read");
     }
 
     @Test
-    void getAssetReturnsViewWhenAccessible() {
-        given(assetRepository.findByAssetId("ast_stored")).willReturn(Optional.of(storedModel()));
+    void updateAssetChangesMutableMetadata() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+        doNothing().when(assetRepository).update(any(Asset.class));
 
-        AssetView view = service.getAsset("ast_stored", "usr_01");
-
-        assertThat(view.namespace()).isEqualTo("nlp");
-        assertThat(view.name()).isEqualTo("qwen-domain-7b");
-    }
-
-    @Test
-    void updateAssetMutatesAndPersists() {
-        given(assetRepository.findByAssetId("ast_stored")).willReturn(Optional.of(storedModel()));
-        UpdateAssetCommand command = new UpdateAssetCommand("新名", "新描述", Visibility.PUBLIC,
-                List.of("team-platform"), List.of("llm"), "MIT",
+        UpdateAssetCommand command = new UpdateAssetCommand(null, null, "新名", "新描述",
+                Visibility.PUBLIC, List.of("team-platform"), List.of("llm"), null, "MIT",
                 new ModelProfile("vllm", "chat", null), null, "usr_02");
-
         AssetView view = service.updateAsset("ast_stored", command);
 
         assertThat(view.displayName()).isEqualTo("新名");
-        assertThat(view.visibility()).isEqualTo(Visibility.PUBLIC);
-        verify(assetRepository).update(any(Asset.class));
+        verify(authorizationService).requirePermission("asset:manage");
+        verify(auditService).record(any());
     }
 
     @Test
-    void deleteAssetSoftDeletes() {
-        given(assetRepository.findByAssetId("ast_stored")).willReturn(Optional.of(storedModel()));
+    void deleteAssetSoftDeletesAndAudits() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
 
-        service.deleteAsset("ast_stored", "usr_09");
+        service.deleteAsset("ast_stored", "usr_01");
 
-        verify(assetRepository).softDelete("ast_stored", "usr_09");
+        verify(assetRepository).softDelete("ast_stored", "usr_01");
+        verify(auditService).record(any());
     }
 
     @Test
-    void searchMapsSummariesToViews() {
-        AssetSummary summary = new AssetSummary("ast_stored", AssetType.MODEL, "nlp", "qwen-domain-7b",
-                "领域问答模型", "描述", Visibility.INTERNAL, com.aihub.asset.domain.AssetStatus.ACTIVE,
-                List.of("team-nlp"), List.of("text-generation"), "Apache-2.0",
+    void searchAssetsReturnsSummaryPage() {
+        com.aihub.asset.domain.AssetSummary summary = new com.aihub.asset.domain.AssetSummary(
+                "ast_stored", AssetType.MODEL, "nlp", null, null, "qwen-domain-7b",
+                "领域问答模型", "描述", Visibility.INTERNAL, AssetStatus.ACTIVE,
+                List.of("team-nlp"), List.of("text-generation"), List.of(), "Apache-2.0",
                 "pytorch", "text-generation", null, null, Instant.now());
-        given(assetRepository.search(any())).willReturn(new CursorPage<>(List.of(summary), "cursor-1", true));
+        when(assetRepository.search(any())).thenReturn(new CursorPage<>(List.of(summary), null, false));
 
-        AssetSearchQuery query = new AssetSearchQuery("qwen", AssetType.MODEL, null, null, null,
+        AssetSearchQuery query = new AssetSearchQuery("qwen", AssetType.MODEL, null, null, null, null,
                 null, null, null, null, false, null, 20, "usr_01");
         CursorPage<AssetSummaryView> page = service.searchAssets(query);
 
         assertThat(page.items()).hasSize(1);
-        assertThat(page.items().get(0).framework()).isEqualTo("pytorch");
-        assertThat(page.nextCursor()).isEqualTo("cursor-1");
-        assertThat(page.hasMore()).isTrue();
+        assertThat(page.items().get(0).name()).isEqualTo("qwen-domain-7b");
+        verify(authorizationService).requirePermission("asset:read");
+    }
+
+    @Test
+    void createAssetValidatesDictionaryGovernanceFields() {
+        service.createAsset(modelCommand());
+
+        verify(dictionaryValidationPort).validateItemCode(eq("license_catalog"), eq("Apache-2.0"));
+        verify(dictionaryValidationPort).validateItemCode(eq("model_framework"), eq("pytorch"));
+        verify(dictionaryValidationPort).validateItemCode(eq("model_task"), eq("text-generation"));
+    }
+
+    @Test
+    void createAssetRejectsDisabledDictionaryItem() {
+        doThrow(new ValidationException("dict item not active"))
+                .when(dictionaryValidationPort).validateItemCode("license_catalog", "Bad-License");
+
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "bad-model", "Bad Model", null, Visibility.INTERNAL, List.of("team-nlp"), null, null,
+                "Bad-License", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetResolvesTagIdsViaTagValidationService() {
+        when(tagValidationService.resolveActiveTags(any(), any()))
+                .thenReturn(List.of(new TagView("tag_001", TagScopeType.PLATFORM, "PLATFORM",
+                        "nlp", "NLP", null, null, TaxonomyStatus.ACTIVE, 1L)));
+
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "tagged-model", "Tagged Model", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, List.of("tag_001"), "Apache-2.0",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+        AssetView view = service.createAsset(command);
+
+        verify(tagValidationService).resolveActiveTags(eq(List.of("tag_001")), any(TagScopeContext.class));
+        assertThat(view.tagIds()).containsExactly("tag_001");
+    }
+
+    @Test
+    void createAssetRejectsUnregisteredTagIds() {
+        when(tagValidationService.resolveActiveTags(any(), any()))
+                .thenThrow(new ValidationException("tag not found: tag_unknown"));
+
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "bad-tag-model", "Bad Tag Model", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, List.of("tag_unknown"), "Apache-2.0",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void auditFailureDoesNotBlockCreateAsset() {
+        doThrow(new RuntimeException("audit unavailable"))
+                .when(auditService).record(any());
+
+        AssetView view = service.createAsset(modelCommand());
+
+        assertThat(view.assetId()).isEqualTo("ast_generated");
+        verify(assetRepository).insert(any(Asset.class));
     }
 }

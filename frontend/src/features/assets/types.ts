@@ -30,6 +30,8 @@ export interface AssetSummary {
   assetId: string;
   type: AssetType;
   namespace: string;
+  organizationId?: string | null;
+  projectId?: string | null;
   name: string;
   displayName?: string | null;
   description?: string | null;
@@ -37,6 +39,7 @@ export interface AssetSummary {
   status: AssetStatus;
   owners: string[];
   tags: string[];
+  tagIds: string[];
   license?: string | null;
   framework?: string | null;
   task?: string | null;
@@ -56,6 +59,8 @@ export interface AssetView extends AssetSummary {
 /** 创建资产请求 */
 export interface CreateAssetRequest {
   type: AssetType;
+  organizationId?: string;
+  projectId?: string;
   namespace: string;
   name: string;
   displayName?: string;
@@ -63,6 +68,7 @@ export interface CreateAssetRequest {
   visibility: Visibility;
   owners?: string[];
   tags?: string[];
+  tagIds?: string[];
   license?: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
@@ -70,11 +76,14 @@ export interface CreateAssetRequest {
 
 /** 更新资产请求 */
 export interface UpdateAssetRequest {
+  organizationId?: string;
+  projectId?: string;
   displayName?: string;
   description?: string;
   visibility?: Visibility;
   owners?: string[];
   tags?: string[];
+  tagIds?: string[];
   license?: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
@@ -85,8 +94,13 @@ export interface AssetSearchParams {
   keyword?: string;
   type?: AssetType;
   namespace?: string;
+  organizationId?: string;
   framework?: string;
-  tag?: string;
+  task?: string;
+  format?: string;
+  modality?: string;
+  tagId?: string;
+  owner?: string;
   cursor?: string;
   limit?: number;
 }

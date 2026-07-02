@@ -48,6 +48,10 @@ class PrincipalContextFilterTest {
         assertThat(context.requestId()).isEqualTo("req_provided_001");
         assertThat(context.traceId()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
         assertThat(context.locale()).isEqualTo("en-US");
+        // 入口过滤器只建立请求关联上下文，绝不注入已认证主体或任何 Scope。
+        assertThat(context.principalId()).isNull();
+        assertThat(context.principalType()).isNull();
+        assertThat(context.scopes()).isEmpty();
         assertThat(response.getHeader(PrincipalContextFilter.REQUEST_ID_HEADER)).isEqualTo("req_provided_001");
         assertThat(response.getHeader(PrincipalContextFilter.TRACE_ID_HEADER))
                 .isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");

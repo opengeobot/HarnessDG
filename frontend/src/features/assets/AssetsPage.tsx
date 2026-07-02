@@ -123,12 +123,14 @@ export function AssetsPage() {
     },
     {
       title: '标签',
-      dataIndex: 'tags',
       key: 'tags',
-      render: (tags: string[]) => (
+      render: (_, record) => (
         <Space size={[0, 4]} wrap>
-          {tags.map((tag) => (
+          {record.tags?.map((tag) => (
             <Tag key={tag}>{tag}</Tag>
+          ))}
+          {record.tagIds?.map((tagId) => (
+            <Tag key={tagId} color="blue">{tagId}</Tag>
           ))}
         </Space>
       ),

@@ -14,20 +14,25 @@ import java.util.List;
 /**
  * 创建资产命令。
  *
- * @param type        资产类型
- * @param namespace   命名空间
+ * @param type           资产类型
+ * @param organizationId 所属组织 ID
+ * @param projectId      所属项目 ID
+ * @param namespace      命名空间
  * @param name        名称
  * @param displayName 展示名称
  * @param description 描述
  * @param visibility  可见性
  * @param owners      Owner 列表
- * @param tags        标签列表
+ * @param tags        标签列表（legacy 自由标签，只读回显）
+ * @param tagIds      受控标签 ID 列表（经 TagValidationService 校验，写入 asset_tag 关联）
  * @param license     许可证
  * @param model       模型画像（仅模型类有效，可空）
  * @param dataset     数据集画像（仅数据集类有效，可空）
  * @param principalId 操作者主体 ID（可空，P1 未接入认证）
  */
 public record CreateAssetCommand(AssetType type,
+                                 String organizationId,
+                                 String projectId,
                                  String namespace,
                                  String name,
                                  String displayName,
@@ -35,6 +40,7 @@ public record CreateAssetCommand(AssetType type,
                                  Visibility visibility,
                                  List<String> owners,
                                  List<String> tags,
+                                 List<String> tagIds,
                                  String license,
                                  ModelProfile model,
                                  DatasetProfile dataset,

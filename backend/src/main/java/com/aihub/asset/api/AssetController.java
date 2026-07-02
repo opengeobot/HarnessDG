@@ -58,17 +58,18 @@ public class AssetController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) AssetType type,
             @RequestParam(required = false) String namespace,
+            @RequestParam(required = false) String organizationId,
             @RequestParam(required = false) String framework,
             @RequestParam(required = false) String task,
             @RequestParam(required = false) String format,
             @RequestParam(required = false) String modality,
-            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String tagId,
             @RequestParam(required = false) String owner,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
-                keyword, type, namespace, framework, task, format, modality, tag, owner,
+                keyword, type, namespace, organizationId, framework, task, format, modality, tagId, owner,
                 includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 

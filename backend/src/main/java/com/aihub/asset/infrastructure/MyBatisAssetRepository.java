@@ -20,6 +20,7 @@ import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
@@ -30,6 +31,9 @@ import org.springframework.stereotype.Repository;
  *
  * <p>单表 CRUD、坐标判重、逻辑删除与乐观锁使用 MyBatis-Plus；多表连接检索与权限下推委托
  * {@link AssetSearchDao} 的显式 SQL。负责领域聚合与持久化实体之间的互转，杜绝实体跨模块外泄。
+ *
+ * <p>受控标签 tagIds 经 {@code asset_tag} 关联表读写：insert 时批量插入关联，update 时先删后插重写关联，
+ * findByAssetId 时查询关联回填 tagIds 到领域聚合。
  */
 @Repository
 public class MyBatisAssetRepository implements AssetRepository {
@@ -41,15 +45,18 @@ public class MyBatisAssetRepository implements AssetRepository {
     private final AssetMapper assetMapper;
     private final AssetModelMapper assetModelMapper;
     private final AssetDatasetMapper assetDatasetMapper;
+    private final AssetTagMapper assetTagMapper;
     private final AssetSearchDao assetSearchDao;
 
     public MyBatisAssetRepository(AssetMapper assetMapper,
                                   AssetModelMapper assetModelMapper,
                                   AssetDatasetMapper assetDatasetMapper,
+                                  AssetTagMapper assetTagMapper,
                                   AssetSearchDao assetSearchDao) {
         this.assetMapper = assetMapper;
         this.assetModelMapper = assetModelMapper;
         this.assetDatasetMapper = assetDatasetMapper;
+        this.assetTagMapper = assetTagMapper;
         this.assetSearchDao = assetSearchDao;
     }
 
@@ -77,6 +84,7 @@ public class MyBatisAssetRepository implements AssetRepository {
         try {
             assetMapper.insert(toEntity(asset));
             insertProfile(asset);
+            insertTagAssociations(asset);
         } catch (DuplicateKeyException ex) {
             throw new ConflictException(
                     ErrorCode.ASSET_ALREADY_EXISTS,
@@ -91,6 +99,8 @@ public class MyBatisAssetRepository implements AssetRepository {
         int affected = assetMapper.update(null, Wrappers.<AssetEntity>lambdaUpdate()
                 .eq(AssetEntity::getAssetId, asset.assetId())
                 .eq(AssetEntity::getRowVersion, currentVersion)
+                .set(AssetEntity::getOrganizationId, asset.organizationId())
+                .set(AssetEntity::getProjectId, asset.projectId())
                 .set(AssetEntity::getDisplayName, asset.displayName())
                 .set(AssetEntity::getDescription, asset.description())
                 .set(AssetEntity::getVisibility, asset.visibility().name())
@@ -107,6 +117,7 @@ public class MyBatisAssetRepository implements AssetRepository {
                     "asset was modified concurrently: " + asset.assetId());
         }
         updateProfile(asset);
+        rewriteTagAssociations(asset);
     }
 
     @Override
@@ -121,6 +132,32 @@ public class MyBatisAssetRepository implements AssetRepository {
     @Override
     public CursorPage<AssetSummary> search(AssetSearchCriteria criteria) {
         return assetSearchDao.search(criteria);
+    }
+
+    private void insertTagAssociations(Asset asset) {
+        List<String> tagIds = asset.tagIds();
+        if (tagIds == null || tagIds.isEmpty()) {
+            return;
+        }
+        for (String tagId : tagIds) {
+            AssetTagEntity tagEntity = new AssetTagEntity();
+            tagEntity.setAssetId(asset.assetId());
+            tagEntity.setTagId(tagId);
+            tagEntity.setCreatedAt(Instant.now());
+            assetTagMapper.insert(tagEntity);
+        }
+    }
+
+    private void rewriteTagAssociations(Asset asset) {
+        assetTagMapper.delete(Wrappers.<AssetTagEntity>lambdaQuery()
+                .eq(AssetTagEntity::getAssetId, asset.assetId()));
+        insertTagAssociations(asset);
+    }
+
+    private List<String> loadTagIds(String assetId) {
+        List<AssetTagEntity> tags = assetTagMapper.selectList(Wrappers.<AssetTagEntity>lambdaQuery()
+                .eq(AssetTagEntity::getAssetId, assetId));
+        return tags.stream().map(AssetTagEntity::getTagId).toList();
     }
 
     private void insertProfile(Asset asset) {
@@ -162,6 +199,8 @@ public class MyBatisAssetRepository implements AssetRepository {
     private AssetEntity toEntity(Asset asset) {
         AssetEntity entity = new AssetEntity();
         entity.setAssetId(asset.assetId());
+        entity.setOrganizationId(asset.organizationId());
+        entity.setProjectId(asset.projectId());
         entity.setType(asset.type().name());
         entity.setNamespace(asset.namespace());
         entity.setName(asset.name());
@@ -189,8 +228,11 @@ public class MyBatisAssetRepository implements AssetRepository {
 
     private Asset toDomain(AssetEntity entity) {
         AssetType type = AssetType.valueOf(entity.getType());
+        List<String> tagIds = loadTagIds(entity.getAssetId());
         Asset.Builder builder = new Asset.Builder()
                 .assetId(entity.getAssetId())
+                .organizationId(entity.getOrganizationId())
+                .projectId(entity.getProjectId())
                 .type(type)
                 .namespace(entity.getNamespace())
                 .name(entity.getName())
@@ -200,6 +242,7 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .status(AssetStatus.valueOf(entity.getStatus()))
                 .owners(entity.getOwners())
                 .tags(entity.getTags())
+                .tagIds(tagIds)
                 .license(entity.getLicense())
                 .rowVersion(entity.getRowVersion() == null ? 0L : entity.getRowVersion())
                 .createdBy(entity.getCreatedBy())

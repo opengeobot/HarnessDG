@@ -10,7 +10,31 @@ MCP Server、Agent 接入包（OpenClaw / QwenPaw Skill）与兼容测试的权�
 
 P0-A 仅建立目录骨架。具体业务 Tool Schema 仍在 P4 Agent 接入阶段按"契约优先"流程填充，
 但 P0-B 必须先提供统一 Principal/JWT、Scope/Permission、Tool Allowlist、审计、限流、错误响应
-和 Trace 契约。MCP 实现不得再假定身份权限可后补。
+和 Trace 契约。MCP 实现不得再假定身份权限可后补。P0-B 的 Tool 白名单与认证约束权威声明见
+[`tools.yaml`](./tools.yaml)。
+
+## 传输与认证
+
+- **传输**：MCP 通过 Streamable HTTP 暴露，不使用 stdio 部署形态。
+- **认证**：仅接受平台签发的统一 Bearer JWT。
+- **调用前实时校验（默认拒绝，缺一即拒）**：
+  1. JWT 有效性与 Token 版本；
+  2. JWT 粗粒度 Scope；
+  3. 业务 Permission；
+  4. 资源状态与敏感级别；
+  5. Agent 的 `iam_agent_tool` 白名单。
+  JWT 内角色不能替代实时授权。
+
+## P0-B Tool 范围与开关
+
+- P0-B **仅声明最小只读工具集合**：`asset_search`、`asset_get`、`asset_list_versions`、
+  `asset_get_version`（详见 `tools.yaml`）。
+- **写工具默认关闭**，由总开关 `mcp.writeTools.enabled=false` 控制；开启需具备相应
+  Scope/Permission 且在白名单内。
+- `asset:publish`、`asset:delete`、`system:configure` 等高风险 Scope **默认不授予 Agent**，
+  对应写工具（如 `asset_publish_version`、`asset_delete`）默认 `enabled: false`。
+- Tool 受 `iam_agent_tool` 白名单与 JWT Scope **双重约束**，二者均通过才允许调用；
+  被拒绝的高风险调用返回 `MCP_TOOL_NOT_ALLOWED` 并写审计事件 `AGENT_ACCESS_DENIED`。
 
 ## 规划内容
 

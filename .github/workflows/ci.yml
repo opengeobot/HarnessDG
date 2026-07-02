@@ -68,3 +68,36 @@ jobs:
         run: cp .env.example .env
       - name: docker compose config
         run: docker compose config --quiet
+
+  contracts:
+    name: Contracts (OpenAPI lint / breaking-change)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # diff 需要基线版本，拉取完整历史以便对比 base ref。
+          fetch-depth: 0
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # 契约 lint 为强制门禁：Redocly recommended 规则集，任何 error 阻断流水线。
+      - name: OpenAPI lint
+        run: >-
+          npx --yes @redocly/cli@latest lint
+          --config contracts/openapi/redocly.yaml
+          contracts/openapi/aihub-v1.yaml
+      # breaking-change 检查：与 PR base ref（或 push 前一提交）对比契约差异。
+      # 作为可见的评审信号，不因风格化差异阻断合并（continue-on-error）。
+      - name: OpenAPI breaking-change diff
+        continue-on-error: true
+        run: |
+          BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "${BASE_REF}" ] || [ "${BASE_REF}" = "0000000000000000000000000000000000000000" ]; then
+            echo "无可用基线提交，跳过 breaking-change diff。"
+            exit 0
+          fi
+          git show "${BASE_REF}:contracts/openapi/aihub-v1.yaml" > /tmp/aihub-base.yaml 2>/dev/null || {
+            echo "基线中不存在契约文件，视为新增，跳过 diff。"; exit 0;
+          }
+          npx --yes @redocly/cli@latest diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml

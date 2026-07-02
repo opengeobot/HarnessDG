@@ -16,6 +16,8 @@ interface CreateAssetModalProps {
 
 interface FormValues {
   type: AssetType;
+  organizationId?: string;
+  projectId?: string;
   namespace: string;
   name: string;
   displayName?: string;
@@ -23,6 +25,7 @@ interface FormValues {
   visibility: Visibility;
   owners?: string[];
   tags?: string[];
+  tagIds?: string[];
   license?: string;
   framework?: string;
   task?: string;
@@ -57,6 +60,8 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
       .then((values) => {
         const payload: CreateAssetRequest = {
           type: values.type,
+          organizationId: values.organizationId || undefined,
+          projectId: values.projectId || undefined,
           namespace: values.namespace,
           name: values.name,
           displayName: values.displayName,
@@ -64,6 +69,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           visibility: values.visibility,
           owners: values.owners,
           tags: values.tags,
+          tagIds: values.tagIds,
           license: values.license,
           model:
             values.type === 'MODEL'
@@ -107,6 +113,12 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
               { value: 'DATASET', label: '数据集' },
             ]}
           />
+        </Form.Item>
+        <Form.Item name="organizationId" label="所属组织">
+          <Input placeholder="org_01J..." />
+        </Form.Item>
+        <Form.Item name="projectId" label="所属项目">
+          <Input placeholder="prj_01J..." />
         </Form.Item>
         <Form.Item
           name="namespace"
@@ -152,8 +164,11 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
         <Form.Item name="owners" label="Owner">
           <Select mode="tags" placeholder="team-nlp" tokenSeparators={[',']} />
         </Form.Item>
-        <Form.Item name="tags" label="标签">
+        <Form.Item name="tags" label="标签（自由）">
           <Select mode="tags" placeholder="text-generation" tokenSeparators={[',']} />
+        </Form.Item>
+        <Form.Item name="tagIds" label="受控标签 ID">
+          <Select mode="tags" placeholder="tag_01J..." tokenSeparators={[',']} />
         </Form.Item>
         <Form.Item name="license" label="许可证">
           <Input placeholder="Apache-2.0" />

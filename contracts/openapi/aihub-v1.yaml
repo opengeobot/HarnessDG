@@ -2289,6 +2289,12 @@ components:
       required: [type, namespace, name, visibility]
       properties:
         type: { $ref: '#/components/schemas/AssetType' }
+        organizationId:
+          type: string
+          description: 所属组织 ID
+        projectId:
+          type: string
+          description: 所属项目 ID
         namespace:
           type: string
           description: 命名空间（小写 slug）
@@ -2329,6 +2335,12 @@ components:
           type: integer
           minimum: 0
           description: 资产乐观锁版本，冲突返回 ASSET_CONCURRENT_MODIFICATION。
+        organizationId:
+          type: string
+          description: 所属组织 ID（为空表示不变更）
+        projectId:
+          type: string
+          description: 所属项目 ID（为空表示不变更）
         displayName: { type: string }
         description: { type: string }
         visibility: { $ref: '#/components/schemas/Visibility' }
@@ -2354,6 +2366,8 @@ components:
         assetId: { type: string, example: ast_01J... }
         type: { $ref: '#/components/schemas/AssetType' }
         namespace: { type: string }
+        organizationId: { type: [string, 'null'], description: 所属组织 ID }
+        projectId: { type: [string, 'null'], description: 所属项目 ID }
         name: { type: string }
         displayName: { type: string }
         description: { type: string }
@@ -2364,7 +2378,12 @@ components:
           items: { type: string }
         tags:
           type: array
-          items: { $ref: '#/components/schemas/TagReference' }
+          description: legacy 自由标签（只读回显）
+          items: { type: string }
+        tagIds:
+          type: array
+          description: 受控标签 ID 列表（asset_tag 关联）
+          items: { type: string, pattern: '^tag_' }
         license: { type: string }
         model:
           oneOf:
@@ -2391,6 +2410,8 @@ components:
         assetId: { type: string }
         type: { $ref: '#/components/schemas/AssetType' }
         namespace: { type: string }
+        organizationId: { type: [string, 'null'], description: 所属组织 ID }
+        projectId: { type: [string, 'null'], description: 所属项目 ID }
         name: { type: string }
         displayName: { type: string }
         description: { type: string }
@@ -2401,7 +2422,12 @@ components:
           items: { type: string }
         tags:
           type: array
-          items: { $ref: '#/components/schemas/TagReference' }
+          description: legacy 自由标签（只读回显）
+          items: { type: string }
+        tagIds:
+          type: array
+          description: 受控标签 ID 列表（asset_tag 关联）
+          items: { type: string, pattern: '^tag_' }
         license: { type: string }
         framework: { type: string }
         task: { type: string }

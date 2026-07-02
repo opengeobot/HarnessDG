@@ -13,11 +13,12 @@ import com.aihub.asset.domain.AssetType;
  * @param keyword         关键词
  * @param type            类型过滤（可空）
  * @param namespace       命名空间过滤（可空）
+ * @param organizationId  组织 ID 过滤（可空，治理作用域下推）
  * @param framework       模型框架过滤（可空）
  * @param task            模型任务过滤（可空）
  * @param format          数据格式过滤（可空）
  * @param modality        数据模态过滤（可空）
- * @param tag             标签过滤（可空）
+ * @param tagId           受控标签 ID 过滤（可空，通过 asset_tag 关联表过滤）
  * @param owner           Owner 过滤（可空）
  * @param includeArchived 是否包含归档资产（默认否，需管理员）
  * @param cursor          游标（首页为空）
@@ -27,11 +28,12 @@ import com.aihub.asset.domain.AssetType;
 public record AssetSearchQuery(String keyword,
                                AssetType type,
                                String namespace,
+                               String organizationId,
                                String framework,
                                String task,
                                String format,
                                String modality,
-                               String tag,
+                               String tagId,
                                String owner,
                                boolean includeArchived,
                                String cursor,

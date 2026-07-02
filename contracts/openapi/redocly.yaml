@@ -1,0 +1,14 @@
+# ============================================================================
+# 功能: Redocly CLI 配置。为 AIHub OpenAPI 契约提供 lint 规则集与 diff 基线。
+#       采用 recommended 规则集，仅对文档内可接受的风格项做最小豁免，
+#       不关闭真正反映契约错误的规则（如 struct、operation-operationId 等）。
+# 时间: 2026-07-01
+# 作者: AxeXie
+# ============================================================================
+extends:
+  - recommended
+
+rules:
+  # 契约保留了部分尚未被路径引用的目标 Schema（如 TagReference），
+  # 作为 P0-B 目标契约的前向占位，降级为告警而非阻断。
+  no-unused-components: warn

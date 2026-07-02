@@ -20,26 +20,31 @@ import java.util.List;
  *
  * <p>对外只暴露业务字段，绝不返回持久化实体。模型/数据集画像按类型择一返回，另一为 {@code null}。
  *
- * @param assetId     业务资产 ID
- * @param type        资产类型
- * @param namespace   命名空间
- * @param name        名称
- * @param displayName 展示名称
- * @param description 描述
- * @param visibility  可见性
- * @param status      状态
- * @param owners      Owner 列表
- * @param tags        标签列表
- * @param license     许可证
- * @param model       模型画像（仅模型类非空）
- * @param dataset     数据集画像（仅数据集类非空）
- * @param repository  仓库引用
- * @param createdAt   创建时间
- * @param updatedAt   更新时间
+ * @param assetId        业务资产 ID
+ * @param type           资产类型
+ * @param namespace      命名空间
+ * @param organizationId 组织 ID（治理作用域）
+ * @param projectId      项目 ID（治理作用域）
+ * @param name           名称
+ * @param displayName    展示名称
+ * @param description    描述
+ * @param visibility     可见性
+ * @param status         状态
+ * @param owners         Owner 列表
+ * @param tags           标签列表（legacy 自由标签，只读回显）
+ * @param tagIds         受控标签 ID 列表（来自 asset_tag 关联）
+ * @param license        许可证
+ * @param model          模型画像（仅模型类非空）
+ * @param dataset        数据集画像（仅数据集类非空）
+ * @param repository     仓库引用
+ * @param createdAt      创建时间
+ * @param updatedAt      更新时间
  */
 public record AssetView(String assetId,
                         AssetType type,
                         String namespace,
+                        String organizationId,
+                        String projectId,
                         String name,
                         String displayName,
                         String description,
@@ -47,6 +52,7 @@ public record AssetView(String assetId,
                         AssetStatus status,
                         List<String> owners,
                         List<String> tags,
+                        List<String> tagIds,
                         String license,
                         ModelView model,
                         DatasetView dataset,
@@ -77,6 +83,8 @@ public record AssetView(String assetId,
                 asset.assetId(),
                 asset.type(),
                 asset.namespace(),
+                asset.organizationId(),
+                asset.projectId(),
                 asset.name(),
                 asset.displayName(),
                 asset.description(),
@@ -84,6 +92,7 @@ public record AssetView(String assetId,
                 asset.status(),
                 asset.owners(),
                 asset.tags(),
+                asset.tagIds(),
                 asset.license(),
                 modelView(asset.modelProfile()),
                 datasetView(asset.datasetProfile()),

@@ -28,6 +28,12 @@ public class AssetEntity {
     @TableField("asset_id")
     private String assetId;
 
+    @TableField("organization_id")
+    private String organizationId;
+
+    @TableField("project_id")
+    private String projectId;
+
     @TableField("type")
     private String type;
 
@@ -100,6 +106,22 @@ public class AssetEntity {
 
     public void setAssetId(String assetId) {
         this.assetId = assetId;
+    }
+
+    public String getOrganizationId() {
+        return organizationId;
+    }
+
+    public void setOrganizationId(String organizationId) {
+        this.organizationId = organizationId;
+    }
+
+    public String getProjectId() {
+        return projectId;
+    }
+
+    public void setProjectId(String projectId) {
+        this.projectId = projectId;
     }
 
     public String getType() {

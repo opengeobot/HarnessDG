@@ -1,0 +1,124 @@
+# AIHub MCP Tool 白名单与认证约束 - P0-B 目标
+# 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 9 章、第 15.8 节
+# 说明：本文件声明 P0-B 阶段 MCP Tool 集合、默认开关、Scope/Permission 与白名单约束。
+#       P0-B 仅声明最小只读工具集合，写工具默认关闭，不代表已实现。
+#       Tool 实现必须复用与 REST 相同的 Application Service，不得绕过权限或直接访问 Mapper。
+# 作者：AxeXie
+schemaVersion: 1
+contractStatus: target-p0-b
+
+transport:
+  protocol: streamable-http
+  description: MCP 通过 Streamable HTTP 暴露；不使用 stdio 部署形态。
+  authentication:
+    scheme: bearer-jwt
+    description: |
+      仅接受平台签发的 Bearer JWT。每次 Tool 调用同时校验：
+      1) JWT 有效性与 Token 版本；2) JWT 粗粒度 Scope；3) 业务 Permission；
+      4) 资源状态与敏感级别；5) Agent 的 iam_agent_tool 白名单。
+      JWT 内角色不能替代实时授权（RBAC/ACL/资源状态/敏感级别）。
+
+# 双重约束：Tool 调用须同时满足 iam_agent_tool 白名单与 JWT Scope，缺一即拒绝（默认拒绝）。
+authorizationModel:
+  dualConstraint:
+    description: Tool 受 iam_agent_tool 白名单与 JWT Scope 双重约束，二者均通过才允许调用。
+    failClosed: true
+  deniedAudit:
+    description: 被拒绝的高风险工具调用必须写审计（AGENT_ACCESS_DENIED），不记录 JWT/预签名 URL/凭据。
+    errorCode: MCP_TOOL_NOT_ALLOWED
+
+# P0-B 默认开关：写工具默认关闭；高风险 Scope 默认不授予 Agent。
+featureFlags:
+  mcp.writeTools.enabled:
+    default: false
+    description: 写工具总开关，P0-B 默认关闭；开启需具备相应 Scope/Permission 且在白名单内。
+defaultDeniedScopes:
+  description: 以下 Scope 默认不授予 Agent，需经显式授权与审计。
+  scopes:
+    - asset:publish
+    - asset:delete
+    - system:configure
+
+tools:
+  # ---- P0-B 最小只读工具集合（默认可声明，仍需 Scope + 白名单 + 实时授权）----
+  - name: asset_search
+    enabled: true
+    write: false
+    summary: 按受控字段与关键词检索资产摘要（权限可见性过滤）。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: AssetQueryService
+    parameters:
+      type: object
+      additionalProperties: false
+      properties:
+        keyword: { type: string }
+        type: { type: string, enum: [MODEL, DATASET] }
+        namespace: { type: string }
+        tagId: { type: string, pattern: '^tag_' }
+        cursor: { type: string }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  - name: asset_get
+    enabled: true
+    write: false
+    summary: 获取单个资产详情。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: AssetQueryService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [assetId]
+      properties:
+        assetId: { type: string }
+
+  - name: asset_list_versions
+    enabled: true
+    write: false
+    summary: 列出资产已发布/可见版本摘要。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: AssetVersionQueryService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [assetId]
+      properties:
+        assetId: { type: string }
+        cursor: { type: string }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  - name: asset_get_version
+    enabled: true
+    write: false
+    summary: 获取指定资产版本详情（不可变发布标识）。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: AssetVersionQueryService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [assetId, version]
+      properties:
+        assetId: { type: string }
+        version: { type: string }
+
+  # ---- P0-B 默认关闭的写工具（受 mcp.writeTools.enabled 与高风险 Scope 双控）----
+  - name: asset_publish_version
+    enabled: false
+    write: false
+    highRisk: true
+    summary: 发布资产版本。P0-B 默认关闭；asset:publish Scope 默认不授予 Agent。
+    requiredScopes: [asset:publish]
+    requiredPermissions: [asset:publish]
+    auditEvent: VERSION_PUBLISHED
+
+  - name: asset_delete
+    enabled: false
+    write: true
+    highRisk: true
+    summary: 删除资产。P0-B 默认关闭；asset:delete Scope 默认不授予 Agent。
+    requiredScopes: [asset:delete]
+    requiredPermissions: [asset:delete]
+    auditEvent: ASSET_DELETED

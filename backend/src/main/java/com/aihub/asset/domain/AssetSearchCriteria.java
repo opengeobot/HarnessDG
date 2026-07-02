@@ -17,11 +17,12 @@ import java.util.Set;
  * @param keyword             关键词（匹配名称/展示名/描述/标签）
  * @param type                资产类型过滤（可空）
  * @param namespace           命名空间过滤（可空）
+ * @param organizationId      组织 ID 过滤（可空，下推到 SQL）
  * @param framework           模型框架过滤（可空）
  * @param task                模型任务过滤（可空）
  * @param format              数据格式过滤（可空）
  * @param modality            数据模态过滤（可空）
- * @param tag                 单标签包含过滤（可空）
+ * @param tagId               受控标签 ID 过滤（可空，通过 asset_tag 关联表过滤）
  * @param owner               Owner 包含过滤（可空）
  * @param statuses            允许返回的状态集合（默认排除 ARCHIVED）
  * @param allowedVisibilities 当前主体可见的可见性集合（权限下推）
@@ -31,11 +32,12 @@ import java.util.Set;
 public record AssetSearchCriteria(String keyword,
                                   AssetType type,
                                   String namespace,
+                                  String organizationId,
                                   String framework,
                                   String task,
                                   String format,
                                   String modality,
-                                  String tag,
+                                  String tagId,
                                   String owner,
                                   Set<AssetStatus> statuses,
                                   Set<Visibility> allowedVisibilities,

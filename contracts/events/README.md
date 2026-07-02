@@ -8,9 +8,33 @@
 
 ## 状态
 
-P0-A 只建立了目录骨架。P0-B 必须先定义公共任务、审计、通知、配置变更、安全拒绝和外发
-Webhook 所需的事件 Envelope 与 Schema，再实现 Outbox/Inbox 和通知能力。版本发布、上传、
-Webhook 消费等业务事件在 P1+ 继续沿用同一 Envelope，按"契约优先"流程增加。
+P0-A 只建立了目录骨架。P0-B 已先行定义统一事件信封（Envelope）与设计第 5.12 节列出的
+通知/领域事件负载 Schema，见 [`events-v1.yaml`](./events-v1.yaml)，再实现 Outbox/Inbox 和
+通知能力。版本发布、上传、Webhook 消费等业务事件在 P1+ 继续沿用同一 Envelope，按"契约优先"
+流程增加。Gitea Webhook 入站事件 Schema 在 P1+ 接入时按同一约定补充。
+
+## 权威 Schema
+
+- [`events-v1.yaml`](./events-v1.yaml)：统一 `EventEnvelope` 与各 `eventType` 的脱敏负载，
+  含 `VERSION_REVIEW_REQUESTED`、`VERSION_APPROVED`、`VERSION_REJECTED`、`VERSION_PUBLISHED`、
+  `VERSION_DEPRECATED`、`UPLOAD_FAILED`、`JOB_DEAD`、`AGENT_ACCESS_DENIED`、
+  `STORAGE_QUOTA_WARNING`、`SYSTEM_DEPENDENCY_UNHEALTHY`。
+  信封字段至少携带 `eventId`、`eventType`、`schemaVersion`、`occurredAt`、`traceId`、
+  `principalId`、`aggregateType`、`aggregateId` 和脱敏后的 `payload`。
+
+## Outbox 投递与签名约定
+
+- **Outbox 原子写入**：事件在产生事件的同一数据库事务内写入 `outbox_event` 表，与核心业务
+  变更原子提交；再由后台可靠任务（`job_task` + Worker）轮询发布到站内通知、邮件、Webhook 与
+  Agent Callback。发布失败不回滚已完成的核心业务事务，但必须可重试、可观测；超过阈值的投递
+  进入 `DEAD` 并告警。
+- **幂等**：消费方以 `eventId` 作为幂等键去重；入站 Gitea Webhook 以 `deliveryId` 写入
+  `webhook_inbox` 去重。
+- **Webhook 签名**：对外 Webhook 投递携带 `X-AIHub-Event`、`X-AIHub-Delivery`、
+  `X-AIHub-Timestamp` 与 `X-AIHub-Signature`（`sha256=<hex>`，对 `{timestamp}.{rawBody}`
+  做 HMAC-SHA256）。接收方校验签名与时间戳容忍窗口以防重放；出站侧做 SSRF 防护。
+  签名密钥属于部署安全配置，不进入数据库配置中心、Git、日志或事件负载。
+  详见 `events-v1.yaml` 的 `x-delivery-conventions` 扩展。
 
 ## 规划内容
 
