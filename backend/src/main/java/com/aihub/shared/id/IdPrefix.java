@@ -107,7 +107,10 @@ public enum IdPrefix {
     PUBLISH_REQUEST("pub"),
 
     /** 审批决策。 */
-    REVIEW_DECISION("rvw");
+    REVIEW_DECISION("rvw"),
+
+    /** 系统告警。 */
+    ALERT("alt");
 
     private final String value;
 

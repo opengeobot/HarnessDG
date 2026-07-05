@@ -8,6 +8,7 @@ package com.aihub.bootstrap;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 平台后端启动类（模块化单体）。
@@ -17,6 +18,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication(scanBasePackages = "com.aihub")
 @MapperScan("com.aihub.*.infrastructure")
+@EnableScheduling
 public class AihubApplication {
 
     public static void main(String[] args) {

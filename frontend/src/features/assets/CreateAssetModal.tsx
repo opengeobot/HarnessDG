@@ -42,6 +42,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const assetType = Form.useWatch('type', form);
+  const orgId = Form.useWatch('organizationId', form);
 
   const mutation = useMutation({
     mutationFn: (payload: CreateAssetRequest) => createAsset(payload),
@@ -130,25 +131,20 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
             allowClear
           />
         </Form.Item>
-        <Form.Item name="projectId" label={t('assets.create.project')} dependencies={['organizationId']}>
-          {({ getFieldValue }) => {
-            const orgId = getFieldValue('organizationId');
-            return (
-              <ControlledSelect
-                apiUrl={`/system/organizations/${orgId}/projects`}
-                queryKey={['projects', orgId]}
-                enabled={!!orgId}
-                extractOptions={(data) =>
-                  (data as Array<{ projectId: string; name: string }>).map(
-                    (p): SelectOption => ({ value: p.projectId, label: `${p.name} (${p.projectId})` }),
-                  )
-                }
-                placeholder={t('assets.create.projectPlaceholder')}
-                allowClear
-                disabled={!orgId}
-              />
-            );
-          }}
+        <Form.Item name="projectId" label={t('assets.create.project')}>
+          <ControlledSelect
+            apiUrl={`/system/organizations/${orgId ?? ''}/projects`}
+            queryKey={['projects', orgId ?? '']}
+            enabled={!!orgId}
+            extractOptions={(data) =>
+              (data as Array<{ projectId: string; name: string }>).map(
+                (p): SelectOption => ({ value: p.projectId, label: `${p.name} (${p.projectId})` }),
+              )
+            }
+            placeholder={t('assets.create.projectPlaceholder')}
+            allowClear
+            disabled={!orgId}
+          />
         </Form.Item>
         <Form.Item
           name="namespace"
@@ -192,10 +188,19 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           />
         </Form.Item>
         <Form.Item name="owners" label={t('assets.create.ownerLabel')}>
-          <Select mode="tags" placeholder="team-nlp" tokenSeparators={[',']} />
-        </Form.Item>
-        <Form.Item name="tags" label={t('assets.create.freeTags')}>
-          <Select mode="tags" placeholder="text-generation" tokenSeparators={[',']} />
+          <ControlledSelect
+            mode="multiple"
+            apiUrl={`/system/organizations/${orgId ?? ''}/teams`}
+            queryKey={['teams', orgId ?? '']}
+            enabled={!!orgId}
+            extractOptions={(data) =>
+              (data as Array<{ teamId: string; name: string }>).map(
+                (team): SelectOption => ({ value: team.teamId, label: `${team.name} (${team.teamId})` }),
+              )
+            }
+            placeholder={t('assets.create.ownerPlaceholder')}
+            disabled={!orgId}
+          />
         </Form.Item>
         <Form.Item name="tagIds" label={t('assets.create.controlledTagIds')}>
           <ControlledSelect

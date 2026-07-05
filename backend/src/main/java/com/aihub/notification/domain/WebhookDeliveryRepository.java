@@ -34,4 +34,13 @@ public interface WebhookDeliveryRepository {
 
     /** 标记投递放弃（DEAD）。 */
     void markDead(String deliveryId, int attempts, Integer httpStatus, String error, Instant now);
+
+    /** 查询最近投递记录（管理员视图）。 */
+    List<WebhookDelivery> listRecent(int limit);
+
+    /** 按状态统计投递数。 */
+    long countByStatus(WebhookDeliveryStatus status);
+
+    /** 重置失败投递为 PENDING（管理员手动重试）。 */
+    boolean resetForRetry(String deliveryId, Instant now);
 }

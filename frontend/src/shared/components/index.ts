@@ -7,3 +7,5 @@ export { PlaceholderPage } from './PlaceholderPage';
 export type { PlaceholderPageProps } from './PlaceholderPage';
 export { QueryBoundary } from './QueryBoundary';
 export type { QueryBoundaryProps } from './QueryBoundary';
+export { SafeMarkdown } from './SafeMarkdown';
+export type { SafeMarkdownProps } from './SafeMarkdown';

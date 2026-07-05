@@ -375,6 +375,29 @@ export interface ListNotificationsParams {
   limit?: number;
 }
 
+/* ---------------- 通知管理（Admin） ---------------- */
+export interface OutboxEventView {
+  eventId: string;
+  aggregateType: string;
+  aggregateId: string;
+  eventType: string;
+  occurredAt: string;
+  processed: boolean;
+  traceId?: string | null;
+}
+
+export interface WebhookDeliveryView {
+  deliveryId: string;
+  eventId: string;
+  targetUrl: string;
+  status: 'PENDING' | 'DELIVERED' | 'FAILED' | 'DEAD';
+  attempts: number;
+  lastResponseCode?: number | null;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /* ---------------- 指标 ---------------- */
 export interface MetricsSummary {
   generatedAt: string;

@@ -36,7 +36,7 @@ Nginx 路由（见 `nginx/nginx.conf`）：`/` → 前端、`/api/` → 后端 R
 
 Gitea Web 仅通过 Nginx 子路径入口 `http://localhost:8080/git/` 访问，不再单独对外暴露 3000 端口。`GITEA__server__ROOT_URL`（由 `.env` 的 `GITEA_PUBLIC_URL` 提供）固定为该地址，确保页面静态资源与链接均带 `/git/` 前缀。
 
-平台本地账号与 JWT 属 P0-B，当前**尚未实现**。平台 JWT 也不等于 OIDC Provider；“平台登录后免登跳转 Gitea”仍是独立预留能力，需另行 ADR 后选择：
+平台本地账号与 JWT 已在 P0-B 中实现（V3 identity + V13 状态放宽 + V20 权限 seed 对齐）。平台 JWT 不等于 OIDC Provider；"平台登录后免登跳转 Gitea"仍是独立预留能力，需另行 ADR 后选择：
 
 - **方案 A**：引入标准 Authorization Server/OIDC Provider，Gitea 作为 OAuth2/OIDC Client；回调地址以 `http://localhost:8080/git/` 为基准。
 - **方案 B**：在 Nginx `/git/` 前置 `auth_request` 校验平台会话，配合 Gitea `ENABLE_REVERSE_PROXY_AUTHENTICATION` 透传可信用户头实现免登。
@@ -79,7 +79,7 @@ docker compose up -d
 - **V02** 核心服务健康（postgres / minio / gitea / backend）
 - **V03** 四个 Bucket 存在且非匿名（gitea-storage / dvc-cache / asset-staging / asset-preview）
 
-业务端到端用例目前仍以提示占位，不冒充已实现。P0-B 退出前，Verify 必须新增并通过以下公共底座用例：
+P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 
 - 本地账号登录、访问/刷新 JWT 轮换、登出、禁用用户和旧刷新令牌重放拒绝；
 - 角色/Scope/ACL 越权拒绝及资产列表数据库权限下推；
@@ -97,14 +97,15 @@ docker compose up -d
 
 | 用例 | 覆盖 | 前置 |
 | --- | --- | --- |
-| **V04** | Flyway V1-V12 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`audit_log`/`notification`）存在 | postgres 容器运行 |
+| **V04** | Flyway V1-V21 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`iam_role_binding`/`iam_resource_acl`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`api_idempotency`/`audit_log`/`notification`/`team`/`team_member`/`discussion_thread`/`asset_version`/`publish_request`/`webhook_inbox`/`system_alert`）存在 | postgres 容器运行 |
 | **V05** | 用登录 bootstrap 管理员签发 JWT、携带 access token 调 `/me` 返回 200、无 Token 调 `/system/users` 返回 401（fail-closed） | backend readiness 就绪、bootstrap 管理员已创建 |
 | **V06** | `/system/audit-logs`、`/system/metrics/summary` 无 Token→401、越权 Token→403 | backend 就绪 |
 | **V07** | `/system/dictionaries`、`/system/tags` 无 Token→401、越权 Token→403 | backend 就绪 |
-| **V08** | `audit_log` 表存在且任何正文都不含明文口令（脱敏恒定不变式）；identity 登录审计接入待统一，故不断言登录事件计数 | postgres 就绪 |
+| **V08** | `audit_log` 表存在且任何正文都不含明文口令（脱敏恒定不变式）；identity 登录审计已通过 `IdentityAuditAdapter` 统一接入，断言 `AUTH_LOGIN_SUCCEEDED` 事件存在 | postgres 就绪 |
 | **V09** | `/system/jobs` 默认拒绝 | backend 就绪 |
 | **V10** | `/system/notifications` 默认拒绝 | backend 就绪 |
 | **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）默认拒绝 | backend 就绪 |
+| **V12** | `/system/alerts`（需 `system:observe`）返回告警列表；DEAD 任务/Outbox 积压/认证失败可触发告警 | backend 就绪 |
 
 ### 前置：bootstrap 管理员凭据
 

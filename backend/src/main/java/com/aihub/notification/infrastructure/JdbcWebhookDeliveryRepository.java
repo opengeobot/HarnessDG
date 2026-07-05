@@ -115,4 +115,27 @@ public class JdbcWebhookDeliveryRepository implements WebhookDeliveryRepository 
                         + "last_error = ?, next_retry_at = NULL, updated_at = ? WHERE delivery_id = ?",
                 attempts, httpStatus, error, Timestamp.from(now), deliveryId);
     }
+
+    @Override
+    public List<WebhookDelivery> listRecent(int limit) {
+        return jdbcTemplate.query(
+                "SELECT * FROM webhook_delivery ORDER BY created_at DESC LIMIT ?",
+                MAPPER, limit);
+    }
+
+    @Override
+    public long countByStatus(WebhookDeliveryStatus status) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM webhook_delivery WHERE status = ?", Long.class, status.name());
+        return count != null ? count : 0L;
+    }
+
+    @Override
+    public boolean resetForRetry(String deliveryId, Instant now) {
+        int rows = jdbcTemplate.update(
+                "UPDATE webhook_delivery SET status = 'PENDING', next_retry_at = NULL, updated_at = ? "
+                        + "WHERE delivery_id = ? AND status IN ('FAILED', 'DEAD')",
+                Timestamp.from(now), deliveryId);
+        return rows > 0;
+    }
 }

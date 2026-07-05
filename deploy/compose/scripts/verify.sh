@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V20：
+# 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V21：
 #       V01 Compose 配置；V02 核心服务健康；V03 Bucket 初始化；
 #       V04 数据库迁移；V05 JWT 生命周期；V06 权限过滤；V07 字典/标签；
 #       V08 审计完整性与脱敏；V09 持久化任务；V10 通知；V11 观测与诊断；
@@ -8,7 +8,8 @@
 #       V14 多组织权限隔离；V15 数据集 Facet 权限过滤；
 #       V16 版本 Schema 验证；V17 发布审批 Schema 验证；
 #       V18 Webhook Inbox 验证；V19 MCP 端点可用性；
-#       V20 对账 Worker 注册验证。
+#       V20 对账 Worker 注册验证；
+#       V21 告警 Schema 与端点验证。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。
 # 时间: 2026-07-04
@@ -143,8 +144,8 @@ check_buckets() {
 check_migrations() {
   local count ok=0
   count="$(psql_q 'select count(*) from flyway_schema_history where success = true')"
-  if [ -z "${count}" ] || [ "${count}" -lt 15 ]; then echo "  成功迁移数 ${count} < 15"; return 1; fi
-  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment; do
+  if [ -z "${count}" ] || [ "${count}" -lt 21 ]; then echo "  成功迁移数 ${count} < 21"; return 1; fi
+  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"; ok=1
     fi
@@ -429,6 +430,23 @@ check_reconciler_registration() {
   return 0
 }
 
+# ---- V21: 告警 Schema 与端点验证 ----
+check_alerts() {
+  # 检查 system_alert 表存在
+  if [ "$(psql_q "select to_regclass('public.system_alert') is not null")" != "t" ]; then
+    echo "  system_alert 表缺失"; return 1
+  fi
+  # 检查关键字段
+  local col_cnt
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='system_alert' and column_name in ('alert_id','alert_type','severity','status','fired_at')")"
+  if [ "${col_cnt}" -lt 5 ]; then echo "  system_alert 关键字段缺失"; return 1; fi
+  # 后端可达时验证端点默认拒绝
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    assert_default_deny /api/v1/system/alerts || return 1
+  fi
+  return 0
+}
+
 # P2 版本与上传 Schema 验证
 if postgres_reachable; then
   step V16 "版本 Schema 验证（asset_version/upload_session）" check_version_schema
@@ -451,6 +469,12 @@ if [ "${BACKEND_UP}" -eq 1 ]; then
 else
   skip V19 "MCP 端点可用性" "backend 不可达"
   skip V20 "对账 Worker 注册验证" "backend 不可达"
+fi
+
+if postgres_reachable; then
+  step V21 "告警 Schema 与端点验证" check_alerts
+else
+  skip V21 "告警 Schema 与端点验证" "postgres 不可达"
 fi
 
 echo ""

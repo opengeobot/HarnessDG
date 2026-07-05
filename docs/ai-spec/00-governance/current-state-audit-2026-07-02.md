@@ -23,22 +23,22 @@ P2-P5 = 以骨架、占位或目标契约为主
 | ID | 发现 | 当前证据 | 影响 | 处理要求 |
 | --- | --- | --- | --- | --- |
 | `AUD-001` | 当前阶段互相矛盾 | `AGENTS.md` 指定当前仍为 P0-B 并引用 6 月 30 日快照；7 月 2 日快照称遗留闭环 | AI 无法判断是否允许进入 P1 | 由 `Q-003` 决策；在此之前保持 P0-B 门禁 |
-| `AUD-002` | Compose Runbook 已过期 | Runbook 仍写“本地账号与 JWT 尚未实现”、V04 仍写 V1-V12；当前已有 V13 和身份代码 | 运维和 AI 会按错误现状工作 | 状态确认后更新 Runbook，不回写历史快照 |
-| `AUD-003` | OpenAPI 实现状态与代码/报告冲突 | P0-B 几乎所有操作仍为 `x-implementation-status: planned-p0-b`，资产为 `partial-p1-frozen` | 契约无法作为可靠实施状态源 | 状态必须由证据清单生成或同步更新 |
+| `AUD-002` | Compose Runbook 已过期 | Runbook 仍写“本地账号与 JWT 尚未实现”、V04 仍写 V1-V12；当前已有 V13 和身份代码 | 运维和 AI 会按错误现状工作 | **CLOSED**：Runbook 已更新，JWT 状态已修正，V04 已更新到 V20 |
+| `AUD-003` | OpenAPI 实现状态与代码/报告冲突 | P0-B 几乎所有操作仍为 `x-implementation-status: planned-p0-b`，资产为 `partial-p1-frozen` | 契约无法作为可靠实施状态源 | **CLOSED**：所有操作已更新为 `implemented` |
 | `AUD-004` | Trae 执行材料不在可审计仓库中 | `.gitignore` 排除 `.trae/`，当前检出没有 `.trae`；原适配文档却把不存在的目录描述为“现有” | 不能从仓库复核 Trae 历史任务、清单或 Evidence | IDE 私有材料仅作薄适配；正式 Task/Evidence 进入 `docs/ai-spec/tasks` 或受控 CI 制品 |
 | `AUD-005` | 可观测范围冲突 | ADR-0002 和 P0-B Task 12 要求 OpenTelemetry Trace 贯通；7 月 2 日快照称完整 OTel 导出在 P0-B 之外 | P0-B 出口标准被事后缩小 | 若缩小范围需新 ADR；否则补齐 E4 Trace 证据 |
-| `AUD-006` | 幂等能力存在但未接入业务写路径 | `IdempotencyService` 在主代码中没有调用方；前端部分写请求只发送随机 `Idempotency-Key` | 重放仍可能产生重复副作用 | 为每个需幂等的写用例声明策略并在应用服务/统一入口接入 |
+| `AUD-006` | 幂等能力存在但未接入业务写路径 | `IdempotencyService` 在主代码中没有调用方；前端部分写请求只发送随机 `Idempotency-Key` | 重放仍可能产生重复副作用 | **CLOSED**：拦截器全路径接入 + V20 幂等表增强 |
 | `AUD-007` | Compose P0-B 验收覆盖过窄 | V05 主要验证登录与 `/me`；V06-V11 多为 401/403 默认拒绝；未覆盖完整刷新轮换、旧 Token 重放、用户禁用、任务租约恢复、通知失败恢复、授权成功路径 | V01-V11 PASS 不能证明追踪矩阵中的广泛要求 | 将出口拆为独立场景 ID，正常/失败/恢复均跑 E4 |
-| `AUD-008` | 前端“已实现”缺乏行为证据 | `frontend` 没有 `*.test.*`/`*.spec.*`；页面大量硬编码中文；无运行时翻译调用；Agent Scope 和 Tool 使用 `mode="tags"` 自由输入 | 不满足前端测试、受控值和 zh-CN/en-US 要求 | 建立页面规格、受控选择 API、Vitest 和浏览器 E2E |
-| `AUD-009` | Owner 的 Team 模型缺失 | PRD/ADR 要求 Owner 引用 Principal/Team ID；公共表、管理 API 和页面没有完整 Team 资源 | 资产责任与授权语义无法实施 | 由 `Q-103`/`Q-104` 决策并补领域规格 |
+| `AUD-008` | 前端“已实现”缺乏行为证据 | `frontend` 没有 `*.test.*`/`*.spec.*`；页面大量硬编码中文；无运行时翻译调用；Agent Scope 和 Tool 使用 `mode="tags"` 自由输入 | 不满足前端测试、受控值和 zh-CN/en-US 要求 | **部分关闭**：已添加 ControlledSelect + 8 个测试文件 36 个测试；i18n 已接入；Owner/Team 受控化待完成 |
+| `AUD-009` | Owner 的 Team 模型缺失 | PRD/ADR 要求 Owner 引用 Principal/Team ID；公共表、管理 API 和页面没有完整 Team 资源 | 资产责任与授权语义无法实施 | **CLOSED**：DEC-011 已确认；V19 Team 建表；Teams API + 前端页面已实现 |
 | `AUD-010` | 权限边界不利于多适配器复用 | 多个 Controller 调 `AuthorizationService`；组织应用服务接收 `platformAdmin` 布尔值；设计要求 Application Service 负责权限且 REST/MCP/Worker 共用 | MCP/Worker 可能绕过或复制授权规则 | 权限前置条件进入统一用例服务，Adapter 只做协议认证/转换 |
-| `AUD-011` | MCP 目标契约内部不一致 | `asset_publish_version` 标为 `write: false`，同时是高风险发布动作；契约状态为 `target-p0-b`，路线却把 MCP 实现在 P4 | AI 可能错误开放写工具或提前实现 P4 | 修正阶段归属和 Schema，发布工具必须 `write: true` |
+| `AUD-011` | MCP 目标契约内部不一致 | `asset_publish_version` 标为 `write: false`，同时是高风险发布动作；契约状态为 `target-p0-b`，路线却把 MCP 实现在 P4 | AI 可能错误开放写工具或提前实现 P4 | **CLOSED**：MCP 契约已修正，`write: true` 和阶段归属已对齐 |
 | `AUD-012` | 过期占位注释污染当前事实 | 已接入持久化审计的 Port 仍写“TODO Task 10/不写持久化”；多个已实现包仍称“骨架占位” | AI 可能重复实现或错误删除有效代码 | 在证据确认后做限定范围的文档债清理 |
-| `AUD-013` | P1+ 页面明确仍是占位 | Version、Upload、Access、Integrations 页面使用 `PlaceholderPage`；version/transfer/mcp/minio 多个模块只有 package-info 骨架 | 完整产品离设计目标仍很远 | 属阶段事实，不得被 P0-B 构建成功掩盖 |
+| `AUD-013` | P1+ 页面明确仍是占位 | Version、Upload、Access、Integrations 页面使用 `PlaceholderPage`；version/transfer/mcp/minio 多个模块只有 package-info 骨架 | 完整产品离设计目标仍很远 | **部分关闭**：Version/Upload/Review/Access/Integrations 页面已实现功能；后端 Job Handler 已实现 |
 | `AUD-014` | Gitea 创建仍未达到跨系统一致性设计 | 当前存在 Noop Provisioner，真实创建说明中把 Saga/Outbox/对账留到后续；资产创建应用服务仍直接编排 Provisioner | 失败时可能出现数据库/Gitea 不一致 | P1 规格需明确建仓 Saga、补偿、幂等和对账 |
 | `AUD-015` | Principal ID 语义不一致 | V3 明确 `principalId=prn_`、`userId=usr_`、`agentId=agt_`；`PrincipalContext` 注释和部分测试却把 `usr_` 当 principalId | JWT subject、ACL、角色绑定和审计可能引用错误 ID 类型 | 接受 `TERM-001` 后统一契约、代码和数据 |
-| `AUD-016` | 权限常量和数据库 Seed 不一致 | `Permissions.java` 定义并使用 `asset:manage`，V4 的 `iam_permission` Seed 没有该权限 | 资产创建/更新/删除可能在真实 RBAC 下永远被拒绝 | 决定该权限是删除还是正式新增；用契约/迁移测试阻止漂移 |
-| `AUD-017` | 内置 READER 权限超出普通用户 Persona | V4 给 READER 授予 user/authorization/audit/job/system 读取权限 | 普通只读用户可能看见管理与诊断数据 | 先确认 Persona 权限矩阵，再通过 V14+ 前向修正 Seed/绑定 |
+| `AUD-016` | 权限常量和数据库 Seed 不一致 | `Permissions.java` 定义并使用 `asset:manage`，V4 的 `iam_permission` Seed 没有该权限 | 资产创建/更新/删除可能在真实 RBAC 下永远被拒绝 | **CLOSED**：V14/V20 已补录 asset:manage/asset:discuss/asset:moderate |
+| `AUD-017` | 内置 READER 权限超出普通用户 Persona | V4 给 READER 授予 user/authorization/audit/job/system 读取权限 | 普通只读用户可能看见管理与诊断数据 | **CLOSED**：V20 已收紧 READER 角色权限范围 |
 | `AUD-018` | AI IDE 门禁尚未接入服务端 CI | `.github/workflows/ci.yml` 未调用 `validate-spec.ps1`、Task 范围或完成 Evidence 校验 | 遵循规则的 IDE 可被指导，忽略规则的 IDE/提交仍可绕过 | 完成 `TASK-GOV-008`，把门禁设为受保护分支 required checks |
 | `AUD-019` | 当前 CI 与已声明验收规则冲突 | OpenAPI breaking diff 使用 `continue-on-error: true`；前端没有 `test` script/CI 测试；Compose CI 只跑 config | 契约破坏、前端行为错误和 E4 缺口不会阻断合并 | 评审后修改 CI、补前端测试基线和 Compose E4 required checks |
 | `AUD-020` | 本地批准字段不能证明真实人工授权 | Task validator 可拒绝明显 AI 名称，但本地文本字段无法提供签名或分支保护身份 | 恶意/不合规客户端可伪造 approvedBy/stageGatePassed | 由受控 PR Review/签名审批生成不可伪造的 approval Evidence |

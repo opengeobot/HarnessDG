@@ -105,4 +105,18 @@ public class JdbcOutboxRepository implements OutboxRepository {
                 "UPDATE outbox_event SET processed_at = ? WHERE event_id = ?",
                 Timestamp.from(now), eventId);
     }
+
+    @Override
+    public List<OutboxEvent> listRecent(int limit) {
+        return jdbcTemplate.query(
+                "SELECT * FROM outbox_event ORDER BY occurred_at DESC LIMIT ?",
+                MAPPER, limit);
+    }
+
+    @Override
+    public long countPending() {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_event WHERE processed_at IS NULL", Long.class);
+        return count != null ? count : 0L;
+    }
 }

@@ -116,3 +116,59 @@ export function listComments(
     { params: { cursor, limit } },
   );
 }
+
+/** 编辑评论 */
+export function editComment(
+  threadId: string,
+  commentId: string,
+  body: string,
+): Promise<CommentView> {
+  return apiClient.patch<CommentView>(
+    `/discussions/${threadId}/comments/${commentId}`,
+    { body },
+  );
+}
+
+/** 撤回评论（作者） */
+export function retractComment(
+  threadId: string,
+  commentId: string,
+): Promise<CommentView> {
+  return apiClient.post<CommentView>(
+    `/discussions/${threadId}/comments/${commentId}/retract`,
+  );
+}
+
+/** 隐藏评论（Moderator） */
+export function hideComment(
+  threadId: string,
+  commentId: string,
+): Promise<CommentView> {
+  return apiClient.post<CommentView>(
+    `/discussions/${threadId}/comments/${commentId}/hide`,
+  );
+}
+
+/** 恢复评论（Moderator） */
+export function unhideComment(
+  threadId: string,
+  commentId: string,
+): Promise<CommentView> {
+  return apiClient.post<CommentView>(
+    `/discussions/${threadId}/comments/${commentId}/unhide`,
+  );
+}
+
+/** 锁定线程 */
+export function lockThread(
+  threadId: string,
+): Promise<ThreadView> {
+  return apiClient.post<ThreadView>(`/discussions/${threadId}/lock`);
+}
+
+/** 解锁线程 */
+export function unlockThread(
+  threadId: string,
+): Promise<ThreadView> {
+  return apiClient.post<ThreadView>(`/discussions/${threadId}/unlock`);
+}

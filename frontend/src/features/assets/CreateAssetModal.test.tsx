@@ -66,10 +66,14 @@ describe('CreateAssetModal', () => {
     expect(screen.getByPlaceholderText('decoder-only')).toBeInTheDocument();
   });
 
-  it('渲染组织/项目/标签/字典受控选择器', () => {
+  it('渲染组织/项目/Owner团队/标签/字典受控选择器', () => {
     renderWithProviders(<CreateAssetModal {...defaultProps} />);
     expect(screen.getByTestId('controlled-select-请选择组织')).toBeInTheDocument();
     expect(screen.getByTestId('controlled-select-请选择受控标签')).toBeInTheDocument();
     expect(screen.getByTestId('controlled-select-请选择许可证')).toBeInTheDocument();
+    // Owner team 使用受控选择器（multi-select 模式，需先选组织才可用）
+    expect(screen.getByTestId('controlled-select-请选择 Owner 团队（需先选组织）')).toBeInTheDocument();
+    // Project 也是受控选择器
+    expect(screen.getByTestId('controlled-select-请选择项目（需先选组织）')).toBeInTheDocument();
   });
 });

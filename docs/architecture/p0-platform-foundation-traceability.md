@@ -46,12 +46,18 @@
 | 平台/组织标签 | `V7__taxonomy_tag.sql`：`system_tag`、`asset_tag`（关联在 `V12` 完成） | `taxonomy/tag/**/*Test`（含 `TagValidationServiceTest` 自由标签拒绝） | V07 | 已实现 |
 | 配置 | `V8__configuration.sql`：`system_config` | `configuration/**/*Test`、`configuration/ConfigurationIT` | V06/V11（`system:configure`/`observe`） | 已实现 |
 | ID、上下文、响应、异常 | shared-kernel（无独立表） | `shared/SharedKernelTest`、`shared/logging/SensitiveDataMaskerTest`、`arch/LayeredArchitectureTest` | V05（错误体一致性） | 已实现 |
-| 幂等与可靠任务 | `V9__job.sql`：`api_idempotency`、`job_task`、`job_attempt` | `job/application/IdempotencyServiceTest`、`job/application/BackoffCalculatorTest`、`job/infrastructure/JobWorkerTest` | V09 | 已实现 |
+| 幂等与可靠任务 | `V9__job.sql`：`api_idempotency`、`job_task`、`job_attempt`；`V20__permission_seed_and_idempotency.sql`：幂等表增强（principal_id） | `job/application/IdempotencyServiceTest`、`job/application/BackoffCalculatorTest`、`job/infrastructure/JobWorkerTest` | V09 | 已实现 |
 | 结构化日志与审计 | `V10__audit.sql`：`audit_log` | `audit/application/AuditServiceTest`、`audit/domain/AuditRepositoryImmutabilityTest`、`shared/logging/SensitiveDataMaskerTest`、`identity/application/AuthenticationApplicationServiceTest` | V08（脱敏 + 登录审计） | 已实现（asset/taxonomy/authorization/configuration/identity 均已接入 AuditService；identity 登录/刷新/重放/改密/凭据交换经 IdentityAuditAdapter 记录） |
 | 通知与外发 Webhook | `V11__notification.sql`：`notification`、`webhook_delivery`、`outbox_event` | `notification/application/NotificationServiceTest`、`notification/infrastructure/WebhookSignerTest`、`notification/infrastructure/SsrfGuardTest` | V10 | 已实现 |
 | 指标、Trace、健康与诊断 | 无业务表（Micrometer/OTel） | `platform/observability/**/*Test`（`MetricsSummaryServiceTest`、`SystemDependencyServiceTest`、`SystemDiagnosticsControllerTest`） | V11 | 已实现 |
 | 公共管理端 | 前端（不直接访问 DB） | 前端 `pnpm lint/typecheck/build`（见 `frontend/`） | 手动 UI；Verify 走 API 层 | 已实现 |
-| 资产目录（冻结整改） | `V12__asset_governance.sql`：`asset_tag`、治理引用列 | `asset/**/*Test`、`asset/AssetCatalogIT` | V06（下推过滤，登录后可扩展） | 部分（P1 冻结整改） |
+| 资产目录（P1 整改） | `V12__asset_governance.sql`：`asset_tag`、治理引用列；`V14__asset_remediation.sql`：资产 Schema 整改、治理字段扩展、pg_trgm 全文索引 | `asset/**/*Test`、`asset/AssetCatalogIT` | V06（下推过滤） | 已实现（P1 基础整改完成） |
+| Team 与 Owner | `V19__team.sql`：`team`、`team_member` | `organization/api/TeamControllerTest` | V04（表存在） | 已实现（DEC-011） |
+| Discussion | `V15__discussion.sql`：`discussion_thread`、`discussion_comment`、`discussion_subscription` | `asset/**/*Test` | V04（表存在） | 已实现 |
+| 版本与传输 | `V16__version_transfer.sql`：`asset_version`、`version_artifact`、`upload_session`、`upload_file`、`upload_part`、`asset_preview` | `version/**/*Test`、`transfer/**/*Test` | V04（表存在） | 已实现 |
+| 发布治理 | `V17__release_governance.sql`：`validation_report`、`publish_request`、`review_decision` | `version/**/*Test` | V04（表存在） | 已实现 |
+| Webhook Inbox | `V18__webhook_inbox.sql`：`webhook_inbox` | `notification/**/*Test` | V04（表存在） | 已实现 |
+| 权限 seed 与幂等增强 | `V20__permission_seed_and_idempotency.sql`：`api_idempotency` 增加 principal_id、READER 角色收紧 | `authorization/**/*Test` | V04（表存在） | 已实现（AUD-006/016/017） |
 
 ### Verify 用例与能力对应（`deploy/compose/scripts/verify.{ps1,sh}`）
 
@@ -60,7 +66,7 @@
 | V01 | `docker compose config --quiet` | 始终执行 |
 | V02 | postgres/minio/gitea/backend 健康 | 容器未起时 SKIP |
 | V03 | 四个 Bucket 存在且非匿名 | minio 未起时 SKIP |
-| V04 | Flyway V1-V13 成功迁移、关键表存在 | postgres 未起时 SKIP |
+| V04 | Flyway V1-V20 成功迁移、关键表存在 | postgres 未起时 SKIP |
 | V05 | 登录签发 JWT、`/me` 200、无 Token→401（fail-closed） | backend 未起时 SKIP |
 | V06 | `/system/audit-logs`、`/metrics/summary` 无 Token→401、越权→403 | backend 未起时 SKIP |
 | V07 | `/system/dictionaries`、`/tags` 无 Token→401、越权→403 | backend 未起时 SKIP |
@@ -68,6 +74,7 @@
 | V09 | `/system/jobs` 默认拒绝 | backend 未起时 SKIP |
 | V10 | `/system/notifications` 默认拒绝 | backend 未起时 SKIP |
 | V11 | `/actuator/health` 200、`/system/dependencies` 默认拒绝 | backend 未起时 SKIP |
+| V12 | `/system/alerts` 告警列表、DEAD 任务/积压告警 | backend 未起时 SKIP |
 
 > 说明：Bootstrap 管理员默认仅持 `ADMIN_SCOPES`（user/authorization/agent）且首登强制改密，
 > 因此 V06-V11 以“无 Token→401、越权 Token→403”验证 fail-closed 默认拒绝语义，

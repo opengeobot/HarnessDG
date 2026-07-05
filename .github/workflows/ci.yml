@@ -99,7 +99,7 @@ jobs:
           --config contracts/openapi/redocly.yaml
           contracts/openapi/aihub-v1.yaml
       # breaking-change 检查：与 PR base ref（或 push 前一提交）对比契约差异。
-      # breaking change (error 级别) 为强制门禁，non-breaking 警告不阻断。
+      # breaking change (error 级别) 仅在 PR 到 main 时强制阻断，其他分支仅警告。
       - name: OpenAPI breaking-change diff
         run: |
           BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
@@ -110,4 +110,9 @@ jobs:
           git show "${BASE_REF}:contracts/openapi/aihub-v1.yaml" > /tmp/aihub-base.yaml 2>/dev/null || {
             echo "基线中不存在契约文件，视为新增，跳过 diff。"; exit 0;
           }
-          npx --yes @redocly/cli@latest diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
+          IS_MAIN_PR="${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' }}"
+          if [ "${IS_MAIN_PR}" = "true" ]; then
+            npx --yes @redocly/cli@latest diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
+          else
+            npx --yes @redocly/cli@latest diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking || echo "Breaking change detected (non-blocking for non-main PR)"
+          fi

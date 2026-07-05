@@ -23,6 +23,7 @@ import {
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
+import { SafeMarkdown } from '@/shared/components';
 import { isApiError } from '@/shared/api';
 import {
   archiveAsset,
@@ -215,17 +216,13 @@ export function AssetDetailPage() {
           {asset.card.readme && (
             <Typography.Paragraph>
               <Typography.Title level={5}>README</Typography.Title>
-              <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
-                {asset.card.readme}
-              </pre>
+              <SafeMarkdown content={asset.card.readme} />
             </Typography.Paragraph>
           )}
           {asset.card.assetYaml && (
             <Typography.Paragraph>
               <Typography.Title level={5}>asset.yaml</Typography.Title>
-              <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
-                {asset.card.assetYaml}
-              </pre>
+              <SafeMarkdown content={asset.card.assetYaml} />
             </Typography.Paragraph>
           )}
         </Card>

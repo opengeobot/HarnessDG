@@ -29,4 +29,10 @@ public interface OutboxRepository {
 
     /** 标记事件已处理。 */
     void markProcessed(String eventId, Instant now);
+
+    /** 查询最近事件（管理员视图）。 */
+    List<OutboxEvent> listRecent(int limit);
+
+    /** 统计待处理事件数。 */
+    long countPending();
 }

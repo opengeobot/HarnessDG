@@ -35,6 +35,7 @@ import type {
   NotificationView,
   OrganizationMemberView,
   OrganizationView,
+  OutboxEventView,
   PageResultUser,
   PermissionView,
   ProjectView,
@@ -52,6 +53,7 @@ import type {
   UpdateTagRequest,
   UpdateTeamRequest,
   UpdateUserRequest,
+  WebhookDeliveryView,
 } from './types';
 
 /** 生成当前 Principal 范围内唯一的写请求幂等键 */
@@ -299,6 +301,23 @@ export function listNotifications(
 
 export function markNotificationRead(notificationId: string) {
   return apiClient.post(`/system/notifications/${notificationId}:read`);
+}
+
+/* ---------------- 通知管理（Admin） ---------------- */
+export function listOutboxEvents(limit = 50): Promise<OutboxEventView[]> {
+  return apiClient.get<OutboxEventView[]>('/system/notifications/admin/outbox', { params: { limit } });
+}
+
+export function getOutboxPendingCount(): Promise<{ count: number }> {
+  return apiClient.get<{ count: number }>('/system/notifications/admin/outbox/pending-count');
+}
+
+export function listWebhookDeliveries(limit = 50): Promise<WebhookDeliveryView[]> {
+  return apiClient.get<WebhookDeliveryView[]>('/system/notifications/admin/deliveries', { params: { limit } });
+}
+
+export function retryWebhookDelivery(deliveryId: string) {
+  return apiClient.post(`/system/notifications/admin/deliveries/${deliveryId}:retry`, undefined, idempotent());
 }
 
 /* ---------------- 指标 ---------------- */
