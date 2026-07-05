@@ -32,6 +32,11 @@ tags:
   - { name: notifications, description: 站内通知 }
   - { name: system, description: 系统观测与依赖诊断 }
   - { name: assets, description: 冻结整改中的资产目录 }
+  - { name: discussions, description: 评论管理与线程管控 }
+  - { name: version, description: 版本管理与发布审批 }
+  - { name: transfer, description: 下载票据 }
+  - { name: integration, description: 外部系统集成 }
+  - { name: mcp, description: MCP 协议端点 }
 
 security:
   - bearerAuth: []
@@ -1877,6 +1882,531 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  # ── 评论管理与线程管控（CommentController） ──
+
+  /discussions/{threadId}/comments/{commentId}:
+    parameters:
+      - { name: threadId, in: path, required: true, schema: { type: string } }
+      - { name: commentId, in: path, required: true, schema: { type: string } }
+    patch:
+      operationId: editComment
+      summary: 编辑评论（作者）
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:discuss]
+      x-audit-event: COMMENT_EDITED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditCommentRequest' }
+      responses:
+        '200':
+          description: 编辑成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommentView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /discussions/{threadId}/comments/{commentId}/retract:
+    parameters:
+      - { name: threadId, in: path, required: true, schema: { type: string } }
+      - { name: commentId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: retractComment
+      summary: 撤回评论（作者）
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:discuss]
+      x-audit-event: COMMENT_RETRACTED
+      responses:
+        '200':
+          description: 撤回成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommentView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /discussions/{threadId}/comments/{commentId}/hide:
+    parameters:
+      - { name: threadId, in: path, required: true, schema: { type: string } }
+      - { name: commentId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: hideComment
+      summary: 隐藏评论（Moderator）
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: COMMENT_HIDDEN
+      responses:
+        '200':
+          description: 隐藏成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommentView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /discussions/{threadId}/comments/{commentId}/unhide:
+    parameters:
+      - { name: threadId, in: path, required: true, schema: { type: string } }
+      - { name: commentId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: unhideComment
+      summary: 恢复评论（Moderator）
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: COMMENT_UNHIDDEN
+      responses:
+        '200':
+          description: 恢复成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CommentView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /discussions/{threadId}/lock:
+    parameters:
+      - { name: threadId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: lockThread
+      summary: 锁定线程（Moderator）
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: THREAD_LOCKED
+      responses:
+        '200':
+          description: 锁定成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ThreadView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /discussions/{threadId}/unlock:
+    parameters:
+      - { name: threadId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: unlockThread
+      summary: 解锁线程（Moderator）
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: THREAD_UNLOCKED
+      responses:
+        '200':
+          description: 解锁成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ThreadView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 系统告警（SystemAlertController） ──
+
+  /system/alerts:
+    get:
+      operationId: listAlerts
+      summary: 查询告警列表（按触发时间降序）
+      tags: [system]
+      x-implementation-status: implemented
+      x-required-permissions: [system:observe]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: 告警列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/SystemAlert' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/alerts/firing:
+    get:
+      operationId: listFiringAlerts
+      summary: 查询当前活跃告警（FIRING）
+      tags: [system]
+      x-implementation-status: implemented
+      x-required-permissions: [system:observe]
+      responses:
+        '200':
+          description: 活跃告警列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/SystemAlert' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 通知管理（NotificationAdminController） ──
+
+  /system/notifications/admin/outbox:
+    get:
+      operationId: listOutboxEvents
+      summary: 查询最近 Outbox 事件
+      tags: [notifications]
+      x-implementation-status: implemented
+      x-required-permissions: [system:observe]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Outbox 事件列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/OutboxEventView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/notifications/admin/outbox/pending-count:
+    get:
+      operationId: countPendingOutbox
+      summary: 统计 Outbox 待处理事件数
+      tags: [notifications]
+      x-implementation-status: implemented
+      x-required-permissions: [system:observe]
+      responses:
+        '200':
+          description: 待处理计数
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count: { type: integer }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/notifications/admin/deliveries:
+    get:
+      operationId: listDeliveries
+      summary: 查询最近 Webhook 投递记录
+      tags: [notifications]
+      x-implementation-status: implemented
+      x-required-permissions: [system:observe]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: 投递记录列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/WebhookDeliveryView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  '/system/notifications/admin/deliveries/{deliveryId}:retry':
+    post:
+      operationId: retryDelivery
+      summary: 手动重试失败投递
+      tags: [notifications]
+      x-implementation-status: implemented
+      x-required-permissions: [system:observe]
+      parameters:
+        - { name: deliveryId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 重试已提交
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deliveryId: { type: string }
+                          status: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 版本审批与生命周期（ReviewController） ──
+
+  /versions/{versionId}/publish-requests:
+    parameters:
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: submitPublishRequest
+      summary: 提交发布请求
+      tags: [version]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: PUBLISH_REQUESTED
+      responses:
+        '200':
+          description: 发布请求已提交
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /publish-requests/{requestId}/decisions:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: submitDecision
+      summary: 提交审批决策
+      tags: [version]
+      x-implementation-status: implemented
+      x-required-permissions: [publish:approve]
+      x-audit-event: PUBLISH_DECISION_SUBMITTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+      responses:
+        '200':
+          description: 决策已提交
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /versions/{versionId}/deprecate:
+    parameters:
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: deprecateVersion
+      summary: 弃用版本
+      tags: [version]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: VERSION_DEPRECATED
+      responses:
+        '200':
+          description: 版本已弃用
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /versions/{versionId}/archive:
+    parameters:
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: archiveVersion
+      summary: 归档版本
+      tags: [version]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      x-audit-event: VERSION_ARCHIVED
+      responses:
+        '200':
+          description: 版本已归档
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 预览与 DVC（PreviewController / DvcConfigurationController） ──
+
+  /assets/{assetId}/previews:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getPreview
+      summary: 获取资产预览
+      tags: [assets]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: versionId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 预览内容
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreviewView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/dvc/config:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getDvcRemoteConfig
+      summary: 获取 DVC Remote 配置
+      tags: [version]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: DVC Remote 配置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DvcRemoteConfig' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/dvc/credentials:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getDvcCredentials
+      summary: 签发短期 DVC 凭据
+      tags: [version]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: DVC 短期凭据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DvcCredentials' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 下载票据（DownloadController） ──
+
+  /versions/{versionId}/download:
+    parameters:
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: issueDownloadTicket
+      summary: 签发下载票据
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: artifactId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 下载票据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DownloadTicket' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 外部集成（WebhookInboxController） ──
+
+  /webhooks/gitea:
+    post:
+      operationId: receiveGiteaWebhook
+      summary: 接收 Gitea Webhook
+      tags: [integration]
+      x-implementation-status: implemented
+      security: []
+      parameters:
+        - { name: X-Gitea-Delivery, in: header, required: false, schema: { type: string } }
+        - { name: X-Gitea-Event, in: header, required: false, schema: { type: string } }
+        - { name: X-Hub-Signature-256, in: header, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '202': { description: Accepted }
+        '400': { description: Bad Request }
+        '401': { description: Signature Invalid }
+
+  # ── MCP 协议（McpController） ──
+
+  /mcp:
+    post:
+      operationId: mcpJsonRpc
+      summary: MCP JSON-RPC 端点
+      tags: [mcp]
+      x-implementation-status: implemented
+      description: |
+        支持方法: initialize、tools/list、tools/call、resources/list、resources/read。
+        JWT 认证复用 PrincipalContext。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JsonRpcRequest' }
+      responses:
+        '200':
+          description: JSON-RPC 响应
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JsonRpcResponse' }
+        '400': { description: Invalid Request }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3002,3 +3532,164 @@ components:
           type: [string, 'null']
         hasMore:
           type: boolean
+
+    # ── 评论管理 schema ──
+
+    EditCommentRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 10000
+
+    # ── 系统告警 schema ──
+
+    SystemAlert:
+      type: object
+      description: 系统告警实体
+      required: [alertId, alertType, severity, title, status, firedAt]
+      properties:
+        id: { type: integer }
+        alertId: { type: string }
+        alertType: { type: string }
+        severity: { type: string, enum: [INFO, WARNING, CRITICAL] }
+        title: { type: string }
+        detail: { type: string }
+        status: { type: string, enum: [FIRING, RESOLVED] }
+        sourceMetric: { type: string }
+        thresholdValue: { type: [number, 'null'] }
+        currentValue: { type: [number, 'null'] }
+        firedAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+        traceId: { type: string }
+
+    # ── 通知管理 schema ──
+
+    OutboxEventView:
+      type: object
+      description: Outbox 事件视图（管理员）
+      required: [eventId, aggregateType, aggregateId, eventType, occurredAt, processed, traceId]
+      properties:
+        eventId: { type: string }
+        aggregateType: { type: string }
+        aggregateId: { type: string }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+        processed: { type: boolean }
+        traceId: { type: string }
+
+    WebhookDeliveryView:
+      type: object
+      description: Webhook 投递视图（管理员）
+      required: [deliveryId, eventId, targetUrl, status, attempts, createdAt, updatedAt]
+      properties:
+        deliveryId: { type: string }
+        eventId: { type: string }
+        targetUrl: { type: string, format: uri }
+        status: { type: string }
+        attempts: { type: integer }
+        lastResponseCode: { type: [integer, 'null'] }
+        lastError: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ── 版本审批 schema ──
+
+    DecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT]
+        comments:
+          type: string
+
+    # ── 预览 schema ──
+
+    PreviewView:
+      type: object
+      description: 资产预览视图
+      required: [previewId, contentType, content]
+      properties:
+        previewId: { type: string }
+        contentType: { type: string }
+        content: { type: string }
+        generatedAt: { type: [string, 'null'] }
+
+    # ── DVC schema ──
+
+    DvcRemoteConfig:
+      type: object
+      description: DVC Remote 配置
+      required: [bucket, endpoint, type, prefix, expiresAt]
+      properties:
+        bucket: { type: string }
+        endpoint: { type: string, format: uri }
+        type: { type: string }
+        prefix: { type: string }
+        expiresAt: { type: string, format: date-time }
+
+    DvcCredentials:
+      type: object
+      description: DVC 短期凭据
+      required: [accessKey, secretKey, expiresAt, bucket, prefix]
+      properties:
+        accessKey: { type: string }
+        secretKey: { type: string, format: password }
+        expiresAt: { type: string, format: date-time }
+        bucket: { type: string }
+        prefix: { type: string }
+
+    # ── 下载票据 schema ──
+
+    DownloadTicket:
+      type: object
+      description: 下载票据
+      required: [method, presignedUrl, expiresAt, fileName, fileSize]
+      properties:
+        method:
+          type: string
+          enum: [PRESIGNED_URL, GIT_DVC]
+        presignedUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+        fileName: { type: string }
+        fileSize: { type: [integer, 'null'] }
+
+    # ── MCP schema ──
+
+    JsonRpcRequest:
+      type: object
+      description: JSON-RPC 2.0 请求
+      required: [jsonrpc, method, id]
+      properties:
+        jsonrpc:
+          type: string
+          const: '2.0'
+        id:
+          type: [string, integer]
+        method:
+          type: string
+          enum: [initialize, tools/list, tools/call, resources/list, resources/read]
+        params:
+          type: object
+
+    JsonRpcResponse:
+      type: object
+      description: JSON-RPC 2.0 响应
+      required: [jsonrpc, id]
+      properties:
+        jsonrpc:
+          type: string
+          const: '2.0'
+        id:
+          type: [string, integer, 'null']
+        result:
+          type: object
+        error:
+          type: object
+          properties:
+            code: { type: integer }
+            message: { type: string }
