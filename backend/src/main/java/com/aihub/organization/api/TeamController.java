@@ -7,6 +7,7 @@ package com.aihub.organization.api;
 
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.organization.api.TeamRequests.AddTeamMemberRequest;
 import com.aihub.organization.api.TeamRequests.CreateTeamRequest;
 import com.aihub.organization.api.TeamRequests.UpdateTeamRequest;
@@ -18,7 +19,11 @@ import com.aihub.organization.application.TeamDtos.TeamView;
 import com.aihub.organization.application.TeamDtos.UpdateTeamCommand;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +31,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -42,11 +48,17 @@ public class TeamController {
 
     private final TeamApplicationService teamService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public TeamController(TeamApplicationService teamService,
-                          AuthorizationService authorizationService) {
+                          AuthorizationService authorizationService,
+                          IdempotencyService idempotencyService,
+                          ObjectMapper objectMapper) {
         this.teamService = teamService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -63,16 +75,27 @@ public class TeamController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<TeamView> createTeam(@PathVariable String organizationId,
-                                            @RequestBody CreateTeamRequest request) {
+    public ApiResponse<TeamView> createTeam(
+            @PathVariable String organizationId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody CreateTeamRequest request) {
         authorizationService.requirePermission(Permissions.TEAM_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        TeamView view = teamService.createTeam(
-                new CreateTeamCommand(organizationId, request.name(), request.description()),
-                OrganizationApiContext.principalId());
-        return OrganizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "POST",
+                "/api/v1/system/organizations/" + organizationId + "/teams");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<TeamView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            TeamView view = teamService.createTeam(
+                    new CreateTeamCommand(organizationId, request.name(), request.description()),
+                    OrganizationApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return OrganizationApiContext.respond(ref.get());
     }
 
     /**
@@ -89,17 +112,28 @@ public class TeamController {
      * 更新 Team。
      */
     @PutMapping("/{teamId}")
-    public ApiResponse<TeamView> updateTeam(@PathVariable String organizationId,
-                                            @PathVariable String teamId,
-                                            @RequestBody UpdateTeamRequest request) {
+    public ApiResponse<TeamView> updateTeam(
+            @PathVariable String organizationId,
+            @PathVariable String teamId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody UpdateTeamRequest request) {
         authorizationService.requirePermission(Permissions.TEAM_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        TeamView view = teamService.updateTeam(teamId,
-                new UpdateTeamCommand(request.name(), request.description(), request.status()),
-                OrganizationApiContext.principalId());
-        return OrganizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "PUT",
+                "/api/v1/system/organizations/" + organizationId + "/teams/" + teamId);
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<TeamView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            TeamView view = teamService.updateTeam(teamId,
+                    new UpdateTeamCommand(request.name(), request.description(), request.status()),
+                    OrganizationApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(200, idempotency.serialize(view));
+        });
+        return OrganizationApiContext.respond(ref.get());
     }
 
     /**
@@ -117,28 +151,48 @@ public class TeamController {
      */
     @PostMapping("/{teamId}/members")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<TeamMemberView> addMember(@PathVariable String organizationId,
-                                                 @PathVariable String teamId,
-                                                 @RequestBody AddTeamMemberRequest request) {
+    public ApiResponse<TeamMemberView> addMember(
+            @PathVariable String organizationId,
+            @PathVariable String teamId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody AddTeamMemberRequest request) {
         authorizationService.requirePermission(Permissions.TEAM_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        TeamMemberView view = teamService.addMember(
-                new AddTeamMemberCommand(teamId, request.principalId(), request.role()),
-                OrganizationApiContext.principalId());
-        return OrganizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "POST",
+                "/api/v1/system/organizations/" + organizationId + "/teams/" + teamId + "/members");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<TeamMemberView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            TeamMemberView view = teamService.addMember(
+                    new AddTeamMemberCommand(teamId, request.principalId(), request.role()),
+                    OrganizationApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return OrganizationApiContext.respond(ref.get());
     }
 
     /**
      * 移除 Team 成员。
      */
     @DeleteMapping("/{teamId}/members/{principalId}")
-    public ApiResponse<Void> removeMember(@PathVariable String organizationId,
-                                          @PathVariable String teamId,
-                                          @PathVariable String principalId) {
+    public ApiResponse<Void> removeMember(
+            @PathVariable String organizationId,
+            @PathVariable String teamId,
+            @PathVariable String principalId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue) {
         authorizationService.requirePermission(Permissions.TEAM_MANAGE);
-        teamService.removeMember(teamId, principalId, OrganizationApiContext.principalId());
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "DELETE",
+                "/api/v1/system/organizations/" + organizationId + "/teams/" + teamId
+                        + "/members/" + principalId);
+        idempotencyService.execute(key, null, () -> {
+            teamService.removeMember(teamId, principalId, OrganizationApiContext.principalId());
+            return new IdempotencyService.IdempotencyResponse(200, "");
+        });
         return OrganizationApiContext.respond(null);
     }
 }

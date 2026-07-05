@@ -1,6 +1,6 @@
 /*
- * 功能: 幂等存储 JDBC 持久化实现，基于 api_idempotency 表，INSERT ON CONFLICT 处理并发重复键。
- * 时间: 2026-06-30
+ * 功能: 基于 PostgreSQL api_idempotency 表的幂等存储实现。
+ * 时间: 2026-07-05
  * 作者: AxeXie
  */
 package com.aihub.job.infrastructure;
@@ -8,86 +8,122 @@ package com.aihub.job.infrastructure;
 import com.aihub.shared.idempotency.IdempotencyKey;
 import com.aihub.shared.idempotency.IdempotencyRecord;
 import com.aihub.shared.idempotency.IdempotencyStore;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Repository;
 
 /**
- * 幂等存储 JDBC 实现。
+ * JDBC 幂等存储。
  *
- * <p>基于 {@code api_idempotency} 表：{@code find} 按 idempotency_key 查询命中记录；
- * {@code save} 以 {@code INSERT ON CONFLICT (idempotency_key) DO NOTHING} 写入，并发下已存在则回查
- * 实际生效记录，保证"恰好一次"语义。response_payload 以 JSONB 承载 {status, body}。
+ * <p>使用 {@code api_idempotency} 表持久化首次执行结果；{@code INSERT ON CONFLICT DO NOTHING}
+ * 保证并发下只有一个请求写入成功，其余读取已有记录。
  */
-@Component
+@Repository
 public class JdbcIdempotencyStore implements IdempotencyStore {
 
-    private final JdbcTemplate jdbcTemplate;
+    private static final Logger LOG = LoggerFactory.getLogger(JdbcIdempotencyStore.class);
+
+    private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
 
-    public JdbcIdempotencyStore(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
-        this.jdbcTemplate = jdbcTemplate;
+    public JdbcIdempotencyStore(NamedParameterJdbcTemplate jdbc, ObjectMapper objectMapper) {
+        this.jdbc = jdbc;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public Optional<IdempotencyRecord> find(IdempotencyKey key) {
-        List<IdempotencyRecord> rows = jdbcTemplate.query(
-                "SELECT response_payload, request_digest, created_at FROM api_idempotency "
-                        + "WHERE idempotency_key = ? AND status = 'COMPLETED'",
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("key", key.key())
+                .addValue("principalId", key.principalId())
+                .addValue("method", key.method())
+                .addValue("path", key.path());
+
+        var results = jdbc.query(
+                "SELECT idempotency_key, principal_id, method, path, request_digest, " +
+                        "response_payload, created_at " +
+                        "FROM api_idempotency " +
+                        "WHERE idempotency_key = :key " +
+                        "  AND principal_id = :principalId " +
+                        "  AND method = :method " +
+                        "  AND path = :path " +
+                        "  AND status = 'COMPLETED'",
+                params,
                 (rs, rowNum) -> {
-                    String payload = rs.getString("response_payload");
-                    String digest = rs.getString("request_digest");
+                    IdempotencyKey k = new IdempotencyKey(
+                            rs.getString("idempotency_key"),
+                            rs.getString("principal_id"),
+                            rs.getString("method"),
+                            rs.getString("path"));
+                    Map<String, Object> payload = readPayload(rs.getString("response_payload"));
+                    int status = payload.containsKey("status")
+                            ? ((Number) payload.get("status")).intValue() : 200;
+                    String body = payload.containsKey("body")
+                            ? payload.get("body").toString() : "";
                     Instant createdAt = rs.getTimestamp("created_at").toInstant();
-                    int status = 0;
-                    String body = null;
-                    if (payload != null) {
-                        try {
-                            JsonNode node = objectMapper.readTree(payload);
-                            status = node.path("status").asInt(0);
-                            body = node.path("body").isNull() ? null : node.path("body").asText(null);
-                        } catch (Exception parseEx) {
-                            // 损坏的 payload 视为未命中
-                        }
-                    }
-                    return new IdempotencyRecord(key, digest, status, body, createdAt);
-                },
-                key.key());
-        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+                    return new IdempotencyRecord(k, rs.getString("request_digest"),
+                            status, body, createdAt);
+                });
+
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     @Override
     public IdempotencyRecord save(IdempotencyRecord record) {
-        ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("status", record.responseStatus());
-        if (record.responseBody() == null) {
-            payload.putNull("body");
-        } else {
-            payload.put("body", record.responseBody());
+        String payloadJson = writePayload(record.responseStatus(), record.responseBody());
+
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("key", record.key().key())
+                .addValue("principalId", record.key().principalId())
+                .addValue("method", record.key().method())
+                .addValue("path", record.key().path())
+                .addValue("digest", record.requestFingerprint())
+                .addValue("payload", payloadJson)
+                .addValue("now", Instant.now());
+
+        try {
+            jdbc.update(
+                    "INSERT INTO api_idempotency " +
+                            "(idempotency_key, principal_id, method, path, request_digest, " +
+                            " status, response_payload, completed_at) " +
+                            "VALUES (:key, :principalId, :method, :path, :digest, " +
+                            " 'COMPLETED', :payload::jsonb, :now) " +
+                            "ON CONFLICT (idempotency_key) DO NOTHING",
+                    params);
+        } catch (DuplicateKeyException e) {
+            LOG.debug("idempotency key already exists, concurrent save: key={}", record.key().key());
+        }
+
+        // 返回已有记录（可能是并发写入的另一条）
+        return find(record.key()).orElse(record);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readPayload(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
         }
         try {
-            String payloadJson = objectMapper.writeValueAsString(payload);
-            int inserted = jdbcTemplate.update("""
-                    INSERT INTO api_idempotency (idempotency_key, method, path, request_digest, status,
-                        response_payload, created_at, completed_at)
-                    VALUES (?,?,?,?, 'COMPLETED', ?::jsonb, now(), now())
-                    ON CONFLICT (idempotency_key) DO NOTHING
-                    """,
-                    record.key().key(), record.key().method(), record.key().path(),
-                    record.requestFingerprint(), payloadJson);
-            if (inserted == 0) {
-                // 并发下已存在同键记录：回查实际生效记录返回。
-                return find(record.key()).orElse(record);
-            }
-            return record;
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to persist idempotency record", ex);
+            return objectMapper.readValue(json, Map.class);
+        } catch (JsonProcessingException e) {
+            LOG.warn("failed to parse idempotency response payload", e);
+            return Map.of();
+        }
+    }
+
+    private String writePayload(int status, String body) {
+        try {
+            return objectMapper.writeValueAsString(Map.of("status", status, "body", body != null ? body : ""));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize idempotency payload", e);
         }
     }
 }

@@ -17,4 +17,5 @@ export {
   AuditLogsPage,
   NotificationsPage,
   DependenciesPage,
+  TeamsPage,
 } from './pages';

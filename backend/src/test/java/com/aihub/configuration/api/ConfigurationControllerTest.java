@@ -28,6 +28,7 @@ import com.aihub.configuration.application.ConfigurationDtos.ConfigView;
 import com.aihub.configuration.domain.ConfigValueType;
 import com.aihub.identity.api.RefreshCookieFactory;
 import com.aihub.identity.api.RefreshCookieProperties;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.ValidationException;
 import com.aihub.shared.identity.PrincipalType;
@@ -76,10 +77,16 @@ class ConfigurationControllerTest {
     private ResourceAclRepository resourceAclRepository;
     @MockitoBean
     private AgentToolRepository agentToolRepository;
+    @MockitoBean
+    private IdempotencyService idempotencyService;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
+        given(idempotencyService.execute(any(), any(), any())).willAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
     }
 
     private String bearer(Set<String> scopes) {

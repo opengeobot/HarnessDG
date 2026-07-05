@@ -7,8 +7,11 @@ package com.aihub.taxonomy.dictionary.api;
 
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
 import com.aihub.taxonomy.api.TaxonomyApiContext;
 import com.aihub.taxonomy.dictionary.application.DictionaryApplicationService;
 import com.aihub.taxonomy.dictionary.application.DictionaryDtos.CreateDictionaryItemCommand;
@@ -17,13 +20,16 @@ import com.aihub.taxonomy.dictionary.application.DictionaryDtos.DictionaryTypeVi
 import com.aihub.taxonomy.dictionary.application.DictionaryDtos.UpdateDictionaryItemCommand;
 import com.aihub.taxonomy.dictionary.api.DictionaryRequests.CreateDictionaryItemRequest;
 import com.aihub.taxonomy.dictionary.api.DictionaryRequests.UpdateDictionaryItemRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -41,11 +47,17 @@ public class DictionaryController {
 
     private final DictionaryApplicationService dictionaryService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public DictionaryController(DictionaryApplicationService dictionaryService,
-                                AuthorizationService authorizationService) {
+                                AuthorizationService authorizationService,
+                                IdempotencyService idempotencyService,
+                                ObjectMapper objectMapper) {
         this.dictionaryService = dictionaryService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -76,33 +88,56 @@ public class DictionaryController {
      */
     @PostMapping("/{dictCode}/items")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<DictionaryItemView> createItem(@PathVariable String dictCode,
-                                                      @RequestBody CreateDictionaryItemRequest request) {
+    public ApiResponse<DictionaryItemView> createItem(
+            @PathVariable String dictCode,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody CreateDictionaryItemRequest request) {
         authorizationService.requirePermission(Permissions.DICTIONARY_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        DictionaryItemView view = dictionaryService.createItem(dictCode,
-                new CreateDictionaryItemCommand(request.itemCode(), request.i18nKey(), request.sortOrder()),
-                TaxonomyApiContext.principalId());
-        return TaxonomyApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                TaxonomyApiContext.principalId(), "POST",
+                "/api/v1/system/dictionaries/" + dictCode + "/items");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<DictionaryItemView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            DictionaryItemView view = dictionaryService.createItem(dictCode,
+                    new CreateDictionaryItemCommand(request.itemCode(), request.i18nKey(),
+                            request.sortOrder()),
+                    TaxonomyApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return TaxonomyApiContext.respond(ref.get());
     }
 
     /**
      * 更新、启用或停用字典项。
      */
     @PatchMapping("/{dictCode}/items/{itemCode}")
-    public ApiResponse<DictionaryItemView> updateItem(@PathVariable String dictCode,
-                                                      @PathVariable String itemCode,
-                                                      @RequestBody UpdateDictionaryItemRequest request) {
+    public ApiResponse<DictionaryItemView> updateItem(
+            @PathVariable String dictCode,
+            @PathVariable String itemCode,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody UpdateDictionaryItemRequest request) {
         authorizationService.requirePermission(Permissions.DICTIONARY_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        DictionaryItemView view = dictionaryService.updateItem(dictCode, itemCode,
-                new UpdateDictionaryItemCommand(request.i18nKey(), request.sortOrder(),
-                        request.status(), request.expectedVersion()),
-                TaxonomyApiContext.principalId());
-        return TaxonomyApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                TaxonomyApiContext.principalId(), "PATCH",
+                "/api/v1/system/dictionaries/" + dictCode + "/items/" + itemCode);
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<DictionaryItemView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            DictionaryItemView view = dictionaryService.updateItem(dictCode, itemCode,
+                    new UpdateDictionaryItemCommand(request.i18nKey(), request.sortOrder(),
+                            request.status(), request.expectedVersion()),
+                    TaxonomyApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(200, idempotency.serialize(view));
+        });
+        return TaxonomyApiContext.respond(ref.get());
     }
 }

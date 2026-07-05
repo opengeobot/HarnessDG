@@ -1,6 +1,7 @@
 /**
  * CreateAssetModal 组件测试——验证创建资产弹窗的表单渲染、校验与提交。
  */
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +12,17 @@ import { renderWithProviders } from '@/test/test-utils';
 const mockCreateAsset = vi.fn();
 vi.mock('./api', () => ({
   createAsset: (...args: unknown[]) => mockCreateAsset(...args),
+}));
+
+// Mock ControlledSelect to avoid real API calls (use createElement to avoid JSX issues in mock factory)
+vi.mock('@/shared/components/ControlledSelect', () => ({
+  ControlledSelect: (props: Record<string, unknown>) =>
+    React.createElement(
+      'div',
+      { 'data-testid': `controlled-select-${(props.placeholder as string) ?? ''}` },
+      (props.mode as string) === 'multiple' ? 'multi-select' : 'select',
+      (props.disabled as boolean) ? ' (disabled)' : '',
+    ),
 }));
 
 const defaultProps = { open: true, onClose: vi.fn() };
@@ -32,9 +44,7 @@ describe('CreateAssetModal', () => {
 
   it('渲染关键字段：类型、命名空间、名称', () => {
     renderWithProviders(<CreateAssetModal {...defaultProps} />);
-    // 类型选择（默认 MODEL，渲染为“模型”标签）
     expect(screen.getByText(/模型/)).toBeInTheDocument();
-    // namespace / name 输入框
     expect(screen.getByPlaceholderText('nlp')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('qwen-domain-7b')).toBeInTheDocument();
   });
@@ -47,11 +57,19 @@ describe('CreateAssetModal', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('MODEL 类型时渲染 framework/task/architecture 字段', () => {
+  it('MODEL 类型时渲染受控选择器替代自由输入', () => {
     renderWithProviders(<CreateAssetModal {...defaultProps} />);
-    // 默认是 MODEL 类型，应该有 framework、task、architecture 字段
-    expect(screen.getByPlaceholderText('pytorch')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('text-generation')).toBeInTheDocument();
+    // framework and task are now ControlledSelect components (zh i18n placeholders)
+    expect(screen.getByTestId('controlled-select-请选择框架')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择任务')).toBeInTheDocument();
+    // architecture remains as Input
     expect(screen.getByPlaceholderText('decoder-only')).toBeInTheDocument();
+  });
+
+  it('渲染组织/项目/标签/字典受控选择器', () => {
+    renderWithProviders(<CreateAssetModal {...defaultProps} />);
+    expect(screen.getByTestId('controlled-select-请选择组织')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择受控标签')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择许可证')).toBeInTheDocument();
   });
 });

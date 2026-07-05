@@ -8,6 +8,7 @@ import { apiClient } from '@/shared/api';
 import type { CursorPage } from '@/shared/types';
 import type {
   AddOrganizationMemberRequest,
+  AddTeamMemberRequest,
   AgentView,
   AuditLogView,
   ConfigurationView,
@@ -19,6 +20,7 @@ import type {
   CreateRoleBindingRequest,
   CreateRoleRequest,
   CreateTagRequest,
+  CreateTeamRequest,
   CreateUserRequest,
   CreatedAgent,
   DictionaryItemView,
@@ -41,11 +43,14 @@ import type {
   RoleBindingView,
   RoleView,
   TagView,
+  TeamMemberView,
+  TeamView,
   UpdateAgentToolAllowlistRequest,
   UpdateConfigurationRequest,
   UpdateDictionaryItemRequest,
   UpdateRoleRequest,
   UpdateTagRequest,
+  UpdateTeamRequest,
   UpdateUserRequest,
 } from './types';
 
@@ -299,4 +304,59 @@ export function markNotificationRead(notificationId: string) {
 /* ---------------- 指标 ---------------- */
 export function getMetricsSummary(): Promise<MetricsSummary> {
   return apiClient.get<MetricsSummary>('/system/metrics/summary');
+}
+
+/* ---------------- Team ---------------- */
+export function listTeams(organizationId: string): Promise<TeamView[]> {
+  return apiClient.get<TeamView[]>(`/system/organizations/${organizationId}/teams`);
+}
+
+export function createTeam(organizationId: string, payload: CreateTeamRequest): Promise<TeamView> {
+  return apiClient.post<TeamView>(
+    `/system/organizations/${organizationId}/teams`,
+    payload,
+    idempotent(),
+  );
+}
+
+export function updateTeam(
+  organizationId: string,
+  teamId: string,
+  payload: UpdateTeamRequest,
+): Promise<TeamView> {
+  return apiClient.put<TeamView>(
+    `/system/organizations/${organizationId}/teams/${teamId}`,
+    payload,
+  );
+}
+
+export function listTeamMembers(
+  organizationId: string,
+  teamId: string,
+): Promise<TeamMemberView[]> {
+  return apiClient.get<TeamMemberView[]>(
+    `/system/organizations/${organizationId}/teams/${teamId}/members`,
+  );
+}
+
+export function addTeamMember(
+  organizationId: string,
+  teamId: string,
+  payload: AddTeamMemberRequest,
+): Promise<TeamMemberView> {
+  return apiClient.post<TeamMemberView>(
+    `/system/organizations/${organizationId}/teams/${teamId}/members`,
+    payload,
+    idempotent(),
+  );
+}
+
+export function removeTeamMember(
+  organizationId: string,
+  teamId: string,
+  principalId: string,
+) {
+  return apiClient.delete(
+    `/system/organizations/${organizationId}/teams/${teamId}/members/${principalId}`,
+  );
 }

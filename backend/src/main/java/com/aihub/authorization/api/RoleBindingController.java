@@ -11,15 +11,21 @@ import com.aihub.authorization.application.AuthorizationDtos.RoleBindingView;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.application.RoleBindingApplicationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,11 +41,17 @@ public class RoleBindingController {
 
     private final RoleBindingApplicationService bindingService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public RoleBindingController(RoleBindingApplicationService bindingService,
-                                 AuthorizationService authorizationService) {
+                                 AuthorizationService authorizationService,
+                                 IdempotencyService idempotencyService,
+                                 ObjectMapper objectMapper) {
         this.bindingService = bindingService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -56,23 +68,41 @@ public class RoleBindingController {
      */
     @PostMapping("/role-bindings")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<RoleBindingView> createBinding(@RequestBody CreateRoleBindingRequest request) {
+    public ApiResponse<RoleBindingView> createBinding(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody CreateRoleBindingRequest request) {
         authorizationService.requirePermission(Permissions.AUTHORIZATION_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        RoleBindingView view = bindingService.createBinding(new CreateRoleBindingCommand(
-                request.principalId(), request.roleId(), request.scopeType(), request.scopeId()));
-        return AuthorizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                AuthorizationApiContext.principalId(), "POST", "/api/v1/system/role-bindings");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<RoleBindingView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            RoleBindingView view = bindingService.createBinding(new CreateRoleBindingCommand(
+                    request.principalId(), request.roleId(), request.scopeType(), request.scopeId()));
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return AuthorizationApiContext.respond(ref.get());
     }
 
     /**
      * 删除角色绑定。
      */
     @DeleteMapping("/role-bindings/{bindingId}")
-    public ApiResponse<Void> deleteBinding(@PathVariable String bindingId) {
+    public ApiResponse<Void> deleteBinding(
+            @PathVariable String bindingId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue) {
         authorizationService.requirePermission(Permissions.AUTHORIZATION_MANAGE);
-        bindingService.deleteBinding(bindingId);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                AuthorizationApiContext.principalId(), "DELETE",
+                "/api/v1/system/role-bindings/" + bindingId);
+        idempotencyService.execute(key, null, () -> {
+            bindingService.deleteBinding(bindingId);
+            return new IdempotencyService.IdempotencyResponse(200, "");
+        });
         return AuthorizationApiContext.respond(null);
     }
 }

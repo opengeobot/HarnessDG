@@ -142,6 +142,39 @@ export interface CreateProjectRequest {
   name: string;
 }
 
+/* ---------------- Team ---------------- */
+export interface TeamView {
+  teamId: string;
+  organizationId: string;
+  name: string;
+  description: string;
+  status: PrincipalStatus;
+  createdAt: string;
+}
+
+export interface TeamMemberView {
+  teamId: string;
+  principalId: string;
+  role: string;
+  joinedAt: string;
+}
+
+export interface CreateTeamRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateTeamRequest {
+  name?: string;
+  description?: string;
+  status?: PrincipalStatus;
+}
+
+export interface AddTeamMemberRequest {
+  principalId: string;
+  role?: string;
+}
+
 /* ---------------- 角色/权限/绑定/ACL ---------------- */
 export interface PermissionView {
   permissionCode: string;

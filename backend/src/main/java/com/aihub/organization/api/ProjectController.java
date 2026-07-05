@@ -7,18 +7,24 @@ package com.aihub.organization.api;
 
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.organization.api.OrganizationRequests.CreateProjectRequest;
 import com.aihub.organization.application.OrganizationDtos.CreateProjectCommand;
 import com.aihub.organization.application.OrganizationDtos.ProjectView;
 import com.aihub.organization.application.ProjectApplicationService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,11 +41,17 @@ public class ProjectController {
 
     private final ProjectApplicationService projectService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public ProjectController(ProjectApplicationService projectService,
-                             AuthorizationService authorizationService) {
+                             AuthorizationService authorizationService,
+                             IdempotencyService idempotencyService,
+                             ObjectMapper objectMapper) {
         this.projectService = projectService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -58,16 +70,28 @@ public class ProjectController {
      */
     @PostMapping("/{organizationId}/projects")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<ProjectView> createProject(@PathVariable String organizationId,
-                                                  @RequestBody CreateProjectRequest request) {
+    public ApiResponse<ProjectView> createProject(
+            @PathVariable String organizationId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody CreateProjectRequest request) {
         authorizationService.requirePermission(Permissions.PROJECT_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "POST",
+                "/api/v1/system/organizations/" + organizationId + "/projects");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<ProjectView> ref = new AtomicReference<>();
         boolean platformAdmin = authorizationService.isPermitted(Permissions.ORGANIZATION_MANAGE);
-        ProjectView view = projectService.createProject(
-                new CreateProjectCommand(organizationId, request.code(), request.name()),
-                OrganizationApiContext.principalId(), platformAdmin, OrganizationApiContext.principalId());
-        return OrganizationApiContext.respond(view);
+        idempotencyService.execute(key, fingerprint, () -> {
+            ProjectView view = projectService.createProject(
+                    new CreateProjectCommand(organizationId, request.code(), request.name()),
+                    OrganizationApiContext.principalId(), platformAdmin,
+                    OrganizationApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return OrganizationApiContext.respond(ref.get());
     }
 }

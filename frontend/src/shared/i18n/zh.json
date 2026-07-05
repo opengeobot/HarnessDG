@@ -165,7 +165,15 @@
       "license": "许可证",
       "dataFormat": "数据格式",
       "org": "所属组织",
-      "project": "所属项目"
+      "project": "所属项目",
+      "orgPlaceholder": "请选择组织",
+      "projectPlaceholder": "请选择项目（需先选组织）",
+      "tagPlaceholder": "请选择受控标签",
+      "licensePlaceholder": "请选择许可证",
+      "frameworkPlaceholder": "请选择框架",
+      "taskPlaceholder": "请选择任务",
+      "formatPlaceholder": "请选择数据格式",
+      "modalityPlaceholder": "请选择模态"
     },
     "provisioning": {
       "NONE": "未触发",
@@ -311,7 +319,25 @@
       "principalIdPlaceholder": "prn_ 开头的主体 ID",
       "addMember": "添加成员",
       "confirmRemoveMember": "确认移除该成员？",
+      "teamManagement": "Team 管理",
       "joinedAt": "加入时间"
+    },
+    "teams": {
+      "title": "Team 管理",
+      "teamCreated": "Team 已创建",
+      "teamUpdated": "Team 已更新",
+      "memberAdded": "成员已添加",
+      "memberRemoved": "成员已移除",
+      "createTeam": "创建 Team",
+      "editTeam": "编辑 Team",
+      "teamName": "Team 名称",
+      "memberManagement": "成员管理",
+      "memberManagementOf": "成员管理 · {{name}}",
+      "addMember": "添加成员",
+      "principalId": "主体 ID",
+      "role": "角色",
+      "joinedAt": "加入时间",
+      "confirmRemoveMember": "确认从 Team 中移除该成员？"
     },
     "roles": {
       "title": "角色管理",

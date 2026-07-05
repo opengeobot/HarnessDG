@@ -7,6 +7,7 @@ package com.aihub.organization.api;
 
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.organization.api.OrganizationRequests.AddOrganizationMemberRequest;
 import com.aihub.organization.api.OrganizationRequests.CreateOrganizationRequest;
 import com.aihub.organization.application.OrganizationApplicationService;
@@ -17,13 +18,18 @@ import com.aihub.organization.application.OrganizationDtos.OrganizationView;
 import com.aihub.organization.domain.MemberRole;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,11 +46,17 @@ public class OrganizationController {
 
     private final OrganizationApplicationService organizationService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public OrganizationController(OrganizationApplicationService organizationService,
-                                  AuthorizationService authorizationService) {
+                                  AuthorizationService authorizationService,
+                                  IdempotencyService idempotencyService,
+                                  ObjectMapper objectMapper) {
         this.organizationService = organizationService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -63,15 +75,25 @@ public class OrganizationController {
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<OrganizationView> createOrganization(@RequestBody CreateOrganizationRequest request) {
+    public ApiResponse<OrganizationView> createOrganization(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody CreateOrganizationRequest request) {
         authorizationService.requirePermission(Permissions.ORGANIZATION_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        OrganizationView view = organizationService.createOrganization(
-                new CreateOrganizationCommand(request.code(), request.name(), request.giteaOrganization()),
-                OrganizationApiContext.principalId());
-        return OrganizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "POST", "/api/v1/system/organizations");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<OrganizationView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            OrganizationView view = organizationService.createOrganization(
+                    new CreateOrganizationCommand(request.code(), request.name(), request.giteaOrganization()),
+                    OrganizationApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return OrganizationApiContext.respond(ref.get());
     }
 
     /**
@@ -88,27 +110,46 @@ public class OrganizationController {
      */
     @PostMapping("/{organizationId}/members")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<OrganizationMemberView> addMember(@PathVariable String organizationId,
-                                                         @RequestBody AddOrganizationMemberRequest request) {
+    public ApiResponse<OrganizationMemberView> addMember(
+            @PathVariable String organizationId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody AddOrganizationMemberRequest request) {
         authorizationService.requirePermission(Permissions.ORGANIZATION_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        OrganizationMemberView view = organizationService.addMember(
-                new AddMemberCommand(organizationId, request.principalId()),
-                MemberRole.MEMBER, OrganizationApiContext.principalId());
-        return OrganizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "POST",
+                "/api/v1/system/organizations/" + organizationId + "/members");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<OrganizationMemberView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            OrganizationMemberView view = organizationService.addMember(
+                    new AddMemberCommand(organizationId, request.principalId()),
+                    MemberRole.MEMBER, OrganizationApiContext.principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return OrganizationApiContext.respond(ref.get());
     }
 
     /**
      * 移除组织成员并使其组织作用域授权失效。
      */
     @DeleteMapping("/{organizationId}/members/{principalId}")
-    public ApiResponse<Void> removeMember(@PathVariable String organizationId,
-                                          @PathVariable String principalId) {
+    public ApiResponse<Void> removeMember(
+            @PathVariable String organizationId,
+            @PathVariable String principalId,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue) {
         authorizationService.requirePermission(Permissions.ORGANIZATION_MANAGE);
-        organizationService.removeMember(organizationId, principalId,
-                OrganizationApiContext.principalId());
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                OrganizationApiContext.principalId(), "DELETE",
+                "/api/v1/system/organizations/" + organizationId + "/members/" + principalId);
+        idempotencyService.execute(key, null, () -> {
+            organizationService.removeMember(organizationId, principalId,
+                    OrganizationApiContext.principalId());
+            return new IdempotencyService.IdempotencyResponse(200, "");
+        });
         return OrganizationApiContext.respond(null);
     }
 }

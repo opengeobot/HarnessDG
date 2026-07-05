@@ -27,6 +27,7 @@ import com.aihub.bootstrap.security.RestAuthenticationEntryPoint;
 import com.aihub.bootstrap.security.SecurityConfiguration;
 import com.aihub.identity.api.RefreshCookieFactory;
 import com.aihub.identity.api.RefreshCookieProperties;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.organization.application.TeamApplicationService;
 import com.aihub.organization.application.TeamDtos.TeamMemberView;
 import com.aihub.organization.application.TeamDtos.TeamView;
@@ -84,10 +85,16 @@ class TeamControllerTest {
     private ResourceAclRepository resourceAclRepository;
     @MockitoBean
     private AgentToolRepository agentToolRepository;
+    @MockitoBean
+    private IdempotencyService idempotencyService;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
+        org.mockito.BDDMockito.given(idempotencyService.execute(any(), any(), any())).willAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
     }
 
     private String bearer(Set<String> scopes) {

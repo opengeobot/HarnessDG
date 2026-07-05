@@ -11,15 +11,21 @@ import com.aihub.configuration.api.ConfigurationRequests.UpdateConfigurationRequ
 import com.aihub.configuration.application.ConfigurationApplicationService;
 import com.aihub.configuration.application.ConfigurationDtos.ConfigView;
 import com.aihub.configuration.application.ConfigurationDtos.UpdateConfigCommand;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
 import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,11 +42,17 @@ public class ConfigurationController {
 
     private final ConfigurationApplicationService configurationService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public ConfigurationController(ConfigurationApplicationService configurationService,
-                                   AuthorizationService authorizationService) {
+                                   AuthorizationService authorizationService,
+                                   IdempotencyService idempotencyService,
+                                   ObjectMapper objectMapper) {
         this.configurationService = configurationService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -56,16 +68,27 @@ public class ConfigurationController {
      * 更新非敏感运行配置。
      */
     @PutMapping("/{configKey}")
-    public ApiResponse<ConfigView> updateConfiguration(@PathVariable String configKey,
-                                                       @RequestBody UpdateConfigurationRequest request) {
+    public ApiResponse<ConfigView> updateConfiguration(
+            @PathVariable String configKey,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody UpdateConfigurationRequest request) {
         authorizationService.requirePermission(Permissions.SYSTEM_CONFIGURE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        ConfigView view = configurationService.updateConfiguration(configKey,
-                new UpdateConfigCommand(request.value(), request.expectedVersion(), request.confirmation()),
-                principalId());
-        return respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                principalId(), "PUT", "/api/v1/system/configurations/" + configKey);
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<ConfigView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            ConfigView view = configurationService.updateConfiguration(configKey,
+                    new UpdateConfigCommand(request.value(), request.expectedVersion(),
+                            request.confirmation()),
+                    principalId());
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(200, idempotency.serialize(view));
+        });
+        return respond(ref.get());
     }
 
     private static String principalId() {

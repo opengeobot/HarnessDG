@@ -15,7 +15,7 @@ interface McpToolInfo {
   permission: string;
 }
 
-/** MCP Tool 清单（与 McpToolCatalog 对齐） */
+/** MCP Tool 清单（与 tools.yaml + McpToolCatalog 对齐） */
 const MCP_TOOLS: McpToolInfo[] = [
   { name: 'asset_search', description: 'Search assets by keyword, type, namespace', write: false, permission: 'asset:read' },
   { name: 'asset_get', description: 'Get a single asset by ID', write: false, permission: 'asset:read' },
@@ -23,6 +23,8 @@ const MCP_TOOLS: McpToolInfo[] = [
   { name: 'asset_get_version', description: 'Get version details by version ID', write: false, permission: 'asset:read' },
   { name: 'asset_request_download', description: 'Request a download ticket for a published version', write: false, permission: 'asset:read' },
   { name: 'asset_create_draft', description: 'Create a new draft version (write tool, disabled by default)', write: true, permission: 'asset:manage' },
+  { name: 'asset_publish_version', description: 'Publish a version (high-risk, disabled by default)', write: true, permission: 'asset:publish' },
+  { name: 'asset_delete', description: 'Delete an asset (high-risk, disabled by default)', write: true, permission: 'asset:delete' },
 ];
 
 export function IntegrationsPage() {

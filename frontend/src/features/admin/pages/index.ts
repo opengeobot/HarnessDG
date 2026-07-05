@@ -16,3 +16,4 @@ export { JobsPage } from './JobsPage';
 export { AuditLogsPage } from './AuditLogsPage';
 export { NotificationsPage } from './NotificationsPage';
 export { DependenciesPage } from './DependenciesPage';
+export { TeamsPage } from './TeamsPage';

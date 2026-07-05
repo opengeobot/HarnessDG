@@ -165,7 +165,15 @@
       "license": "License",
       "dataFormat": "Data Format",
       "org": "Organization",
-      "project": "Project"
+      "project": "Project",
+      "orgPlaceholder": "Select organization",
+      "projectPlaceholder": "Select project (requires organization)",
+      "tagPlaceholder": "Select controlled tags",
+      "licensePlaceholder": "Select license",
+      "frameworkPlaceholder": "Select framework",
+      "taskPlaceholder": "Select task",
+      "formatPlaceholder": "Select data format",
+      "modalityPlaceholder": "Select modality"
     },
     "provisioning": {
       "NONE": "Not Triggered",
@@ -311,7 +319,25 @@
       "principalIdPlaceholder": "Principal ID starting with prn_",
       "addMember": "Add Member",
       "confirmRemoveMember": "Remove this member?",
+      "teamManagement": "Team Management",
       "joinedAt": "Joined At"
+    },
+    "teams": {
+      "title": "Team Management",
+      "teamCreated": "Team created",
+      "teamUpdated": "Team updated",
+      "memberAdded": "Member added",
+      "memberRemoved": "Member removed",
+      "createTeam": "Create Team",
+      "editTeam": "Edit Team",
+      "teamName": "Team Name",
+      "memberManagement": "Team Members",
+      "memberManagementOf": "Team Members · {{name}}",
+      "addMember": "Add Member",
+      "principalId": "Principal ID",
+      "role": "Role",
+      "joinedAt": "Joined At",
+      "confirmRemoveMember": "Remove this member from the team?"
     },
     "roles": {
       "title": "Role Management",

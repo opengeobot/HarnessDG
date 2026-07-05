@@ -27,6 +27,7 @@ import {
   ProjectsPage,
   RolesPage,
   TagsPage,
+  TeamsPage,
   UsersPage,
 } from '@/features/admin';
 import type { Scope } from '@/shared/types';
@@ -62,6 +63,7 @@ export const router = createBrowserRouter([
           { path: 'users', element: guarded(<UsersPage />, ['user:read']) },
           { path: 'agents', element: guarded(<AgentsPage />, ['authorization:read']) },
           { path: 'organizations', element: guarded(<OrganizationsPage />, ['project:view']) },
+          { path: 'organizations/:orgId/teams', element: guarded(<TeamsPage />, ['project:view']) },
           { path: 'projects', element: guarded(<ProjectsPage />, ['project:view']) },
           { path: 'roles', element: guarded(<RolesPage />, ['authorization:read']) },
           { path: 'permissions', element: guarded(<PermissionsPage />, ['authorization:read']) },

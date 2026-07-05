@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -42,6 +43,7 @@ export function OrganizationsPage() {
   useDocumentTitle(t('admin.organizations.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [memberOrg, setMemberOrg] = useState<OrganizationView | null>(null);
@@ -119,9 +121,14 @@ export function OrganizationsPage() {
       title: t('common.action'),
       key: 'action',
       render: (_, record) => (
-        <Button type="link" size="small" onClick={() => setMemberOrg(record)}>
-          {t('admin.organizations.memberManagement')}
-        </Button>
+        <Space>
+          <Button type="link" size="small" onClick={() => setMemberOrg(record)}>
+            {t('admin.organizations.memberManagement')}
+          </Button>
+          <Button type="link" size="small" onClick={() => navigate(`/admin/organizations/${record.organizationId}/teams`)}>
+            {t('admin.organizations.teamManagement')}
+          </Button>
+        </Space>
       ),
     },
   ];

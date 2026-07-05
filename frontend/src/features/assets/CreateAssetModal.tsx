@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App, Form, Input, Modal, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { isApiError } from '@/shared/api';
+import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
 import { createAsset } from './api';
 import type { AssetType, CreateAssetRequest, Visibility } from './types';
 
@@ -117,10 +118,37 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           />
         </Form.Item>
         <Form.Item name="organizationId" label={t('assets.create.org')}>
-          <Input placeholder="org_01J..." />
+          <ControlledSelect
+            apiUrl="/system/organizations"
+            queryKey="organizations"
+            extractOptions={(data) =>
+              (data as Array<{ organizationId: string; name: string }>).map(
+                (o): SelectOption => ({ value: o.organizationId, label: `${o.name} (${o.organizationId})` }),
+              )
+            }
+            placeholder={t('assets.create.orgPlaceholder')}
+            allowClear
+          />
         </Form.Item>
-        <Form.Item name="projectId" label={t('assets.create.project')}>
-          <Input placeholder="prj_01J..." />
+        <Form.Item name="projectId" label={t('assets.create.project')} dependencies={['organizationId']}>
+          {({ getFieldValue }) => {
+            const orgId = getFieldValue('organizationId');
+            return (
+              <ControlledSelect
+                apiUrl={`/system/organizations/${orgId}/projects`}
+                queryKey={['projects', orgId]}
+                enabled={!!orgId}
+                extractOptions={(data) =>
+                  (data as Array<{ projectId: string; name: string }>).map(
+                    (p): SelectOption => ({ value: p.projectId, label: `${p.name} (${p.projectId})` }),
+                  )
+                }
+                placeholder={t('assets.create.projectPlaceholder')}
+                allowClear
+                disabled={!orgId}
+              />
+            );
+          }}
         </Form.Item>
         <Form.Item
           name="namespace"
@@ -170,18 +198,58 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           <Select mode="tags" placeholder="text-generation" tokenSeparators={[',']} />
         </Form.Item>
         <Form.Item name="tagIds" label={t('assets.create.controlledTagIds')}>
-          <Select mode="tags" placeholder="tag_01J..." tokenSeparators={[',']} />
+          <ControlledSelect
+            mode="multiple"
+            apiUrl="/system/tags"
+            queryKey="tags"
+            extractOptions={(data) =>
+              (data as Array<{ tagId: string; displayName: string; tagCode: string }>).map(
+                (tag): SelectOption => ({ value: tag.tagId, label: `${tag.displayName} (${tag.tagCode})` }),
+              )
+            }
+            placeholder={t('assets.create.tagPlaceholder')}
+          />
         </Form.Item>
         <Form.Item name="license" label={t('assets.create.license')}>
-          <Input placeholder="Apache-2.0" />
+          <ControlledSelect
+            apiUrl="/system/dictionaries/license/items"
+            queryKey="dict-license"
+            extractOptions={(data) =>
+              (data as Array<{ itemCode: string; i18nKey: string }>).map(
+                (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+              )
+            }
+            placeholder={t('assets.create.licensePlaceholder')}
+            allowClear
+          />
         </Form.Item>
         {assetType === 'MODEL' ? (
           <>
             <Form.Item name="framework" label={t('assets.detail.framework')}>
-              <Input placeholder="pytorch" />
+              <ControlledSelect
+                apiUrl="/system/dictionaries/framework/items"
+                queryKey="dict-framework"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.frameworkPlaceholder')}
+                allowClear
+              />
             </Form.Item>
             <Form.Item name="task" label={t('assets.detail.task')}>
-              <Input placeholder="text-generation" />
+              <ControlledSelect
+                apiUrl="/system/dictionaries/task/items"
+                queryKey="dict-task"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.taskPlaceholder')}
+                allowClear
+              />
             </Form.Item>
             <Form.Item name="architecture" label={t('assets.detail.architecture')}>
               <Input placeholder="decoder-only" />
@@ -190,10 +258,30 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
         ) : (
           <>
             <Form.Item name="format" label={t('assets.create.dataFormat')}>
-              <Input placeholder="parquet" />
+              <ControlledSelect
+                apiUrl="/system/dictionaries/format/items"
+                queryKey="dict-format"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.formatPlaceholder')}
+                allowClear
+              />
             </Form.Item>
             <Form.Item name="modality" label={t('assets.detail.modality')}>
-              <Input placeholder="image" />
+              <ControlledSelect
+                apiUrl="/system/dictionaries/modality/items"
+                queryKey="dict-modality"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.modalityPlaceholder')}
+                allowClear
+              />
             </Form.Item>
           </>
         )}

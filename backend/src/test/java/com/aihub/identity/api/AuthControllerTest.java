@@ -32,6 +32,7 @@ import com.aihub.identity.application.PrincipalQueryApplicationService;
 import com.aihub.identity.application.TokenPairResult;
 import com.aihub.identity.application.UserManagementApplicationService;
 import com.aihub.identity.domain.LocalUserRepository;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.shared.security.IssuedToken;
 import com.aihub.shared.security.TokenIssueRequest;
@@ -92,10 +93,16 @@ class AuthControllerTest {
     private ResourceAclRepository resourceAclRepository;
     @MockitoBean
     private AgentToolRepository agentToolRepository;
+    @MockitoBean
+    private IdempotencyService idempotencyService;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
+        given(idempotencyService.execute(any(), any(), any())).willAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
     }
 
     private TokenPairResult tokenPair() {

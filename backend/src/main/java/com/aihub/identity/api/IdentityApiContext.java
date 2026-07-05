@@ -28,4 +28,8 @@ final class IdentityApiContext {
         String traceId = PrincipalContextHolder.current().map(PrincipalContext::traceId).orElse(null);
         return ApiResponse.of(data, requestId, traceId);
     }
+
+    static String principalId() {
+        return PrincipalContextHolder.current().map(PrincipalContext::principalId).orElse(null);
+    }
 }
