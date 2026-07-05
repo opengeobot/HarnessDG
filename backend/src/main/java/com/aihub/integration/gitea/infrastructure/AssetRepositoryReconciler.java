@@ -79,23 +79,58 @@ public class AssetRepositoryReconciler implements JobHandler {
                 context.jobId(), totalChecked, discrepancies);
     }
 
+    private static final java.util.regex.Pattern VALID_NAME =
+            java.util.regex.Pattern.compile("^[a-z0-9][a-z0-9._-]{0,63}$");
+    private static final java.util.regex.Pattern VALID_NAMESPACE =
+            java.util.regex.Pattern.compile("^[a-z0-9][a-z0-9._/-]{0,127}$");
+
     private ReconcileResult checkAssetRepository(String assetId, String name, String namespace) {
-        // P5 简化：检查资产记录完整性
-        // 实际实现应调用 Gitea API 验证仓库是否存在且一致
+        // 名称完整性检查
         if (name == null || name.isEmpty()) {
+            LOG.warn("asset {} has null/empty name", assetId);
             return ReconcileResult.MANUAL_REVIEW;
         }
+        if (!VALID_NAME.matcher(name).matches()) {
+            LOG.warn("asset {} has invalid name format: '{}'", assetId, name);
+            return ReconcileResult.MANUAL_REVIEW;
+        }
+
+        // 命名空间完整性检查
         if (namespace == null || namespace.isEmpty()) {
+            LOG.warn("asset {} has null/empty namespace", assetId);
             return ReconcileResult.AUTO_REPAIR;
         }
+        if (!VALID_NAMESPACE.matcher(namespace).matches()) {
+            LOG.warn("asset {} has invalid namespace format: '{}'", assetId, namespace);
+            return ReconcileResult.MANUAL_REVIEW;
+        }
+
+        // 仓库名与 namespace/name 拼接应为有效 Gitea 路径
+        String expectedFullName = namespace + "/" + name;
+        if (expectedFullName.length() > 200) {
+            LOG.warn("asset {} full_name exceeds 200 chars: '{}'", assetId, expectedFullName);
+            return ReconcileResult.MANUAL_REVIEW;
+        }
+
         return ReconcileResult.CONSISTENT;
     }
 
     private void recordDiscrepancy(String assetId, ReconcileResult result) {
         LOG.warn("reconciliation discrepancy assetId={} classification={}", assetId, result);
-        // 严重不一致记录审计事件
         if (result == ReconcileResult.SECURITY_INCIDENT) {
             LOG.error("SECURITY INCIDENT: asset {} has critical inconsistency", assetId);
+        }
+        // 记录对账差异到 webhook_inbox 以供审计追溯
+        try {
+            String deliveryId = "reconcile-" + assetId + "-" + System.currentTimeMillis();
+            jdbcTemplate.update(
+                    "INSERT INTO webhook_inbox (delivery_id, event_type, source, signature_valid, payload, status) " +
+                            "VALUES (?, 'RECONCILE_DISCREPANCY', 'internal', true, " +
+                            "jsonb_build_object('assetId', ?, 'classification', ?::text), 'COMPLETED') " +
+                            "ON CONFLICT (delivery_id) DO NOTHING",
+                    deliveryId, assetId, result.name());
+        } catch (Exception e) {
+            LOG.error("failed to record reconciliation discrepancy for assetId={}", assetId, e);
         }
     }
 

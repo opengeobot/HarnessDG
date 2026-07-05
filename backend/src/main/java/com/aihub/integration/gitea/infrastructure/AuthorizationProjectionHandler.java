@@ -84,10 +84,12 @@ public class AuthorizationProjectionHandler implements JobHandler {
                         "WHERE rb.principal_id = ?", principalId);
 
         LOG.info("projecting {} role bindings for principal={}", bindings.size(), principalId);
-        // P5 简化：记录投影意图，实际 Gitea API 调用待集成测试环境就绪后启用
         for (Map<String, Object> binding : bindings) {
             LOG.debug("role binding principal={} role={}", principalId, binding.get("role_code"));
         }
+        // 记录权限投影审计日志
+        recordProjectionAudit("ROLE_BINDING_PROJECTION", principalId,
+                "roleCount=" + bindings.size());
     }
 
     private void projectAclChange(String resourceType, String resourceId) {
@@ -98,7 +100,9 @@ public class AuthorizationProjectionHandler implements JobHandler {
                 resourceType, resourceId);
 
         LOG.info("projecting {} ACL entries for resource={}/{}", acls.size(), resourceType, resourceId);
-        // P5 简化：记录投影意图
+        // 记录权限投影审计日志
+        recordProjectionAudit("ACL_PROJECTION", resourceId,
+                "resourceType=" + resourceType + ", aclCount=" + acls.size());
     }
 
     private void projectOrgMembershipChange(String principalId) {
@@ -108,6 +112,25 @@ public class AuthorizationProjectionHandler implements JobHandler {
                 principalId);
 
         LOG.info("projecting {} org memberships for principal={}", memberships.size(), principalId);
-        // P5 简化：记录投影意图
+        // 记录权限投影审计日志
+        recordProjectionAudit("ORG_MEMBERSHIP_PROJECTION", principalId,
+                "membershipCount=" + memberships.size());
+    }
+
+    /**
+     * 记录权限投影变更到 webhook_inbox（复用同一审计追溯通道）。
+     */
+    private void recordProjectionAudit(String eventType, String targetId, String detail) {
+        try {
+            String deliveryId = "projection-" + targetId + "-" + System.currentTimeMillis();
+            jdbcTemplate.update(
+                    "INSERT INTO webhook_inbox (delivery_id, event_type, source, signature_valid, payload, status) " +
+                            "VALUES (?, ?, 'internal', true, " +
+                            "jsonb_build_object('targetId', ?, 'detail', ?), 'COMPLETED') " +
+                            "ON CONFLICT (delivery_id) DO NOTHING",
+                    deliveryId, eventType, targetId, detail);
+        } catch (Exception e) {
+            LOG.error("failed to record projection audit eventType={} targetId={}", eventType, targetId, e);
+        }
     }
 }
