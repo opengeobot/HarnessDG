@@ -28,6 +28,9 @@ public enum IdPrefix {
     /** 项目。 */
     PROJECT("prj"),
 
+    /** Team。 */
+    TEAM("team"),
+
     /** 组织/项目成员关系。 */
     MEMBER("mbr"),
 

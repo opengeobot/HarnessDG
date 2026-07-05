@@ -471,8 +471,34 @@
   "placeholder": {
     "defaultDescription": "该页面为 P0 工程基线占位，业务逻辑将在 P1 实现。"
   },
+  "integrations": {
+    "title": "Agent 接入",
+    "mcpOverview": "MCP (Model Context Protocol) 接入状态总览",
+    "mcpDescription": "Agent 通过 MCP 协议访问平台能力。只读 Tool 默认可用，写 Tool 需显式开启并授权。",
+    "connectionInfo": "连接信息",
+    "protocol": "协议",
+    "endpoint": "端点",
+    "writeTools": "写 Tool",
+    "disabledByDefault": "默认关闭",
+    "writeToolsNote": "需服务端配置 mcp.writeTools.enabled=true 并授权 Agent",
+    "readOnlyTools": "只读 Tool",
+    "writeToolsTitle": "写 Tool（需显式开启）"
+  },
   "access": {
     "title": "访问与凭据",
-    "description": "成员、Agent、Token 与 Scope 管理将在 P1 实现。"
+    "description": "成员、Agent、Token 与 Scope 管理。",
+    "principalInfo": "当前主体",
+    "principalId": "主体 ID",
+    "principalType": "主体类型",
+    "subject": "登录名",
+    "displayName": "显示名",
+    "organizationId": "组织 ID",
+    "locale": "语言",
+    "roles": "角色",
+    "scopes": "权限 Scope",
+    "noScopes": "无可用权限",
+    "notAuthenticated": "未登录",
+    "apiTokens": "API Token",
+    "tokensComingSoon": "Token 管理功能即将上线"
   }
 }

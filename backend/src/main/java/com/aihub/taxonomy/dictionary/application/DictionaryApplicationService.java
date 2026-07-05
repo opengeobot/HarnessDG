@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 字典应用服务。
  *
  * <p>字典只存稳定的 {@code itemCode} 与 {@code i18nKey}，绝不存展示文案。字典项新增/修改/停用时
- * 自增所属字典类型的缓存版本，并经 {@link AuditPort} 记录（TODO Task 10 权威实现）。
+ * 自增所属字典类型的缓存版本，并经 {@link AuditPort} 记录审计事件。
  * 同时实现 {@link DictionaryValidationPort}，供资产模块 Task 14 校验治理字段（license/framework 等）。
  *
  * <p><b>停用语义：</b>停用项保留并可回显（{@link #isKnown} 返回 true），但不可用于新建引用

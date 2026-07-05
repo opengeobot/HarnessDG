@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 角色管理应用服务。
  *
  * <p>用例编排：列表、创建（权限编码须均已注册）、更新（乐观锁 + 内置角色禁止改名）、删除（内置角色与
- * 仍被绑定引用的角色不可删除）。写操作记录审计接入点（TODO(Task 10)）。
+ * 仍被绑定引用的角色不可删除）。写操作经 AuditPort 记录审计事件。
  */
 @Service
 public class RoleManagementApplicationService {

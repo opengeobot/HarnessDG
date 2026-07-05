@@ -1,5 +1,6 @@
 /*
- * 功能: 审计接入端口（占位），授权管理写操作的审计事件在此发出；Task 10 审计模块落地后接入真实实现。
+ * 功能: 审计接入端口，授权管理写操作的审计事件在此发出；
+ *       由 infrastructure 层 AuthorizationAuditAdapter 实现，委托 AuditService 持久化。
  * 时间: 2026-06-30
  * 作者: AxeXie
  */
@@ -10,9 +11,7 @@ import java.util.Map;
 /**
  * 审计接入端口。
  *
- * <p><b>TODO(Task 10)：</b>审计模块尚未实现，本端口仅作为授权管理写操作的审计接入点占位。
- * 当前提供结构化日志实现（{@code LoggingAuditPort}），<b>不写入持久化审计、不进入伪审计数据面</b>；
- * Task 10 审计模块落地后由其提供权威实现（Outbox/持久化 + 完整性校验）替换。
+ * <p>由 {@code AuthorizationAuditAdapter} 提供实现，委托 {@code AuditService} 写入审计日志。
  */
 public interface AuditPort {
 

@@ -23,7 +23,7 @@ servers:
 tags:
   - { name: auth, description: 本地身份与 JWT 生命周期 }
   - { name: users, description: Principal 与本地用户管理 }
-  - { name: organizations, description: 组织、项目与成员作用域 }
+  - { name: organizations, description: 组织、项目、团队与成员作用域 }
   - { name: authorization, description: 角色、权限、绑定与 ACL }
   - { name: taxonomy, description: 字典、标签与国际化治理 }
   - { name: configuration, description: 非敏感运行配置 }
@@ -608,6 +608,170 @@ paths:
                       data: { $ref: '#/components/schemas/ProjectView' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/teams:
+    parameters:
+      - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+    get:
+      operationId: listTeams
+      summary: 列出组织下的 Team
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [project:view]
+      responses:
+        '200':
+          description: Team 列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/TeamView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createTeam
+      summary: 创建 Team
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [team:manage]
+      x-audit-event: TEAM_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTeamRequest' }
+      responses:
+        '201':
+          description: Team 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TeamView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/teams/{teamId}:
+    parameters:
+      - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+      - { name: teamId, in: path, required: true, schema: { type: string, pattern: '^team_' } }
+    get:
+      operationId: getTeam
+      summary: 查询 Team 详情
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [project:view]
+      responses:
+        '200':
+          description: Team 详情
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TeamView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      operationId: updateTeam
+      summary: 更新 Team
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [team:manage]
+      x-audit-event: TEAM_UPDATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTeamRequest' }
+      responses:
+        '200':
+          description: Team 更新成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TeamView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/teams/{teamId}/members:
+    parameters:
+      - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+      - { name: teamId, in: path, required: true, schema: { type: string, pattern: '^team_' } }
+    get:
+      operationId: listTeamMembers
+      summary: 列出 Team 成员
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [project:view]
+      responses:
+        '200':
+          description: 成员列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/TeamMemberView' } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: addTeamMember
+      summary: 添加 Team 成员
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [team:manage]
+      x-audit-event: TEAM_MEMBER_ADDED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddTeamMemberRequest' }
+      responses:
+        '201':
+          description: 成员添加成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TeamMemberView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/organizations/{organizationId}/teams/{teamId}/members/{principalId}:
+    delete:
+      operationId: removeTeamMember
+      summary: 移除 Team 成员
+      tags: [organizations]
+      x-implementation-status: implemented
+      x-required-permissions: [team:manage]
+      x-audit-event: TEAM_MEMBER_REMOVED
+      parameters:
+        - { name: organizationId, in: path, required: true, schema: { type: string, pattern: '^org_' } }
+        - { name: teamId, in: path, required: true, schema: { type: string, pattern: '^team_' } }
+        - { name: principalId, in: path, required: true, schema: { type: string, pattern: '^prn_' } }
+      responses:
+        '200': { description: 已移除, content: { application/json: { schema: { $ref: '#/components/schemas/ApiResponse' } } } }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /system/roles:
     get:
@@ -2110,6 +2274,60 @@ components:
         name: { type: string }
         status: { $ref: '#/components/schemas/PrincipalStatus' }
         createdAt: { type: string, format: date-time }
+
+    CreateTeamRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        description: { type: [string, 'null'] }
+
+    UpdateTeamRequest:
+      type: object
+      additionalProperties: false
+      required: [name, status]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        description: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [ACTIVE, DISABLED]
+
+    TeamView:
+      type: object
+      required: [teamId, organizationId, name, status, createdAt]
+      properties:
+        teamId: { type: string, pattern: '^team_' }
+        organizationId: { type: string, pattern: '^org_' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [ACTIVE, DISABLED]
+        createdAt: { type: string, format: date-time }
+
+    AddTeamMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [principalId]
+      properties:
+        principalId: { type: string, pattern: '^prn_' }
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+          default: MEMBER
+
+    TeamMemberView:
+      type: object
+      required: [teamId, principalId, role, joinedAt]
+      properties:
+        teamId: { type: string, pattern: '^team_' }
+        principalId: { type: string, pattern: '^prn_' }
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+        joinedAt: { type: string, format: date-time }
 
     PermissionView:
       type: object

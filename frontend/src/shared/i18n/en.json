@@ -471,8 +471,34 @@
   "placeholder": {
     "defaultDescription": "This page is a P0 engineering baseline placeholder. Business logic will be implemented in P1."
   },
+  "integrations": {
+    "title": "Agent Integration",
+    "mcpOverview": "MCP (Model Context Protocol) Integration Status",
+    "mcpDescription": "Agents access platform capabilities via MCP. Read-only tools are available by default; write tools require explicit enablement and authorization.",
+    "connectionInfo": "Connection Info",
+    "protocol": "Protocol",
+    "endpoint": "Endpoint",
+    "writeTools": "Write Tools",
+    "disabledByDefault": "Disabled by default",
+    "writeToolsNote": "Requires server config mcp.writeTools.enabled=true and Agent authorization",
+    "readOnlyTools": "Read-only Tools",
+    "writeToolsTitle": "Write Tools (require explicit enablement)"
+  },
   "access": {
     "title": "Access & Credentials",
-    "description": "Member, Agent, Token & Scope management will be implemented in P1."
+    "description": "Member, Agent, Token & Scope management.",
+    "principalInfo": "Current Principal",
+    "principalId": "Principal ID",
+    "principalType": "Principal Type",
+    "subject": "Login Name",
+    "displayName": "Display Name",
+    "organizationId": "Organization ID",
+    "locale": "Locale",
+    "roles": "Roles",
+    "scopes": "Scopes",
+    "noScopes": "No scopes available",
+    "notAuthenticated": "Not authenticated",
+    "apiTokens": "API Tokens",
+    "tokensComingSoon": "Token management coming soon"
   }
 }

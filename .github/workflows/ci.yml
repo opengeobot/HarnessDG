@@ -31,7 +31,7 @@ jobs:
         run: ./mvnw -B verify
 
   frontend:
-    name: Frontend (lint / typecheck / build)
+    name: Frontend (lint / typecheck / test / build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -53,6 +53,8 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+      - name: Test
+        run: pnpm test
       - name: Build
         run: pnpm build
 
@@ -68,6 +70,15 @@ jobs:
         run: cp .env.example .env
       - name: docker compose config
         run: docker compose config --quiet
+
+  spec-gate:
+    name: AI Spec Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Spec
+        shell: pwsh
+        run: ./tools/validate-spec.ps1
 
   contracts:
     name: Contracts (OpenAPI lint / breaking-change)
@@ -88,9 +99,8 @@ jobs:
           --config contracts/openapi/redocly.yaml
           contracts/openapi/aihub-v1.yaml
       # breaking-change 检查：与 PR base ref（或 push 前一提交）对比契约差异。
-      # 作为可见的评审信号，不因风格化差异阻断合并（continue-on-error）。
+      # breaking change (error 级别) 为强制门禁，non-breaking 警告不阻断。
       - name: OpenAPI breaking-change diff
-        continue-on-error: true
         run: |
           BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
           if [ -z "${BASE_REF}" ] || [ "${BASE_REF}" = "0000000000000000000000000000000000000000" ]; then
@@ -100,4 +110,4 @@ jobs:
           git show "${BASE_REF}:contracts/openapi/aihub-v1.yaml" > /tmp/aihub-base.yaml 2>/dev/null || {
             echo "基线中不存在契约文件，视为新增，跳过 diff。"; exit 0;
           }
-          npx --yes @redocly/cli@latest diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml
+          npx --yes @redocly/cli@latest diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking

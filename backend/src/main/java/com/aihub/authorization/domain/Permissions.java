@@ -17,6 +17,8 @@ public final class Permissions {
 
     /** 管理组织。 */
     public static final String ORGANIZATION_MANAGE = "organization:manage";
+    /** 管理团队。 */
+    public static final String TEAM_MANAGE = "team:manage";
     /** 查看项目。 */
     public static final String PROJECT_VIEW = "project:view";
     /** 管理项目。 */

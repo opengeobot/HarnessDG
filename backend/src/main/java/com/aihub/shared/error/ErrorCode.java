@@ -94,6 +94,18 @@ public enum ErrorCode {
     ORGANIZATION_MEMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.organization.memberAlreadyExists",
             false, AlertLevel.NONE),
 
+    /** Team 不存在。 */
+    TEAM_NOT_FOUND(HttpStatus.NOT_FOUND, "error.team.notFound", false, AlertLevel.NONE),
+
+    /** Team 名称在组织内已存在。 */
+    TEAM_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.team.alreadyExists", false, AlertLevel.NONE),
+
+    /** Team 成员不存在。 */
+    TEAM_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "error.team.memberNotFound", false, AlertLevel.NONE),
+
+    /** Team 成员已存在。 */
+    TEAM_MEMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.team.memberAlreadyExists", false, AlertLevel.NONE),
+
     /** 项目不存在。 */
     PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "error.project.notFound", false, AlertLevel.NONE),
 

@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 大小写不敏感）一律拒绝（{@link ErrorCode#CONFIG_SECRET_FORBIDDEN}），<b>绝不把密码/Token/私钥写入 system_config</b>。
  *
  * <p><b>类型/校验：</b>按 {@link ConfigValueType} 校验提交值并序列化为文本存储；不可热更新项
- * （{@code hotReloadable=false}）在响应中体现，客户端据此提示需重启。变更经 AuditPort 记录（TODO Task 10），
+ * （{@code hotReloadable=false}）在响应中体现，客户端据此提示需重启。变更经 AuditPort 记录审计事件，
  * version 自增。
  */
 @Service
