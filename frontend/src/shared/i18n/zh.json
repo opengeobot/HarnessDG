@@ -273,7 +273,15 @@
     "noArtifacts": "暂无工件",
     "selectVersion": "选择一个版本查看详情",
     "path": "路径",
-    "size": "大小"
+    "size": "大小",
+    "version": "版本",
+    "viewDetail": "查看详情",
+    "viewAll": "查看全部",
+    "createdAt": "创建时间",
+    "versionInfo": "版本信息",
+    "publishedAt": "发布时间",
+    "publishedBy": "发布人",
+    "mediaType": "媒体类型"
   },
   "review": {
     "title": "发布审批",

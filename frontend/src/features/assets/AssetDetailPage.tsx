@@ -32,6 +32,7 @@ import {
   restoreAsset,
 } from './api';
 import { DiscussionPanel } from './DiscussionPanel';
+import { VersionListPanel } from '@/features/version/VersionListPanel';
 import type { AssetView, ProvisioningStatus } from './types';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -227,6 +228,8 @@ export function AssetDetailPage() {
           )}
         </Card>
       )}
+
+      {assetId && <VersionListPanel assetId={assetId} />}
 
       {assetId && <DiscussionPanel assetId={assetId} />}
     </Flex>

@@ -273,7 +273,15 @@
     "noArtifacts": "No artifacts",
     "selectVersion": "Select a version to view details",
     "path": "Path",
-    "size": "Size"
+    "size": "Size",
+    "version": "Version",
+    "viewDetail": "View Detail",
+    "viewAll": "View All",
+    "createdAt": "Created At",
+    "versionInfo": "Version Info",
+    "publishedAt": "Published At",
+    "publishedBy": "Published By",
+    "mediaType": "Media Type"
   },
   "review": {
     "title": "Release Review",

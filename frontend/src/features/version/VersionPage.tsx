@@ -54,7 +54,7 @@ export function VersionPage() {
   const handleSelectVersion = async (v: VersionView) => {
     setSelectedVersion(v);
     try {
-      const arts = await listArtifacts(v.versionId);
+      const arts = await listArtifacts(assetId, v.versionId);
       setArtifacts(arts);
     } catch {
       setArtifacts([]);

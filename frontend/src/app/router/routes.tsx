@@ -9,7 +9,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/app/layout/AppLayout';
 import { RouteGuard } from '@/app/permission';
 import { AssetsPage, AssetDetailPage } from '@/features/assets';
-import { VersionPage, ReviewPage } from '@/features/version';
+import { VersionPage, VersionDetailPage, ReviewPage } from '@/features/version';
 import { UploadPage } from '@/features/upload';
 import { AccessPage } from '@/features/access';
 import { IntegrationsPage } from '@/features/integrations';
@@ -51,6 +51,7 @@ export const router = createBrowserRouter([
       { path: 'assets', element: guarded(<AssetsPage />, ['asset:read']) },
       { path: 'assets/:assetId', element: guarded(<AssetDetailPage />, ['asset:read']) },
       { path: 'version', element: guarded(<VersionPage />, ['asset:read']) },
+      { path: 'assets/:assetId/versions/:versionId', element: guarded(<VersionDetailPage />, ['asset:read']) },
       { path: 'upload', element: guarded(<UploadPage />, ['asset:write']) },
       { path: 'review', element: guarded(<ReviewPage />, ['asset:manage']) },
       { path: 'access', element: guarded(<AccessPage />, ['authorization:read']) },

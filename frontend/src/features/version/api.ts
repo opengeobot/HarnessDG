@@ -25,8 +25,8 @@ export function listVersions(
 }
 
 /** 获取版本详情 */
-export function getVersion(versionId: string): Promise<VersionView> {
-  return apiClient.get<VersionView>(`/versions/${versionId}`);
+export function getVersion(assetId: string, versionId: string): Promise<VersionView> {
+  return apiClient.get<VersionView>(`/assets/${assetId}/versions/${versionId}`);
 }
 
 /** 创建草稿版本 */
@@ -62,8 +62,8 @@ export function publishVersion(
 }
 
 /** 列出版本工件 */
-export function listArtifacts(versionId: string): Promise<ArtifactView[]> {
-  return apiClient.get<ArtifactView[]>(`/versions/${versionId}/artifacts`);
+export function listArtifacts(assetId: string, versionId: string): Promise<ArtifactView[]> {
+  return apiClient.get<ArtifactView[]>(`/assets/${assetId}/versions/${versionId}/artifacts`);
 }
 
 /** 签发下载票据 */
