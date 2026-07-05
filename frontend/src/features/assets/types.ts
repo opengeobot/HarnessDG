@@ -17,6 +17,14 @@ export interface ModelProfile {
 export interface DatasetProfile {
   format?: string | null;
   modality?: string | null;
+  taskCodes?: string[] | null;
+  modalityCodes?: string[] | null;
+  formatCodes?: string[] | null;
+  languageCodes?: string[] | null;
+  sensitivityCode?: string | null;
+  sampleCount?: number | null;
+  totalBytes?: number | null;
+  sizeBucketCode?: string | null;
 }
 
 export type ProvisioningStatus = 'NONE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';

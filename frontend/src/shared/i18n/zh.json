@@ -146,7 +146,15 @@
       "link": "链接",
       "cardProjection": "Card 投影",
       "untrustedWarning": "以下内容来自外部仓库，未经信任，请注意安全。",
-      "sourceCommit": "来源 Commit"
+      "sourceCommit": "来源 Commit",
+      "taskCodes": "任务分类",
+      "modalityCodes": "模态分类",
+      "formatCodes": "格式分类",
+      "languageCodes": "语言",
+      "sensitivityCode": "敏感等级",
+      "sampleCount": "样本数",
+      "totalBytes": "数据量",
+      "sizeBucketCode": "大小区间"
     },
     "create": {
       "title": "登记资产",

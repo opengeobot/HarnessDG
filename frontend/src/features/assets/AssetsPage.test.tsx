@@ -12,6 +12,19 @@ vi.mock('./api', () => ({
   deleteAsset: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock ControlledSelect 避免测试中发起真实 API 请求
+vi.mock('@/shared/components/ControlledSelect', () => ({
+  ControlledSelect: (props: { placeholder?: string; value?: string; onChange?: (v: string) => void }) => (
+    <select
+      data-testid="controlled-select"
+      value={props.value ?? ''}
+      onChange={(e) => props.onChange?.(e.target.value)}
+    >
+      <option value="">{props.placeholder ?? ''}</option>
+    </select>
+  ),
+}));
+
 // Mock react-router-dom 的 Link 组件（保留 Router 等真实实现）
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');

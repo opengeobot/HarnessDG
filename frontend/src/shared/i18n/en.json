@@ -146,7 +146,15 @@
       "link": "Link",
       "cardProjection": "Card Projection",
       "untrustedWarning": "Content below is from an external repository and is untrusted.",
-      "sourceCommit": "Source Commit"
+      "sourceCommit": "Source Commit",
+      "taskCodes": "Task Codes",
+      "modalityCodes": "Modality Codes",
+      "formatCodes": "Format Codes",
+      "languageCodes": "Languages",
+      "sensitivityCode": "Sensitivity",
+      "sampleCount": "Sample Count",
+      "totalBytes": "Total Size",
+      "sizeBucketCode": "Size Bucket"
     },
     "create": {
       "title": "Register Asset",

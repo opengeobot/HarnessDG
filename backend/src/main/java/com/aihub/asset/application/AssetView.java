@@ -70,7 +70,11 @@ public record AssetView(String assetId,
     }
 
     /** 数据集画像视图。 */
-    public record DatasetView(String format, String modality) {
+    public record DatasetView(String format, String modality,
+                              List<String> taskCodes, List<String> modalityCodes,
+                              List<String> formatCodes, List<String> languageCodes,
+                              String sensitivityCode, Long sampleCount,
+                              Long totalBytes, String sizeBucketCode) {
     }
 
     /** 仓库引用视图。 */
@@ -119,7 +123,12 @@ public record AssetView(String assetId,
     }
 
     private static DatasetView datasetView(DatasetProfile profile) {
-        return profile == null ? null : new DatasetView(profile.format(), profile.modality());
+        return profile == null ? null
+                : new DatasetView(profile.format(), profile.modality(),
+                        profile.taskCodes(), profile.modalityCodes(),
+                        profile.formatCodes(), profile.languageCodes(),
+                        profile.sensitivityCode(), profile.sampleCount(),
+                        profile.totalBytes(), profile.sizeBucketCode());
     }
 
     private static RepositoryView repositoryView(AssetRepositoryRef ref) {

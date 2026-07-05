@@ -35,6 +35,14 @@ import { DiscussionPanel } from './DiscussionPanel';
 import { VersionListPanel } from '@/features/version/VersionListPanel';
 import type { AssetView, ProvisioningStatus } from './types';
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: 'green',
   DEPRECATED: 'orange',
@@ -177,9 +185,45 @@ export function AssetDetailPage() {
 
       {asset.dataset && (
         <Card title={t('assets.detail.datasetProfile')} size="small">
-          <Descriptions column={2} size="small">
+          <Descriptions column={2} bordered size="small">
             <Descriptions.Item label={t('assets.detail.format')}>{asset.dataset.format ?? '-'}</Descriptions.Item>
             <Descriptions.Item label={t('assets.detail.modality')}>{asset.dataset.modality ?? '-'}</Descriptions.Item>
+            {asset.dataset.taskCodes && asset.dataset.taskCodes.length > 0 && (
+              <Descriptions.Item label={t('assets.detail.taskCodes')}>
+                <Space size={[0, 4]} wrap>{asset.dataset.taskCodes.map(c => <Tag key={c}>{c}</Tag>)}</Space>
+              </Descriptions.Item>
+            )}
+            {asset.dataset.modalityCodes && asset.dataset.modalityCodes.length > 0 && (
+              <Descriptions.Item label={t('assets.detail.modalityCodes')}>
+                <Space size={[0, 4]} wrap>{asset.dataset.modalityCodes.map(c => <Tag key={c}>{c}</Tag>)}</Space>
+              </Descriptions.Item>
+            )}
+            {asset.dataset.formatCodes && asset.dataset.formatCodes.length > 0 && (
+              <Descriptions.Item label={t('assets.detail.formatCodes')}>
+                <Space size={[0, 4]} wrap>{asset.dataset.formatCodes.map(c => <Tag key={c}>{c}</Tag>)}</Space>
+              </Descriptions.Item>
+            )}
+            {asset.dataset.languageCodes && asset.dataset.languageCodes.length > 0 && (
+              <Descriptions.Item label={t('assets.detail.languageCodes')}>
+                <Space size={[0, 4]} wrap>{asset.dataset.languageCodes.map(c => <Tag key={c}>{c}</Tag>)}</Space>
+              </Descriptions.Item>
+            )}
+            <Descriptions.Item label={t('assets.detail.sensitivityCode')}>
+              {asset.dataset.sensitivityCode ? (
+                <Tag color={asset.dataset.sensitivityCode === 'PUBLIC' ? 'green' : asset.dataset.sensitivityCode === 'SECRET' ? 'red' : 'orange'}>
+                  {t(`assets.sensitivity.${asset.dataset.sensitivityCode}`, asset.dataset.sensitivityCode)}
+                </Tag>
+              ) : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.sampleCount')}>
+              {asset.dataset.sampleCount != null ? asset.dataset.sampleCount.toLocaleString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.totalBytes')}>
+              {asset.dataset.totalBytes != null ? formatBytes(asset.dataset.totalBytes) : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.sizeBucketCode')}>
+              {asset.dataset.sizeBucketCode ?? '-'}
+            </Descriptions.Item>
           </Descriptions>
         </Card>
       )}

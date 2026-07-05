@@ -31,6 +31,37 @@ const mockAsset = {
   },
 };
 
+const mockDatasetAsset = {
+  assetId: 'ast_002',
+  type: 'DATASET' as const,
+  namespace: 'org/team',
+  name: 'test-dataset',
+  displayName: 'Test Dataset',
+  description: 'A test dataset',
+  visibility: 'PUBLIC' as const,
+  status: 'ACTIVE' as const,
+  owners: ['team-cv'],
+  tags: [],
+  tagIds: [],
+  license: 'CC-BY-4.0',
+  organizationId: 'org_001',
+  projectId: null,
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-01T00:00:00Z',
+  dataset: {
+    format: 'parquet',
+    modality: 'image',
+    taskCodes: ['classification', 'detection'],
+    modalityCodes: ['image'],
+    formatCodes: ['parquet', 'csv'],
+    languageCodes: ['en', 'zh'],
+    sensitivityCode: 'INTERNAL',
+    sampleCount: 100000,
+    totalBytes: 5368709120,
+    sizeBucketCode: 'MEDIUM',
+  },
+};
+
 const mockGetAsset = vi.fn().mockResolvedValue(mockAsset);
 const mockDeprecateAsset = vi.fn().mockResolvedValue(mockAsset);
 const mockArchiveAsset = vi.fn().mockResolvedValue(mockAsset);
@@ -89,5 +120,16 @@ describe('AssetDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('org/team/MODEL/test-model')).toBeInTheDocument();
     });
+  });
+
+  it('renders dataset classification fields for dataset assets', async () => {
+    mockGetAsset.mockResolvedValueOnce(mockDatasetAsset);
+    renderWithProviders(<AssetDetailPage />, { route: '/assets/ast_002' });
+    await waitFor(() => {
+      expect(screen.getByText('Test Dataset')).toBeInTheDocument();
+    });
+    expect(screen.getByText('classification')).toBeInTheDocument();
+    expect(screen.getByText('detection')).toBeInTheDocument();
+    expect(screen.getByText('100,000')).toBeInTheDocument();
   });
 });
