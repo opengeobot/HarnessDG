@@ -1,0 +1,123 @@
+{
+  "annotations": { "list": [] },
+  "title": "AIHub Platform Dashboard",
+  "uid": "aihub-platform",
+  "version": 1,
+  "description": "HarnessDG 内部 AI 资产管理平台运维看板",
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate (5m avg)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_count[5m])", "legendFormat": "{{method}} {{uri}} {{status}}" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "title": "HTTP Latency P95 (5m)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m]))", "legendFormat": "{{uri}}" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "id": 3,
+      "title": "Job Queue Depth",
+      "type": "stat",
+      "targets": [
+        { "expr": "aihub_job_queue_depth", "legendFormat": "{{type}}" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 }
+    },
+    {
+      "id": 4,
+      "title": "Dead Jobs (24h)",
+      "type": "stat",
+      "targets": [
+        { "expr": "aihub_job_dead_count", "legendFormat": "dead jobs" }
+      ],
+      "thresholds": [
+        { "value": 0, "color": "green" },
+        { "value": 1, "color": "red" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 }
+    },
+    {
+      "id": 5,
+      "title": "Webhook Inbox Pending",
+      "type": "stat",
+      "targets": [
+        { "expr": "aihub_webhook_inbox_pending", "legendFormat": "pending" }
+      ],
+      "thresholds": [
+        { "value": 0, "color": "green" },
+        { "value": 100, "color": "yellow" },
+        { "value": 1000, "color": "red" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 }
+    },
+    {
+      "id": 6,
+      "title": "MCP Tool Calls (5m)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(aihub_mcp_tool_calls_total[5m])", "legendFormat": "{{tool}} {{status}}" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 18, "y": 8 }
+    },
+    {
+      "id": 7,
+      "title": "Database Connection Pool",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "hikaricp_connections_active", "legendFormat": "active" },
+        { "expr": "hikaricp_connections_idle", "legendFormat": "idle" },
+        { "expr": "hikaricp_connections_pending", "legendFormat": "pending" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 }
+    },
+    {
+      "id": 8,
+      "title": "JVM Memory Usage",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area='heap'}", "legendFormat": "heap used" },
+        { "expr": "jvm_memory_max_bytes{area='heap'}", "legendFormat": "heap max" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 }
+    },
+    {
+      "id": 9,
+      "title": "Upload Sessions Active",
+      "type": "stat",
+      "targets": [
+        { "expr": "aihub_upload_sessions_active", "legendFormat": "active sessions" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 20 }
+    },
+    {
+      "id": 10,
+      "title": "Asset Count by Status",
+      "type": "piechart",
+      "targets": [
+        { "expr": "aihub_asset_count_by_status", "legendFormat": "{{status}}" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 6, "y": 20 }
+    },
+    {
+      "id": 11,
+      "title": "Audit Events Rate",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(aihub_audit_events_total[5m])", "legendFormat": "{{eventType}}" }
+      ],
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 20 }
+    }
+  ],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s"
+}

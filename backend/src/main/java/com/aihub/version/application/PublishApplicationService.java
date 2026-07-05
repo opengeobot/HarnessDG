@@ -1,0 +1,231 @@
+package com.aihub.version.application;
+
+import com.aihub.audit.application.AuditEvent;
+import com.aihub.audit.application.AuditService;
+import com.aihub.audit.domain.AuditResult;
+import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.job.application.JobApplicationService;
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.NotFoundException;
+import com.aihub.shared.id.IdGenerator;
+import com.aihub.shared.id.IdPrefix;
+import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.version.domain.Version;
+import com.aihub.version.domain.VersionRepository;
+import com.aihub.version.domain.VersionStatus;
+import java.time.Instant;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 发布应用服务。
+ *
+ * <p>编排提交审批、审批决策与发布 Saga 触发。
+ * 默认提交人不能审批自己。审批全部完成后创建唯一 Publish Job。
+ */
+@Service
+public class PublishApplicationService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PublishApplicationService.class);
+
+    private final VersionRepository versionRepository;
+    private final JdbcTemplate jdbcTemplate;
+    private final IdGenerator idGenerator;
+    private final AuthorizationService authorizationService;
+    private final AuditService auditService;
+    private final JobApplicationService jobApplicationService;
+    private final ObjectMapper objectMapper;
+
+    public PublishApplicationService(VersionRepository versionRepository,
+                                     JdbcTemplate jdbcTemplate,
+                                     IdGenerator idGenerator,
+                                     AuthorizationService authorizationService,
+                                     AuditService auditService,
+                                     JobApplicationService jobApplicationService,
+                                     ObjectMapper objectMapper) {
+        this.versionRepository = versionRepository;
+        this.jdbcTemplate = jdbcTemplate;
+        this.idGenerator = idGenerator;
+        this.authorizationService = authorizationService;
+        this.auditService = auditService;
+        this.jobApplicationService = jobApplicationService;
+        this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 提交发布请求。
+     *
+     * @param versionId 版本 ID（必须处于 PENDING_REVIEW 状态）
+     * @return 请求 ID
+     */
+    @Transactional
+    public String submitPublishRequest(String versionId) {
+        authorizationService.requirePermission("asset:write");
+
+        Version version = versionRepository.findByVersionId(versionId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
+                        "version not found", Map.of("versionId", versionId)));
+
+        if (version.status() != VersionStatus.PENDING_REVIEW) {
+            throw new IllegalStateException("only PENDING_REVIEW versions can be submitted for publish");
+        }
+
+        String digest = version.manifestDigest();
+        if (digest == null || digest.isBlank()) {
+            throw new IllegalStateException("version must have a manifest digest before publishing");
+        }
+
+        String requestId = idGenerator.generate(IdPrefix.PUBLISH_REQUEST);
+        String principalId = PrincipalContextHolder.current()
+                .map(c -> c.principalId())
+                .orElseThrow(() -> new IllegalStateException("no authenticated principal"));
+
+        // 幂等：检查是否已存在请求
+        Long existing = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM publish_request WHERE version_id = ?",
+                Long.class, versionId);
+        if (existing != null && existing > 0) {
+            String existingId = jdbcTemplate.queryForObject(
+                    "SELECT request_id FROM publish_request WHERE version_id = ?",
+                    String.class, versionId);
+            LOG.info("publish request already exists for versionId={} requestId={}", versionId, existingId);
+            return existingId;
+        }
+
+        jdbcTemplate.update("""
+                INSERT INTO publish_request (request_id, version_id, frozen_digest, policy_version, status, submitted_by)
+                VALUES (?, ?, ?, ?, 'SUBMITTED', ?)
+                """, requestId, versionId, digest, "v1", principalId);
+
+        auditService.record(new AuditEvent(
+                "PUBLISH_REQUEST_SUBMITTED", "publish:submit",
+                principalId, null, "VERSION", versionId, null, null,
+                AuditResult.SUCCEEDED, null,
+                Map.of("requestId", requestId)));
+
+        LOG.info("publish request submitted versionId={} requestId={}", versionId, requestId);
+        return requestId;
+    }
+
+    /**
+     * 审批决策。
+     *
+     * @param requestId 请求 ID
+     * @param decision  APPROVE / REJECT / REQUEST_CHANGES
+     * @param comments  审批意见
+     */
+    @Transactional
+    public void submitDecision(String requestId, String decision, String comments) {
+        authorizationService.requirePermission("asset:publish");
+
+        String reviewerId = PrincipalContextHolder.current()
+                .map(c -> c.principalId())
+                .orElseThrow(() -> new IllegalStateException("no authenticated principal"));
+
+        // 查询请求
+        Map<String, Object> request = jdbcTemplate.queryForMap(
+                "SELECT request_id, version_id, submitted_by, status FROM publish_request WHERE request_id = ?",
+                requestId);
+
+        String submittedBy = String.valueOf(request.get("submitted_by"));
+        String status = String.valueOf(request.get("status"));
+
+        // 提交人不能审批自己
+        if (submittedBy.equals(reviewerId)) {
+            throw new IllegalStateException("submitter cannot approve their own publish request");
+        }
+
+        if (!"SUBMITTED".equals(status)) {
+            throw new IllegalStateException("only SUBMITTED requests can receive decisions, current: " + status);
+        }
+
+        String reviewId = idGenerator.generate(IdPrefix.REVIEW_DECISION);
+        jdbcTemplate.update("""
+                INSERT INTO review_decision (review_id, request_id, reviewer_id, decision, comments)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (request_id, reviewer_id) DO UPDATE SET decision = EXCLUDED.decision, comments = EXCLUDED.comments
+                """, reviewId, requestId, reviewerId, decision, comments);
+
+        auditService.record(new AuditEvent(
+                "REVIEW_DECISION_SUBMITTED", "publish:review",
+                reviewerId, null, "PUBLISH_REQUEST", requestId, null, null,
+                AuditResult.SUCCEEDED, null,
+                Map.of("reviewId", reviewId, "decision", decision)));
+
+        // 如果是 REJECT，直接拒绝请求
+        if ("REJECT".equals(decision)) {
+            jdbcTemplate.update("UPDATE publish_request SET status = 'REJECTED', decided_at = ? WHERE request_id = ?",
+                    Instant.now(), requestId);
+
+            // 版本回到 DRAFT
+            String versionId = String.valueOf(request.get("version_id"));
+            Version version = versionRepository.findByVersionId(versionId).orElse(null);
+            if (version != null && version.status() == VersionStatus.PENDING_REVIEW) {
+                version.transitionTo(VersionStatus.DRAFT);
+                versionRepository.update(version);
+            }
+            LOG.info("publish request rejected requestId={} versionId={}", requestId, versionId);
+            return;
+        }
+
+        // 如果是 APPROVE，检查是否所有必需审批人都已审批
+        // P3 简化：单一审批即可
+        if ("APPROVE".equals(decision)) {
+            jdbcTemplate.update("UPDATE publish_request SET status = 'APPROVED', decided_at = ? WHERE request_id = ?",
+                    Instant.now(), requestId);
+
+            // 创建发布 Job
+            String versionId = String.valueOf(request.get("version_id"));
+            try {
+                String payload = objectMapper.writeValueAsString(
+                        Map.of("requestId", requestId, "versionId", versionId));
+                jobApplicationService.enqueue("VERSION_PUBLISH", payload, reviewerId, null, versionId, 3);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new IllegalStateException("failed to serialize publish payload", e);
+            }
+
+            LOG.info("publish request approved, publish job submitted requestId={} versionId={}", requestId, versionId);
+        }
+    }
+
+    /**
+     * 版本弃用。
+     */
+    @Transactional
+    public void deprecateVersion(String versionId) {
+        authorizationService.requirePermission("asset:write");
+        Version version = versionRepository.findByVersionId(versionId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
+                        "version not found", Map.of("versionId", versionId)));
+        version.transitionTo(VersionStatus.DEPRECATED);
+        versionRepository.update(version);
+        auditService.record(new AuditEvent(
+                "VERSION_DEPRECATED", "version:deprecate",
+                null, null, "VERSION", versionId, null, null,
+                AuditResult.SUCCEEDED, null, Map.of()));
+        LOG.info("version deprecated versionId={}", versionId);
+    }
+
+    /**
+     * 版本归档。
+     */
+    @Transactional
+    public void archiveVersion(String versionId) {
+        authorizationService.requirePermission("asset:write");
+        Version version = versionRepository.findByVersionId(versionId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
+                        "version not found", Map.of("versionId", versionId)));
+        version.transitionTo(VersionStatus.ARCHIVED);
+        versionRepository.update(version);
+        auditService.record(new AuditEvent(
+                "VERSION_ARCHIVED", "version:archive",
+                null, null, "VERSION", versionId, null, null,
+                AuditResult.SUCCEEDED, null, Map.of()));
+        LOG.info("version archived versionId={}", versionId);
+    }
+}

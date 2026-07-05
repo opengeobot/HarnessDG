@@ -44,6 +44,13 @@ components:
       type: string
       description: 稳定事件类型枚举。新增类型按兼容策略追加，不复用或重命名既有值。
       enum:
+        - ASSET_CREATED
+        - ASSET_UPDATED
+        - ASSET_DEPRECATED
+        - ASSET_ARCHIVED
+        - ASSET_RESTORED
+        - DISCUSSION_CREATED
+        - COMMENT_CREATED
         - VERSION_REVIEW_REQUESTED
         - VERSION_APPROVED
         - VERSION_REJECTED
@@ -58,7 +65,7 @@ components:
     AggregateType:
       type: string
       description: 事件聚合根类型，用于路由、订阅与对账。
-      enum: [ASSET_VERSION, UPLOAD_SESSION, JOB, AGENT, STORAGE, SYSTEM_DEPENDENCY]
+      enum: [ASSET, ASSET_VERSION, UPLOAD_SESSION, JOB, AGENT, STORAGE, SYSTEM_DEPENDENCY]
 
     EventEnvelope:
       type: object
@@ -110,6 +117,13 @@ components:
     EventPayload:
       description: 事件负载多态联合，按 eventType 区分。
       oneOf:
+        - $ref: '#/components/schemas/AssetCreatedPayload'
+        - $ref: '#/components/schemas/AssetUpdatedPayload'
+        - $ref: '#/components/schemas/AssetDeprecatedPayload'
+        - $ref: '#/components/schemas/AssetArchivedPayload'
+        - $ref: '#/components/schemas/AssetRestoredPayload'
+        - $ref: '#/components/schemas/DiscussionCreatedPayload'
+        - $ref: '#/components/schemas/CommentCreatedPayload'
         - $ref: '#/components/schemas/VersionReviewRequestedPayload'
         - $ref: '#/components/schemas/VersionApprovedPayload'
         - $ref: '#/components/schemas/VersionRejectedPayload'
@@ -120,6 +134,74 @@ components:
         - $ref: '#/components/schemas/AgentAccessDeniedPayload'
         - $ref: '#/components/schemas/StorageQuotaWarningPayload'
         - $ref: '#/components/schemas/SystemDependencyUnhealthyPayload'
+
+    AssetCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, namespace, name, type, createdBy]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [MODEL, DATASET] }
+        createdBy: { type: string, pattern: '^prn_' }
+
+    AssetUpdatedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, updatedBy]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        updatedBy: { type: string, pattern: '^prn_' }
+
+    AssetDeprecatedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, deprecatedBy]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        deprecatedBy: { type: string, pattern: '^prn_' }
+
+    AssetArchivedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, archivedBy]
+      properties:
+        assetId: { type: string }
+        archivedBy: { type: string, pattern: '^prn_' }
+
+    AssetRestoredPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, restoredBy]
+      properties:
+        assetId: { type: string }
+        restoredBy: { type: string, pattern: '^prn_' }
+
+    DiscussionCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, threadId, title, createdBy]
+      properties:
+        assetId: { type: string }
+        threadId: { type: string }
+        title: { type: string }
+        createdBy: { type: string, pattern: '^prn_' }
+
+    CommentCreatedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, threadId, commentId, createdBy]
+      properties:
+        assetId: { type: string }
+        threadId: { type: string }
+        commentId: { type: string }
+        parentId: { type: [string, 'null'] }
+        createdBy: { type: string, pattern: '^prn_' }
 
     VersionReviewRequestedPayload:
       type: object

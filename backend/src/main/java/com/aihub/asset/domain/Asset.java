@@ -39,6 +39,10 @@ public final class Asset {
     private ModelProfile modelProfile;
     private DatasetProfile datasetProfile;
     private AssetRepositoryRef repository;
+    private ProvisioningStatus provisioningStatus;
+    private String sourceCommit;
+    private String cardReadme;
+    private String cardAssetYaml;
 
     private long rowVersion;
     private final String createdBy;
@@ -64,6 +68,11 @@ public final class Asset {
         this.modelProfile = builder.modelProfile;
         this.datasetProfile = builder.datasetProfile;
         this.repository = builder.repository;
+        this.provisioningStatus = builder.provisioningStatus != null
+                ? builder.provisioningStatus : ProvisioningStatus.NONE;
+        this.sourceCommit = builder.sourceCommit;
+        this.cardReadme = builder.cardReadme;
+        this.cardAssetYaml = builder.cardAssetYaml;
         this.rowVersion = builder.rowVersion;
         this.createdBy = builder.createdBy;
         this.updatedBy = builder.updatedBy;
@@ -177,15 +186,33 @@ public final class Asset {
         touch(updatedBy);
     }
 
-    /** 标记弃用：仍可访问但检索降权。 */
+    /** 标记弃用：仍可访问但检索降权。仅 ACTIVE 可弃用。 */
     public void deprecate(String updatedBy) {
+        if (this.status != AssetStatus.ACTIVE) {
+            throw new IllegalStateException(
+                    "only ACTIVE assets can be deprecated, current: " + this.status);
+        }
         this.status = AssetStatus.DEPRECATED;
         touch(updatedBy);
     }
 
-    /** 归档：默认不返回。 */
+    /** 归档：默认不返回。ACTIVE 或 DEPRECATED 可归档。 */
     public void archive(String updatedBy) {
+        if (this.status != AssetStatus.ACTIVE && this.status != AssetStatus.DEPRECATED) {
+            throw new IllegalStateException(
+                    "only ACTIVE or DEPRECATED assets can be archived, current: " + this.status);
+        }
         this.status = AssetStatus.ARCHIVED;
+        touch(updatedBy);
+    }
+
+    /** 恢复：从 DEPRECATED 或 ARCHIVED 恢复为 ACTIVE。 */
+    public void restore(String updatedBy) {
+        if (this.status != AssetStatus.DEPRECATED && this.status != AssetStatus.ARCHIVED) {
+            throw new IllegalStateException(
+                    "only DEPRECATED or ARCHIVED assets can be restored, current: " + this.status);
+        }
+        this.status = AssetStatus.ACTIVE;
         touch(updatedBy);
     }
 
@@ -306,6 +333,27 @@ public final class Asset {
         return repository;
     }
 
+    public ProvisioningStatus provisioningStatus() {
+        return provisioningStatus;
+    }
+
+    public String sourceCommit() {
+        return sourceCommit;
+    }
+
+    public String cardReadme() {
+        return cardReadme;
+    }
+
+    public String cardAssetYaml() {
+        return cardAssetYaml;
+    }
+
+    /** 推进建仓状态（由 Saga/Job 调用）。 */
+    public void advanceProvisioning(ProvisioningStatus status) {
+        this.provisioningStatus = status;
+    }
+
     public long rowVersion() {
         return rowVersion;
     }
@@ -347,6 +395,10 @@ public final class Asset {
         private ModelProfile modelProfile;
         private DatasetProfile datasetProfile;
         private AssetRepositoryRef repository;
+        private ProvisioningStatus provisioningStatus;
+        private String sourceCommit;
+        private String cardReadme;
+        private String cardAssetYaml;
         private long rowVersion;
         private String createdBy;
         private String updatedBy;
@@ -435,6 +487,26 @@ public final class Asset {
 
         public Builder repository(AssetRepositoryRef repository) {
             this.repository = repository;
+            return this;
+        }
+
+        public Builder provisioningStatus(ProvisioningStatus provisioningStatus) {
+            this.provisioningStatus = provisioningStatus;
+            return this;
+        }
+
+        public Builder sourceCommit(String sourceCommit) {
+            this.sourceCommit = sourceCommit;
+            return this;
+        }
+
+        public Builder cardReadme(String cardReadme) {
+            this.cardReadme = cardReadme;
+            return this;
+        }
+
+        public Builder cardAssetYaml(String cardAssetYaml) {
+            this.cardAssetYaml = cardAssetYaml;
             return this;
         }
 

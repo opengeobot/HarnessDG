@@ -5,7 +5,7 @@
 #       Tool 实现必须复用与 REST 相同的 Application Service，不得绕过权限或直接访问 Mapper。
 # 作者：AxeXie
 schemaVersion: 1
-contractStatus: target-p0-b
+contractStatus: implemented-p4
 
 transport:
   protocol: streamable-http
@@ -107,7 +107,7 @@ tools:
   # ---- P0-B 默认关闭的写工具（受 mcp.writeTools.enabled 与高风险 Scope 双控）----
   - name: asset_publish_version
     enabled: false
-    write: false
+    write: true
     highRisk: true
     summary: 发布资产版本。P0-B 默认关闭；asset:publish Scope 默认不授予 Agent。
     requiredScopes: [asset:publish]

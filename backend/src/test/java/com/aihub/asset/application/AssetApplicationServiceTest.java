@@ -16,16 +16,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.asset.domain.Asset;
+import com.aihub.asset.domain.AssetCardProjectionPort;
 import com.aihub.asset.domain.AssetRepository;
-import com.aihub.asset.domain.AssetRepositoryProvisioner;
-import com.aihub.asset.domain.AssetRepositoryRef;
 import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ModelProfile;
+import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.job.domain.JobRepository;
 import com.aihub.shared.api.CursorPage;
+import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.error.ValidationException;
 import com.aihub.shared.id.IdGenerator;
@@ -46,6 +48,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * {@link AssetApplicationService} 单元测试。
@@ -57,23 +60,23 @@ import org.mockito.quality.Strictness;
 class AssetApplicationServiceTest {
 
     @Mock private AssetRepository assetRepository;
-    @Mock private AssetRepositoryProvisioner provisioner;
     @Mock private IdGenerator idGenerator;
     @Mock private AuthorizationService authorizationService;
     @Mock private DictionaryValidationPort dictionaryValidationPort;
     @Mock private TagValidationService tagValidationService;
     @Mock private AuditService auditService;
+    @Mock private JobRepository jobRepository;
+    @Mock private ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
 
     private AssetApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new AssetApplicationService(assetRepository, provisioner,
+        service = new AssetApplicationService(assetRepository,
                 new AssetAccessPolicy(), idGenerator, authorizationService,
-                dictionaryValidationPort, tagValidationService, auditService);
+                dictionaryValidationPort, tagValidationService, auditService, jobRepository,
+                cardProjectionPortProvider);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
-        when(provisioner.provision(any())).thenReturn(
-                new AssetRepositoryRef("nlp/qwen-domain-7b", null, null));
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
         doNothing().when(assetRepository).insert(any(Asset.class));
     }
@@ -97,9 +100,10 @@ class AssetApplicationServiceTest {
         AssetView view = service.createAsset(modelCommand());
 
         assertThat(view.assetId()).isEqualTo("ast_generated");
+        assertThat(view.provisioningStatus()).isEqualTo(ProvisioningStatus.PENDING);
         verify(authorizationService).requirePermission("asset:manage");
         verify(assetRepository).insert(any(Asset.class));
-        verify(provisioner).provision(any());
+        verify(jobRepository).insert(any());
         verify(auditService).record(any());
     }
 
@@ -220,5 +224,53 @@ class AssetApplicationServiceTest {
 
         assertThat(view.assetId()).isEqualTo("ast_generated");
         verify(assetRepository).insert(any(Asset.class));
+    }
+
+    @Test
+    void deprecateAssetTransitionsToDeprecated() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        AssetView view = service.deprecateAsset("ast_stored", "usr_01");
+
+        assertThat(view.status()).isEqualTo(AssetStatus.DEPRECATED);
+        verify(assetRepository).update(any(Asset.class));
+        verify(auditService).record(any());
+    }
+
+    @Test
+    void archiveAssetTransitionsToArchived() {
+        Asset asset = storedModel();
+        asset.deprecate("usr_01");
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        AssetView view = service.archiveAsset("ast_stored", "usr_01");
+
+        assertThat(view.status()).isEqualTo(AssetStatus.ARCHIVED);
+        verify(assetRepository).update(any(Asset.class));
+        verify(auditService).record(any());
+    }
+
+    @Test
+    void restoreAssetTransitionsToActive() {
+        Asset asset = storedModel();
+        asset.deprecate("usr_01");
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        AssetView view = service.restoreAsset("ast_stored", "usr_01");
+
+        assertThat(view.status()).isEqualTo(AssetStatus.ACTIVE);
+        verify(assetRepository).update(any(Asset.class));
+        verify(auditService).record(any());
+    }
+
+    @Test
+    void deprecateArchivedAssetThrowsStateNotAllowed() {
+        Asset asset = storedModel();
+        asset.archive("usr_01");
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        assertThatThrownBy(() -> service.deprecateAsset("ast_stored", "usr_01"))
+                .isInstanceOf(ConflictException.class);
     }
 }

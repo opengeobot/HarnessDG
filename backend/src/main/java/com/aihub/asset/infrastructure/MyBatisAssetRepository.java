@@ -14,6 +14,7 @@ import com.aihub.asset.domain.AssetSummary;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.DatasetProfile;
 import com.aihub.asset.domain.ModelProfile;
+import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
@@ -110,7 +111,18 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .set(AssetEntity::getLicense, asset.license())
                 .set(AssetEntity::getRowVersion, currentVersion + 1)
                 .set(AssetEntity::getUpdatedBy, asset.updatedBy())
-                .set(AssetEntity::getUpdatedAt, asset.updatedAt()));
+                .set(AssetEntity::getUpdatedAt, asset.updatedAt())
+                .set(asset.repository() != null, AssetEntity::getRepoFullName,
+                        asset.repository() != null ? asset.repository().fullName() : null)
+                .set(asset.repository() != null, AssetEntity::getRepoHtmlUrl,
+                        asset.repository() != null ? asset.repository().htmlUrl() : null)
+                .set(asset.repository() != null, AssetEntity::getRepoCloneUrl,
+                        asset.repository() != null ? asset.repository().cloneUrl() : null)
+                .set(AssetEntity::getProvisioningStatus,
+                        asset.provisioningStatus() != null ? asset.provisioningStatus().name() : "NONE")
+                .set(AssetEntity::getSourceCommit, asset.sourceCommit())
+                .set(AssetEntity::getCardReadme, asset.cardReadme())
+                .set(AssetEntity::getCardAssetYaml, asset.cardAssetYaml()));
         if (affected == 0) {
             throw new ConflictException(
                     ErrorCode.ASSET_CONCURRENT_MODIFICATION,
@@ -132,6 +144,11 @@ public class MyBatisAssetRepository implements AssetRepository {
     @Override
     public CursorPage<AssetSummary> search(AssetSearchCriteria criteria) {
         return assetSearchDao.search(criteria);
+    }
+
+    @Override
+    public Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria) {
+        return assetSearchDao.facet(criteria);
     }
 
     private void insertTagAssociations(Asset asset) {
@@ -168,6 +185,13 @@ public class MyBatisAssetRepository implements AssetRepository {
             entity.setFramework(profile.framework());
             entity.setTask(profile.task());
             entity.setArchitecture(profile.architecture());
+            entity.setParameterScale(profile.parameterScale());
+            entity.setPrecision(profile.precision());
+            entity.setWeightFormat(profile.weightFormat());
+            entity.setRuntime(profile.runtime());
+            entity.setKnownRisks(profile.knownRisks());
+            entity.setUsageRestrictions(profile.usageRestrictions());
+            entity.setSensitivityCode(profile.sensitivityCode());
             assetModelMapper.insert(entity);
             return;
         }
@@ -176,6 +200,14 @@ public class MyBatisAssetRepository implements AssetRepository {
         entity.setAssetId(asset.assetId());
         entity.setFormat(profile.format());
         entity.setModality(profile.modality());
+        entity.setTaskCodes(profile.taskCodes());
+        entity.setModalityCodes(profile.modalityCodes());
+        entity.setFormatCodes(profile.formatCodes());
+        entity.setLanguageCodes(profile.languageCodes());
+        entity.setSensitivityCode(profile.sensitivityCode());
+        entity.setSampleCount(profile.sampleCount());
+        entity.setTotalBytes(profile.totalBytes());
+        entity.setSizeBucketCode(profile.sizeBucketCode());
         assetDatasetMapper.insert(entity);
     }
 
@@ -186,14 +218,29 @@ public class MyBatisAssetRepository implements AssetRepository {
                     .eq(AssetModelEntity::getAssetId, asset.assetId())
                     .set(AssetModelEntity::getFramework, profile.framework())
                     .set(AssetModelEntity::getTask, profile.task())
-                    .set(AssetModelEntity::getArchitecture, profile.architecture()));
+                    .set(AssetModelEntity::getArchitecture, profile.architecture())
+                    .set(AssetModelEntity::getParameterScale, profile.parameterScale())
+                    .set(AssetModelEntity::getPrecision, profile.precision())
+                    .set(AssetModelEntity::getWeightFormat, profile.weightFormat())
+                    .set(AssetModelEntity::getRuntime, profile.runtime())
+                    .set(AssetModelEntity::getKnownRisks, profile.knownRisks(), JSONB_LIST_HANDLER)
+                    .set(AssetModelEntity::getUsageRestrictions, profile.usageRestrictions(), JSONB_LIST_HANDLER)
+                    .set(AssetModelEntity::getSensitivityCode, profile.sensitivityCode()));
             return;
         }
         DatasetProfile profile = asset.datasetProfile() == null ? DatasetProfile.empty() : asset.datasetProfile();
         assetDatasetMapper.update(null, Wrappers.<AssetDatasetEntity>lambdaUpdate()
                 .eq(AssetDatasetEntity::getAssetId, asset.assetId())
                 .set(AssetDatasetEntity::getFormat, profile.format())
-                .set(AssetDatasetEntity::getModality, profile.modality()));
+                .set(AssetDatasetEntity::getModality, profile.modality())
+                .set(AssetDatasetEntity::getTaskCodes, profile.taskCodes(), JSONB_LIST_HANDLER)
+                .set(AssetDatasetEntity::getModalityCodes, profile.modalityCodes(), JSONB_LIST_HANDLER)
+                .set(AssetDatasetEntity::getFormatCodes, profile.formatCodes(), JSONB_LIST_HANDLER)
+                .set(AssetDatasetEntity::getLanguageCodes, profile.languageCodes(), JSONB_LIST_HANDLER)
+                .set(AssetDatasetEntity::getSensitivityCode, profile.sensitivityCode())
+                .set(AssetDatasetEntity::getSampleCount, profile.sampleCount())
+                .set(AssetDatasetEntity::getTotalBytes, profile.totalBytes())
+                .set(AssetDatasetEntity::getSizeBucketCode, profile.sizeBucketCode()));
     }
 
     private AssetEntity toEntity(Asset asset) {
@@ -217,6 +264,11 @@ public class MyBatisAssetRepository implements AssetRepository {
             entity.setRepoHtmlUrl(ref.htmlUrl());
             entity.setRepoCloneUrl(ref.cloneUrl());
         }
+        entity.setProvisioningStatus(
+                asset.provisioningStatus() != null ? asset.provisioningStatus().name() : "NONE");
+        entity.setSourceCommit(asset.sourceCommit());
+        entity.setCardReadme(asset.cardReadme());
+        entity.setCardAssetYaml(asset.cardAssetYaml());
         entity.setRowVersion(asset.rowVersion());
         entity.setCreatedBy(asset.createdBy());
         entity.setUpdatedBy(asset.updatedBy());
@@ -249,6 +301,12 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .updatedBy(entity.getUpdatedBy())
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt());
+        if (entity.getProvisioningStatus() != null) {
+            builder.provisioningStatus(ProvisioningStatus.valueOf(entity.getProvisioningStatus()));
+        }
+        builder.sourceCommit(entity.getSourceCommit());
+        builder.cardReadme(entity.getCardReadme());
+        builder.cardAssetYaml(entity.getCardAssetYaml());
         if (entity.getRepoFullName() != null) {
             builder.repository(new AssetRepositoryRef(
                     entity.getRepoFullName(), entity.getRepoHtmlUrl(), entity.getRepoCloneUrl()));
@@ -262,12 +320,18 @@ public class MyBatisAssetRepository implements AssetRepository {
             AssetModelEntity model = assetModelMapper.selectById(assetId);
             builder.modelProfile(model == null
                     ? ModelProfile.empty()
-                    : new ModelProfile(model.getFramework(), model.getTask(), model.getArchitecture()));
+                    : new ModelProfile(model.getFramework(), model.getTask(), model.getArchitecture(),
+                            model.getParameterScale(), model.getPrecision(), model.getWeightFormat(),
+                            model.getRuntime(), model.getKnownRisks(), model.getUsageRestrictions(),
+                            model.getSensitivityCode()));
             return;
         }
         AssetDatasetEntity dataset = assetDatasetMapper.selectById(assetId);
         builder.datasetProfile(dataset == null
                 ? DatasetProfile.empty()
-                : new DatasetProfile(dataset.getFormat(), dataset.getModality()));
+                : new DatasetProfile(dataset.getFormat(), dataset.getModality(),
+                        dataset.getTaskCodes(), dataset.getModalityCodes(), dataset.getFormatCodes(),
+                        dataset.getLanguageCodes(), dataset.getSensitivityCode(),
+                        dataset.getSampleCount(), dataset.getTotalBytes(), dataset.getSizeBucketCode()));
     }
 }

@@ -55,6 +55,9 @@ public class AssetEntity {
     @TableField("status")
     private String status;
 
+    @TableField("provisioning_status")
+    private String provisioningStatus;
+
     @TableField(value = "owners", typeHandler = JsonbStringListTypeHandler.class)
     private List<String> owners;
 
@@ -72,6 +75,15 @@ public class AssetEntity {
 
     @TableField("repo_clone_url")
     private String repoCloneUrl;
+
+    @TableField("source_commit")
+    private String sourceCommit;
+
+    @TableField("card_readme")
+    private String cardReadme;
+
+    @TableField("card_asset_yaml")
+    private String cardAssetYaml;
 
     @TableField("row_version")
     private Long rowVersion;
@@ -180,6 +192,14 @@ public class AssetEntity {
         this.status = status;
     }
 
+    public String getProvisioningStatus() {
+        return provisioningStatus;
+    }
+
+    public void setProvisioningStatus(String provisioningStatus) {
+        this.provisioningStatus = provisioningStatus;
+    }
+
     public List<String> getOwners() {
         return owners;
     }
@@ -226,6 +246,30 @@ public class AssetEntity {
 
     public void setRepoCloneUrl(String repoCloneUrl) {
         this.repoCloneUrl = repoCloneUrl;
+    }
+
+    public String getSourceCommit() {
+        return sourceCommit;
+    }
+
+    public void setSourceCommit(String sourceCommit) {
+        this.sourceCommit = sourceCommit;
+    }
+
+    public String getCardReadme() {
+        return cardReadme;
+    }
+
+    public void setCardReadme(String cardReadme) {
+        this.cardReadme = cardReadme;
+    }
+
+    public String getCardAssetYaml() {
+        return cardAssetYaml;
+    }
+
+    public void setCardAssetYaml(String cardAssetYaml) {
+        this.cardAssetYaml = cardAssetYaml;
     }
 
     public Long getRowVersion() {

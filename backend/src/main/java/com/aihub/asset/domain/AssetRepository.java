@@ -6,6 +6,7 @@
 package com.aihub.asset.domain;
 
 import com.aihub.shared.api.CursorPage;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -63,4 +64,12 @@ public interface AssetRepository {
      * @return 游标分页的资产摘要
      */
     CursorPage<AssetSummary> search(AssetSearchCriteria criteria);
+
+    /**
+     * 按维度统计资产数量（Facet），应用与 search 相同的访问作用域过滤。
+     *
+     * @param criteria 检索条件
+     * @return 各维度计数映射
+     */
+    Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria);
 }

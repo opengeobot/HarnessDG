@@ -6,7 +6,9 @@
 package com.aihub.asset.api;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,6 +24,7 @@ import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ModelProfile;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.authorization.domain.AgentToolRepository;
 import com.aihub.authorization.domain.ResourceAclRepository;
 import com.aihub.authorization.domain.RoleBindingRepository;
@@ -76,10 +79,15 @@ class AssetControllerTest {
     @MockitoBean private RoleBindingRepository roleBindingRepository;
     @MockitoBean private ResourceAclRepository resourceAclRepository;
     @MockitoBean private AgentToolRepository agentToolRepository;
+    @MockitoBean private IdempotencyService idempotencyService;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of("asset:manage", "asset:read"));
+        when(idempotencyService.execute(any(), anyString(), any())).thenAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
     }
 
     private String bearer() {
@@ -160,6 +168,36 @@ class AssetControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assetId").value("ast_demo"));
+    }
+
+    @Test
+    void deprecateAssetReturnsUpdatedView() throws Exception {
+        given(assetService.deprecateAsset(any(), any())).willReturn(modelView());
+
+        mockMvc.perform(post("/api/v1/assets/ast_demo/deprecate")
+                        .header(HttpHeaders.AUTHORIZATION, bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assetId").value("ast_demo"));
+    }
+
+    @Test
+    void archiveAssetReturnsUpdatedView() throws Exception {
+        given(assetService.archiveAsset(any(), any())).willReturn(modelView());
+
+        mockMvc.perform(post("/api/v1/assets/ast_demo/archive")
+                        .header(HttpHeaders.AUTHORIZATION, bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assetId").value("ast_demo"));
+    }
+
+    @Test
+    void restoreAssetReturnsUpdatedView() throws Exception {
+        given(assetService.restoreAsset(any(), any())).willReturn(modelView());
+
+        mockMvc.perform(post("/api/v1/assets/ast_demo/restore")
+                        .header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.assetId").value("ast_demo"));
     }

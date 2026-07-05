@@ -12,6 +12,12 @@ spring:
     username: ${AIHUB_DB_USER:aihub}
     password: ${AIHUB_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      leak-detection-threshold: 30000
+      connection-timeout: 5000
+      idle-timeout: 300000
   # Flyway 负责唯一的库结构演进，前向迁移、空库可基线化。
   flyway:
     enabled: true
@@ -95,6 +101,13 @@ aihub:
       display-name: ${AIHUB_BOOTSTRAP_ADMIN_DISPLAY_NAME:平台管理员}
       password: ${AIHUB_BOOTSTRAP_ADMIN_PASSWORD:}
       password-file: ${AIHUB_BOOTSTRAP_ADMIN_PASSWORD_FILE:}
+  # MinIO 对象存储配置
+  minio:
+    endpoint: ${AIHUB_MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${AIHUB_MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${AIHUB_MINIO_SECRET_KEY:minioadmin}
+    secure: ${AIHUB_MINIO_SECURE:false}
+    external-endpoint: ${AIHUB_MINIO_EXTERNAL_ENDPOINT:}
 
 ---
 #

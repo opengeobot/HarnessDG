@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V11：
+# 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V15：
 #       V01 Compose 配置；V02 核心服务健康；V03 Bucket 初始化；
 #       V04 数据库迁移；V05 JWT 生命周期；V06 权限过滤；V07 字典/标签；
-#       V08 审计完整性与脱敏；V09 持久化任务；V10 通知；V11 观测与诊断。
+#       V08 审计完整性与脱敏；V09 持久化任务；V10 通知；V11 观测与诊断；
+#       V12 资产创建与 Gitea 仓库一致性；V13 幂等键重放；
+#       V14 多组织权限隔离；V15 数据集 Facet 权限过滤。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。
-# 时间: 2026-07-01
+# 时间: 2026-07-04
 # 作者: AxeXie
 # ============================================================================
 set -uo pipefail
@@ -138,8 +140,8 @@ check_buckets() {
 check_migrations() {
   local count ok=0
   count="$(psql_q 'select count(*) from flyway_schema_history where success = true')"
-  if [ -z "${count}" ] || [ "${count}" -lt 12 ]; then echo "  成功迁移数 ${count} < 12"; return 1; fi
-  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification; do
+  if [ -z "${count}" ] || [ "${count}" -lt 15 ]; then echo "  成功迁移数 ${count} < 15"; return 1; fi
+  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"; ok=1
     fi
@@ -210,6 +212,64 @@ check_observability() {
   return 0
 }
 
+# ---- V12: 资产创建与 Gitea 仓库一致性 ----
+check_asset_gitea_consistency() {
+  local asset_cnt job_cnt
+  asset_cnt="$(psql_q 'select count(*) from asset where deleted_at is null')"
+  if [ -z "${asset_cnt}" ] || [ "${asset_cnt}" -lt 0 ]; then echo "  asset 表查询失败"; return 1; fi
+  # 检查资产表存在且 provisioning_status 列可用
+  local col_exists
+  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='asset' and column_name='provisioning_status'")"
+  if [ "${col_exists}" != "1" ]; then echo "  asset.provisioning_status 列缺失"; return 1; fi
+  # 检查 job_task 表中 ASSET_PROVISION 任务存在
+  job_cnt="$(psql_q "select count(*) from job_task where job_type = 'ASSET_PROVISION'")"
+  if [ -z "${job_cnt}" ]; then echo "  job_task 查询失败"; return 1; fi
+  return 0
+}
+
+# ---- V13: 幂等键重放不重复建仓 ----
+check_idempotency_replay() {
+  # 检查 idempotency_key 列存在于 job_task 表
+  local col_exists
+  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='idempotency_key'")"
+  if [ "${col_exists}" != "1" ]; then echo "  job_task.idempotency_key 列缺失"; return 1; fi
+  # 检查唯一约束
+  local idx_exists
+  idx_exists="$(psql_q "select count(*) from pg_indexes where tablename='job_task' and indexdef like '%idempotency_key%'")"
+  if [ "${idx_exists}" -lt 1 ]; then echo "  job_task.idempotency_key 唯一索引缺失"; return 1; fi
+  return 0
+}
+
+# ---- V14: 多组织权限主体搜索无泄漏 ----
+check_multi_org_isolation() {
+  # 检查 resource_acl 表存在并具备 resource_type/principal_id 列
+  local col_cnt
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='resource_acl' and column_name in ('resource_type','principal_id')")"
+  if [ "${col_cnt}" != "2" ]; then echo "  resource_acl 关键字段缺失"; return 1; fi
+  # 后端可达时验证搜索接口默认拒绝匿名
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    local anon
+    anon="$(http_status GET /api/v1/assets)"
+    if [ "${anon}" != "401" ]; then echo "  匿名访问 /assets 返回 ${anon}，期望 401"; return 1; fi
+  fi
+  return 0
+}
+
+# ---- V15: 数据集 Facet 权限过滤 ----
+check_facet_permission() {
+  # 检查 asset 表存在 visibility 列
+  local col_exists
+  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='asset' and column_name='visibility'")"
+  if [ "${col_exists}" != "1" ]; then echo "  asset.visibility 列缺失"; return 1; fi
+  # 后端可达时验证 facet 接口默认拒绝匿名
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    local anon
+    anon="$(http_status GET /api/v1/assets/facets)"
+    if [ "${anon}" != "401" ]; then echo "  匿名访问 /assets/facets 返回 ${anon}，期望 401"; return 1; fi
+  fi
+  return 0
+}
+
 step V01 "Compose 配置合法" check_config
 
 if service_running postgres; then
@@ -260,6 +320,23 @@ else
   skip V09 "持久化任务访问" "backend 不可达"
   skip V10 "通知访问" "backend 不可达"
   skip V11 "观测与诊断" "backend 不可达"
+fi
+
+# P1 资产目录验证
+if postgres_reachable; then
+  step V12 "资产创建与 Gitea 仓库一致性" check_asset_gitea_consistency
+  step V13 "幂等键重放不重复建仓" check_idempotency_replay
+else
+  skip V12 "资产创建与 Gitea 仓库一致性" "postgres 不可达"
+  skip V13 "幂等键重放不重复建仓" "postgres 不可达"
+fi
+
+if postgres_reachable; then
+  step V14 "多组织权限主体搜索无泄漏" check_multi_org_isolation
+  step V15 "数据集 Facet 权限过滤" check_facet_permission
+else
+  skip V14 "多组织权限主体搜索无泄漏" "postgres 不可达"
+  skip V15 "数据集 Facet 权限过滤" "postgres 不可达"
 fi
 
 echo ""

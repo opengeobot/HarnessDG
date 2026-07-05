@@ -11,6 +11,7 @@ import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.DatasetProfile;
 import com.aihub.asset.domain.ModelProfile;
+import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
 import java.time.Instant;
 import java.util.List;
@@ -36,9 +37,11 @@ import java.util.List;
  * @param license        许可证
  * @param model          模型画像（仅模型类非空）
  * @param dataset        数据集画像（仅数据集类非空）
- * @param repository     仓库引用
- * @param createdAt      创建时间
- * @param updatedAt      更新时间
+ * @param repository          仓库引用
+ * @param provisioningStatus  建仓异步状态
+ * @param card                Card 投影（untrustedContent，前端需 DOMPurify 渲染）
+ * @param createdAt           创建时间
+ * @param updatedAt           更新时间
  */
 public record AssetView(String assetId,
                         AssetType type,
@@ -57,6 +60,8 @@ public record AssetView(String assetId,
                         ModelView model,
                         DatasetView dataset,
                         RepositoryView repository,
+                        ProvisioningStatus provisioningStatus,
+                        CardView card,
                         Instant createdAt,
                         Instant updatedAt) {
 
@@ -70,6 +75,11 @@ public record AssetView(String assetId,
 
     /** 仓库引用视图。 */
     public record RepositoryView(String fullName, String htmlUrl, String cloneUrl) {
+    }
+
+    /** Card 投影视图（untrustedContent 标记前端需 DOMPurify 清洗）。 */
+    public record CardView(String readme, String assetYaml, String sourceCommit,
+                           boolean untrustedContent) {
     }
 
     /**
@@ -97,6 +107,8 @@ public record AssetView(String assetId,
                 modelView(asset.modelProfile()),
                 datasetView(asset.datasetProfile()),
                 repositoryView(asset.repository()),
+                asset.provisioningStatus(),
+                cardView(asset),
                 asset.createdAt(),
                 asset.updatedAt());
     }
@@ -112,5 +124,13 @@ public record AssetView(String assetId,
 
     private static RepositoryView repositoryView(AssetRepositoryRef ref) {
         return ref == null ? null : new RepositoryView(ref.fullName(), ref.htmlUrl(), ref.cloneUrl());
+    }
+
+    private static CardView cardView(Asset asset) {
+        if (asset.cardReadme() == null && asset.cardAssetYaml() == null) {
+            return null;
+        }
+        return new CardView(asset.cardReadme(), asset.cardAssetYaml(),
+                asset.sourceCommit(), true);
     }
 }

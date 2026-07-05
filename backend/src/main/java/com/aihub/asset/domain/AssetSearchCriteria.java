@@ -5,19 +5,20 @@
  */
 package com.aihub.asset.domain;
 
+import com.aihub.authorization.domain.AccessScope;
 import java.util.List;
 import java.util.Set;
 
 /**
  * 资产检索条件。
  *
- * <p>精确字段过滤 + 关键词全文 + 访问可见性过滤（在数据库阶段完成）。{@code allowedVisibilities}
+ * <p>精确字段过滤 + 关键词全文 + 访问作用域过滤（在数据库阶段完成）。{@code accessScope}
  * 由应用层依据当前主体计算并下推到 SQL，确保不返回越权资产。游标分页避免深分页。
  *
  * @param keyword             关键词（匹配名称/展示名/描述/标签）
  * @param type                资产类型过滤（可空）
  * @param namespace           命名空间过滤（可空）
- * @param organizationId      组织 ID 过滤（可空，下推到 SQL）
+ * @param organizationId      组织 ID 过滤（可空，治理作用域下推）
  * @param framework           模型框架过滤（可空）
  * @param task                模型任务过滤（可空）
  * @param format              数据格式过滤（可空）
@@ -26,6 +27,12 @@ import java.util.Set;
  * @param owner               Owner 包含过滤（可空）
  * @param statuses            允许返回的状态集合（默认排除 ARCHIVED）
  * @param allowedVisibilities 当前主体可见的可见性集合（权限下推）
+ * @param accessScope         访问作用域（权限下推到 SQL）
+ * @param taskCodes           多值模型任务过滤（可空）
+ * @param modalityCodes       多值数据模态过滤（可空）
+ * @param formatCodes         多值数据格式过滤（可空）
+ * @param languageCodes       多值语言过滤（可空）
+ * @param tagIds              多值受控标签过滤（可空）
  * @param cursor              游标（上一页末项编码），首页为 {@code null}
  * @param limit               每页大小
  */
@@ -41,6 +48,12 @@ public record AssetSearchCriteria(String keyword,
                                   String owner,
                                   Set<AssetStatus> statuses,
                                   Set<Visibility> allowedVisibilities,
+                                  AccessScope accessScope,
+                                  List<String> taskCodes,
+                                  List<String> modalityCodes,
+                                  List<String> formatCodes,
+                                  List<String> languageCodes,
+                                  List<String> tagIds,
                                   String cursor,
                                   int limit) {
 

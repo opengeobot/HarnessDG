@@ -1,7 +1,7 @@
 # 已确认决策日志
 
 > 状态：`DRAFT`
-> 当前生效的 Accepted Decision：8（`DEC-005` 已被 `DEC-008` 替代）
+> 当前生效的 Accepted Decision：12（`DEC-005` 已被 `DEC-008` 替代）
 
 ## 1. 规则
 
@@ -246,3 +246,86 @@ affected:
     - tools/validate-task-card.ps1
 requiresAdr: false
 ```
+
+### DEC-010：P0 边界采用 ADR-0002，全阶段连续实施
+
+```yaml
+decisionId: DEC-010
+questionIds: [Q-007]
+status: ACCEPTED
+decision: >
+  P0 边界严格采用 ADR-0002 的 P0-A/P0-B 定义；P0-B 真实退出后，按 P1→P2→P3→P4→P5 顺序连续实施，
+  不拆分独立交付阶段。资产登记/搜索/上传/发布仍按 P1-P3 实施，但不再等待阶段门禁人工审批。
+rationale: 用户明确要求不分阶段直接进行完整开发实施。
+decidedBy: User
+decidedAt: "2026-07-04"
+affected:
+  requirements: [REQ-AST-001, REQ-VER-001, REQ-PUB-001]
+  documents: [01-requirements/product-scope.md, 02-delivery/work-breakdown.md]
+requiresAdr: false
+```
+
+### DEC-011：用户跨组织、Team 与 Owner 模型
+
+```yaml
+decisionId: DEC-011
+questionIds: [Q-102, Q-103, Q-104, Q-105, Q-106]
+status: ACCEPTED
+decision: >
+  用户可同时属于多个组织和项目；Team 是正式领域资源（Organization 内）；资产 Owner 至少一个 Team，
+  可附个人 Maintainer；平台管理员建组织，组织管理员建项目/Team，项目成员按角色建资产；
+  PUBLIC 仅对已认证主体公开，匿名不可访问。
+rationale: 与设计文档第 5.4/5.5 节一致，支持灵活的多组织协作和严格的责任归属。
+decidedBy: User
+decidedAt: "2026-07-04"
+affected:
+  requirements: [REQ-ORG-001, REQ-ORG-002, REQ-AST-001, REQ-AST-006, REQ-AUTH-001, REQ-AUTH-003]
+  invariants: [INV-ORG-001, INV-ORG-002, INV-ORG-003, INV-ORG-004, INV-ORG-005, INV-ORG-006, INV-TEAM-001, INV-TEAM-002, INV-TEAM-003, INV-TEAM-004, INV-TEAM-005, INV-TEAM-006, INV-TEAM-007, INV-AST-004, INV-AST-005]
+  pages: [PAGE-ADM-003, PAGE-ADM-004, PAGE-ADM-005, PAGE-AST-005]
+  contracts: [contracts/openapi/aihub-v1.yaml]
+  migrations: [V14__asset_remediation.sql]
+requiresAdr: false
+```
+
+### DEC-012：版本、发布与保留策略
+
+```yaml
+decisionId: DEC-012
+questionIds: [Q-201, Q-202, Q-203, Q-204, Q-205, Q-206]
+status: ACCEPTED
+decision: >
+  首个可交付版本同时支持 MODEL 和 DATASET；资产名称组织内 Namespace 唯一，重命名保留永久别名；
+  提交人与审批人必须分离，平台管理员仅紧急越权并审计；所有发布均审批，高敏感/高风险追加安全审核；
+  模型强制 SemVer，数据集允许受控日期版本；元数据 90 天可恢复，正式对象需引用检查后回收。
+rationale: 与设计文档第 8/9/10 章一致，确保版本不可变和发布治理闭环。
+decidedBy: User
+decidedAt: "2026-07-04"
+affected:
+  requirements: [REQ-VER-001, REQ-VAL-001, REQ-REV-001, REQ-PUB-001, REQ-IMM-001, REQ-DEP-001, REQ-AST-007]
+  invariants: [INV-VER-001, INV-VER-002, INV-VER-003, INV-VER-004, INV-VER-005, INV-VER-006, INV-VER-007, INV-VER-008, INV-VER-009]
+  pages: [PAGE-VER-001, PAGE-VER-002, PAGE-REV-001, PAGE-REV-002]
+  contracts: [contracts/openapi/aihub-v1.yaml]
+  migrations: [V16__version_transfer.sql, V17__release_governance.sql]
+requiresAdr: false
+```
+
+### DEC-013：UI 与非功能基线
+
+```yaml
+decisionId: DEC-013
+questionIds: [Q-301, Q-302, Q-303, Q-304, Q-305]
+status: ACCEPTED
+decision: >
+  必须同时支持 zh-CN/en-US 运行时切换；以 Ant Design 企业后台为 UI 基线；
+  沿用 PRD 规模目标（10 万资产、Web 20GiB 上限）；Compose 为功能验收环境；
+  浏览器 E2E 采用 Playwright + 关键页面截图。
+rationale: 与设计文档第 13/14/16 章一致。
+decidedBy: User
+decidedAt: "2026-07-04"
+affected:
+  requirements: [REQ-UI-001, REQ-OBS-001, REQ-PERF-001]
+  pages: [PAGE-AUTH-001, PAGE-COM-001, PAGE-COM-002, PAGE-COM-003]
+  documents: [01-requirements/non-functional-requirements.md, 04-ui/information-architecture.md]
+requiresAdr: false
+```
+

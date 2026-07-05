@@ -10,6 +10,7 @@ import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetSummary;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.Visibility;
+import com.aihub.authorization.domain.AccessScope;
 import com.aihub.shared.api.CursorPage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -48,11 +49,13 @@ public class AssetSearchDao {
             SELECT a.id, a.asset_id, a.type, a.namespace, a.organization_id, a.project_id, a.name,
                    a.display_name, a.description, a.visibility, a.status,
                    a.owners::text AS owners_json, a.tags::text AS tags_json, a.license,
-                   am.framework, am.task, ad.format, ad.modality, a.created_at, a.updated_at
+                   am.framework, am.task, ad.format, ad.modality,
+                   a.provisioning_status, a.created_at, a.updated_at
             FROM asset a
             LEFT JOIN asset_model am ON am.asset_id = a.asset_id
             LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
             WHERE a.deleted = 0
+            AND a.provisioning_status = 'COMPLETED'
             """;
 
     private static final String TAG_IDS_BATCH_SQL = """
@@ -89,7 +92,13 @@ public class AssetSearchDao {
         appendEquals(sql, params, "ad.modality", "modality", criteria.modality());
         appendKeyword(sql, params, criteria.keyword());
         appendTagIdFilter(sql, params, criteria.tagId());
+        appendMultiTagIdFilter(sql, params, criteria.tagIds());
         appendJsonContains(sql, params, "a.owners", "owner", criteria.owner());
+        appendJsonArrayContains(sql, params, "ad.task_codes", "taskCodes", criteria.taskCodes());
+        appendJsonArrayContains(sql, params, "ad.modality_codes", "modalityCodes", criteria.modalityCodes());
+        appendJsonArrayContains(sql, params, "ad.format_codes", "formatCodes", criteria.formatCodes());
+        appendJsonArrayContains(sql, params, "ad.language_codes", "languageCodes", criteria.languageCodes());
+        appendAccessScopeFilter(sql, params, criteria.accessScope());
         appendCursor(sql, params, criteria.cursor());
 
         sql.append(" ORDER BY a.created_at DESC, a.id DESC LIMIT :limit");
@@ -97,6 +106,66 @@ public class AssetSearchDao {
 
         List<SearchRow> rows = jdbcTemplate.query(sql.toString(), params, this::mapRow);
         return toPage(rows, criteria.limit());
+    }
+
+    /**
+     * 按维度统计资产数量（Facet），应用与 search 相同的访问作用域过滤。
+     *
+     * @param criteria 检索条件（仅使用过滤和权限部分，忽略分页）
+     * @return 各维度计数映射
+     */
+    public Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT a.type, a.license, am.framework, am.task, ad.format, ad.modality
+                FROM asset a
+                LEFT JOIN asset_model am ON am.asset_id = a.asset_id
+                LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
+                WHERE a.deleted = 0
+                AND a.provisioning_status = 'COMPLETED'
+                """);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+
+        sql.append(" AND a.status IN (:statuses)");
+        params.addValue("statuses", criteria.statusNames());
+        sql.append(" AND a.visibility IN (:visibilities)");
+        params.addValue("visibilities", criteria.visibilityNames());
+
+        appendKeyword(sql, params, criteria.keyword());
+        appendAccessScopeFilter(sql, params, criteria.accessScope());
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params);
+        Map<String, Map<String, Long>> result = new LinkedHashMap<>();
+        Map<String, Long> types = new LinkedHashMap<>();
+        Map<String, Long> frameworks = new LinkedHashMap<>();
+        Map<String, Long> tasks = new LinkedHashMap<>();
+        Map<String, Long> formats = new LinkedHashMap<>();
+        Map<String, Long> modalities = new LinkedHashMap<>();
+        Map<String, Long> licenses = new LinkedHashMap<>();
+
+        for (Map<String, Object> row : rows) {
+            countIfNotNull(types, row.get("type"));
+            countIfNotNull(frameworks, row.get("framework"));
+            countIfNotNull(tasks, row.get("task"));
+            countIfNotNull(formats, row.get("format"));
+            countIfNotNull(modalities, row.get("modality"));
+            countIfNotNull(licenses, row.get("license"));
+        }
+        result.put("types", types);
+        result.put("frameworks", frameworks);
+        result.put("tasks", tasks);
+        result.put("formats", formats);
+        result.put("modalities", modalities);
+        result.put("licenses", licenses);
+        result.put("_total", Map.of("count", (long) rows.size()));
+        return result;
+    }
+
+    private void countIfNotNull(Map<String, Long> map, Object value) {
+        if (value == null) {
+            return;
+        }
+        String key = String.valueOf(value);
+        map.merge(key, 1L, Long::sum);
     }
 
     private void appendEquals(StringBuilder sql, MapSqlParameterSource params,
@@ -124,6 +193,48 @@ public class AssetSearchDao {
         sql.append(" AND EXISTS (SELECT 1 FROM asset_tag at WHERE at.asset_id = a.asset_id"
                 + " AND at.tag_id = :tagId)");
         params.addValue("tagId", tagId.trim());
+    }
+
+    private void appendMultiTagIdFilter(StringBuilder sql, MapSqlParameterSource params, List<String> tagIds) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            return;
+        }
+        sql.append(" AND EXISTS (SELECT 1 FROM asset_tag at WHERE at.asset_id = a.asset_id"
+                + " AND at.tag_id IN (:multiTagIds))");
+        params.addValue("multiTagIds", tagIds);
+    }
+
+    private void appendJsonArrayContains(StringBuilder sql, MapSqlParameterSource params,
+                                         String column, String key, List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        sql.append(" AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(").append(column)
+                .append(") e WHERE e IN (:").append(key).append("))");
+        params.addValue(key, values);
+    }
+
+    private void appendAccessScopeFilter(StringBuilder sql, MapSqlParameterSource params,
+                                         AccessScope scope) {
+        if (scope == null || scope.platformAdmin()) {
+            return;
+        }
+        StringBuilder clause = new StringBuilder();
+        clause.append(" AND (a.visibility = 'PUBLIC'");
+        if (!scope.organizationIds().isEmpty()) {
+            clause.append(" OR a.organization_id IN (:scopeOrgIds)");
+            params.addValue("scopeOrgIds", scope.organizationIdList());
+        }
+        if (!scope.projectIds().isEmpty()) {
+            clause.append(" OR a.project_id IN (:scopeProjectIds)");
+            params.addValue("scopeProjectIds", scope.projectIdList());
+        }
+        if (!scope.accessibleResourceIds().isEmpty()) {
+            clause.append(" OR a.asset_id IN (:scopeAclIds)");
+            params.addValue("scopeAclIds", scope.accessibleResourceIdList());
+        }
+        clause.append(")");
+        sql.append(clause);
     }
 
     private void appendJsonContains(StringBuilder sql, MapSqlParameterSource params,

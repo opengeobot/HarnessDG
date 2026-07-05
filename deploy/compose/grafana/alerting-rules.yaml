@@ -1,0 +1,111 @@
+# AIHub Platform Alert Rules
+# Prometheus alerting rules for HarnessDG monitoring
+groups:
+  - name: aihub-job-alerts
+    rules:
+      - alert: JobQueueBacklog
+        expr: aihub_job_queue_depth > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job queue backlog exceeds 50 ({{ $labels.type }})"
+          description: "Job type {{ $labels.type }} has {{ $value }} pending jobs for over 5 minutes."
+
+      - alert: JobDead
+        expr: aihub_job_dead_count > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dead jobs detected"
+          description: "{{ $value }} jobs have exceeded max retry attempts."
+
+      - alert: JobStuckProcessing
+        expr: aihub_job_processing_duration_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job stuck processing for >5 min"
+          description: "Job {{ $labels.jobId }} type {{ $labels.type }} has been processing for {{ $value }}s."
+
+  - name: aihub-webhook-alerts
+    rules:
+      - alert: WebhookInboxBacklog
+        expr: aihub_webhook_inbox_pending > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook inbox backlog exceeds 100"
+          description: "{{ $value }} pending webhook events in inbox."
+
+      - alert: WebhookCriticalEvent
+        expr: aihub_webhook_critical_events_total > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical webhook event received"
+          description: "Tag deletion or force push detected: {{ $labels.deliveryId }}"
+
+  - name: aihub-http-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_server_requests_seconds_count{status=~"5.."}[5m]) / rate(http_server_requests_seconds_count[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx error rate exceeds 5%"
+          description: "Current 5xx rate: {{ $value | humanizePercentage }}"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP P95 latency exceeds 2s"
+          description: "Current P95: {{ $value }}s for {{ $labels.uri }}"
+
+  - name: aihub-resource-alerts
+    rules:
+      - alert: DatabaseConnectionPoolExhausted
+        expr: hikaricp_connections_pending > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool exhaustion imminent"
+          description: "{{ $value }} connections pending in HikariCP queue."
+
+      - alert: JvmHeapHigh
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap usage exceeds 85%"
+          description: "Current heap usage: {{ $value | humanizePercentage }}"
+
+  - name: aihub-consistency-alerts
+    rules:
+      - alert: ReconciliationDiscrepancy
+        expr: aihub_reconciliation_discrepancies_total > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reconciliation discrepancies detected"
+          description: "{{ $value }} discrepancies found in last reconciliation run."
+
+      - alert: UploadSessionExpired
+        expr: aihub_upload_sessions_expired_total > 10
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "High upload session expiry rate"
+          description: "{{ $value }} upload sessions expired in the last hour."

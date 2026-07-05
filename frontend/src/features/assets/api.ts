@@ -6,10 +6,13 @@
 import { apiClient } from '@/shared/api';
 import type { CursorPage } from '@/shared/types';
 import type {
+  AssetFacetView,
   AssetSearchParams,
   AssetSummary,
   AssetView,
+  CommentView,
   CreateAssetRequest,
+  ThreadView,
   UpdateAssetRequest,
 } from './types';
 
@@ -41,4 +44,75 @@ export function updateAsset(
 /** 逻辑删除资产 */
 export function deleteAsset(assetId: string): Promise<void> {
   return apiClient.delete<void>(`/assets/${assetId}`);
+}
+
+/** 查询 Facet 统计 */
+export function getAssetFacets(
+  keyword?: string,
+  type?: string,
+): Promise<AssetFacetView> {
+  return apiClient.get<AssetFacetView>('/assets/facets', {
+    params: { keyword, type },
+  });
+}
+
+/** 弃用资产 */
+export function deprecateAsset(assetId: string): Promise<AssetView> {
+  return apiClient.post<AssetView>(`/assets/${assetId}/deprecate`);
+}
+
+/** 归档资产 */
+export function archiveAsset(assetId: string): Promise<AssetView> {
+  return apiClient.post<AssetView>(`/assets/${assetId}/archive`);
+}
+
+/** 恢复资产 */
+export function restoreAsset(assetId: string): Promise<AssetView> {
+  return apiClient.post<AssetView>(`/assets/${assetId}/restore`);
+}
+
+// ---- Discussion API ----
+
+/** 创建讨论线程 */
+export function createThread(
+  assetId: string,
+  title: string,
+): Promise<ThreadView> {
+  return apiClient.post<ThreadView>(`/assets/${assetId}/discussions`, { title });
+}
+
+/** 列出讨论线程 */
+export function listThreads(
+  assetId: string,
+  cursor?: string,
+  limit = 20,
+): Promise<CursorPage<ThreadView>> {
+  return apiClient.get<CursorPage<ThreadView>>(
+    `/assets/${assetId}/discussions`,
+    { params: { cursor, limit } },
+  );
+}
+
+/** 发表评论 */
+export function createComment(
+  threadId: string,
+  body: string,
+  parentId?: string,
+): Promise<CommentView> {
+  return apiClient.post<CommentView>(
+    `/discussions/${threadId}/comments`,
+    { body, parentId },
+  );
+}
+
+/** 读取评论列表 */
+export function listComments(
+  threadId: string,
+  cursor?: string,
+  limit = 50,
+): Promise<CommentView[]> {
+  return apiClient.get<CommentView[]>(
+    `/discussions/${threadId}/comments`,
+    { params: { cursor, limit } },
+  );
 }

@@ -25,6 +25,10 @@ acceptedDecisions:
   - DEC-007
   - DEC-008
   - DEC-009
+  - DEC-010
+  - DEC-011
+  - DEC-012
+  - DEC-013
 
 confirmedDirection:
   implementationFocus: P0
@@ -188,15 +192,8 @@ documents:
     kind: validation-tool
     status: ACTIVE
 
-openDecisionSets:
-  - ids: [Q-007]
-    blocks: [exact-p0-exit-boundary]
-  - ids: [Q-102, Q-103, Q-104, Q-105, Q-106]
-    blocks: [organization-requirements, permission-matrix, asset-owner-contract]
-  - ids: [Q-201, Q-202, Q-203, Q-204, Q-205, Q-206]
-    blocks: [asset-version-release-requirements]
-  - ids: [Q-301, Q-302, Q-303, Q-304, Q-305]
-    blocks: [ui-acceptance, non-functional-baseline]
+openDecisionSets: []
+# 全部 OPEN 决策已由 DEC-010/011/012/013 闭合（全阶段连续实施）。
 
 executionGates:
   requireRootAgentsMd: true

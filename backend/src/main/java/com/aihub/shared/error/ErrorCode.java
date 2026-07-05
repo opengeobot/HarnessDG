@@ -147,14 +147,35 @@ public enum ErrorCode {
     ASSET_CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "error.asset.concurrentModification",
             true, AlertLevel.NONE),
 
+    /** 资产当前状态不允许该生命周期操作（如已归档再弃用）。 */
+    ASSET_STATE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.asset.stateNotAllowed", false, AlertLevel.INFO),
+
+    /** 资产存在活跃发布版本，不可归档。 */
+    ASSET_HAS_ACTIVE_VERSIONS(HttpStatus.CONFLICT, "error.asset.hasActiveVersions", false, AlertLevel.INFO),
+
+    /** 讨论线程不存在。 */
+    DISCUSSION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.discussion.notFound", false, AlertLevel.NONE),
+
+    /** 讨论线程已锁定，不可回复。 */
+    DISCUSSION_LOCKED(HttpStatus.CONFLICT, "error.discussion.locked", false, AlertLevel.INFO),
+
+    /** 评论内容超过大小限制。 */
+    COMMENT_TOO_LARGE(HttpStatus.BAD_REQUEST, "error.comment.tooLarge", false, AlertLevel.NONE),
+
     /** 资产版本冲突，目标版本已存在。 */
     ASSET_VERSION_CONFLICT(HttpStatus.CONFLICT, "error.asset.versionConflict", false, AlertLevel.INFO),
 
     /** 当前版本状态不允许该操作。 */
     VERSION_STATE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.version.stateNotAllowed", false, AlertLevel.INFO),
 
+    /** 版本未找到。 */
+    VERSION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.version.notFound", false, AlertLevel.NONE),
+
     /** 上传会话已过期。 */
     UPLOAD_SESSION_EXPIRED(HttpStatus.CONFLICT, "error.upload.sessionExpired", false, AlertLevel.INFO),
+
+    /** 上传会话未找到。 */
+    UPLOAD_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.upload.sessionNotFound", false, AlertLevel.NONE),
 
     /** DVC 对象缺失。 */
     DVC_OBJECT_MISSING(HttpStatus.NOT_FOUND, "error.dvc.objectMissing", false, AlertLevel.WARN),

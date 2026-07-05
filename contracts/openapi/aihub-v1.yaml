@@ -1279,7 +1279,7 @@ paths:
       summary: 登记新资产（模型/数据集）
       description: 校验坐标唯一、开通 Git 仓库并写入初始卡片，返回资产详情。
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: partial-p1
       x-required-permissions: [asset:create]
       x-audit-event: ASSET_CREATED
       parameters:
@@ -1311,7 +1311,7 @@ paths:
       summary: 检索资产摘要（游标分页）
       description: 精确字段过滤 + 关键词全文 + 权限可见性过滤；默认排除归档资产。
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: partial-p1
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -1353,7 +1353,7 @@ paths:
       operationId: getAsset
       summary: 查询资产详情
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: partial-p1
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -1373,7 +1373,7 @@ paths:
       operationId: updateAsset
       summary: 更新资产可变元数据
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: partial-p1
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_UPDATED
       requestBody:
@@ -1402,7 +1402,7 @@ paths:
       operationId: deleteAsset
       summary: 逻辑删除资产
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: partial-p1
       x-required-permissions: [asset:delete]
       x-audit-event: ASSET_DELETED
       responses:
@@ -1412,6 +1412,237 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/facets:
+    get:
+      operationId: getAssetFacets
+      summary: 获取资产 Facet 聚合统计
+      description: 返回各维度（type/framework/task/modality/format）的聚合计数，用于搜索侧栏过滤。
+      tags: [assets]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: Facet 聚合成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetFacetView'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/deprecate:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: deprecateAsset
+      summary: 弃用资产（ACTIVE → DEPRECATED）
+      tags: [assets]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:update]
+      x-audit-event: ASSET_DEPRECATED
+      responses:
+        '200':
+          description: 弃用成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetView'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/archive:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: archiveAsset
+      summary: 归档资产（ACTIVE/DEPRECATED → ARCHIVED）
+      tags: [assets]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:update]
+      x-audit-event: ASSET_ARCHIVED
+      responses:
+        '200':
+          description: 归档成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetView'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/restore:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: restoreAsset
+      summary: 恢复资产（DEPRECATED/ARCHIVED → ACTIVE）
+      tags: [assets]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:update]
+      x-audit-event: ASSET_RESTORED
+      responses:
+        '200':
+          description: 恢复成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetView'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/discussions:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: createDiscussionThread
+      summary: 创建资产讨论线程
+      tags: [discussions]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:discuss]
+      x-audit-event: DISCUSSION_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThreadRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ThreadView'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    get:
+      operationId: listDiscussionThreads
+      summary: 列出资产讨论线程（游标分页）
+      tags: [discussions]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: 列表成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageThread'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /discussions/{threadId}/comments:
+    parameters:
+      - name: threadId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: createComment
+      summary: 在讨论线程下创建评论
+      tags: [discussions]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:discuss]
+      x-audit-event: COMMENT_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CommentView'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    get:
+      operationId: listComments
+      summary: 列出讨论线程下的评论（游标分页）
+      tags: [discussions]
+      x-implementation-status: partial-p1
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        '200':
+          description: 列表成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageComment'
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
@@ -2446,5 +2677,109 @@ components:
         nextCursor:
           type: [string, 'null']
           description: 下一页游标，null 表示末页
+        hasMore:
+          type: boolean
+
+    # ─── P1: Facet / Discussion ─────────────────────────────────────
+
+    FacetBucket:
+      type: object
+      required: [value, count]
+      properties:
+        value: { type: string }
+        count: { type: integer }
+
+    FacetDimension:
+      type: object
+      required: [buckets]
+      properties:
+        buckets:
+          type: array
+          items: { $ref: '#/components/schemas/FacetBucket' }
+
+    AssetFacetView:
+      type: object
+      description: 资产 Facet 聚合视图
+      properties:
+        type: { $ref: '#/components/schemas/FacetDimension' }
+        framework: { $ref: '#/components/schemas/FacetDimension' }
+        task: { $ref: '#/components/schemas/FacetDimension' }
+        modality: { $ref: '#/components/schemas/FacetDimension' }
+        format: { $ref: '#/components/schemas/FacetDimension' }
+
+    ThreadStatus:
+      type: string
+      enum: [OPEN, LOCKED, CLOSED]
+
+    CommentStatus:
+      type: string
+      enum: [VISIBLE, HIDDEN, RETRACTED]
+
+    CreateThreadRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+
+    ThreadView:
+      type: object
+      required: [threadId, assetId, title, status, createdAt, createdBy, commentCount]
+      properties:
+        threadId: { type: string }
+        assetId: { type: string }
+        title: { type: string }
+        status: { $ref: '#/components/schemas/ThreadStatus' }
+        createdAt: { type: string, format: date-time }
+        createdBy: { type: string }
+        commentCount: { type: integer }
+
+    CursorPageThread:
+      type: object
+      description: 讨论线程游标分页
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ThreadView' }
+        nextCursor:
+          type: [string, 'null']
+        hasMore:
+          type: boolean
+
+    CreateCommentRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 10000
+
+    CommentView:
+      type: object
+      required: [commentId, threadId, body, status, createdAt, createdBy]
+      properties:
+        commentId: { type: string }
+        threadId: { type: string }
+        body: { type: string }
+        status: { $ref: '#/components/schemas/CommentStatus' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        createdBy: { type: string }
+        editedAt: { type: string, format: date-time, description: 最后编辑时间，null 表示未编辑 }
+
+    CursorPageComment:
+      type: object
+      description: 评论游标分页
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CommentView' }
+        nextCursor:
+          type: [string, 'null']
         hasMore:
           type: boolean

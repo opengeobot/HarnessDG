@@ -19,10 +19,29 @@ export interface DatasetProfile {
   modality?: string | null;
 }
 
+export type ProvisioningStatus = 'NONE' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
 export interface RepositoryRef {
   fullName: string;
   htmlUrl?: string | null;
   cloneUrl?: string | null;
+}
+
+export interface CardView {
+  readme?: string | null;
+  assetYaml?: string | null;
+  sourceCommit?: string | null;
+  untrustedContent: boolean;
+}
+
+export interface AssetFacetView {
+  types: Record<string, number>;
+  frameworks: Record<string, number>;
+  tasks: Record<string, number>;
+  formats: Record<string, number>;
+  modalities: Record<string, number>;
+  licenses: Record<string, number>;
+  totalCount: number;
 }
 
 /** 资产检索摘要 */
@@ -53,6 +72,8 @@ export interface AssetView extends AssetSummary {
   model?: ModelProfile | null;
   dataset?: DatasetProfile | null;
   repository?: RepositoryRef | null;
+  provisioningStatus?: ProvisioningStatus;
+  card?: CardView | null;
   createdAt: string;
 }
 
@@ -101,6 +122,33 @@ export interface AssetSearchParams {
   modality?: string;
   tagId?: string;
   owner?: string;
+  includeArchived?: boolean;
   cursor?: string;
   limit?: number;
+}
+
+/** 讨论线程 */
+export interface ThreadView {
+  threadId: string;
+  assetId: string;
+  title: string;
+  createdBy: string;
+  status: 'OPEN' | 'LOCKED' | 'CLOSED';
+  commentCount: number;
+  lastCommentAt?: string | null;
+  createdAt: string;
+}
+
+/** 评论 */
+export interface CommentView {
+  commentId: string;
+  threadId: string;
+  parentId?: string | null;
+  assetId: string;
+  body: string;
+  createdBy: string;
+  status: 'VISIBLE' | 'HIDDEN' | 'RETRACTED';
+  revisionCount: number;
+  createdAt: string;
+  updatedAt: string;
 }

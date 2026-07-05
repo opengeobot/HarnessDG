@@ -1,0 +1,269 @@
+# AIHub Agent API v1 — 裁剪契约
+# 面向 Agent/MCP 客户端的精简 OpenAPI 子集。
+# 两个 Profile：read-only（只读检索）和 contribution（写入贡献）。
+# 所有端点复用主 API 的 Application Service，授权逻辑一致。
+openapi: 3.1.0
+info:
+  title: AIHub Agent API
+  version: 0.1.0
+  description: |
+    Agent-friendly subset of the AIHub REST API.
+    Two profiles: read-only (asset search/inspect) and contribution (draft/create/upload).
+    Authentication: Bearer JWT issued by the platform.
+    All responses include x-request-id and x-trace-id headers for debugging.
+  contact:
+    name: AIHub Platform Team
+
+servers:
+  - url: /api/v1
+    description: Agent API base path
+
+# Profile tags
+tags:
+  - name: read-only
+    description: Read-only profile — asset search, inspect, version listing, download handle.
+  - name: contribution
+    description: Contribution profile — draft creation, upload session management.
+
+paths:
+  /agent/assets/search:
+    get:
+      operationId: agentSearchAssets
+      tags: [read-only]
+      summary: Search assets (read-only profile)
+      description: |
+        Search the asset catalog with access-control filtering.
+        Reuses AssetApplicationService.searchAssets().
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string, enum: [MODEL, DATASET] }
+        - name: namespace
+          in: query
+          schema: { type: string }
+        - name: tagId
+          in: query
+          schema: { type: string }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AssetSummary' }
+                  nextCursor: { type: string, nullable: true }
+                  hasMore: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /agent/assets/{assetId}:
+    get:
+      operationId: agentGetAsset
+      tags: [read-only]
+      summary: Get asset details (read-only profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Asset details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /agent/assets/{assetId}/versions:
+    get:
+      operationId: agentListVersions
+      tags: [read-only]
+      summary: List versions for an asset (read-only profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Version list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/VersionSummary' }
+                  nextCursor: { type: string, nullable: true }
+                  hasMore: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /agent/versions/{versionId}/download:
+    post:
+      operationId: agentRequestDownload
+      tags: [read-only]
+      summary: Request download ticket (returns handle, not URL)
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                artifactId: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Download ticket
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DownloadTicket' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /agent/assets/{assetId}/versions/draft:
+    post:
+      operationId: agentCreateDraftVersion
+      tags: [contribution]
+      summary: Create a draft version (contribution profile)
+      description: |
+        Requires mcp.writeTools.enabled=true and asset:manage permission.
+        Protected by confirmation token mechanism.
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string }
+                confirmationToken: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Draft version created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Platform-issued JWT. Agent credentials exchange via /auth/agent/token.
+
+  schemas:
+    AssetSummary:
+      type: object
+      properties:
+        assetId: { type: string }
+        type: { type: string, enum: [MODEL, DATASET] }
+        namespace: { type: string }
+        name: { type: string }
+        displayName: { type: string }
+        description: { type: string }
+        visibility: { type: string }
+        status: { type: string }
+        license: { type: string }
+
+    AssetDetail:
+      allOf:
+        - $ref: '#/components/schemas/AssetSummary'
+        - type: object
+          properties:
+            organizationId: { type: string }
+            owners: { type: array, items: { type: string } }
+            tags: { type: array, items: { type: string } }
+            provisioningStatus: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    VersionSummary:
+      type: object
+      properties:
+        versionId: { type: string }
+        assetId: { type: string }
+        version: { type: string }
+        status: { type: string, enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED] }
+        gitTag: { type: string, nullable: true }
+        manifestDigest: { type: string, nullable: true }
+        publishedAt: { type: string, format: date-time, nullable: true }
+
+    DownloadTicket:
+      type: object
+      properties:
+        method: { type: string, enum: [PRESIGNED_URL, GIT_DVC] }
+        presignedUrl: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        fileName: { type: string, nullable: true }
+        fileSize: { type: integer, format: int64, nullable: true }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            attributes: { type: object }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource not found (or not accessible)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Resource state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+security:
+  - bearerJwt: []

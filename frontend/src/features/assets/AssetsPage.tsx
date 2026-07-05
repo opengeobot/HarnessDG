@@ -6,6 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   App,
   Button,
@@ -82,7 +83,9 @@ export function AssetsPage() {
       key: 'name',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <Typography.Text strong>{record.displayName || record.name}</Typography.Text>
+          <Link to={`/assets/${record.assetId}`}>
+            <Typography.Text strong>{record.displayName || record.name}</Typography.Text>
+          </Link>
           <Typography.Text type="secondary" code>
             {record.namespace}/{record.name}
           </Typography.Text>

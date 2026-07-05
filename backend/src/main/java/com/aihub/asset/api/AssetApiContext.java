@@ -14,7 +14,7 @@ import com.aihub.shared.identity.PrincipalContextHolder;
  *
  * <p>集中从入口建立的 {@link PrincipalContext} 读取主体与关联标识，避免在每个控制器方法重复样板。
  */
-final class AssetApiContext {
+public final class AssetApiContext {
 
     private AssetApiContext() {
     }
@@ -22,7 +22,7 @@ final class AssetApiContext {
     /**
      * @return 当前主体 ID（P1 未接入认证时可能为 {@code null}）
      */
-    static String principalId() {
+    public static String principalId() {
         return PrincipalContextHolder.current().map(PrincipalContext::principalId).orElse(null);
     }
 
@@ -33,7 +33,7 @@ final class AssetApiContext {
      * @param <T>  数据类型
      * @return 统一成功响应
      */
-    static <T> ApiResponse<T> respond(T data) {
+    public static <T> ApiResponse<T> respond(T data) {
         String requestId = PrincipalContextHolder.current().map(PrincipalContext::requestId).orElse(null);
         String traceId = PrincipalContextHolder.current().map(PrincipalContext::traceId).orElse(null);
         return ApiResponse.of(data, requestId, traceId);

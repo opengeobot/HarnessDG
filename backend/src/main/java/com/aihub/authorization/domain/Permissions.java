@@ -43,6 +43,10 @@ public final class Permissions {
     public static final String ASSET_READ = "asset:read";
     /** 管理资产。 */
     public static final String ASSET_MANAGE = "asset:manage";
+    /** 参与资产讨论（创建 Thread/回复/Mention）。 */
+    public static final String ASSET_DISCUSS = "asset:discuss";
+    /** 管理资产讨论（Moderator 隐藏/恢复/锁定）。 */
+    public static final String ASSET_MODERATE = "asset:moderate";
     /** 更新资产。 */
     public static final String ASSET_UPDATE = "asset:update";
     /** 上传资产内容。 */

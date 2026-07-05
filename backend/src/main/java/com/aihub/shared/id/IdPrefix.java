@@ -67,8 +67,17 @@ public enum IdPrefix {
     /** 版本。 */
     VERSION("ver"),
 
+    /** 版本工件。 */
+    ARTIFACT("art"),
+
     /** 上传会话。 */
     UPLOAD_SESSION("upl"),
+
+    /** 上传文件。 */
+    UPLOAD_FILE("upf"),
+
+    /** 资产预览。 */
+    PREVIEW("prv"),
 
     /** 任务。 */
     JOB("job"),
@@ -77,7 +86,25 @@ public enum IdPrefix {
     AUDIT("aud"),
 
     /** 请求标识。 */
-    REQUEST("req");
+    REQUEST("req"),
+
+    /** 讨论线程。 */
+    THREAD("thr"),
+
+    /** 评论。 */
+    COMMENT("cmt"),
+
+    /** 评论修订。 */
+    REVISION("rev"),
+
+    /** 校验报告。 */
+    VALIDATION_REPORT("vrp"),
+
+    /** 发布请求。 */
+    PUBLISH_REQUEST("pub"),
+
+    /** 审批决策。 */
+    REVIEW_DECISION("rvw");
 
     private final String value;
 

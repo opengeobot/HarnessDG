@@ -6,21 +6,24 @@
 package com.aihub.asset.application;
 
 import com.aihub.asset.domain.Asset;
-import com.aihub.asset.domain.AssetCard;
+import com.aihub.asset.domain.AssetCardProjectionPort;
 import com.aihub.asset.domain.AssetRepository;
-import com.aihub.asset.domain.AssetRepositoryProvisioner;
-import com.aihub.asset.domain.AssetRepositoryRef;
 import com.aihub.asset.domain.AssetSearchCriteria;
 import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.DatasetProfile;
 import com.aihub.asset.domain.ModelProfile;
+import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.audit.application.AuditEvent;
 import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.authorization.domain.AccessScope;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.domain.Job;
+import com.aihub.job.domain.JobRepository;
+import com.aihub.job.domain.JobStatus;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -35,8 +38,10 @@ import com.aihub.taxonomy.tag.domain.TagScopeType;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -67,34 +72,40 @@ public class AssetApplicationService {
     private static final String DICT_MODALITY = "dataset_modality";
 
     private final AssetRepository assetRepository;
-    private final AssetRepositoryProvisioner repositoryProvisioner;
     private final AssetAccessPolicy accessPolicy;
     private final IdGenerator idGenerator;
     private final AuthorizationService authorizationService;
     private final DictionaryValidationPort dictionaryValidationPort;
     private final TagValidationService tagValidationService;
     private final AuditService auditService;
+    private final JobRepository jobRepository;
+    private final ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
 
     public AssetApplicationService(AssetRepository assetRepository,
-                                   AssetRepositoryProvisioner repositoryProvisioner,
                                    AssetAccessPolicy accessPolicy,
                                    IdGenerator idGenerator,
                                    AuthorizationService authorizationService,
                                    DictionaryValidationPort dictionaryValidationPort,
                                    TagValidationService tagValidationService,
-                                   AuditService auditService) {
+                                   AuditService auditService,
+                                   JobRepository jobRepository,
+                                   ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider) {
         this.assetRepository = assetRepository;
-        this.repositoryProvisioner = repositoryProvisioner;
         this.accessPolicy = accessPolicy;
         this.idGenerator = idGenerator;
         this.authorizationService = authorizationService;
         this.dictionaryValidationPort = dictionaryValidationPort;
         this.tagValidationService = tagValidationService;
         this.auditService = auditService;
+        this.jobRepository = jobRepository;
+        this.cardProjectionPortProvider = cardProjectionPortProvider;
     }
 
     /**
-     * 登记新资产：校验字典治理字段与受控标签、授权、开通 Git 仓库并写入初始卡片、持久化目录条目、审计。
+     * 登记新资产：校验字典治理字段与受控标签、授权、写入目录条目并创建 REPOSITORY_PROVISION Job。
+     *
+     * <p>建仓操作由 {@code RepositoryProvisionJobHandler} 异步执行，
+     * 本方法仅保证资产坐标与元数据持久化，并创建可靠任务驱动后续 Saga。
      */
     @Transactional
     public AssetView createAsset(CreateAssetCommand command) {
@@ -113,12 +124,9 @@ public class AssetApplicationService {
         if (assetRepository.existsByCoordinate(asset.namespace(), asset.type(), asset.name())) {
             throw coordinateConflict(asset.namespace(), asset.type(), asset.name());
         }
-        AssetCard.CardFiles card = AssetCard.render(asset);
-        AssetRepositoryRef ref = repositoryProvisioner.provision(new AssetRepositoryProvisioner.ProvisionRequest(
-                asset.namespace(), asset.name(), asset.type(), asset.description(),
-                asset.visibility(), card.readme(), card.assetYaml()));
-        asset.attachRepository(ref);
+        asset.advanceProvisioning(ProvisioningStatus.PENDING);
         assetRepository.insert(asset);
+        createProvisionJob(asset, command.principalId());
         auditAsset("ASSET_CREATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name(), "type", asset.type().name()));
         return AssetView.from(asset);
@@ -178,24 +186,162 @@ public class AssetApplicationService {
     }
 
     /**
+     * 弃用资产：仍可访问但检索降权。仅 ACTIVE 可弃用。
+     */
+    @Transactional
+    public AssetView deprecateAsset(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        Asset asset = loadAccessible(assetId, principalId);
+        try {
+            asset.deprecate(principalId);
+        } catch (IllegalStateException ex) {
+            throw new ConflictException(ErrorCode.ASSET_STATE_NOT_ALLOWED, ex.getMessage(),
+                    Map.of("assetId", assetId, "status", asset.status().name()));
+        }
+        assetRepository.update(asset);
+        auditAsset("ASSET_DEPRECATED", principalId, asset.assetId(), Map.of(
+                "namespace", asset.namespace(), "name", asset.name()));
+        return AssetView.from(asset);
+    }
+
+    /**
+     * 归档资产：默认不返回，仅管理员可恢复。ACTIVE 或 DEPRECATED 可归档。
+     *
+     * <p>归档前预留检查活跃发布版本（P2 Version 模块就绪后接入）。
+     */
+    @Transactional
+    public AssetView archiveAsset(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        Asset asset = loadAccessible(assetId, principalId);
+        try {
+            asset.archive(principalId);
+        } catch (IllegalStateException ex) {
+            throw new ConflictException(ErrorCode.ASSET_STATE_NOT_ALLOWED, ex.getMessage(),
+                    Map.of("assetId", assetId, "status", asset.status().name()));
+        }
+        assetRepository.update(asset);
+        auditAsset("ASSET_ARCHIVED", principalId, asset.assetId(), Map.of(
+                "namespace", asset.namespace(), "name", asset.name()));
+        return AssetView.from(asset);
+    }
+
+    /**
+     * 恢复资产：从 DEPRECATED 或 ARCHIVED 恢复为 ACTIVE。
+     */
+    @Transactional
+    public AssetView restoreAsset(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        Asset asset = loadAccessible(assetId, principalId);
+        try {
+            asset.restore(principalId);
+        } catch (IllegalStateException ex) {
+            throw new ConflictException(ErrorCode.ASSET_STATE_NOT_ALLOWED, ex.getMessage(),
+                    Map.of("assetId", assetId, "status", asset.status().name()));
+        }
+        assetRepository.update(asset);
+        auditAsset("ASSET_RESTORED", principalId, asset.assetId(), Map.of(
+                "namespace", asset.namespace(), "name", asset.name()));
+        return AssetView.from(asset);
+    }
+
+    /**
      * 检索资产摘要，权限可见性在数据库阶段过滤。
      */
     @Transactional(readOnly = true)
     public CursorPage<AssetSummaryView> searchAssets(AssetSearchQuery query) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
         Set<Visibility> allowed = accessPolicy.visibleVisibilities(query.principalId());
+        AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
         Set<AssetStatus> statuses = query.includeArchived()
                 ? Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED, AssetStatus.ARCHIVED)
                 : Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
         AssetSearchCriteria criteria = new AssetSearchCriteria(
                 query.keyword(), query.type(), query.namespace(), query.organizationId(),
                 query.framework(), query.task(), query.format(), query.modality(),
-                query.tagId(), query.owner(), statuses, allowed, query.cursor(), query.limit());
+                query.tagId(), query.owner(), statuses, allowed, accessScope,
+                null, null, null, null, null,
+                query.cursor(), query.limit());
         CursorPage<com.aihub.asset.domain.AssetSummary> page = assetRepository.search(criteria);
         return new CursorPage<>(
                 page.items().stream().map(AssetSummaryView::from).toList(),
                 page.nextCursor(),
                 page.hasMore());
+    }
+
+    /**
+     * 查询资产 Facet 统计（按维度分组计数，应用与 search 相同的权限过滤）。
+     */
+    @Transactional(readOnly = true)
+    public AssetFacetView getAssetFacets(String keyword, AssetType type, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        Set<Visibility> allowed = accessPolicy.visibleVisibilities(principalId);
+        AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
+        Set<AssetStatus> statuses = Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
+        AssetSearchCriteria criteria = new AssetSearchCriteria(
+                keyword, type, null, null, null, null, null, null,
+                null, null, statuses, allowed, accessScope,
+                null, null, null, null, null,
+                null, AssetSearchCriteria.MAX_LIMIT);
+        Map<String, Map<String, Long>> raw = assetRepository.facet(criteria);
+        long total = raw.containsKey("_total") ? raw.get("_total").getOrDefault("count", 0L) : 0L;
+        return new AssetFacetView(
+                raw.getOrDefault("types", Map.of()),
+                raw.getOrDefault("frameworks", Map.of()),
+                raw.getOrDefault("tasks", Map.of()),
+                raw.getOrDefault("formats", Map.of()),
+                raw.getOrDefault("modalities", Map.of()),
+                raw.getOrDefault("licenses", Map.of()),
+                total);
+    }
+
+    /**
+     * 刷新资产 Card 投影（从 Gitea 读取最新 README/asset.yaml）。
+     *
+     * <p>当 Gitea 未启用或仓库未开通时返回当前视图而不刷新。
+     */
+    @Transactional
+    public AssetView refreshCardProjection(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        Asset asset = loadAccessible(assetId, principalId);
+        AssetCardProjectionPort port = cardProjectionPortProvider.getIfAvailable();
+        if (port == null || asset.repository() == null) {
+            return AssetView.from(asset);
+        }
+        AssetCardProjectionPort.CardProjection projection =
+                port.fetchCard(asset.repository().fullName(), asset.sourceCommit());
+        if (projection.sourceCommit() != null) {
+            Asset updated = new Asset.Builder()
+                    .assetId(asset.assetId())
+                    .type(asset.type())
+                    .organizationId(asset.organizationId())
+                    .projectId(asset.projectId())
+                    .namespace(asset.namespace())
+                    .name(asset.name())
+                    .displayName(asset.displayName())
+                    .description(asset.description())
+                    .visibility(asset.visibility())
+                    .status(asset.status())
+                    .owners(asset.owners())
+                    .tags(asset.tags())
+                    .tagIds(asset.tagIds())
+                    .license(asset.license())
+                    .modelProfile(asset.modelProfile())
+                    .datasetProfile(asset.datasetProfile())
+                    .repository(asset.repository())
+                    .provisioningStatus(asset.provisioningStatus())
+                    .rowVersion(asset.rowVersion())
+                    .createdBy(asset.createdBy())
+                    .updatedBy(principalId)
+                    .createdAt(asset.createdAt())
+                    .updatedAt(Instant.now())
+                    .sourceCommit(projection.sourceCommit())
+                    .cardReadme(projection.readme())
+                    .cardAssetYaml(projection.assetYaml())
+                    .build();
+            assetRepository.update(updated);
+            return AssetView.from(updated);
+        }
+        return AssetView.from(asset);
     }
 
     private Asset buildNewAsset(CreateAssetCommand command, List<String> tagIds) {
@@ -280,6 +426,16 @@ public class AssetApplicationService {
                 ErrorCode.ASSET_ALREADY_EXISTS,
                 "asset already exists: " + namespace + "/" + type + "/" + name,
                 Map.of("namespace", namespace, "type", type.name(), "name", name));
+    }
+
+    private void createProvisionJob(Asset asset, String principalId) {
+        String jobId = idGenerator.generate(IdPrefix.JOB);
+        Instant now = Instant.now();
+        String payload = "{\"assetId\":\"" + asset.assetId() + "\"}";
+        Job job = new Job(null, jobId, "REPOSITORY_PROVISION", payload,
+                JobStatus.PENDING, 5, 0, now, null, null, null, principalId,
+                asset.assetId(), null, now, now, 0);
+        jobRepository.insert(job);
     }
 
     private static String modelFramework(CreateAssetCommand command) {
