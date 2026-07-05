@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+# =============================================================================
+# aih — AIHub 命令行客户端（最小实现）
+#
+# 用法:
+#   aih <resource> <action> [options]
+#
+# 资源:
+#   dataset    数据集资产管理
+#
+# 动作:
+#   search     搜索数据集
+#   inspect    查看资产详情
+#   pull       请求下载票据
+#   create     创建数据集草稿
+#   status     查看资产 provisioning 状态
+#   versions   列出资产版本
+#
+# 环境变量:
+#   AIH_API_URL       API 基址（默认 http://localhost:8080）
+#   AIH_TOKEN         JWT 认证令牌（或从 ~/.aih/token 读取）
+#   AIH_OUTPUT        输出格式：json（默认）| table
+#   AIH_TIMEOUT       请求超时秒数（默认 30）
+#
+# 退出码:
+#   0  成功
+#   1  通用错误
+#   2  认证失败
+#   3  资源未找到
+#   4  冲突
+#   5  校验失败
+#   6  限流
+#   7  服务端错误
+# =============================================================================
+set -euo pipefail
+
+readonly VERSION="0.1.0"
+readonly EXIT_OK=0
+readonly EXIT_ERROR=1
+readonly EXIT_AUTH=2
+readonly EXIT_NOT_FOUND=3
+readonly EXIT_CONFLICT=4
+readonly EXIT_VALIDATION=5
+readonly EXIT_RATE_LIMIT=6
+readonly EXIT_SERVER=7
+
+# ---- 配置 ----
+API_URL="${AIH_API_URL:-http://localhost:8080}"
+TIMEOUT="${AIH_TIMEOUT:-30}"
+OUTPUT="${AIH_OUTPUT:-json}"
+
+# ---- Token 获取 ----
+resolve_token() {
+    if [[ -n "${AIH_TOKEN:-}" ]]; then
+        echo "$AIH_TOKEN"
+    elif [[ -f "${HOME}/.aih/token" ]]; then
+        cat "${HOME}/.aih/token"
+    else
+        echo ""
+    fi
+}
+
+TOKEN=$(resolve_token)
+
+# ---- 工具函数 ----
+die() {
+    local code="$1"; shift
+    printf '{"error":{"code":"%s","message":"%s"}}\n' "$code" "$*" >&2
+    exit "$code"
+}
+
+usage() {
+    cat <<EOF
+aih v${VERSION} — AIHub CLI
+
+用法: aih <resource> <action> [options]
+
+资源与动作:
+  dataset search   [--query Q] [--cursor C] [--limit N]   搜索数据集
+  dataset inspect  --id <assetId>                         查看资产详情
+  dataset pull     --version <versionId> [--artifact ID]  请求下载票据
+  dataset create   --name N --namespace NS [--desc D]     创建数据集草稿
+  dataset status   --id <assetId>                         查看 provisioning 状态
+  dataset versions --id <assetId> [--cursor C] [--limit N] 列出资产版本
+
+通用选项:
+  --api-url URL    API 基址（默认 \$AIH_API_URL）
+  --token T        JWT 令牌（默认 \$AIH_TOKEN 或 ~/.aih/token）
+  --timeout N      超时秒数（默认 30）
+  --output FMT     输出格式 json|table（默认 json）
+  --help           显示帮助
+  --version        显示版本号
+
+环境变量:
+  AIH_API_URL      API 基址
+  AIH_TOKEN        JWT 认证令牌
+  AIH_OUTPUT       输出格式
+  AIH_TIMEOUT      请求超时
+
+退出码: 0=成功 1=错误 2=认证失败 3=未找到 4=冲突 5=校验失败 6=限流 7=服务端错误
+EOF
+    exit "$EXIT_OK"
+}
+
+# ---- HTTP 请求封装 ----
+http_request() {
+    local method="$1"
+    local path="$2"
+    local body="${3:-}"
+
+    local -a curl_args=(
+        --silent
+        --show-error
+        --max-time "$TIMEOUT"
+        -X "$method"
+        -H "Accept: application/json"
+        -H "Content-Type: application/json"
+        -w "\n%{http_code}"
+    )
+
+    if [[ -n "$TOKEN" ]]; then
+        curl_args+=(-H "Authorization: Bearer ${TOKEN}")
+    fi
+
+    if [[ -n "$body" ]]; then
+        curl_args+=(-d "$body")
+    fi
+
+    local response
+    response=$(curl "${curl_args[@]}" "${API_URL}${path}" 2>&1) || {
+        die "$EXIT_ERROR" "HTTP request failed: $response"
+    }
+
+    local http_code
+    http_code=$(echo "$response" | tail -1)
+    local body_resp
+    body_resp=$(echo "$response" | sed '$d')
+
+    case "$http_code" in
+        200|201|202)
+            echo "$body_resp"
+            ;;
+        401|403)
+            die "$EXIT_AUTH" "Authentication failed (HTTP $http_code)"
+            ;;
+        404)
+            die "$EXIT_NOT_FOUND" "Resource not found (HTTP $http_code)"
+            ;;
+        409)
+            die "$EXIT_CONFLICT" "Conflict (HTTP $http_code)"
+            ;;
+        422)
+            die "$EXIT_VALIDATION" "Validation error (HTTP $http_code)"
+            ;;
+        429)
+            die "$EXIT_RATE_LIMIT" "Rate limited (HTTP $http_code)"
+            ;;
+        5*)
+            die "$EXIT_SERVER" "Server error (HTTP $http_code)"
+            ;;
+        *)
+            die "$EXIT_ERROR" "Unexpected HTTP status $http_code"
+            ;;
+    esac
+}
+
+# ---- dataset 子命令 ----
+cmd_dataset_search() {
+    local query="" cursor="" limit="20"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --query|-q)   query="$2"; shift 2 ;;
+            --cursor|-c)  cursor="$2"; shift 2 ;;
+            --limit|-l)   limit="$2"; shift 2 ;;
+            *)            shift ;;
+        esac
+    done
+
+    local params="type=DATASET&limit=${limit}"
+    [[ -n "$query" ]] && params+="&query=${query}"
+    [[ -n "$cursor" ]] && params+="&cursor=${cursor}"
+
+    http_request GET "/assets?${params}"
+}
+
+cmd_dataset_inspect() {
+    local asset_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --id|-i)  asset_id="$2"; shift 2 ;;
+            *)        shift ;;
+        esac
+    done
+
+    [[ -z "$asset_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --id"
+
+    http_request GET "/assets/${asset_id}"
+}
+
+cmd_dataset_pull() {
+    local version_id="" artifact_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --version|-v)    version_id="$2"; shift 2 ;;
+            --artifact|-a)   artifact_id="$2"; shift 2 ;;
+            *)               shift ;;
+        esac
+    done
+
+    [[ -z "$version_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --version"
+
+    local body="{\"versionId\":\"${version_id}\""
+    [[ -n "$artifact_id" ]] && body+=",\"artifactId\":\"${artifact_id}\""
+    body+="}"
+
+    http_request POST "/downloads/ticket" "$body"
+}
+
+cmd_dataset_create() {
+    local name="" namespace="" description="" organization_id="" project_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name|-n)          name="$2"; shift 2 ;;
+            --namespace|-ns)    namespace="$2"; shift 2 ;;
+            --description|-d)   description="$2"; shift 2 ;;
+            --organization|-o)  organization_id="$2"; shift 2 ;;
+            --project|-p)       project_id="$2"; shift 2 ;;
+            *)                  shift ;;
+        esac
+    done
+
+    [[ -z "$name" ]] && die "$EXIT_VALIDATION" "Missing required option: --name"
+    [[ -z "$namespace" ]] && die "$EXIT_VALIDATION" "Missing required option: --namespace"
+
+    local body="{\"name\":\"${name}\",\"namespace\":\"${namespace}\",\"type\":\"DATASET\""
+    [[ -n "$description" ]] && body+=",\"description\":\"${description}\""
+    [[ -n "$organization_id" ]] && body+=",\"organizationId\":\"${organization_id}\""
+    [[ -n "$project_id" ]] && body+=",\"projectId\":\"${project_id}\""
+    body+="}"
+
+    http_request POST "/assets" "$body"
+}
+
+cmd_dataset_status() {
+    local asset_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --id|-i)  asset_id="$2"; shift 2 ;;
+            *)        shift ;;
+        esac
+    done
+
+    [[ -z "$asset_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --id"
+
+    local resp
+    resp=$(http_request GET "/assets/${asset_id}")
+
+    # 提取 provisioning_status 和基本信息
+    if command -v python3 &>/dev/null; then
+        echo "$resp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(json.dumps({
+    'assetId': d.get('assetId', ''),
+    'name': d.get('name', ''),
+    'type': d.get('type', ''),
+    'status': d.get('status', ''),
+    'provisioningStatus': d.get('provisioningStatus', ''),
+    'ownerId': d.get('ownerId', ''),
+    'createdAt': d.get('createdAt', '')
+}, indent=2))
+" 2>/dev/null || echo "$resp"
+    else
+        echo "$resp"
+    fi
+}
+
+cmd_dataset_versions() {
+    local asset_id="" cursor="" limit="20"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --id|-i)     asset_id="$2"; shift 2 ;;
+            --cursor|-c) cursor="$2"; shift 2 ;;
+            --limit|-l)  limit="$2"; shift 2 ;;
+            *)           shift ;;
+        esac
+    done
+
+    [[ -z "$asset_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --id"
+
+    local params="limit=${limit}"
+    [[ -n "$cursor" ]] && params+="&cursor=${cursor}"
+
+    http_request GET "/assets/${asset_id}/versions?${params}"
+}
+
+# ---- 登录 ----
+cmd_login() {
+    local username="" password=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --username|-u)  username="$2"; shift 2 ;;
+            --password|-p)  password="$2"; shift 2 ;;
+            *)             shift ;;
+        esac
+    done
+
+    [[ -z "$username" ]] && die "$EXIT_VALIDATION" "Missing required option: --username"
+    [[ -z "$password" ]] && die "$EXIT_VALIDATION" "Missing required option: --password"
+
+    local body="{\"username\":\"${username}\",\"password\":\"${password}\"}"
+    local resp
+    # 临时清除 TOKEN 以避免发送旧的 Authorization header
+    TOKEN=""
+    resp=$(http_request POST "/auth/login" "$body")
+
+    # 提取 access token 并保存
+    if command -v python3 &>/dev/null; then
+        local access_token
+        access_token=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))" 2>/dev/null)
+        if [[ -n "$access_token" ]]; then
+            mkdir -p "${HOME}/.aih"
+            chmod 700 "${HOME}/.aih"
+            echo -n "$access_token" > "${HOME}/.aih/token"
+            chmod 600 "${HOME}/.aih/token"
+            echo '{"status":"ok","message":"Token saved to ~/.aih/token"}'
+        else
+            die "$EXIT_AUTH" "Failed to extract access token from response"
+        fi
+    else
+        echo "$resp"
+    fi
+}
+
+# ---- 主入口 ----
+main() {
+    [[ $# -eq 0 ]] && usage
+
+    # 全局选项解析
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)    usage ;;
+            --version|-V) echo "aih v${VERSION}"; exit 0 ;;
+            --api-url)    API_URL="$2"; shift 2 ;;
+            --token)      TOKEN="$2"; shift 2 ;;
+            --timeout)    TIMEOUT="$2"; shift 2 ;;
+            --output)     OUTPUT="$2"; shift 2 ;;
+            --)           shift; break ;;
+            -*)           die "$EXIT_ERROR" "Unknown option: $1" ;;
+            *)            break ;;
+        esac
+    done
+
+    local resource="${1:-}"
+    local action="${2:-}"
+    shift 2 2>/dev/null || true
+
+    case "${resource}/${action}" in
+        login)           cmd_login "$@" ;;
+        dataset/search)  cmd_dataset_search "$@" ;;
+        dataset/inspect) cmd_dataset_inspect "$@" ;;
+        dataset/pull)    cmd_dataset_pull "$@" ;;
+        dataset/create)  cmd_dataset_create "$@" ;;
+        dataset/status)  cmd_dataset_status "$@" ;;
+        dataset/versions) cmd_dataset_versions "$@" ;;
+        *)               die "$EXIT_ERROR" "Unknown command: ${resource} ${action}" ;;
+    esac
+}
+
+main "$@"
