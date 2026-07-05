@@ -5,6 +5,6 @@
  */
 
 /**
- * version 模块的 application 应用层，承载版本与发布用例编排。当前为骨架占位。
+ * version 模块的 application 应用层，承载版本与发布用例编排。
  */
 package com.aihub.version.application;

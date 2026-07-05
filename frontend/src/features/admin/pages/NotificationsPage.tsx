@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { App, Button, Flex, Space, Switch, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -14,7 +15,8 @@ import { listNotifications, markNotificationRead } from '../api';
 import type { NotificationView } from '../types';
 
 export function NotificationsPage() {
-  useDocumentTitle('通知中心');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.notifications.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -31,7 +33,7 @@ export function NotificationsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'notifications'] });
     },
-    onError: (error) => message.error(isApiError(error) ? error.message : '操作失败'),
+    onError: (error) => message.error(isApiError(error) ? error.message : t('common.operationFailed')),
   });
 
   const items = useMemo(
@@ -40,19 +42,19 @@ export function NotificationsPage() {
   );
 
   const columns: ColumnsType<NotificationView> = [
-    { title: '事件类型', dataIndex: 'eventType', key: 'eventType' },
-    { title: '文案 Key', dataIndex: 'i18nKey', key: 'i18nKey' },
+    { title: t('admin.notifications.eventType'), dataIndex: 'eventType', key: 'eventType' },
+    { title: t('admin.notifications.i18nKey'), dataIndex: 'i18nKey', key: 'i18nKey' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
         <Tag color={status === 'UNREAD' ? 'blue' : 'default'}>{status}</Tag>
       ),
     },
-    { title: '时间', dataIndex: 'createdAt', key: 'createdAt' },
+    { title: t('admin.notifications.time'), dataIndex: 'createdAt', key: 'createdAt' },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) =>
         record.status === 'UNREAD' ? (
@@ -62,7 +64,7 @@ export function NotificationsPage() {
             loading={readMutation.isPending}
             onClick={() => readMutation.mutate(record.notificationId)}
           >
-            标记已读
+            {t('admin.notifications.markRead')}
           </Button>
         ) : (
           '-'
@@ -74,12 +76,12 @@ export function NotificationsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          通知中心
+          {t('admin.notifications.title')}
         </Typography.Title>
         <Space>
-          <span>仅未读</span>
+          <span>{t('admin.notifications.unreadOnly')}</span>
           <Switch checked={unreadOnly} onChange={setUnreadOnly} />
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
         </Space>
       </Flex>
 
@@ -98,7 +100,7 @@ export function NotificationsPage() {
         {query.hasNextPage ? (
           <Flex justify="center" style={{ marginTop: 16 }}>
             <Button onClick={() => query.fetchNextPage()} loading={query.isFetchingNextPage}>
-              加载更多
+              {t('assets.loadMore')}
             </Button>
           </Flex>
         ) : null}

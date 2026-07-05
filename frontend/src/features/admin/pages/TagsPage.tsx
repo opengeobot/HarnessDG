@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -26,7 +27,8 @@ import { createTag, disableTag, enableTag, listTags, updateTag } from '../api';
 import type { CreateTagRequest, TagScopeType, TagView } from '../types';
 
 export function TagsPage() {
-  useDocumentTitle('标签管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.tags.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -38,12 +40,12 @@ export function TagsPage() {
   const query = useQuery({ queryKey: ['admin', 'tags'], queryFn: () => listTags({}) });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'tags'] });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateTagRequest) => createTag(payload),
     onSuccess: () => {
-      message.success('标签已创建');
+      message.success(t('admin.tags.tagCreated'));
       setCreateOpen(false);
       createForm.resetFields();
       void invalidate();
@@ -60,7 +62,7 @@ export function TagsPage() {
         expectedVersion: vars.version,
       }),
     onSuccess: () => {
-      message.success('标签已更新');
+      message.success(t('admin.tags.tagUpdated'));
       setEditing(null);
       void invalidate();
     },
@@ -70,7 +72,7 @@ export function TagsPage() {
   const toggleMutation = useMutation({
     mutationFn: (tag: TagView) => (tag.status === 'ACTIVE' ? disableTag(tag.tagId) : enableTag(tag.tagId)),
     onSuccess: () => {
-      message.success('状态已更新');
+      message.success(t('admin.tags.statusUpdated'));
       void invalidate();
     },
     onError,
@@ -78,7 +80,7 @@ export function TagsPage() {
 
   const columns: ColumnsType<TagView> = [
     {
-      title: '标签',
+      title: t('admin.tags.tag'),
       key: 'tag',
       render: (_, record) => (
         <Space>
@@ -89,10 +91,10 @@ export function TagsPage() {
         </Space>
       ),
     },
-    { title: '作用域', dataIndex: 'scopeType', key: 'scopeType' },
-    { title: '文案 Key', dataIndex: 'i18nKey', key: 'i18nKey' },
+    { title: t('admin.tags.scopeType'), dataIndex: 'scopeType', key: 'scopeType' },
+    { title: t('admin.tags.i18nKey'), dataIndex: 'i18nKey', key: 'i18nKey' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
@@ -100,7 +102,7 @@ export function TagsPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Space size="small">
@@ -116,10 +118,10 @@ export function TagsPage() {
               });
             }}
           >
-            编辑
+            {t('common.edit')}
           </Button>
           <Button type="link" size="small" onClick={() => toggleMutation.mutate(record)}>
-            {record.status === 'ACTIVE' ? '停用' : '启用'}
+            {record.status === 'ACTIVE' ? t('common.disable') : t('common.enable')}
           </Button>
         </Space>
       ),
@@ -130,12 +132,12 @@ export function TagsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          标签管理
+          {t('admin.tags.title')}
         </Typography.Title>
         <Space>
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
           <Button type="primary" onClick={() => setCreateOpen(true)}>
-            创建标签
+            {t('admin.tags.createTag')}
           </Button>
         </Space>
       </Flex>
@@ -150,7 +152,7 @@ export function TagsPage() {
       </QueryBoundary>
 
       <Modal
-        title="创建标签"
+        title={t('admin.tags.createTag')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -164,11 +166,11 @@ export function TagsPage() {
           initialValues={{ scopeType: 'PLATFORM' as TagScopeType }}
           onFinish={(values) => createMutation.mutate(values)}
         >
-          <Form.Item name="scopeType" label="作用域" rules={[{ required: true }]}>
+          <Form.Item name="scopeType" label={t('admin.tags.scopeType')} rules={[{ required: true }]}>
             <Select
               options={[
-                { value: 'PLATFORM', label: '平台' },
-                { value: 'ORGANIZATION', label: '组织' },
+                { value: 'PLATFORM', label: t('admin.tags.scopePlatform') },
+                { value: 'ORGANIZATION', label: t('admin.tags.scopeOrganization') },
               ]}
             />
           </Form.Item>
@@ -178,29 +180,29 @@ export function TagsPage() {
           >
             {({ getFieldValue }) =>
               getFieldValue('scopeType') === 'ORGANIZATION' ? (
-                <Form.Item name="scopeId" label="组织 ID" rules={[{ required: true }]}>
-                  <Input placeholder="org_ 开头" />
+                <Form.Item name="scopeId" label={t('admin.tags.orgId')} rules={[{ required: true }]}>
+                  <Input placeholder={t('admin.tags.orgIdPlaceholder')} />
                 </Form.Item>
               ) : null
             }
           </Form.Item>
-          <Form.Item name="tagCode" label="标签代码" rules={[{ required: true }]}>
-            <Input placeholder="小写字母数字与 . _ -" />
+          <Form.Item name="tagCode" label={t('admin.tags.tagCode')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.tags.tagCodePlaceholder')} />
           </Form.Item>
-          <Form.Item name="displayName" label="显示名" rules={[{ required: true }]}>
+          <Form.Item name="displayName" label={t('admin.tags.displayName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="i18nKey" label="文案 Key" rules={[{ required: true }]}>
+          <Form.Item name="i18nKey" label={t('admin.tags.i18nKey')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="color" label="颜色">
+          <Form.Item name="color" label={t('admin.tags.color')}>
             <Input placeholder="#1677ff" />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="编辑标签"
+        title={t('admin.tags.editTag')}
         open={editing !== null}
         onCancel={() => setEditing(null)}
         onOk={() => editForm.submit()}
@@ -218,13 +220,13 @@ export function TagsPage() {
             updateMutation.mutate({ tagId: editing.tagId, version: editing.version, ...values });
           }}
         >
-          <Form.Item name="displayName" label="显示名" rules={[{ required: true }]}>
+          <Form.Item name="displayName" label={t('admin.tags.displayName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="i18nKey" label="文案 Key" rules={[{ required: true }]}>
+          <Form.Item name="i18nKey" label={t('admin.tags.i18nKey')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="color" label="颜色">
+          <Form.Item name="color" label={t('admin.tags.color')}>
             <Input placeholder="#1677ff" />
           </Form.Item>
         </Form>

@@ -3,6 +3,7 @@
  * 时间: 2026-07-01
  * 作者: AxeXie
  */
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Flex, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -12,28 +13,29 @@ import { listPermissions } from '../api';
 import type { PermissionView } from '../types';
 
 export function PermissionsPage() {
-  useDocumentTitle('权限清单');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.permissions.title'));
   const query = useQuery({ queryKey: ['admin', 'permissions'], queryFn: listPermissions });
 
   const columns: ColumnsType<PermissionView> = [
     {
-      title: '权限编码',
+      title: t('admin.permissions.permissionCode'),
       dataIndex: 'permissionCode',
       key: 'permissionCode',
       render: (code: string) => <Tag color="blue">{code}</Tag>,
     },
-    { title: '资源', dataIndex: 'resource', key: 'resource' },
-    { title: '动作', dataIndex: 'action', key: 'action' },
-    { title: '文案 Key', dataIndex: 'i18nKey', key: 'i18nKey' },
+    { title: t('admin.permissions.resource'), dataIndex: 'resource', key: 'resource' },
+    { title: t('admin.permissions.action'), dataIndex: 'action', key: 'action' },
+    { title: t('admin.permissions.i18nKey'), dataIndex: 'i18nKey', key: 'i18nKey' },
   ];
 
   return (
     <Flex vertical gap={16}>
       <Space>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          权限清单
+          {t('admin.permissions.title')}
         </Typography.Title>
-        <Typography.Text type="secondary">只读，权限由后端定义</Typography.Text>
+        <Typography.Text type="secondary">{t('admin.permissions.readonly')}</Typography.Text>
       </Space>
 
       <QueryBoundary

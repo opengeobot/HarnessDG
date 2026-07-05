@@ -5,6 +5,6 @@
  */
 
 /**
- * transfer 模块的 application 应用层，承载上传下载用例编排。当前为骨架占位。
+ * transfer 模块的 application 应用层，承载上传下载用例编排。
  */
 package com.aihub.transfer.application;

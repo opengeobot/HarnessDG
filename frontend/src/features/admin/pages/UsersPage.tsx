@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -43,7 +44,8 @@ const STATUS_COLOR: Record<UserStatus, string> = {
 const PAGE_SIZE = 20;
 
 export function UsersPage() {
-  useDocumentTitle('用户管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.users.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -63,12 +65,12 @@ export function UsersPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateUserRequest) => createUser(payload),
     onSuccess: () => {
-      message.success('用户已创建');
+      message.success(t('admin.users.userCreated'));
       setCreateOpen(false);
       createForm.resetFields();
       void invalidate();
@@ -84,7 +86,7 @@ export function UsersPage() {
         locale: vars.locale,
       }),
     onSuccess: () => {
-      message.success('资料已更新');
+      message.success(t('admin.users.profileUpdated'));
       setEditing(null);
       void invalidate();
     },
@@ -94,7 +96,7 @@ export function UsersPage() {
   const enableMutation = useMutation({
     mutationFn: (userId: string) => enableUser(userId),
     onSuccess: () => {
-      message.success('已启用');
+      message.success(t('admin.users.enabled'));
       void invalidate();
     },
     onError,
@@ -103,7 +105,7 @@ export function UsersPage() {
   const disableMutation = useMutation({
     mutationFn: (userId: string) => disableUser(userId),
     onSuccess: () => {
-      message.success('已禁用');
+      message.success(t('admin.users.disabled'));
       void invalidate();
     },
     onError,
@@ -113,7 +115,7 @@ export function UsersPage() {
     mutationFn: (vars: { userId: string; temporaryPassword: string }) =>
       resetUserPassword(vars.userId, { temporaryPassword: vars.temporaryPassword }),
     onSuccess: () => {
-      message.success('已重置临时密码');
+      message.success(t('admin.users.passwordReset'));
       setResetting(null);
       resetForm.resetFields();
     },
@@ -122,7 +124,7 @@ export function UsersPage() {
 
   const columns: ColumnsType<UserView> = [
     {
-      title: '用户',
+      title: t('admin.users.user'),
       key: 'user',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
@@ -133,22 +135,22 @@ export function UsersPage() {
         </Space>
       ),
     },
-    { title: '邮箱', dataIndex: 'email', key: 'email', render: (email: string) => email || '-' },
-    { title: '语言', dataIndex: 'locale', key: 'locale' },
+    { title: t('admin.users.email'), dataIndex: 'email', key: 'email', render: (email: string) => email || '-' },
+    { title: t('admin.users.language'), dataIndex: 'locale', key: 'locale' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: UserStatus) => <Tag color={STATUS_COLOR[status]}>{status}</Tag>,
     },
     {
-      title: '强制改密',
+      title: t('admin.users.forcePasswordChange'),
       dataIndex: 'forcePasswordChange',
       key: 'forcePasswordChange',
-      render: (value: boolean) => (value ? <Tag color="red">是</Tag> : '否'),
+      render: (value: boolean) => (value ? <Tag color="red">{t('common.yes')}</Tag> : t('common.no')),
     },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Space size="small" wrap>
@@ -164,7 +166,7 @@ export function UsersPage() {
               });
             }}
           >
-            编辑
+            {t('common.edit')}
           </Button>
           {record.status === 'DISABLED' ? (
             <Button
@@ -172,20 +174,20 @@ export function UsersPage() {
               size="small"
               onClick={() => enableMutation.mutate(record.userId)}
             >
-              启用
+              {t('common.enable')}
             </Button>
           ) : (
             <Popconfirm
-              title="确认禁用该用户？其 Token 将被吊销。"
+              title={t('admin.users.confirmDisable')}
               onConfirm={() => disableMutation.mutate(record.userId)}
             >
               <Button type="link" size="small" danger>
-                禁用
+                {t('common.disable')}
               </Button>
             </Popconfirm>
           )}
           <Button type="link" size="small" onClick={() => setResetting(record)}>
-            重置密码
+            {t('admin.users.resetPassword')}
           </Button>
         </Space>
       ),
@@ -196,21 +198,21 @@ export function UsersPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          用户管理
+          {t('admin.users.title')}
         </Typography.Title>
         <Space wrap>
           <Input.Search
             allowClear
-            placeholder="搜索用户名/显示名"
+            placeholder={t('admin.users.searchPlaceholder')}
             style={{ width: 240 }}
             onSearch={(value) => {
               setKeyword(value.trim());
               setPage(1);
             }}
           />
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
           <Button type="primary" onClick={() => setCreateOpen(true)}>
-            创建用户
+            {t('admin.users.createUser')}
           </Button>
         </Space>
       </Flex>
@@ -236,7 +238,7 @@ export function UsersPage() {
       </QueryBoundary>
 
       <Modal
-        title="创建用户"
+        title={t('admin.users.createModalTitle')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -250,27 +252,27 @@ export function UsersPage() {
           initialValues={{ locale: 'zh-CN' }}
           preserve={false}
         >
-          <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-            <Input placeholder="字母数字与 . _ -" />
+          <Form.Item name="username" label={t('admin.users.username')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.users.usernamePlaceholder')} />
           </Form.Item>
-          <Form.Item name="displayName" label="显示名" rules={[{ required: true }]}>
+          <Form.Item name="displayName" label={t('admin.users.displayName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="email" label="邮箱" rules={[{ type: 'email' }]}>
+          <Form.Item name="email" label={t('admin.users.email')} rules={[{ type: 'email' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="locale" label="语言">
+          <Form.Item name="locale" label={t('admin.users.language')}>
             <Select
               options={[
-                { value: 'zh-CN', label: '简体中文' },
+                { value: 'zh-CN', label: t('admin.users.simplifiedChinese') },
                 { value: 'en-US', label: 'English' },
               ]}
             />
           </Form.Item>
           <Form.Item
             name="temporaryPassword"
-            label="临时密码"
-            rules={[{ required: true }, { min: 12, message: '至少 12 位' }]}
+            label={t('admin.users.tempPassword')}
+            rules={[{ required: true }, { min: 12, message: t('admin.users.tempPasswordMin') }]}
           >
             <Input.Password autoComplete="new-password" />
           </Form.Item>
@@ -278,7 +280,7 @@ export function UsersPage() {
       </Modal>
 
       <Modal
-        title="编辑用户资料"
+        title={t('admin.users.editProfile')}
         open={editing !== null}
         onCancel={() => setEditing(null)}
         onOk={() => editForm.submit()}
@@ -296,16 +298,16 @@ export function UsersPage() {
             updateMutation.mutate({ userId: editing.userId, ...values });
           }}
         >
-          <Form.Item name="displayName" label="显示名" rules={[{ required: true }]}>
+          <Form.Item name="displayName" label={t('admin.users.displayName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="email" label="邮箱" rules={[{ type: 'email' }]}>
+          <Form.Item name="email" label={t('admin.users.email')} rules={[{ type: 'email' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="locale" label="语言">
+          <Form.Item name="locale" label={t('admin.users.language')}>
             <Select
               options={[
-                { value: 'zh-CN', label: '简体中文' },
+                { value: 'zh-CN', label: t('admin.users.simplifiedChinese') },
                 { value: 'en-US', label: 'English' },
               ]}
             />
@@ -314,7 +316,7 @@ export function UsersPage() {
       </Modal>
 
       <Modal
-        title="重置密码"
+        title={t('admin.users.resetModalTitle')}
         open={resetting !== null}
         onCancel={() => setResetting(null)}
         onOk={() => resetForm.submit()}
@@ -334,8 +336,8 @@ export function UsersPage() {
         >
           <Form.Item
             name="temporaryPassword"
-            label="临时密码"
-            rules={[{ required: true }, { min: 12, message: '至少 12 位' }]}
+            label={t('admin.users.tempPassword')}
+            rules={[{ required: true }, { min: 12, message: t('admin.users.tempPasswordMin') }]}
           >
             <Input.Password autoComplete="new-password" />
           </Form.Item>

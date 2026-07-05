@@ -5,6 +5,6 @@
  */
 
 /**
- * integration.gitea 模块（Gitea Client、Webhook、对账）的 api 适配层。当前为骨架占位。
+ * integration.gitea 模块（Gitea Client、Webhook、对账）的 api 适配层。
  */
 package com.aihub.integration.gitea.api;

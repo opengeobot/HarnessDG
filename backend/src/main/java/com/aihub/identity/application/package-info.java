@@ -7,6 +7,6 @@
 /**
  * identity 模块的 application 应用层。
  *
- * <p>承载用例编排、事务边界与授权调用，被 REST/MCP/Worker 适配器复用。当前为骨架占位。
+ * <p>承载用例编排、事务边界与授权调用，被 REST/MCP/Worker 适配器复用。
  */
 package com.aihub.identity.application;

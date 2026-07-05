@@ -8,6 +8,7 @@ import { App, Dropdown, Layout, Menu, Space, Typography } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownOutlined, UserOutlined } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth';
 import { usePermission } from '@/app/permission';
 import { isApiError } from '@/shared/api';
@@ -23,6 +24,7 @@ export function AppLayout() {
   const { message } = App.useApp();
   const { principal, logout } = useAuth();
   const { hasAllScopes } = usePermission();
+  const { t } = useTranslation();
 
   // 按权限过滤导航项（父项若无可见子项则隐藏）
   const menuItems = useMemo<MenuNode[]>(() => {
@@ -58,7 +60,7 @@ export function AppLayout() {
     try {
       await logout();
     } catch (error) {
-      message.error(isApiError(error) ? error.message : '登出失败');
+      message.error(isApiError(error) ? error.message : t('layout.logoutFailed'));
     } finally {
       navigate('/login', { replace: true });
     }
@@ -68,13 +70,13 @@ export function AppLayout() {
     <Layout style={{ minHeight: '100vh' }}>
       <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography.Title level={4} style={{ color: '#fff', margin: 0, whiteSpace: 'nowrap' }}>
-          AI 资产管理平台
+          AI {t('app.title')}
         </Typography.Title>
         <Dropdown
           menu={{
             items: [
-              { key: 'profile', label: '个人中心' },
-              { key: 'logout', label: '登出' },
+              { key: 'profile', label: t('layout.profile') },
+              { key: 'logout', label: t('layout.logout') },
             ],
             onClick: ({ key }) => {
               if (key === 'profile') {
@@ -87,7 +89,7 @@ export function AppLayout() {
         >
           <Space style={{ color: '#fff', cursor: 'pointer' }}>
             <UserOutlined />
-            {principal?.displayName ?? principal?.subject ?? '未登录'}
+            {principal?.displayName ?? principal?.subject ?? t('app.notLoggedIn')}
             <DownOutlined />
           </Space>
         </Dropdown>

@@ -5,6 +5,7 @@
  * 作者: AxeXie
  */
 import type { Scope } from '@/shared/types';
+import i18n from '@/shared/i18n';
 
 export interface NavItem {
   /** 路由路径（相对根） */
@@ -18,28 +19,28 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { key: '/assets', label: '资产目录', requiredScopes: ['asset:read'] },
-  { key: '/version', label: '版本中心', requiredScopes: ['asset:read'] },
-  { key: '/upload', label: '上传中心', requiredScopes: ['asset:write'] },
-  { key: '/access', label: '访问与凭据', requiredScopes: ['authorization:read'] },
-  { key: '/integrations', label: 'Agent 接入', requiredScopes: ['authorization:read'] },
+  { key: '/assets', label: i18n.t('nav.assetCatalog'), requiredScopes: ['asset:read'] },
+  { key: '/version', label: i18n.t('nav.versionCenter'), requiredScopes: ['asset:read'] },
+  { key: '/upload', label: i18n.t('nav.uploadCenter'), requiredScopes: ['asset:write'] },
+  { key: '/access', label: i18n.t('nav.accessCredentials'), requiredScopes: ['authorization:read'] },
+  { key: '/integrations', label: i18n.t('nav.agentIntegration'), requiredScopes: ['authorization:read'] },
   {
     key: '/admin',
-    label: '管理中心',
+    label: i18n.t('nav.adminCenter'),
     children: [
-      { key: '/admin/users', label: '用户管理', requiredScopes: ['user:read'] },
-      { key: '/admin/agents', label: 'Agent 管理', requiredScopes: ['authorization:read'] },
-      { key: '/admin/organizations', label: '组织管理', requiredScopes: ['project:view'] },
-      { key: '/admin/projects', label: '项目管理', requiredScopes: ['project:view'] },
-      { key: '/admin/roles', label: '角色管理', requiredScopes: ['authorization:read'] },
-      { key: '/admin/permissions', label: '权限清单', requiredScopes: ['authorization:read'] },
-      { key: '/admin/dictionaries', label: '字典管理', requiredScopes: ['dictionary:read'] },
-      { key: '/admin/tags', label: '标签管理', requiredScopes: ['tag:read'] },
-      { key: '/admin/configurations', label: '配置管理', requiredScopes: ['system:configure'] },
-      { key: '/admin/jobs', label: '任务管理', requiredScopes: ['job:read'] },
-      { key: '/admin/audit-logs', label: '审计日志', requiredScopes: ['audit:read'] },
-      { key: '/admin/notifications', label: '通知中心', requiredScopes: ['notification:read'] },
-      { key: '/admin/dependencies', label: '系统依赖', requiredScopes: ['system:observe'] },
+      { key: '/admin/users', label: i18n.t('nav.userManagement'), requiredScopes: ['user:read'] },
+      { key: '/admin/agents', label: i18n.t('nav.agentManagement'), requiredScopes: ['authorization:read'] },
+      { key: '/admin/organizations', label: i18n.t('nav.orgManagement'), requiredScopes: ['project:view'] },
+      { key: '/admin/projects', label: i18n.t('nav.projectManagement'), requiredScopes: ['project:view'] },
+      { key: '/admin/roles', label: i18n.t('nav.roleManagement'), requiredScopes: ['authorization:read'] },
+      { key: '/admin/permissions', label: i18n.t('nav.permissionList'), requiredScopes: ['authorization:read'] },
+      { key: '/admin/dictionaries', label: i18n.t('nav.dictManagement'), requiredScopes: ['dictionary:read'] },
+      { key: '/admin/tags', label: i18n.t('nav.tagManagement'), requiredScopes: ['tag:read'] },
+      { key: '/admin/configurations', label: i18n.t('nav.configManagement'), requiredScopes: ['system:configure'] },
+      { key: '/admin/jobs', label: i18n.t('nav.jobManagement'), requiredScopes: ['job:read'] },
+      { key: '/admin/audit-logs', label: i18n.t('nav.auditLogs'), requiredScopes: ['audit:read'] },
+      { key: '/admin/notifications', label: i18n.t('nav.notificationCenter'), requiredScopes: ['notification:read'] },
+      { key: '/admin/dependencies', label: i18n.t('nav.systemDeps'), requiredScopes: ['system:observe'] },
     ],
   },
 ];

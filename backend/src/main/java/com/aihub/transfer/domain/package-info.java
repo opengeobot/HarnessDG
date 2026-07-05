@@ -5,6 +5,6 @@
  */
 
 /**
- * transfer 模块的 domain 领域层，承载上传会话状态规则。当前为骨架占位。
+ * transfer 模块的 domain 领域层，承载上传会话状态规则。
  */
 package com.aihub.transfer.domain;

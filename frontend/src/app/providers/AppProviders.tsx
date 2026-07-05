@@ -7,9 +7,12 @@
 import { useState, type ReactNode } from 'react';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import enUS from 'antd/locale/en_US';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { AuthProvider } from '@/app/auth';
 import { PermissionProvider } from '@/app/permission';
+import '@/shared/i18n';
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -24,12 +27,13 @@ function createQueryClient(): QueryClient {
 }
 
 export function AppProviders({ children }: { children: ReactNode }) {
-  // 每个应用实例持有单一 QueryClient，避免重渲染重建缓存
   const [queryClient] = useState(createQueryClient);
+  const { i18n } = useTranslation();
+  const antdLocale = i18n.language === 'en' ? enUS : zhCN;
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ConfigProvider locale={zhCN}>
+      <ConfigProvider locale={antdLocale}>
         <AntdApp>
           <AuthProvider>
             <PermissionProvider>{children}</PermissionProvider>

@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -26,7 +27,8 @@ import { createProject, listOrganizationProjects, listOrganizations } from '../a
 import type { CreateProjectRequest, ProjectView } from '../types';
 
 export function ProjectsPage() {
-  useDocumentTitle('项目管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.projects.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -45,17 +47,17 @@ export function ProjectsPage() {
   const createMutation = useMutation({
     mutationFn: (payload: CreateProjectRequest) => createProject(organizationId!, payload),
     onSuccess: () => {
-      message.success('项目已创建');
+      message.success(t('admin.projects.projectCreated'));
       setCreateOpen(false);
       createForm.resetFields();
       void queryClient.invalidateQueries({ queryKey: ['admin', 'projects', organizationId] });
     },
-    onError: (error) => message.error(isApiError(error) ? error.message : '操作失败'),
+    onError: (error) => message.error(isApiError(error) ? error.message : t('common.operationFailed')),
   });
 
   const columns: ColumnsType<ProjectView> = [
     {
-      title: '项目',
+      title: t('admin.projects.project'),
       key: 'project',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
@@ -66,21 +68,21 @@ export function ProjectsPage() {
         </Space>
       ),
     },
-    { title: '项目 ID', dataIndex: 'projectId', key: 'projectId' },
-    { title: '状态', dataIndex: 'status', key: 'status', render: (s: string) => <Tag>{s}</Tag> },
-    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt' },
+    { title: t('admin.projects.projectId'), dataIndex: 'projectId', key: 'projectId' },
+    { title: t('common.status'), dataIndex: 'status', key: 'status', render: (s: string) => <Tag>{s}</Tag> },
+    { title: t('admin.projects.createdAt'), dataIndex: 'createdAt', key: 'createdAt' },
   ];
 
   return (
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          项目管理
+          {t('admin.projects.title')}
         </Typography.Title>
         <Space wrap>
           <Select
             style={{ width: 260 }}
-            placeholder="选择组织"
+            placeholder={t('admin.projects.selectOrg')}
             loading={orgsQuery.isLoading}
             value={organizationId}
             onChange={setOrganizationId}
@@ -94,7 +96,7 @@ export function ProjectsPage() {
             disabled={!organizationId}
             onClick={() => setCreateOpen(true)}
           >
-            创建项目
+            {t('admin.projects.createProject')}
           </Button>
         </Space>
       </Flex>
@@ -113,11 +115,11 @@ export function ProjectsPage() {
           />
         </QueryBoundary>
       ) : (
-        <Typography.Text type="secondary">请先选择组织以查看项目。</Typography.Text>
+        <Typography.Text type="secondary">{t('admin.projects.selectOrgHint')}</Typography.Text>
       )}
 
       <Modal
-        title="创建项目"
+        title={t('admin.projects.createProject')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -130,10 +132,10 @@ export function ProjectsPage() {
           preserve={false}
           onFinish={(values) => createMutation.mutate(values)}
         >
-          <Form.Item name="code" label="项目代码" rules={[{ required: true }]}>
-            <Input placeholder="小写字母数字与连字符" />
+          <Form.Item name="code" label={t('admin.projects.projectCode')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.projects.codePlaceholder')} />
           </Form.Item>
-          <Form.Item name="name" label="项目名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label={t('admin.projects.projectName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
         </Form>

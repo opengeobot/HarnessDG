@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from 'react';
 import { Button, Result, Skeleton } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { isApiError } from '@/shared/api';
 
 export interface QueryBoundaryProps {
@@ -23,20 +24,21 @@ export function QueryBoundary({
   onRetry,
   children,
 }: QueryBoundaryProps) {
+  const { t } = useTranslation();
   if (isLoading) {
     return <Skeleton active paragraph={{ rows: 6 }} />;
   }
   if (isError) {
-    const message = isApiError(error) ? error.message : '加载失败，请稍后重试';
+    const message = isApiError(error) ? error.message : t('common.loadFailedRetry');
     return (
       <Result
         status="error"
-        title="加载失败"
+        title={t('queryBoundary.errorTitle')}
         subTitle={message}
         extra={
           onRetry ? (
             <Button type="primary" onClick={onRetry}>
-              重试
+              {t('queryBoundary.retry')}
             </Button>
           ) : undefined
         }

@@ -5,6 +5,6 @@
  */
 
 /**
- * job 模块的 infrastructure 基础设施层，承载任务表 Mapper 与领取实现。当前为骨架占位。
+ * job 模块的 infrastructure 基础设施层，承载任务表 Mapper 与领取实现。
  */
 package com.aihub.job.infrastructure;

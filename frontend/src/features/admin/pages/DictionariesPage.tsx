@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -33,7 +34,8 @@ import {
 import type { CreateDictionaryItemRequest, DictionaryItemView } from '../types';
 
 export function DictionariesPage() {
-  useDocumentTitle('字典管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.dictionaries.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -51,13 +53,13 @@ export function DictionariesPage() {
   const invalidateItems = () =>
     queryClient.invalidateQueries({ queryKey: ['admin', 'dictionaries', selected, 'items'] });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateDictionaryItemRequest) =>
       createDictionaryItem(selected!, payload),
     onSuccess: () => {
-      message.success('字典项已创建');
+      message.success(t('admin.dictionaries.itemCreated'));
       setCreateOpen(false);
       createForm.resetFields();
       void invalidateItems();
@@ -72,18 +74,18 @@ export function DictionariesPage() {
         expectedVersion: item.version,
       }),
     onSuccess: () => {
-      message.success('状态已更新');
+      message.success(t('admin.dictionaries.statusUpdated'));
       void invalidateItems();
     },
     onError,
   });
 
   const columns: ColumnsType<DictionaryItemView> = [
-    { title: '项编码', dataIndex: 'itemCode', key: 'itemCode' },
-    { title: '文案 Key', dataIndex: 'i18nKey', key: 'i18nKey' },
-    { title: '排序', dataIndex: 'sortOrder', key: 'sortOrder' },
+    { title: t('admin.dictionaries.itemCode'), dataIndex: 'itemCode', key: 'itemCode' },
+    { title: t('admin.dictionaries.i18nKey'), dataIndex: 'i18nKey', key: 'i18nKey' },
+    { title: t('admin.dictionaries.sortOrder'), dataIndex: 'sortOrder', key: 'sortOrder' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => (
@@ -91,11 +93,11 @@ export function DictionariesPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Button type="link" size="small" onClick={() => toggleMutation.mutate(record)}>
-          {record.status === 'ACTIVE' ? '停用' : '启用'}
+          {record.status === 'ACTIVE' ? t('common.disable') : t('common.enable')}
         </Button>
       ),
     },
@@ -104,11 +106,11 @@ export function DictionariesPage() {
   return (
     <Flex vertical gap={16}>
       <Typography.Title level={4} style={{ margin: 0 }}>
-        字典管理
+        {t('admin.dictionaries.title')}
       </Typography.Title>
 
       <Flex gap={16} align="stretch" wrap>
-        <Card title="字典类型" style={{ width: 280 }}>
+        <Card title={t('admin.dictionaries.dictType')} style={{ width: 280 }}>
           <QueryBoundary
             isLoading={typesQuery.isLoading}
             isError={typesQuery.isError}
@@ -137,11 +139,11 @@ export function DictionariesPage() {
         </Card>
 
         <Card
-          title={selected ? `字典项 · ${selected}` : '字典项'}
+          title={selected ? t('admin.dictionaries.dictItemsOf', { code: selected }) : t('admin.dictionaries.dictItems')}
           style={{ flex: 1, minWidth: 360 }}
           extra={
             <Button type="primary" size="small" disabled={!selected} onClick={() => setCreateOpen(true)}>
-              新增字典项
+              {t('admin.dictionaries.createItem')}
             </Button>
           }
         >
@@ -161,13 +163,13 @@ export function DictionariesPage() {
               />
             </QueryBoundary>
           ) : (
-            <Typography.Text type="secondary">请选择左侧字典类型。</Typography.Text>
+            <Typography.Text type="secondary">{t('admin.dictionaries.selectDictType')}</Typography.Text>
           )}
         </Card>
       </Flex>
 
       <Modal
-        title="新增字典项"
+        title={t('admin.dictionaries.createItem')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -181,13 +183,13 @@ export function DictionariesPage() {
           initialValues={{ sortOrder: 0 }}
           onFinish={(values) => createMutation.mutate(values)}
         >
-          <Form.Item name="itemCode" label="项编码" rules={[{ required: true }]}>
+          <Form.Item name="itemCode" label={t('admin.dictionaries.itemCode')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="i18nKey" label="文案 Key" rules={[{ required: true }]}>
+          <Form.Item name="i18nKey" label={t('admin.dictionaries.i18nKey')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="sortOrder" label="排序">
+          <Form.Item name="sortOrder" label={t('admin.dictionaries.sortOrder')}>
             <InputNumber style={{ width: '100%' }} />
           </Form.Item>
         </Form>

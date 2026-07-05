@@ -5,6 +5,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -40,7 +41,8 @@ interface RoleFormValues {
 }
 
 export function RolesPage() {
-  useDocumentTitle('角色管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.roles.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -53,7 +55,7 @@ export function RolesPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const saveMutation = useMutation({
     mutationFn: (values: RoleFormValues) => {
@@ -67,7 +69,7 @@ export function RolesPage() {
       return createRole(values as CreateRoleRequest);
     },
     onSuccess: () => {
-      message.success(editing ? '角色已更新' : '角色已创建');
+      message.success(editing ? t('admin.roles.roleUpdated') : t('admin.roles.roleCreated'));
       setModalOpen(false);
       setEditing(null);
       form.resetFields();
@@ -79,7 +81,7 @@ export function RolesPage() {
   const deleteMutation = useMutation({
     mutationFn: (roleId: string) => deleteRole(roleId),
     onSuccess: () => {
-      message.success('角色已删除');
+      message.success(t('admin.roles.roleDeleted'));
       void invalidate();
     },
     onError,
@@ -108,7 +110,7 @@ export function RolesPage() {
 
   const columns: ColumnsType<RoleView> = [
     {
-      title: '角色',
+      title: t('admin.roles.role'),
       key: 'role',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
@@ -120,15 +122,15 @@ export function RolesPage() {
       ),
     },
     {
-      title: '类型',
+      title: t('admin.roles.roleType'),
       dataIndex: 'roleType',
       key: 'roleType',
       render: (type: string) => (
-        <Tag color={type === 'SYSTEM' ? 'gold' : 'blue'}>{type === 'SYSTEM' ? '内置' : '自定义'}</Tag>
+        <Tag color={type === 'SYSTEM' ? 'gold' : 'blue'}>{type === 'SYSTEM' ? t('admin.roles.builtIn') : t('admin.roles.custom')}</Tag>
       ),
     },
     {
-      title: '权限',
+      title: t('admin.roles.permissions'),
       dataIndex: 'permissionCodes',
       key: 'permissionCodes',
       render: (codes: string[]) => (
@@ -140,22 +142,22 @@ export function RolesPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => {
         const isSystem = record.roleType === 'SYSTEM';
         return (
           <Space size="small">
             <Button type="link" size="small" disabled={isSystem} onClick={() => openEdit(record)}>
-              编辑
+              {t('common.edit')}
             </Button>
             <Popconfirm
-              title="确认删除该角色？"
+              title={t('admin.roles.confirmDelete')}
               disabled={isSystem}
               onConfirm={() => deleteMutation.mutate(record.roleId)}
             >
               <Button type="link" size="small" danger disabled={isSystem}>
-                删除
+                {t('common.delete')}
               </Button>
             </Popconfirm>
           </Space>
@@ -168,12 +170,12 @@ export function RolesPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          角色管理
+          {t('admin.roles.title')}
         </Typography.Title>
         <Space>
-          <Button onClick={() => rolesQuery.refetch()}>刷新</Button>
+          <Button onClick={() => rolesQuery.refetch()}>{t('common.refresh')}</Button>
           <Button type="primary" onClick={openCreate}>
-            创建角色
+            {t('admin.roles.createRole')}
           </Button>
         </Space>
       </Flex>
@@ -188,7 +190,7 @@ export function RolesPage() {
       </QueryBoundary>
 
       <Modal
-        title={editing ? '编辑角色' : '创建角色'}
+        title={editing ? t('admin.roles.editRole') : t('admin.roles.createRole')}
         open={modalOpen}
         onCancel={() => {
           setModalOpen(false);
@@ -204,16 +206,16 @@ export function RolesPage() {
           preserve={false}
           onFinish={(values) => saveMutation.mutate(values)}
         >
-          <Form.Item name="roleCode" label="角色代码" rules={[{ required: true }]}>
-            <Input placeholder="小写字母开头" disabled={editing !== null} />
+          <Form.Item name="roleCode" label={t('admin.roles.roleCode')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.roles.roleCodePlaceholder')} disabled={editing !== null} />
           </Form.Item>
-          <Form.Item name="roleName" label="角色名称" rules={[{ required: true }]}>
+          <Form.Item name="roleName" label={t('admin.roles.roleName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="permissionCodes" label="权限集合" rules={[{ required: true }]}>
+          <Form.Item name="permissionCodes" label={t('admin.roles.permissionSet')} rules={[{ required: true }]}>
             <Select
               mode="multiple"
-              placeholder="选择权限编码"
+              placeholder={t('admin.roles.selectPermissionCodes')}
               options={permissionOptions}
               loading={permsQuery.isLoading}
               optionFilterProp="label"

@@ -5,6 +5,6 @@
  */
 
 /**
- * asset 模块（资产、卡片、标签、检索）的 api 适配层，禁止直接调用 Mapper。当前为骨架占位。
+ * asset 模块（资产、卡片、标签、检索）的 api 适配层，禁止直接调用 Mapper。
  */
 package com.aihub.asset.api;

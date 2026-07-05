@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { Result, Typography } from 'antd';
+import { useTranslation } from 'react-i18next';
 
 export interface PlaceholderPageProps {
   /** 页面标题 */
@@ -13,13 +14,14 @@ export interface PlaceholderPageProps {
 }
 
 export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
+  const { t } = useTranslation();
   return (
     <Result
       status="info"
       title={title}
       subTitle={
         <Typography.Text type="secondary">
-          {description ?? '该页面为 P0 工程基线占位，业务逻辑将在 P1 实现。'}
+          {description ?? t('placeholder.defaultDescription')}
         </Typography.Text>
       }
     />

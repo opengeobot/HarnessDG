@@ -5,6 +5,6 @@
  */
 
 /**
- * audit 模块的 infrastructure 基础设施层，承载审计表 Mapper 与 Outbox 实现。当前为骨架占位。
+ * audit 模块的 infrastructure 基础设施层，承载审计表 Mapper 与 Outbox 实现。
  */
 package com.aihub.audit.infrastructure;

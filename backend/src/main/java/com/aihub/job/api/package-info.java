@@ -5,6 +5,6 @@
  */
 
 /**
- * job 模块（PostgreSQL 任务队列、Worker、重试）的 api 适配层。当前为骨架占位。
+ * job 模块（PostgreSQL 任务队列、Worker、重试）的 api 适配层。
  */
 package com.aihub.job.api;

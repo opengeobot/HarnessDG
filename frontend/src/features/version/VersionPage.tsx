@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import {
   issueDownloadTicket,
@@ -23,7 +24,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function VersionPage() {
-  useDocumentTitle('版本中心');
+  const { t } = useTranslation();
+  useDocumentTitle(t('version.title'));
   const [assetId, setAssetId] = useState('');
   const [versions, setVersions] = useState<VersionView[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<VersionView | null>(null);
@@ -39,11 +41,11 @@ export function VersionPage() {
       const page = await listVersions(assetId);
       setVersions(page.items ?? []);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '加载失败');
+      setError(e instanceof Error ? e.message : t('version.loadFailedMsg'));
     } finally {
       setLoading(false);
     }
-  }, [assetId]);
+  }, [assetId, t]);
 
   useEffect(() => {
     loadVersions();
@@ -69,7 +71,7 @@ export function VersionPage() {
         setSelectedVersion(updated);
       }
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '状态推进失败');
+      alert(e instanceof Error ? e.message : t('version.transitionFailed'));
     }
   };
 
@@ -79,10 +81,10 @@ export function VersionPage() {
       if (ticket.method === 'PRESIGNED_URL' && ticket.presignedUrl) {
         window.open(ticket.presignedUrl, '_blank');
       } else {
-        alert(`下载方式: ${ticket.method}\n请使用 DVC CLI 拉取。`);
+        alert(t('version.downloadMethod', { method: ticket.method }));
       }
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : '签发下载票据失败');
+      alert(e instanceof Error ? e.message : t('version.downloadTicketFailed'));
     }
   };
 
@@ -96,12 +98,12 @@ export function VersionPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">版本中心</h1>
+      <h1 className="text-2xl font-bold mb-4">{t('version.title')}</h1>
 
       <div className="mb-4 flex gap-2">
         <input
           className="border rounded px-3 py-2 flex-1"
-          placeholder="输入资产 ID"
+          placeholder={t('version.assetIdPlaceholder')}
           value={assetId}
           onChange={(e) => setAssetId(e.target.value)}
         />
@@ -109,17 +111,16 @@ export function VersionPage() {
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           onClick={loadVersions}
         >
-          查询
+          {t('common.query')}
         </button>
       </div>
 
       {error && <p className="text-red-600 mb-4">{error}</p>}
-      {loading && <p className="text-gray-500">加载中...</p>}
+      {loading && <p className="text-gray-500">{t('common.loading')}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 版本列表 */}
         <div>
-          <h2 className="text-lg font-semibold mb-2">版本列表</h2>
+          <h2 className="text-lg font-semibold mb-2">{t('version.versionList')}</h2>
           <div className="space-y-2">
             {versions.map((v) => (
               <div
@@ -152,7 +153,7 @@ export function VersionPage() {
                         handleTransition(v, 'VALIDATING');
                       }}
                     >
-                      提交校验
+                      {t('version.submitValidation')}
                     </button>
                   </div>
                 )}
@@ -165,37 +166,36 @@ export function VersionPage() {
                         handleDownload(v);
                       }}
                     >
-                      下载 (DVC)
+                      {t('version.downloadDvc')}
                     </button>
                   </div>
                 )}
               </div>
             ))}
             {!loading && versions.length === 0 && (
-              <p className="text-gray-400 text-sm">暂无版本</p>
+              <p className="text-gray-400 text-sm">{t('version.noVersions')}</p>
             )}
           </div>
         </div>
 
-        {/* 版本详情 */}
         <div>
-          <h2 className="text-lg font-semibold mb-2">版本详情</h2>
+          <h2 className="text-lg font-semibold mb-2">{t('version.versionDetail')}</h2>
           {selectedVersion ? (
             <div className="space-y-4">
               <div className="border rounded p-4 space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">版本 ID</span>
+                  <span className="text-gray-500">{t('version.versionId')}</span>
                   <span className="font-mono text-sm">{selectedVersion.versionId}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">状态</span>
+                  <span className="text-gray-500">{t('common.status')}</span>
                   <span className={STATUS_COLORS[selectedVersion.status] ?? ''}>
                     {selectedVersion.status}
                   </span>
                 </div>
                 {selectedVersion.sourceCommit && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Commit</span>
+                    <span className="text-gray-500">{t('version.commit')}</span>
                     <span className="font-mono text-sm">{selectedVersion.sourceCommit}</span>
                   </div>
                 )}
@@ -213,29 +213,28 @@ export function VersionPage() {
                 )}
                 {selectedVersion.notes && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">备注</span>
+                    <span className="text-gray-500">{t('version.notes')}</span>
                     <span className="text-sm">{selectedVersion.notes}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-gray-500">创建者</span>
+                  <span className="text-gray-500">{t('version.createdBy')}</span>
                   <span className="text-sm">{selectedVersion.createdBy}</span>
                 </div>
               </div>
 
-              {/* 工件列表 */}
               <div>
                 <h3 className="font-semibold mb-2">
-                  工件列表 ({artifacts.length})
+                  {t('version.artifactList')} ({artifacts.length})
                 </h3>
                 {artifacts.length > 0 ? (
                   <table className="w-full text-sm border">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="text-left p-2">路径</th>
-                        <th className="text-right p-2">大小</th>
+                        <th className="text-left p-2">{t('version.path')}</th>
+                        <th className="text-right p-2">{t('version.size')}</th>
                         <th className="text-right p-2">SHA-256</th>
-                        <th className="text-center p-2">操作</th>
+                        <th className="text-center p-2">{t('common.action')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -254,7 +253,7 @@ export function VersionPage() {
                                   handleDownload(selectedVersion, a.artifactId)
                                 }
                               >
-                                下载
+                                {t('version.download')}
                               </button>
                             )}
                           </td>
@@ -263,12 +262,12 @@ export function VersionPage() {
                     </tbody>
                   </table>
                 ) : (
-                  <p className="text-gray-400 text-sm">暂无工件</p>
+                  <p className="text-gray-400 text-sm">{t('version.noArtifacts')}</p>
                 )}
               </div>
             </div>
           ) : (
-            <p className="text-gray-400">选择一个版本查看详情</p>
+            <p className="text-gray-400">{t('version.selectVersion')}</p>
           )}
         </div>
       </div>

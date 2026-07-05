@@ -5,6 +5,6 @@
  */
 
 /**
- * asset 模块的 domain 领域层，承载资产领域模型与状态规则。当前为骨架占位。
+ * asset 模块的 domain 领域层，承载资产领域模型与状态规则。
  */
 package com.aihub.asset.domain;

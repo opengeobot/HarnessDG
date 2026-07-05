@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
 
@@ -26,7 +27,8 @@ interface PartProgress {
 const PART_SIZE = 5 * 1024 * 1024; // 5MiB
 
 export function UploadPage() {
-  useDocumentTitle('上传中心');
+  const { t } = useTranslation();
+  useDocumentTitle(t('upload.title'));
   const [assetId, setAssetId] = useState('');
   const [versionId, setVersionId] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -45,7 +47,7 @@ export function UploadPage() {
 
   const createSession = useCallback(async () => {
     if (!assetId || !versionId || files.length === 0) {
-      setError('请填写资产 ID、版本 ID 并选择文件');
+      setError(t('upload.fillRequired'));
       return;
     }
     setError(null);
@@ -53,23 +55,18 @@ export function UploadPage() {
 
     const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
     if (totalBytes > 20 * 1024 * 1024 * 1024) {
-      setError('总大小超过 20GiB，请使用 CLI/DVC 上传');
+      setError(t('upload.sizeExceeded'));
       return;
     }
 
     try {
       const result = await apiClient.post<UploadSession>(
         `/assets/${assetId}/versions/${versionId}/upload-sessions`,
-        {
-          totalBytes,
-          fileCount: files.length,
-          ttlSeconds: 7200,
-        },
+        { totalBytes, fileCount: files.length, ttlSeconds: 7200 },
       );
       setSession(result);
-      setMessage(`上传会话已创建: ${result.sessionId}`);
+      setMessage(t('upload.sessionCreated', { id: result.sessionId }));
 
-      // 计算分片
       const totalParts = Math.ceil(totalBytes / PART_SIZE);
       setParts(
         Array.from({ length: totalParts }, (_, i) => ({
@@ -79,9 +76,9 @@ export function UploadPage() {
         })),
       );
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '创建上传会话失败');
+      setError(e instanceof Error ? e.message : t('upload.createSessionFailed'));
     }
-  }, [assetId, versionId, files]);
+  }, [assetId, versionId, files, t]);
 
   const startUpload = async () => {
     if (!session) return;
@@ -99,15 +96,12 @@ export function UploadPage() {
           ),
         );
 
-        // 请求预签名 URL（实际应使用 PUT 请求上传文件分片）
         await apiClient.get<string>(
           `/upload-sessions/${session.sessionId}/parts/${i + 1}/presign`,
         );
 
-        // 模拟上传（实际应使用 XMLHttpRequest 或 fetch 上传文件分片）
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // 模拟进度
         for (let pct = 0; pct <= 100; pct += 20) {
           await new Promise((resolve) => setTimeout(resolve, 50));
           setParts((prev) =>
@@ -126,9 +120,9 @@ export function UploadPage() {
         );
       }
 
-      setMessage('所有分片上传完成');
+      setMessage(t('upload.allPartsComplete'));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '上传失败');
+      setError(e instanceof Error ? e.message : t('upload.uploadFailed'));
     } finally {
       setUploading(false);
     }
@@ -141,10 +135,10 @@ export function UploadPage() {
         `/upload-sessions/${session.sessionId}/complete`,
         { parts: parts.map((p) => ({ partNumber: p.partNumber, etag: 'mock' })) },
       );
-      setMessage('上传已完成，等待物化 Worker 处理');
+      setMessage(t('upload.uploadCompleted'));
       setSession((prev) => prev ? { ...prev, status: 'COMPLETED' } : null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '完成上传失败');
+      setError(e instanceof Error ? e.message : t('upload.completeFailed'));
     }
   };
 
@@ -152,11 +146,11 @@ export function UploadPage() {
     if (!session) return;
     try {
       await apiClient.post(`/upload-sessions/${session.sessionId}/cancel`);
-      setMessage('上传已取消');
+      setMessage(t('upload.uploadCancelled'));
       setSession(null);
       setParts([]);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '取消上传失败');
+      setError(e instanceof Error ? e.message : t('upload.cancelFailed'));
     }
   };
 
@@ -166,27 +160,27 @@ export function UploadPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">上传中心</h1>
+      <h1 className="text-2xl font-bold mb-4">{t('upload.title')}</h1>
 
       {!session && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <input
               className="border rounded px-3 py-2"
-              placeholder="资产 ID"
+              placeholder={t('upload.assetIdPlaceholder')}
               value={assetId}
               onChange={(e) => setAssetId(e.target.value)}
             />
             <input
               className="border rounded px-3 py-2"
-              placeholder="版本 ID"
+              placeholder={t('upload.versionIdPlaceholder')}
               value={versionId}
               onChange={(e) => setVersionId(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-600 mb-1">选择文件</label>
+            <label className="block text-sm text-gray-600 mb-1">{t('upload.selectFiles')}</label>
             <input
               type="file"
               multiple
@@ -195,9 +189,8 @@ export function UploadPage() {
             />
             {files.length > 0 && (
               <div className="mt-2 text-sm text-gray-600">
-                {files.length} 个文件, 共{' '}
-                {(files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1)}{' '}
-                MB
+                {t('upload.fileCount', { count: files.length })},{' '}
+                {t('upload.totalSize', { size: (files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1) })}
               </div>
             )}
           </div>
@@ -207,7 +200,7 @@ export function UploadPage() {
             onClick={createSession}
             disabled={!assetId || !versionId || files.length === 0}
           >
-            创建上传会话
+            {t('upload.createSession')}
           </button>
         </div>
       )}
@@ -218,31 +211,30 @@ export function UploadPage() {
       {session && (
         <div className="mt-6 space-y-4">
           <div className="border rounded p-4">
-            <h2 className="font-semibold mb-2">会话信息</h2>
+            <h2 className="font-semibold mb-2">{t('upload.sessionInfo')}</h2>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div>
-                <span className="text-gray-500">会话 ID:</span>{' '}
+                <span className="text-gray-500">{t('upload.sessionId')}:</span>{' '}
                 <span className="font-mono">{session.sessionId}</span>
               </div>
               <div>
-                <span className="text-gray-500">状态:</span>{' '}
+                <span className="text-gray-500">{t('common.status')}:</span>{' '}
                 <span>{session.status}</span>
               </div>
               <div>
-                <span className="text-gray-500">文件数:</span>{' '}
+                <span className="text-gray-500">{t('upload.fileCountLabel')}:</span>{' '}
                 <span>{session.fileCount}</span>
               </div>
               <div>
-                <span className="text-gray-500">总大小:</span>{' '}
+                <span className="text-gray-500">{t('upload.totalSizeLabel')}:</span>{' '}
                 <span>{(session.totalBytes / 1024 / 1024).toFixed(1)} MB</span>
               </div>
             </div>
           </div>
 
-          {/* 进度条 */}
           <div>
             <div className="flex justify-between text-sm mb-1">
-              <span>总进度</span>
+              <span>{t('upload.overallProgress')}</span>
               <span>{overallProgress}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded h-4">
@@ -253,10 +245,9 @@ export function UploadPage() {
             </div>
           </div>
 
-          {/* 分片列表 */}
           <div>
             <h3 className="font-semibold mb-2">
-              分片详情 ({completedParts}/{parts.length})
+              {t('upload.partDetails')} ({completedParts}/{parts.length})
             </h3>
             <div className="max-h-48 overflow-y-auto border rounded">
               {parts.map((p) => (
@@ -296,14 +287,13 @@ export function UploadPage() {
             </div>
           </div>
 
-          {/* 操作按钮 */}
           <div className="flex gap-2">
             {session.status === 'OPEN' && !uploading && (
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 onClick={startUpload}
               >
-                开始上传
+                {t('upload.startUpload')}
               </button>
             )}
             {uploading && !paused && (
@@ -311,7 +301,7 @@ export function UploadPage() {
                 className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
                 onClick={() => setPaused(true)}
               >
-                暂停
+                {t('upload.pause')}
               </button>
             )}
             {uploading && paused && (
@@ -319,7 +309,7 @@ export function UploadPage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 onClick={startUpload}
               >
-                恢复
+                {t('upload.resume')}
               </button>
             )}
             {session.status === 'OPEN' &&
@@ -329,14 +319,14 @@ export function UploadPage() {
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
                   onClick={completeUpload}
                 >
-                  完成上传
+                  {t('upload.completeUpload')}
                 </button>
               )}
             <button
               className="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
               onClick={cancelUpload}
             >
-              取消
+              {t('common.cancel')}
             </button>
           </div>
         </div>

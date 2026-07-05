@@ -5,6 +5,6 @@
  */
 
 /**
- * integration.minio 模块的 infrastructure 基础设施层，承载 MinIO Client 适配实现。当前为骨架占位。
+ * integration.minio 模块的 infrastructure 基础设施层，承载 MinIO Client 适配实现。
  */
 package com.aihub.integration.minio.infrastructure;

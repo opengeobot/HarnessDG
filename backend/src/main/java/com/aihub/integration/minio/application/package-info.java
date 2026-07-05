@@ -5,6 +5,6 @@
  */
 
 /**
- * integration.minio 模块的 application 应用层，承载对象存储集成用例编排。当前为骨架占位。
+ * integration.minio 模块的 application 应用层，承载对象存储集成用例编排。
  */
 package com.aihub.integration.minio.application;

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V15：
+# 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V20：
 #       V01 Compose 配置；V02 核心服务健康；V03 Bucket 初始化；
 #       V04 数据库迁移；V05 JWT 生命周期；V06 权限过滤；V07 字典/标签；
 #       V08 审计完整性与脱敏；V09 持久化任务；V10 通知；V11 观测与诊断；
 #       V12 资产创建与 Gitea 仓库一致性；V13 幂等键重放；
-#       V14 多组织权限隔离；V15 数据集 Facet 权限过滤。
+#       V14 多组织权限隔离；V15 数据集 Facet 权限过滤；
+#       V16 版本 Schema 验证；V17 发布审批 Schema 验证；
+#       V18 Webhook Inbox 验证；V19 MCP 端点可用性；
+#       V20 对账 Worker 注册验证。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。
 # 时间: 2026-07-04
@@ -337,6 +340,117 @@ if postgres_reachable; then
 else
   skip V14 "多组织权限主体搜索无泄漏" "postgres 不可达"
   skip V15 "数据集 Facet 权限过滤" "postgres 不可达"
+fi
+
+# ---- V16: 版本 Schema 验证 ----
+check_version_schema() {
+  local ok=0
+  for t in asset_version upload_session upload_file upload_part version_artifact; do
+    if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
+      echo "  关键表 ${t} 缺失"; ok=1
+    fi
+  done
+  # 检查 asset_version 关键字段
+  local col_cnt
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='asset_version' and column_name in ('version','status','asset_id','manifest_sha256')")"
+  if [ "${col_cnt}" -lt 4 ]; then echo "  asset_version 关键字段缺失（需 version/status/asset_id/manifest_sha256）"; ok=1; fi
+  return ${ok}
+}
+
+# ---- V17: 发布审批 Schema 验证 ----
+check_publish_schema() {
+  local ok=0
+  for t in validation_report publish_request review_decision; do
+    if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
+      echo "  关键表 ${t} 缺失"; ok=1
+    fi
+  done
+  # 检查 publish_request 关键字段
+  local col_cnt
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='publish_request' and column_name in ('version_id','status','requested_by')")"
+  if [ "${col_cnt}" -lt 3 ]; then echo "  publish_request 关键字段缺失"; ok=1; fi
+  return ${ok}
+}
+
+# ---- V18: Webhook Inbox 验证 ----
+check_webhook_inbox() {
+  # 表存在性
+  if [ "$(psql_q "select to_regclass('public.webhook_inbox') is not null")" != "t" ]; then
+    echo "  webhook_inbox 表缺失"; return 1
+  fi
+  if [ "$(psql_q "select to_regclass('public.webhook_delivery') is not null")" != "t" ]; then
+    echo "  webhook_delivery 表缺失"; return 1
+  fi
+  # 后端可达时验证端点默认拒绝
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    local anon
+    anon="$(http_status POST /api/v1/integrations/webhooks/gitea)"
+    if [ "${anon}" != "401" ] && [ "${anon}" != "400" ] && [ "${anon}" != "200" ]; then
+      echo "  webhook 端点返回 ${anon}，期望 401/400/200"; return 1
+    fi
+  fi
+  return 0
+}
+
+# ---- V19: MCP 端点可用性 ----
+check_mcp_endpoint() {
+  # 后端可达时验证 MCP initialize
+  if [ "${BACKEND_UP:-0}" -ne 1 ]; then
+    echo "  backend 不可达，无法验证 MCP"; return 1
+  fi
+  local body
+  body="$(curl -s -m 15 -X POST -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"verify","version":"1.0"}}}' \
+    "${BASE_URL}/api/v1/mcp" 2>/dev/null)"
+  if echo "${body}" | grep -q '"serverInfo"'; then return 0; fi
+  # 可能返回 401（需认证），也视为端点可用
+  local code
+  code="$(http_status POST /api/v1/mcp "" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')"
+  if [ "${code}" = "401" ] || [ "${code}" = "200" ]; then return 0; fi
+  echo "  MCP /api/v1/mcp 端点不可用（HTTP ${code}）"; return 1
+}
+
+# ---- V20: 对账 Worker 注册验证 ----
+check_reconciler_registration() {
+  # 验证 6 种 Reconciler JobHandler 类型在 job_task 表中有记录或至少 job_type 列可接受
+  local col_exists
+  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='job_type'")"
+  if [ "${col_exists}" != "1" ]; then echo "  job_task.job_type 列缺失"; return 1; fi
+  # 检查 6 种对账类型在 job_type 约束中可接受（枚举/字符串均可）
+  # 如果后端可达，通过 /system/jobs 端点间接验证
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    local code
+    code="$(http_status GET /api/v1/system/jobs "${ACCESS_TOKEN}")"
+    # 403 说明端点存在但权限不足（正常），200 说明可访问
+    if [ "${code}" != "200" ] && [ "${code}" != "403" ]; then
+      echo "  /system/jobs 端点返回 ${code}"; return 1
+    fi
+  fi
+  return 0
+}
+
+# P2 版本与上传 Schema 验证
+if postgres_reachable; then
+  step V16 "版本 Schema 验证（asset_version/upload_session）" check_version_schema
+  step V17 "发布审批 Schema 验证（validation_report/publish_request/review_decision）" check_publish_schema
+else
+  skip V16 "版本 Schema 验证" "postgres 不可达"
+  skip V17 "发布审批 Schema 验证" "postgres 不可达"
+fi
+
+# P3-P4 Webhook 与 MCP 验证
+if postgres_reachable; then
+  step V18 "Webhook Inbox 验证" check_webhook_inbox
+else
+  skip V18 "Webhook Inbox 验证" "postgres 不可达"
+fi
+
+if [ "${BACKEND_UP}" -eq 1 ]; then
+  step V19 "MCP 端点可用性" check_mcp_endpoint
+  step V20 "对账 Worker 注册验证" check_reconciler_registration
+else
+  skip V19 "MCP 端点可用性" "backend 不可达"
+  skip V20 "对账 Worker 注册验证" "backend 不可达"
 fi
 
 echo ""

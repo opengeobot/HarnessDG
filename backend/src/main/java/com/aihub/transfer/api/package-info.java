@@ -5,6 +5,6 @@
  */
 
 /**
- * transfer 模块（上传会话、预签名 URL、下载授权）的 api 适配层。当前为骨架占位。
+ * transfer 模块（上传会话、预签名 URL、下载授权）的 api 适配层。
  */
 package com.aihub.transfer.api;

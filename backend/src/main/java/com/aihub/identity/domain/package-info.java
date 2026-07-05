@@ -7,6 +7,6 @@
 /**
  * identity 模块的 domain 领域层。
  *
- * <p>承载领域模型与领域服务，不依赖 Spring、MyBatis 或外部 SDK。当前为骨架占位。
+ * <p>承载领域模型与领域服务，不依赖 Spring、MyBatis 或外部 SDK。
  */
 package com.aihub.identity.domain;

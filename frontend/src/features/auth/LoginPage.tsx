@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { App, Button, Card, Form, Input, Typography } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth';
 import { isApiError } from '@/shared/api';
 import { useDocumentTitle } from '@/shared/hooks';
@@ -18,7 +19,8 @@ interface LocationState {
 }
 
 export function LoginPage() {
-  useDocumentTitle('登录');
+  const { t } = useTranslation();
+  useDocumentTitle(t('login.title'));
   const { message } = App.useApp();
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -31,15 +33,15 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       const principal = await login(values);
-      message.success('登录成功');
+      message.success(t('login.success'));
       if (principal.forcePasswordChange) {
-        message.warning('首次登录请先修改密码');
+        message.warning(t('login.forceChangePassword'));
         navigate('/profile', { replace: true });
         return;
       }
       navigate(from, { replace: true });
     } catch (error) {
-      message.error(isApiError(error) ? error.message : '登录失败，请稍后重试');
+      message.error(isApiError(error) ? error.message : t('login.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -58,30 +60,30 @@ export function LoginPage() {
     >
       <Card style={{ width: 380 }}>
         <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
-          AI 资产管理平台
+          {t('login.platformTitle')}
         </Typography.Title>
         <Form<LoginRequest> layout="vertical" onFinish={handleSubmit} disabled={submitting}>
           <Form.Item
             name="username"
-            label="用户名"
-            rules={[{ required: true, message: '请输入用户名' }]}
+            label={t('login.username')}
+            rules={[{ required: true, message: t('login.usernameRequired') }]}
           >
-            <Input prefix={<UserOutlined />} placeholder="用户名" autoComplete="username" />
+            <Input prefix={<UserOutlined />} placeholder={t('login.username')} autoComplete="username" />
           </Form.Item>
           <Form.Item
             name="password"
-            label="密码"
-            rules={[{ required: true, message: '请输入密码' }]}
+            label={t('login.password')}
+            rules={[{ required: true, message: t('login.passwordRequired') }]}
           >
             <Input.Password
               prefix={<LockOutlined />}
-              placeholder="密码"
+              placeholder={t('login.password')}
               autoComplete="current-password"
             />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0 }}>
             <Button type="primary" htmlType="submit" block loading={submitting}>
-              登录
+              {t('login.title')}
             </Button>
           </Form.Item>
         </Form>

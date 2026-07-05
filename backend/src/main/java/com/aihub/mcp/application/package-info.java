@@ -5,6 +5,6 @@
  */
 
 /**
- * mcp 模块的 application 应用层，承载 Tool 白名单与调用编排。当前为骨架占位。
+ * mcp 模块的 application 应用层，承载 Tool 白名单与调用编排。
  */
 package com.aihub.mcp.application;

@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -41,7 +42,8 @@ const STATUS_COLOR: Record<PrincipalStatus, string> = {
 };
 
 export function AgentsPage() {
-  useDocumentTitle('Agent 管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.agents.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -54,7 +56,7 @@ export function AgentsPage() {
   const query = useQuery({ queryKey: ['admin', 'agents'], queryFn: listAgents });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateAgentRequest) => createAgent(payload),
@@ -70,7 +72,7 @@ export function AgentsPage() {
   const enableMutation = useMutation({
     mutationFn: (agentId: string) => enableAgent(agentId),
     onSuccess: () => {
-      message.success('已启用');
+      message.success(t('admin.users.enabled'));
       void invalidate();
     },
     onError,
@@ -79,7 +81,7 @@ export function AgentsPage() {
   const disableMutation = useMutation({
     mutationFn: (agentId: string) => disableAgent(agentId),
     onSuccess: () => {
-      message.success('已禁用');
+      message.success(t('admin.users.disabled'));
       void invalidate();
     },
     onError,
@@ -89,7 +91,7 @@ export function AgentsPage() {
     mutationFn: (vars: { agentId: string; tools: string[] }) =>
       updateAgentToolAllowlist(vars.agentId, { tools: vars.tools }),
     onSuccess: () => {
-      message.success('白名单已更新');
+      message.success(t('admin.agents.allowlistUpdated'));
       setAllowlistTarget(null);
       void invalidate();
     },
@@ -109,17 +111,17 @@ export function AgentsPage() {
         </Space>
       ),
     },
-    { title: '类型', dataIndex: 'agentType', key: 'agentType' },
-    { title: '厂商', dataIndex: 'vendor', key: 'vendor', render: (v: string) => v || '-' },
-    { title: '最大敏感级', dataIndex: 'maxSensitivityLevel', key: 'maxSensitivityLevel' },
+    { title: t('admin.agents.agentType'), dataIndex: 'agentType', key: 'agentType' },
+    { title: t('admin.agents.vendor'), dataIndex: 'vendor', key: 'vendor', render: (v: string) => v || '-' },
+    { title: t('admin.agents.maxSensitivityLevel'), dataIndex: 'maxSensitivityLevel', key: 'maxSensitivityLevel' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: PrincipalStatus) => <Tag color={STATUS_COLOR[status]}>{status}</Tag>,
     },
     {
-      title: 'Tool 白名单',
+      title: t('admin.agents.toolAllowlist'),
       dataIndex: 'toolAllowlist',
       key: 'toolAllowlist',
       render: (tools: string[]) => (
@@ -129,21 +131,21 @@ export function AgentsPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Space size="small" wrap>
           {record.status === 'DISABLED' ? (
             <Button type="link" size="small" onClick={() => enableMutation.mutate(record.agentId)}>
-              启用
+              {t('common.enable')}
             </Button>
           ) : (
             <Popconfirm
-              title="确认禁用该 Agent？凭据与 Token 将被吊销。"
+              title={t('admin.agents.confirmDisable')}
               onConfirm={() => disableMutation.mutate(record.agentId)}
             >
               <Button type="link" size="small" danger>
-                禁用
+                {t('common.disable')}
               </Button>
             </Popconfirm>
           )}
@@ -155,7 +157,7 @@ export function AgentsPage() {
               allowlistForm.setFieldsValue({ tools: record.toolAllowlist });
             }}
           >
-            白名单
+            {t('admin.agents.allowlist')}
           </Button>
         </Space>
       ),
@@ -166,12 +168,12 @@ export function AgentsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          Agent 管理
+          {t('admin.agents.title')}
         </Typography.Title>
         <Space>
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
           <Button type="primary" onClick={() => setCreateOpen(true)}>
-            注册 Agent
+            {t('admin.agents.registerAgent')}
           </Button>
         </Space>
       </Flex>
@@ -186,7 +188,7 @@ export function AgentsPage() {
       </QueryBoundary>
 
       <Modal
-        title="注册 Agent"
+        title={t('admin.agents.registerAgent')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -200,31 +202,31 @@ export function AgentsPage() {
           initialValues={{ maxSensitivityLevel: 0, scopes: [] }}
           onFinish={(values) => createMutation.mutate(values as CreateAgentRequest)}
         >
-          <Form.Item name="displayName" label="显示名" rules={[{ required: true }]}>
+          <Form.Item name="displayName" label={t('profile.displayName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="agentType" label="类型" rules={[{ required: true }]}>
-            <Input placeholder="如 openclaw" />
+          <Form.Item name="agentType" label={t('common.type')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.agents.agentTypePlaceholder')} />
           </Form.Item>
-          <Form.Item name="vendor" label="厂商">
+          <Form.Item name="vendor" label={t('admin.agents.vendor')}>
             <Input />
           </Form.Item>
-          <Form.Item name="maxSensitivityLevel" label="最大敏感级" rules={[{ required: true }]}>
+          <Form.Item name="maxSensitivityLevel" label={t('admin.agents.maxSensitivityLevel')} rules={[{ required: true }]}>
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="scopes" label="授予 Scope">
-            <Select mode="tags" placeholder="输入权限编码，如 asset:read" />
+          <Form.Item name="scopes" label={t('admin.agents.grantScopes')}>
+            <Select mode="tags" placeholder={t('admin.agents.scopesPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title="一次性 Agent 凭据"
+        title={t('admin.agents.credentialTitle')}
         open={credential !== null}
         onCancel={() => setCredential(null)}
         footer={[
           <Button key="close" type="primary" onClick={() => setCredential(null)}>
-            我已妥善保存
+            {t('admin.agents.credentialSaved')}
           </Button>,
         ]}
         destroyOnClose
@@ -232,8 +234,8 @@ export function AgentsPage() {
         <Alert
           type="warning"
           showIcon
-          message="凭据仅显示一次"
-          description="请立即复制并安全保存；关闭后无法再次查看。"
+          message={t('admin.agents.credentialWarning')}
+          description={t('admin.agents.credentialDesc')}
           style={{ marginBottom: 12 }}
         />
         <Typography.Paragraph copyable code>
@@ -242,7 +244,7 @@ export function AgentsPage() {
       </Modal>
 
       <Modal
-        title="编辑 Tool 白名单"
+        title={t('admin.agents.editAllowlist')}
         open={allowlistTarget !== null}
         onCancel={() => setAllowlistTarget(null)}
         onOk={() => allowlistForm.submit()}
@@ -260,8 +262,8 @@ export function AgentsPage() {
             allowlistMutation.mutate({ agentId: allowlistTarget.agentId, tools: values.tools ?? [] });
           }}
         >
-          <Form.Item name="tools" label="允许调用的 MCP Tool">
-            <Select mode="tags" placeholder="输入 tool 名称，如 asset_search" />
+          <Form.Item name="tools" label={t('admin.agents.allowedTools')}>
+            <Select mode="tags" placeholder={t('admin.agents.toolPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>

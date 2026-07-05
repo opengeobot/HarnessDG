@@ -5,6 +5,6 @@
  */
 
 /**
- * asset 模块的 application 应用层，承载资产用例编排与授权过滤。当前为骨架占位。
+ * asset 模块的 application 应用层，承载资产用例编排与授权过滤。
  */
 package com.aihub.asset.application;

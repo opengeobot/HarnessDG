@@ -5,6 +5,6 @@
  */
 
 /**
- * mcp 模块的 domain 领域层，承载工具描述与权限映射模型。当前为骨架占位。
+ * mcp 模块的 domain 领域层，承载工具描述与权限映射模型。
  */
 package com.aihub.mcp.domain;

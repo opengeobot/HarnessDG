@@ -5,6 +5,6 @@
  */
 
 /**
- * mcp 模块（MCP Tools/Resources/Prompts）的 api 适配层，必须复用 Application Service。当前为骨架占位。
+ * mcp 模块（MCP Tools/Resources/Prompts）的 api 适配层，必须复用 Application Service。
  */
 package com.aihub.mcp.api;

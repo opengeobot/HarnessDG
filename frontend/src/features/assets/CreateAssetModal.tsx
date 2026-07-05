@@ -5,6 +5,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App, Form, Input, Modal, Select } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { isApiError } from '@/shared/api';
 import { createAsset } from './api';
 import type { AssetType, CreateAssetRequest, Visibility } from './types';
@@ -38,18 +39,19 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
   const [form] = Form.useForm<FormValues>();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const assetType = Form.useWatch('type', form);
 
   const mutation = useMutation({
     mutationFn: (payload: CreateAssetRequest) => createAsset(payload),
     onSuccess: (asset) => {
-      message.success(`已登记资产 ${asset.namespace}/${asset.name}`);
+      message.success(`${t('assets.create.title')} ${asset.namespace}/${asset.name}`);
       void queryClient.invalidateQueries({ queryKey: ['assets'] });
       form.resetFields();
       onClose();
     },
     onError: (error) => {
-      const text = isApiError(error) ? error.message : '创建失败';
+      const text = isApiError(error) ? error.message : t('discussion.createFailed');
       message.error(text);
     },
   });
@@ -91,13 +93,13 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
 
   return (
     <Modal
-      title="登记资产"
+      title={t('assets.create.title')}
       open={open}
       onOk={handleOk}
       onCancel={onClose}
       confirmLoading={mutation.isPending}
-      okText="创建"
-      cancelText="取消"
+      okText={t('common.create')}
+      cancelText={t('common.cancel')}
       destroyOnClose
     >
       <Form
@@ -106,28 +108,28 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
         initialValues={{ type: 'MODEL', visibility: 'INTERNAL' }}
         preserve={false}
       >
-        <Form.Item name="type" label="类型" rules={[{ required: true }]}>
+        <Form.Item name="type" label={t('common.type')} rules={[{ required: true }]}>
           <Select
             options={[
-              { value: 'MODEL', label: '模型' },
-              { value: 'DATASET', label: '数据集' },
+              { value: 'MODEL', label: t('assets.model') },
+              { value: 'DATASET', label: t('assets.dataset') },
             ]}
           />
         </Form.Item>
-        <Form.Item name="organizationId" label="所属组织">
+        <Form.Item name="organizationId" label={t('assets.create.org')}>
           <Input placeholder="org_01J..." />
         </Form.Item>
-        <Form.Item name="projectId" label="所属项目">
+        <Form.Item name="projectId" label={t('assets.create.project')}>
           <Input placeholder="prj_01J..." />
         </Form.Item>
         <Form.Item
           name="namespace"
-          label="命名空间"
+          label={t('assets.create.namespace')}
           rules={[
-            { required: true, message: '请输入命名空间' },
+            { required: true, message: t('assets.create.namespaceRequired') },
             {
               pattern: /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/,
-              message: '仅小写字母、数字与连字符',
+              message: t('assets.create.namespacePattern'),
             },
           ]}
         >
@@ -135,62 +137,62 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
         </Form.Item>
         <Form.Item
           name="name"
-          label="名称"
+          label={t('common.name')}
           rules={[
-            { required: true, message: '请输入名称' },
+            { required: true, message: t('assets.create.nameRequired') },
             {
               pattern: /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/,
-              message: '仅小写字母、数字与连字符',
+              message: t('assets.create.namespacePattern'),
             },
           ]}
         >
           <Input placeholder="qwen-domain-7b" />
         </Form.Item>
-        <Form.Item name="displayName" label="展示名称">
-          <Input placeholder="领域问答模型" />
+        <Form.Item name="displayName" label={t('assets.create.displayNameLabel')}>
+          <Input />
         </Form.Item>
-        <Form.Item name="description" label="描述">
-          <Input.TextArea rows={2} placeholder="资产卡片摘要" />
+        <Form.Item name="description" label={t('common.description')}>
+          <Input.TextArea rows={2} />
         </Form.Item>
-        <Form.Item name="visibility" label="可见性" rules={[{ required: true }]}>
+        <Form.Item name="visibility" label={t('assets.create.visibility')} rules={[{ required: true }]}>
           <Select
             options={[
-              { value: 'PRIVATE', label: '私有' },
-              { value: 'INTERNAL', label: '内部' },
-              { value: 'PUBLIC', label: '公开' },
+              { value: 'PRIVATE', label: t('assets.create.private') },
+              { value: 'INTERNAL', label: t('assets.create.internal') },
+              { value: 'PUBLIC', label: t('assets.create.public') },
             ]}
           />
         </Form.Item>
-        <Form.Item name="owners" label="Owner">
+        <Form.Item name="owners" label={t('assets.create.ownerLabel')}>
           <Select mode="tags" placeholder="team-nlp" tokenSeparators={[',']} />
         </Form.Item>
-        <Form.Item name="tags" label="标签（自由）">
+        <Form.Item name="tags" label={t('assets.create.freeTags')}>
           <Select mode="tags" placeholder="text-generation" tokenSeparators={[',']} />
         </Form.Item>
-        <Form.Item name="tagIds" label="受控标签 ID">
+        <Form.Item name="tagIds" label={t('assets.create.controlledTagIds')}>
           <Select mode="tags" placeholder="tag_01J..." tokenSeparators={[',']} />
         </Form.Item>
-        <Form.Item name="license" label="许可证">
+        <Form.Item name="license" label={t('assets.create.license')}>
           <Input placeholder="Apache-2.0" />
         </Form.Item>
         {assetType === 'MODEL' ? (
           <>
-            <Form.Item name="framework" label="框架">
+            <Form.Item name="framework" label={t('assets.detail.framework')}>
               <Input placeholder="pytorch" />
             </Form.Item>
-            <Form.Item name="task" label="任务">
+            <Form.Item name="task" label={t('assets.detail.task')}>
               <Input placeholder="text-generation" />
             </Form.Item>
-            <Form.Item name="architecture" label="架构">
+            <Form.Item name="architecture" label={t('assets.detail.architecture')}>
               <Input placeholder="decoder-only" />
             </Form.Item>
           </>
         ) : (
           <>
-            <Form.Item name="format" label="数据格式">
+            <Form.Item name="format" label={t('assets.create.dataFormat')}>
               <Input placeholder="parquet" />
             </Form.Item>
-            <Form.Item name="modality" label="模态">
+            <Form.Item name="modality" label={t('assets.detail.modality')}>
               <Input placeholder="image" />
             </Form.Item>
           </>

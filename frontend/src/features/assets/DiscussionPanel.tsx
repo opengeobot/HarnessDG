@@ -17,6 +17,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { isApiError } from '@/shared/api';
 import {
   createComment,
@@ -33,6 +34,7 @@ interface DiscussionPanelProps {
 export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const [newTitle, setNewTitle] = useState('');
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -51,32 +53,32 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
   const createThreadMut = useMutation({
     mutationFn: () => createThread(assetId, newTitle),
     onSuccess: () => {
-      message.success('线程已创建');
+      message.success(t('discussion.threadCreated'));
       setNewTitle('');
       void queryClient.invalidateQueries({ queryKey: ['threads', assetId] });
     },
-    onError: (err: unknown) => message.error(isApiError(err) ? err.message : '创建失败'),
+    onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.createFailed')),
   });
 
   const createCommentMut = useMutation({
     mutationFn: () => createComment(selectedThread!, newComment),
     onSuccess: () => {
-      message.success('评论已发表');
+      message.success(t('discussion.commentPosted'));
       setNewComment('');
       void queryClient.invalidateQueries({ queryKey: ['comments', selectedThread] });
       void queryClient.invalidateQueries({ queryKey: ['threads', assetId] });
     },
-    onError: (err: unknown) => message.error(isApiError(err) ? err.message : '评论失败'),
+    onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
   });
 
   const threads = threadsQuery.data?.items ?? [];
 
   return (
-    <Card title="讨论">
+    <Card title={t('discussion.title')}>
       <Flex vertical gap={12}>
         <Flex gap={8}>
           <Input
-            placeholder="新建讨论标题"
+            placeholder={t('discussion.newTitlePlaceholder')}
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             onPressEnter={() => newTitle.trim() && createThreadMut.mutate()}
@@ -87,14 +89,14 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
             loading={createThreadMut.isPending}
             onClick={() => createThreadMut.mutate()}
           >
-            新建
+            {t('discussion.newThread')}
           </Button>
         </Flex>
 
         <List
           dataSource={threads}
           loading={threadsQuery.isLoading}
-          locale={{ emptyText: <Empty description="暂无讨论" /> }}
+          locale={{ emptyText: <Empty description={t('discussion.noDiscussions')} /> }}
           renderItem={(thread: ThreadView) => (
             <List.Item
               style={{
@@ -112,7 +114,7 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
                   </Tag>
                 </Space>
                 <Space>
-                  <Typography.Text type="secondary">{thread.commentCount} 评论</Typography.Text>
+                  <Typography.Text type="secondary">{thread.commentCount} {t('discussion.comments')}</Typography.Text>
                   <Typography.Text type="secondary">{thread.createdBy}</Typography.Text>
                 </Space>
               </Flex>
@@ -123,14 +125,14 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
         {selectedThread && (
           <Card
             size="small"
-            title={`评论 - ${threads.find((t) => t.threadId === selectedThread)?.title}`}
-            extra={<Button size="small" onClick={() => setSelectedThread(null)}>关闭</Button>}
+            title={`${t('discussion.commentsTitle')} - ${threads.find((t2) => t2.threadId === selectedThread)?.title}`}
+            extra={<Button size="small" onClick={() => setSelectedThread(null)}>{t('common.close')}</Button>}
           >
             <Flex vertical gap={8}>
               <List
                 dataSource={commentsQuery.data ?? []}
                 loading={commentsQuery.isLoading}
-                locale={{ emptyText: <Empty description="暂无评论" /> }}
+                locale={{ emptyText: <Empty description={t('discussion.noComments')} /> }}
                 renderItem={(comment: CommentView) => (
                   <List.Item>
                     <Flex vertical gap={4} style={{ width: '100%' }}>
@@ -153,7 +155,7 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
                         </Typography.Paragraph>
                       ) : (
                         <Typography.Text type="secondary">
-                          [{comment.status === 'RETRACTED' ? '已撤回' : '已隐藏'}]
+                          [{comment.status === 'RETRACTED' ? t('discussion.retracted') : t('discussion.hidden')}]
                         </Typography.Text>
                       )}
                     </Flex>
@@ -163,7 +165,7 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
               <Flex gap={8}>
                 <Input.TextArea
                   rows={2}
-                  placeholder="输入评论..."
+                  placeholder={t('discussion.commentPlaceholder')}
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   maxLength={10000}
@@ -175,7 +177,7 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
                   loading={createCommentMut.isPending}
                   onClick={() => createCommentMut.mutate()}
                 >
-                  发表
+                  {t('discussion.publish')}
                 </Button>
               </Flex>
             </Flex>

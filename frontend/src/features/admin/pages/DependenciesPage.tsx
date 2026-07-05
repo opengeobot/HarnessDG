@@ -4,6 +4,7 @@
  * 时间: 2026-07-01
  * 作者: AxeXie
  */
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Card, Descriptions, Flex, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -23,7 +24,8 @@ const HEALTH_COLOR: Record<DependencyHealth, string> = {
 };
 
 export function DependenciesPage() {
-  useDocumentTitle('系统依赖');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.dependencies.title'));
 
   const depsQuery = useQuery({
     queryKey: ['admin', 'dependencies'],
@@ -36,15 +38,15 @@ export function DependenciesPage() {
   });
 
   const columns: ColumnsType<DependencyStatus> = [
-    { title: '组件', dataIndex: 'name', key: 'name' },
+    { title: t('admin.dependencies.component'), dataIndex: 'name', key: 'name' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: DependencyHealth) => <Tag color={HEALTH_COLOR[status]}>{status}</Tag>,
     },
     {
-      title: '延迟 (ms)',
+      title: t('admin.dependencies.latencyMs'),
       dataIndex: 'latencyMs',
       key: 'latencyMs',
       render: (value: number) => value ?? '-',
@@ -54,13 +56,13 @@ export function DependenciesPage() {
   return (
     <Flex vertical gap={16}>
       <Typography.Title level={4} style={{ margin: 0 }}>
-        系统依赖
+        {t('admin.dependencies.title')}
       </Typography.Title>
 
       <Card
         title={
           <Space>
-            依赖健康
+            {t('admin.dependencies.health')}
             {depsQuery.data ? (
               <Tag color={HEALTH_COLOR[depsQuery.data.status]}>{depsQuery.data.status}</Tag>
             ) : null}
@@ -83,7 +85,7 @@ export function DependenciesPage() {
         </QueryBoundary>
       </Card>
 
-      <Card title="平台指标摘要">
+      <Card title={t('admin.dependencies.metricsSummary')}>
         <QueryBoundary
           isLoading={metricsQuery.isLoading}
           isError={metricsQuery.isError}
@@ -91,16 +93,16 @@ export function DependenciesPage() {
           onRetry={() => metricsQuery.refetch()}
         >
           <Descriptions column={1} bordered size="small">
-            <Descriptions.Item label="生成时间">
+            <Descriptions.Item label={t('admin.dependencies.generatedAt')}>
               {metricsQuery.data?.generatedAt}
             </Descriptions.Item>
             <Descriptions.Item label="API">
               <Typography.Text code>{JSON.stringify(metricsQuery.data?.api ?? {})}</Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label="任务">
+            <Descriptions.Item label={t('admin.dependencies.jobs')}>
               <Typography.Text code>{JSON.stringify(metricsQuery.data?.jobs ?? {})}</Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label="依赖">
+            <Descriptions.Item label={t('admin.dependencies.dependencies')}>
               <Typography.Text code>
                 {JSON.stringify(metricsQuery.data?.dependencies ?? {})}
               </Typography.Text>

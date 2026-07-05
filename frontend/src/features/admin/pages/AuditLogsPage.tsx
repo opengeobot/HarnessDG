@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Button, Flex, Form, Input, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -19,7 +20,8 @@ const RESULT_COLOR: Record<AuditResult, string> = {
 };
 
 export function AuditLogsPage() {
-  useDocumentTitle('审计日志');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.auditLogs.title'));
   const [filter, setFilter] = useState<ListAuditLogsParams>({});
   const [form] = Form.useForm<ListAuditLogsParams>();
 
@@ -36,28 +38,28 @@ export function AuditLogsPage() {
   );
 
   const columns: ColumnsType<AuditLogView> = [
-    { title: '时间', dataIndex: 'occurredAt', key: 'occurredAt' },
-    { title: '主体', dataIndex: 'principalId', key: 'principalId' },
-    { title: '动作', dataIndex: 'action', key: 'action' },
+    { title: t('admin.auditLogs.time'), dataIndex: 'occurredAt', key: 'occurredAt' },
+    { title: t('admin.auditLogs.principal'), dataIndex: 'principalId', key: 'principalId' },
+    { title: t('admin.auditLogs.action'), dataIndex: 'action', key: 'action' },
     {
-      title: '资源',
+      title: t('admin.auditLogs.resource'),
       key: 'resource',
       render: (_, record) => `${record.resourceType}:${record.resourceId}`,
     },
     {
-      title: '结果',
+      title: t('admin.auditLogs.result'),
       dataIndex: 'result',
       key: 'result',
       render: (value: AuditResult) => <Tag color={RESULT_COLOR[value]}>{value}</Tag>,
     },
-    { title: '错误码', dataIndex: 'errorCode', key: 'errorCode', render: (v: string) => v || '-' },
+    { title: t('admin.auditLogs.errorCode'), dataIndex: 'errorCode', key: 'errorCode', render: (v: string) => v || '-' },
     { title: 'Trace', dataIndex: 'traceId', key: 'traceId', render: (v: string) => v || '-' },
   ];
 
   return (
     <Flex vertical gap={16}>
       <Typography.Title level={4} style={{ margin: 0 }}>
-        审计日志
+        {t('admin.auditLogs.title')}
       </Typography.Title>
 
       <Form
@@ -72,18 +74,18 @@ export function AuditLogsPage() {
         }
       >
         <Form.Item name="principalId">
-          <Input allowClear placeholder="主体 ID" style={{ width: 200 }} />
+          <Input allowClear placeholder={t('admin.auditLogs.principalPlaceholder')} style={{ width: 200 }} />
         </Form.Item>
         <Form.Item name="action">
-          <Input allowClear placeholder="动作" style={{ width: 180 }} />
+          <Input allowClear placeholder={t('admin.auditLogs.actionPlaceholder')} style={{ width: 180 }} />
         </Form.Item>
         <Form.Item name="resourceId">
-          <Input allowClear placeholder="资源 ID" style={{ width: 200 }} />
+          <Input allowClear placeholder={t('admin.auditLogs.resourceIdPlaceholder')} style={{ width: 200 }} />
         </Form.Item>
         <Form.Item>
           <Space>
             <Button type="primary" htmlType="submit">
-              查询
+              {t('common.query')}
             </Button>
             <Button
               onClick={() => {
@@ -91,7 +93,7 @@ export function AuditLogsPage() {
                 setFilter({});
               }}
             >
-              重置
+              {t('admin.auditLogs.reset')}
             </Button>
           </Space>
         </Form.Item>
@@ -107,7 +109,7 @@ export function AuditLogsPage() {
         {query.hasNextPage ? (
           <Flex justify="center" style={{ marginTop: 16 }}>
             <Button onClick={() => query.fetchNextPage()} loading={query.isFetchingNextPage}>
-              加载更多
+              {t('assets.loadMore')}
             </Button>
           </Flex>
         ) : null}

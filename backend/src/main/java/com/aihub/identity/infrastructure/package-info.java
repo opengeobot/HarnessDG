@@ -7,6 +7,6 @@
 /**
  * identity 模块的 infrastructure 基础设施层。
  *
- * <p>承载持久化 Mapper 与外部系统适配实现，仅供本模块内部使用，禁止被其他模块引用。当前为骨架占位。
+ * <p>承载持久化 Mapper 与外部系统适配实现，仅供本模块内部使用，禁止被其他模块引用。
  */
 package com.aihub.identity.infrastructure;

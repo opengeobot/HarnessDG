@@ -5,6 +5,6 @@
  */
 
 /**
- * audit 模块的 domain 领域层，承载审计事件模型与不可篡改规则。当前为骨架占位。
+ * audit 模块的 domain 领域层，承载审计事件模型与不可篡改规则。
  */
 package com.aihub.audit.domain;

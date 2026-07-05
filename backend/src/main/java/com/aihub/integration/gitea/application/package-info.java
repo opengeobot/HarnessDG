@@ -5,6 +5,6 @@
  */
 
 /**
- * integration.gitea 模块的 application 应用层，承载 Gitea 集成用例编排。当前为骨架占位。
+ * integration.gitea 模块的 application 应用层，承载 Gitea 集成用例编排。
  */
 package com.aihub.integration.gitea.application;

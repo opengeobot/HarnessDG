@@ -5,13 +5,15 @@
  */
 import { PlaceholderPage } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
+import { useTranslation } from 'react-i18next';
 
 export function AccessPage() {
-  useDocumentTitle('访问与凭据');
+  const { t } = useTranslation();
+  useDocumentTitle(t('access.title'));
   return (
     <PlaceholderPage
-      title="访问与凭据"
-      description="成员、Agent、Token 与 Scope 管理将在 P1 实现。"
+      title={t('access.title')}
+      description={t('access.description')}
     />
   );
 }

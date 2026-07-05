@@ -5,6 +5,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -25,7 +26,8 @@ import { listConfigurations, updateConfiguration } from '../api';
 import type { ConfigurationView } from '../types';
 
 export function ConfigurationsPage() {
-  useDocumentTitle('配置管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.configurations.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -42,11 +44,11 @@ export function ConfigurationsPage() {
         confirmation: vars.confirmation || null,
       }),
     onSuccess: () => {
-      message.success('配置已更新');
+      message.success(t('admin.configurations.configUpdated'));
       setEditing(null);
       void queryClient.invalidateQueries({ queryKey: ['admin', 'configurations'] });
     },
-    onError: (error) => message.error(isApiError(error) ? error.message : '操作失败'),
+    onError: (error) => message.error(isApiError(error) ? error.message : t('common.operationFailed')),
   });
 
   const parseValue = (raw: string, valueType: ConfigurationView['valueType']): unknown => {
@@ -63,15 +65,15 @@ export function ConfigurationsPage() {
   };
 
   const columns: ColumnsType<ConfigurationView> = [
-    { title: '配置键', dataIndex: 'configKey', key: 'configKey' },
+    { title: t('admin.configurations.configKey'), dataIndex: 'configKey', key: 'configKey' },
     {
-      title: '类型',
+      title: t('common.type'),
       dataIndex: 'valueType',
       key: 'valueType',
       render: (type: string) => <Tag>{type}</Tag>,
     },
     {
-      title: '当前值',
+      title: t('admin.configurations.currentValue'),
       dataIndex: 'value',
       key: 'value',
       render: (value: unknown) => (
@@ -81,14 +83,14 @@ export function ConfigurationsPage() {
       ),
     },
     {
-      title: '热更新',
+      title: t('admin.configurations.hotReloadable'),
       dataIndex: 'hotReloadable',
       key: 'hotReloadable',
-      render: (value: boolean) => (value ? '是' : '否'),
+      render: (value: boolean) => (value ? t('common.yes') : t('common.no')),
     },
-    { title: '版本', dataIndex: 'version', key: 'version' },
+    { title: t('admin.configurations.version'), dataIndex: 'version', key: 'version' },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Button
@@ -103,7 +105,7 @@ export function ConfigurationsPage() {
             form.setFieldsValue({ value: initial, confirmation: undefined });
           }}
         >
-          编辑
+          {t('common.edit')}
         </Button>
       ),
     },
@@ -113,9 +115,9 @@ export function ConfigurationsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          配置管理
+          {t('admin.configurations.title')}
         </Typography.Title>
-        <Button onClick={() => query.refetch()}>刷新</Button>
+        <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
       </Flex>
 
       <QueryBoundary
@@ -132,7 +134,7 @@ export function ConfigurationsPage() {
       </QueryBoundary>
 
       <Modal
-        title={editing ? `编辑配置 · ${editing.configKey}` : '编辑配置'}
+        title={editing ? t('admin.configurations.editConfigOf', { key: editing.configKey }) : t('admin.configurations.editConfig')}
         open={editing !== null}
         onCancel={() => setEditing(null)}
         onOk={() => form.submit()}
@@ -156,11 +158,11 @@ export function ConfigurationsPage() {
                 confirmation: values.confirmation,
               });
             } catch {
-              message.error('值格式无效，请检查（JSON 需为合法 JSON）');
+              message.error(t('admin.configurations.invalidJson'));
             }
           }}
         >
-          <Form.Item name="value" label={`值 (${editing?.valueType})`} rules={[{ required: true }]}>
+          <Form.Item name="value" label={t('admin.configurations.valueLabel', { type: editing?.valueType })} rules={[{ required: true }]}>
             {editing?.valueType === 'JSON' ? (
               <Input.TextArea rows={6} />
             ) : (
@@ -169,8 +171,8 @@ export function ConfigurationsPage() {
           </Form.Item>
           <Form.Item
             name="confirmation"
-            label="二次确认"
-            extra="安全/发布策略配置按服务端要求提供确认值"
+            label={t('admin.configurations.confirmation')}
+            extra={t('admin.configurations.confirmationExtra')}
           >
             <Input />
           </Form.Item>

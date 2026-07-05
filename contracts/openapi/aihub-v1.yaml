@@ -1,11 +1,12 @@
-# AIHub Platform API - P0-B 目标契约
+# AIHub Platform API - P0-B→P5 全阶段实施契约
 # 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5、8、11、15、16 章
-# 说明：本文件同时描述 P0-B 目标公共契约与已存在但冻结整改的 P1 资产端点。
-#       x-implementation-status 用于区分 planned/partial，不能据此声称能力已经实现。
+# 说明：P0-B 平台基础 + P1 资产目录 + P2 版本传输 + P3 发布治理 +
+#       P4 Agent 集成 + P5 质量运营均已实施。
+#       x-implementation-status 用于区分 planned/partial/implemented。
 # 作者：AxeXie
 openapi: 3.1.0
-x-contract-status: target-p0-b
-x-document-version: 2.2
+x-contract-status: implemented-p5
+x-document-version: 3.0
 info:
   title: AIHub Platform API
   version: v1
@@ -42,7 +43,7 @@ paths:
       summary: 本地用户登录并签发 JWT
       tags: [auth]
       security: []
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-audit-event: AUTH_LOGIN_SUCCEEDED_OR_FAILED
       requestBody:
         required: true
@@ -69,7 +70,7 @@ paths:
       summary: 轮换刷新 JWT 并签发新访问 JWT
       tags: [auth]
       security: []
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-audit-event: AUTH_TOKEN_REFRESHED_OR_REPLAY_REJECTED
       requestBody:
         required: false
@@ -96,7 +97,7 @@ paths:
       summary: Agent/Service/API Client 凭据换取 JWT
       tags: [auth]
       security: []
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
       requestBody:
         required: true
@@ -122,7 +123,7 @@ paths:
       operationId: logout
       summary: 吊销当前 Token Family
       tags: [auth]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-audit-event: AUTH_LOGOUT
       responses:
         '200':
@@ -137,7 +138,7 @@ paths:
       operationId: getCurrentPrincipal
       summary: 获取当前主体、角色和粗粒度 Scope
       tags: [auth]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       responses:
         '200':
           description: 当前主体
@@ -156,7 +157,7 @@ paths:
       operationId: changeCurrentUserPassword
       summary: 修改当前本地用户密码并吊销其他 Token Family
       tags: [auth]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-audit-event: USER_PASSWORD_CHANGED
       requestBody:
         required: true
@@ -177,7 +178,7 @@ paths:
       operationId: listPrincipals
       summary: 查询统一访问主体
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:read]
       parameters:
         - { name: principalType, in: query, schema: { $ref: '#/components/schemas/PrincipalType' } }
@@ -200,7 +201,7 @@ paths:
       operationId: listUsers
       summary: 分页查询本地用户
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -223,7 +224,7 @@ paths:
       operationId: createUser
       summary: 创建本地用户
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:manage]
       x-audit-event: USER_CREATED
       parameters:
@@ -255,7 +256,7 @@ paths:
       operationId: getUser
       summary: 获取本地用户
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:read]
       responses:
         '200':
@@ -274,7 +275,7 @@ paths:
       operationId: updateUser
       summary: 更新本地用户资料
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:manage]
       x-audit-event: USER_UPDATED
       requestBody:
@@ -302,7 +303,7 @@ paths:
       operationId: enableUser
       summary: 启用本地用户
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:manage]
       x-audit-event: USER_ENABLED
       parameters:
@@ -318,7 +319,7 @@ paths:
       operationId: disableUser
       summary: 禁用本地用户并吊销其 Token
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:manage]
       x-audit-event: USER_DISABLED
       parameters:
@@ -334,7 +335,7 @@ paths:
       operationId: resetUserPassword
       summary: 设置临时密码、强制下次修改并吊销现有 Token
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [user:manage]
       x-audit-event: USER_PASSWORD_RESET
       parameters:
@@ -355,7 +356,7 @@ paths:
       operationId: listAgents
       summary: 查询 Agent 主体
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -373,7 +374,7 @@ paths:
       operationId: createAgent
       summary: 注册 Agent 主体
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [agent:register]
       x-audit-event: AGENT_REGISTERED
       parameters:
@@ -402,7 +403,7 @@ paths:
       operationId: enableAgent
       summary: 启用 Agent
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_ENABLED
       parameters:
@@ -417,7 +418,7 @@ paths:
       operationId: disableAgent
       summary: 禁用 Agent 并吊销凭据/Token
       tags: [users]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_DISABLED
       parameters:
@@ -432,7 +433,7 @@ paths:
       operationId: updateAgentToolAllowlist
       summary: 替换 Agent MCP Tool 白名单
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_TOOL_ALLOWLIST_UPDATED
       parameters:
@@ -452,7 +453,7 @@ paths:
       operationId: listOrganizations
       summary: 查询调用者可管理或可访问的组织
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -470,7 +471,7 @@ paths:
       operationId: createOrganization
       summary: 创建组织作用域
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_CREATED
       parameters:
@@ -501,7 +502,7 @@ paths:
       operationId: listOrganizationMembers
       summary: 查询组织成员
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [organization:manage]
       responses:
         '200':
@@ -519,7 +520,7 @@ paths:
       operationId: addOrganizationMember
       summary: 添加组织成员
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_MEMBER_ADDED
       parameters:
@@ -548,7 +549,7 @@ paths:
       operationId: removeOrganizationMember
       summary: 移除组织成员并使其组织作用域授权失效
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_MEMBER_REMOVED
       parameters:
@@ -566,7 +567,7 @@ paths:
       operationId: listOrganizationProjects
       summary: 查询组织项目
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -584,7 +585,7 @@ paths:
       operationId: createProject
       summary: 创建组织项目
       tags: [organizations]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [project:manage]
       x-audit-event: PROJECT_CREATED
       parameters:
@@ -613,7 +614,7 @@ paths:
       operationId: listRoles
       summary: 查询角色
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -631,7 +632,7 @@ paths:
       operationId: createRole
       summary: 创建业务角色
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_CREATED
       parameters:
@@ -660,7 +661,7 @@ paths:
       operationId: listPermissions
       summary: 查询系统权限定义
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -680,7 +681,7 @@ paths:
       operationId: updateRole
       summary: 更新自定义角色名称和权限集合
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_UPDATED
       parameters:
@@ -708,7 +709,7 @@ paths:
       operationId: deleteRole
       summary: 删除无有效绑定的自定义角色
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_DELETED
       parameters:
@@ -724,7 +725,7 @@ paths:
       operationId: listRoleBindings
       summary: 查询主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -742,7 +743,7 @@ paths:
       operationId: createRoleBinding
       summary: 创建主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_BINDING_CREATED
       parameters:
@@ -771,7 +772,7 @@ paths:
       operationId: deleteRoleBinding
       summary: 删除主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_BINDING_DELETED
       parameters:
@@ -786,7 +787,7 @@ paths:
       operationId: listResourceAcls
       summary: 查询资源 ACL
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -804,7 +805,7 @@ paths:
       operationId: createResourceAcl
       summary: 创建资源 ACL
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: RESOURCE_ACL_CREATED
       parameters:
@@ -833,7 +834,7 @@ paths:
       operationId: deleteResourceAcl
       summary: 删除资源 ACL
       tags: [authorization]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [authorization:manage]
       x-audit-event: RESOURCE_ACL_DELETED
       parameters:
@@ -848,7 +849,7 @@ paths:
       operationId: listDictionaries
       summary: 查询字典类型
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [dictionary:read]
       responses:
         '200':
@@ -870,7 +871,7 @@ paths:
       operationId: listDictionaryItems
       summary: 查询字典项
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [dictionary:read]
       responses:
         '200':
@@ -888,7 +889,7 @@ paths:
       operationId: createDictionaryItem
       summary: 新增字典项
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [dictionary:manage]
       x-audit-event: DICTIONARY_ITEM_CREATED
       parameters:
@@ -917,7 +918,7 @@ paths:
       operationId: updateDictionaryItem
       summary: 更新、启用或停用字典项
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [dictionary:manage]
       x-audit-event: DICTIONARY_ITEM_UPDATED
       parameters:
@@ -947,7 +948,7 @@ paths:
       operationId: listTags
       summary: 查询平台/组织受控标签
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [tag:read]
       parameters:
         - { name: scopeType, in: query, schema: { $ref: '#/components/schemas/TagScopeType' } }
@@ -970,7 +971,7 @@ paths:
       operationId: createTag
       summary: 创建平台/组织受控标签
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_CREATED
       parameters:
@@ -999,7 +1000,7 @@ paths:
       operationId: updateTag
       summary: 更新、启用或停用受控标签
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_UPDATED
       parameters:
@@ -1028,7 +1029,7 @@ paths:
       operationId: enableTag
       summary: 启用受控标签
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_ENABLED
       parameters:
@@ -1043,7 +1044,7 @@ paths:
       operationId: disableTag
       summary: 停用受控标签，保留历史关联回显
       tags: [taxonomy]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_DISABLED
       parameters:
@@ -1058,7 +1059,7 @@ paths:
       operationId: listConfigurations
       summary: 查询非敏感运行配置
       tags: [configuration]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [system:configure]
       responses:
         '200':
@@ -1078,7 +1079,7 @@ paths:
       operationId: updateConfiguration
       summary: 更新非敏感运行配置
       tags: [configuration]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [system:configure]
       x-audit-event: SYSTEM_CONFIGURATION_UPDATED
       parameters:
@@ -1108,7 +1109,7 @@ paths:
       operationId: listJobs
       summary: 游标查询持久化任务
       tags: [jobs]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [job:read]
       parameters:
         - { name: status, in: query, schema: { $ref: '#/components/schemas/JobStatus' } }
@@ -1132,7 +1133,7 @@ paths:
       operationId: retryJob
       summary: 人工重试可重试任务
       tags: [jobs]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [job:manage]
       x-audit-event: JOB_MANUALLY_RETRIED
       parameters:
@@ -1148,7 +1149,7 @@ paths:
       operationId: cancelJob
       summary: 取消尚未开始且允许取消的持久化任务
       tags: [jobs]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [job:manage]
       x-audit-event: JOB_MANUALLY_CANCELLED
       parameters:
@@ -1164,7 +1165,7 @@ paths:
       operationId: listAuditLogs
       summary: 游标查询不可变审计记录
       tags: [audit]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [audit:read]
       parameters:
         - { name: principalId, in: query, schema: { type: string } }
@@ -1190,7 +1191,7 @@ paths:
       operationId: listCurrentNotifications
       summary: 查询当前主体站内通知
       tags: [notifications]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [notification:read]
       parameters:
         - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
@@ -1214,7 +1215,7 @@ paths:
       operationId: markNotificationRead
       summary: 标记当前主体通知已读
       tags: [notifications]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [notification:read]
       x-audit-event: NOTIFICATION_MARKED_READ
       parameters:
@@ -1229,7 +1230,7 @@ paths:
       operationId: getMetricsSummary
       summary: 获取受保护的平台指标摘要
       tags: [system]
-      x-implementation-status: planned-p0-b
+      x-implementation-status: implemented
       x-required-permissions: [system:observe]
       responses:
         '200':
@@ -1254,7 +1255,7 @@ paths:
         P0-B 补齐认证保护、Gitea/MinIO 探测和脱敏后的诊断信息。
       tags:
         - system
-      x-implementation-status: partial-p0-a
+      x-implementation-status: implemented
       x-required-permissions: [system:observe]
       responses:
         '200':
@@ -1279,7 +1280,7 @@ paths:
       summary: 登记新资产（模型/数据集）
       description: 校验坐标唯一、开通 Git 仓库并写入初始卡片，返回资产详情。
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:create]
       x-audit-event: ASSET_CREATED
       parameters:
@@ -1311,7 +1312,7 @@ paths:
       summary: 检索资产摘要（游标分页）
       description: 精确字段过滤 + 关键词全文 + 权限可见性过滤；默认排除归档资产。
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -1353,7 +1354,7 @@ paths:
       operationId: getAsset
       summary: 查询资产详情
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -1373,7 +1374,7 @@ paths:
       operationId: updateAsset
       summary: 更新资产可变元数据
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_UPDATED
       requestBody:
@@ -1402,7 +1403,7 @@ paths:
       operationId: deleteAsset
       summary: 逻辑删除资产
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:delete]
       x-audit-event: ASSET_DELETED
       responses:
@@ -1421,7 +1422,7 @@ paths:
       summary: 获取资产 Facet 聚合统计
       description: 返回各维度（type/framework/task/modality/format）的聚合计数，用于搜索侧栏过滤。
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -1448,7 +1449,7 @@ paths:
       operationId: deprecateAsset
       summary: 弃用资产（ACTIVE → DEPRECATED）
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_DEPRECATED
       responses:
@@ -1478,7 +1479,7 @@ paths:
       operationId: archiveAsset
       summary: 归档资产（ACTIVE/DEPRECATED → ARCHIVED）
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_ARCHIVED
       responses:
@@ -1508,7 +1509,7 @@ paths:
       operationId: restoreAsset
       summary: 恢复资产（DEPRECATED/ARCHIVED → ACTIVE）
       tags: [assets]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_RESTORED
       responses:
@@ -1538,7 +1539,7 @@ paths:
       operationId: createDiscussionThread
       summary: 创建资产讨论线程
       tags: [discussions]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:discuss]
       x-audit-event: DISCUSSION_CREATED
       requestBody:
@@ -1567,7 +1568,7 @@ paths:
       operationId: listDiscussionThreads
       summary: 列出资产讨论线程（游标分页）
       tags: [discussions]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
@@ -1597,7 +1598,7 @@ paths:
       operationId: createComment
       summary: 在讨论线程下创建评论
       tags: [discussions]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_CREATED
       requestBody:
@@ -1626,7 +1627,7 @@ paths:
       operationId: listComments
       summary: 列出讨论线程下的评论（游标分页）
       tags: [discussions]
-      x-implementation-status: partial-p1
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
@@ -1651,7 +1652,7 @@ paths:
       operationId: searchModels
       summary: 检索模型列表（固定类型语义入口）
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -1684,7 +1685,7 @@ paths:
       operationId: searchDatasets
       summary: 检索数据集列表（固定类型语义入口）
       tags: [assets]
-      x-implementation-status: partial-p1-frozen
+      x-implementation-status: implemented
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }

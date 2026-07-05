@@ -5,6 +5,6 @@
  */
 
 /**
- * job 模块的 domain 领域层，承载任务状态机与租约规则。当前为骨架占位。
+ * job 模块的 domain 领域层，承载任务状态机与租约规则。
  */
 package com.aihub.job.domain;

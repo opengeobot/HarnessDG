@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -33,7 +34,8 @@ const STATUS_COLOR: Record<JobStatus, string> = {
 };
 
 export function JobsPage() {
-  useDocumentTitle('任务管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.jobs.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<JobStatus | undefined>();
@@ -47,12 +49,12 @@ export function JobsPage() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'jobs'] });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const retryMutation = useMutation({
     mutationFn: (jobId: string) => retryJob(jobId),
     onSuccess: () => {
-      message.success('已安排重试');
+      message.success(t('admin.jobs.retryScheduled'));
       void invalidate();
     },
     onError,
@@ -61,7 +63,7 @@ export function JobsPage() {
   const cancelMutation = useMutation({
     mutationFn: (jobId: string) => cancelJob(jobId),
     onSuccess: () => {
-      message.success('已取消');
+      message.success(t('admin.jobs.cancelled'));
       void invalidate();
     },
     onError,
@@ -73,28 +75,28 @@ export function JobsPage() {
   );
 
   const columns: ColumnsType<JobView> = [
-    { title: '任务 ID', dataIndex: 'jobId', key: 'jobId' },
-    { title: '类型', dataIndex: 'jobType', key: 'jobType' },
+    { title: t('admin.jobs.jobId'), dataIndex: 'jobId', key: 'jobId' },
+    { title: t('common.type'), dataIndex: 'jobType', key: 'jobType' },
     {
-      title: '状态',
+      title: t('common.status'),
       dataIndex: 'status',
       key: 'status',
       render: (value: JobStatus) => <Tag color={STATUS_COLOR[value]}>{value}</Tag>,
     },
-    { title: '重试次数', dataIndex: 'retryCount', key: 'retryCount' },
-    { title: '下次执行', dataIndex: 'nextRunAt', key: 'nextRunAt', render: (v: string) => v || '-' },
-    { title: '错误码', dataIndex: 'errorCode', key: 'errorCode', render: (v: string) => v || '-' },
+    { title: t('admin.jobs.retryCount'), dataIndex: 'retryCount', key: 'retryCount' },
+    { title: t('admin.jobs.nextRunAt'), dataIndex: 'nextRunAt', key: 'nextRunAt', render: (v: string) => v || '-' },
+    { title: t('admin.jobs.errorCode'), dataIndex: 'errorCode', key: 'errorCode', render: (v: string) => v || '-' },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Space size="small">
           <Button type="link" size="small" onClick={() => retryMutation.mutate(record.jobId)}>
-            重试
+            {t('admin.jobs.retry')}
           </Button>
-          <Popconfirm title="确认取消该任务？" onConfirm={() => cancelMutation.mutate(record.jobId)}>
+          <Popconfirm title={t('admin.jobs.confirmCancel')} onConfirm={() => cancelMutation.mutate(record.jobId)}>
             <Button type="link" size="small" danger>
-              取消
+              {t('common.cancel')}
             </Button>
           </Popconfirm>
         </Space>
@@ -106,18 +108,18 @@ export function JobsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          任务管理
+          {t('admin.jobs.title')}
         </Typography.Title>
         <Space>
           <Select
             allowClear
             style={{ width: 160 }}
-            placeholder="按状态过滤"
+            placeholder={t('admin.jobs.filterByStatus')}
             value={status}
             onChange={(value) => setStatus(value)}
             options={(Object.keys(STATUS_COLOR) as JobStatus[]).map((s) => ({ value: s, label: s }))}
           />
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
         </Space>
       </Flex>
 
@@ -131,7 +133,7 @@ export function JobsPage() {
         {query.hasNextPage ? (
           <Flex justify="center" style={{ marginTop: 16 }}>
             <Button onClick={() => query.fetchNextPage()} loading={query.isFetchingNextPage}>
-              加载更多
+              {t('assets.loadMore')}
             </Button>
           </Flex>
         ) : null}

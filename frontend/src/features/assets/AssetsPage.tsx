@@ -21,6 +21,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
 import { deleteAsset, searchAssets } from './api';
@@ -42,7 +43,8 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export function AssetsPage() {
-  useDocumentTitle('资产目录');
+  const { t } = useTranslation();
+  useDocumentTitle(t('assets.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -63,11 +65,11 @@ export function AssetsPage() {
   const deleteMutation = useMutation({
     mutationFn: (assetId: string) => deleteAsset(assetId),
     onSuccess: () => {
-      message.success('已删除资产');
+      message.success(t('assets.deleted'));
       void queryClient.invalidateQueries({ queryKey: ['assets'] });
     },
     onError: (error) => {
-      message.error(isApiError(error) ? error.message : '删除失败');
+      message.error(isApiError(error) ? error.message : t('assets.deleteFailed'));
     },
   });
 
@@ -78,7 +80,7 @@ export function AssetsPage() {
 
   const columns: ColumnsType<AssetSummary> = [
     {
-      title: '名称',
+      title: t('assets.columns.name'),
       dataIndex: 'name',
       key: 'name',
       render: (_, record) => (
@@ -93,17 +95,17 @@ export function AssetsPage() {
       ),
     },
     {
-      title: '类型',
+      title: t('assets.columns.type'),
       dataIndex: 'type',
       key: 'type',
       render: (type: AssetType) => (
         <Tag color={type === 'MODEL' ? 'geekblue' : 'purple'}>
-          {type === 'MODEL' ? '模型' : '数据集'}
+          {type === 'MODEL' ? t('assets.model') : t('assets.dataset')}
         </Tag>
       ),
     },
     {
-      title: '规格',
+      title: t('assets.columns.spec'),
       key: 'spec',
       render: (_, record) =>
         record.type === 'MODEL'
@@ -111,7 +113,7 @@ export function AssetsPage() {
           : [record.format, record.modality].filter(Boolean).join(' · ') || '-',
     },
     {
-      title: '可见性',
+      title: t('assets.columns.visibility'),
       dataIndex: 'visibility',
       key: 'visibility',
       render: (visibility: string) => (
@@ -119,13 +121,13 @@ export function AssetsPage() {
       ),
     },
     {
-      title: '状态',
+      title: t('assets.columns.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: string) => <Tag color={STATUS_COLOR[status]}>{status}</Tag>,
     },
     {
-      title: '标签',
+      title: t('assets.columns.tags'),
       key: 'tags',
       render: (_, record) => (
         <Space size={[0, 4]} wrap>
@@ -139,17 +141,17 @@ export function AssetsPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('assets.columns.action'),
       key: 'action',
       render: (_, record) => (
         <Popconfirm
-          title="确认删除该资产？"
-          okText="删除"
-          cancelText="取消"
+          title={t('assets.confirmDelete')}
+          okText={t('common.delete')}
+          cancelText={t('common.cancel')}
           onConfirm={() => deleteMutation.mutate(record.assetId)}
         >
           <Button danger type="link" size="small">
-            删除
+            {t('common.delete')}
           </Button>
         </Popconfirm>
       ),
@@ -160,27 +162,27 @@ export function AssetsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          资产目录
+          {t('assets.title')}
         </Typography.Title>
         <Space wrap>
           <Segmented<TypeFilter>
             value={typeFilter}
             onChange={(value) => setTypeFilter(value)}
             options={[
-              { value: 'ALL', label: '全部' },
-              { value: 'MODEL', label: '模型' },
-              { value: 'DATASET', label: '数据集' },
+              { value: 'ALL', label: t('assets.all') },
+              { value: 'MODEL', label: t('assets.model') },
+              { value: 'DATASET', label: t('assets.dataset') },
             ]}
           />
           <Input.Search
             allowClear
-            placeholder="搜索名称、描述或标签"
+            placeholder={t('assets.searchPlaceholder')}
             style={{ width: 260 }}
             onSearch={(value) => setKeyword(value.trim())}
           />
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
           <Button type="primary" onClick={() => setCreateOpen(true)}>
-            登记资产
+            {t('assets.registerAsset')}
           </Button>
         </Space>
       </Flex>
@@ -191,13 +193,13 @@ export function AssetsPage() {
         dataSource={items}
         loading={query.isLoading}
         pagination={false}
-        locale={{ emptyText: <Empty description="暂无资产，点击“登记资产”开始" /> }}
+        locale={{ emptyText: <Empty description={t('assets.emptyText')} /> }}
       />
 
       {query.hasNextPage ? (
         <Flex justify="center">
           <Button onClick={() => query.fetchNextPage()} loading={query.isFetchingNextPage}>
-            加载更多
+            {t('assets.loadMore')}
           </Button>
         </Flex>
       ) : null}

@@ -5,6 +5,6 @@
  */
 
 /**
- * version 模块（Commit/Tag/DVC/Manifest、发布状态机）的 api 适配层。当前为骨架占位。
+ * version 模块（Commit/Tag/DVC/Manifest、发布状态机）的 api 适配层。
  */
 package com.aihub.version.api;

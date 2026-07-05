@@ -4,6 +4,7 @@
  * 作者: AxeXie
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
@@ -37,7 +38,8 @@ import type {
 } from '../types';
 
 export function OrganizationsPage() {
-  useDocumentTitle('组织管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin.organizations.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -48,12 +50,12 @@ export function OrganizationsPage() {
 
   const query = useQuery({ queryKey: ['admin', 'organizations'], queryFn: listOrganizations });
   const onError = (error: unknown) =>
-    message.error(isApiError(error) ? error.message : '操作失败');
+    message.error(isApiError(error) ? error.message : t('common.operationFailed'));
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateOrganizationRequest) => createOrganization(payload),
     onSuccess: () => {
-      message.success('组织已创建');
+      message.success(t('admin.organizations.orgCreated'));
       setCreateOpen(false);
       createForm.resetFields();
       void queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
@@ -76,7 +78,7 @@ export function OrganizationsPage() {
     mutationFn: (principalId: string) =>
       addOrganizationMember(memberOrg!.organizationId, { principalId }),
     onSuccess: () => {
-      message.success('成员已添加');
+      message.success(t('admin.organizations.memberAdded'));
       memberForm.resetFields();
       void invalidateMembers();
     },
@@ -87,7 +89,7 @@ export function OrganizationsPage() {
     mutationFn: (principalId: string) =>
       removeOrganizationMember(memberOrg!.organizationId, principalId),
     onSuccess: () => {
-      message.success('成员已移除');
+      message.success(t('admin.organizations.memberRemoved'));
       void invalidateMembers();
     },
     onError,
@@ -95,7 +97,7 @@ export function OrganizationsPage() {
 
   const columns: ColumnsType<OrganizationView> = [
     {
-      title: '组织',
+      title: t('admin.organizations.org'),
       key: 'org',
       render: (_, record) => (
         <Space direction="vertical" size={0}>
@@ -107,36 +109,36 @@ export function OrganizationsPage() {
       ),
     },
     {
-      title: 'Gitea 组织',
+      title: t('admin.organizations.giteaOrg'),
       dataIndex: 'giteaOrganization',
       key: 'giteaOrganization',
       render: (v: string) => v || '-',
     },
-    { title: '状态', dataIndex: 'status', key: 'status', render: (s: string) => <Tag>{s}</Tag> },
+    { title: t('common.status'), dataIndex: 'status', key: 'status', render: (s: string) => <Tag>{s}</Tag> },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Button type="link" size="small" onClick={() => setMemberOrg(record)}>
-          成员管理
+          {t('admin.organizations.memberManagement')}
         </Button>
       ),
     },
   ];
 
   const memberColumns: ColumnsType<OrganizationMemberView> = [
-    { title: '主体 ID', dataIndex: 'principalId', key: 'principalId' },
-    { title: '加入时间', dataIndex: 'joinedAt', key: 'joinedAt' },
+    { title: t('admin.organizations.principalId'), dataIndex: 'principalId', key: 'principalId' },
+    { title: t('admin.organizations.joinedAt'), dataIndex: 'joinedAt', key: 'joinedAt' },
     {
-      title: '操作',
+      title: t('common.action'),
       key: 'action',
       render: (_, record) => (
         <Popconfirm
-          title="确认移除该成员？"
+          title={t('admin.organizations.confirmRemoveMember')}
           onConfirm={() => removeMemberMutation.mutate(record.principalId)}
         >
           <Button type="link" size="small" danger>
-            移除
+            {t('common.remove')}
           </Button>
         </Popconfirm>
       ),
@@ -147,12 +149,12 @@ export function OrganizationsPage() {
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          组织管理
+          {t('admin.organizations.title')}
         </Typography.Title>
         <Space>
-          <Button onClick={() => query.refetch()}>刷新</Button>
+          <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
           <Button type="primary" onClick={() => setCreateOpen(true)}>
-            创建组织
+            {t('admin.organizations.createOrg')}
           </Button>
         </Space>
       </Flex>
@@ -171,7 +173,7 @@ export function OrganizationsPage() {
       </QueryBoundary>
 
       <Modal
-        title="创建组织"
+        title={t('admin.organizations.createOrg')}
         open={createOpen}
         onCancel={() => setCreateOpen(false)}
         onOk={() => createForm.submit()}
@@ -184,20 +186,20 @@ export function OrganizationsPage() {
           preserve={false}
           onFinish={(values) => createMutation.mutate(values)}
         >
-          <Form.Item name="code" label="组织代码" rules={[{ required: true }]}>
-            <Input placeholder="小写字母数字与连字符" />
+          <Form.Item name="code" label={t('admin.organizations.orgCode')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.organizations.orgCodePlaceholder')} />
           </Form.Item>
-          <Form.Item name="name" label="组织名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label={t('admin.organizations.orgName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="giteaOrganization" label="Gitea 组织">
+          <Form.Item name="giteaOrganization" label={t('admin.organizations.giteaOrg')}>
             <Input />
           </Form.Item>
         </Form>
       </Modal>
 
       <Drawer
-        title={memberOrg ? `成员管理 · ${memberOrg.name}` : '成员管理'}
+        title={memberOrg ? t('admin.organizations.memberManagementOf', { name: memberOrg.name }) : t('admin.organizations.memberManagement')}
         open={memberOrg !== null}
         onClose={() => setMemberOrg(null)}
         width={520}
@@ -209,12 +211,12 @@ export function OrganizationsPage() {
           style={{ marginBottom: 16 }}
           onFinish={(values) => addMemberMutation.mutate(values.principalId.trim())}
         >
-          <Form.Item name="principalId" rules={[{ required: true, message: '请输入主体 ID' }]}>
-            <Input placeholder="prn_ 开头的主体 ID" style={{ width: 280 }} />
+          <Form.Item name="principalId" rules={[{ required: true, message: t('admin.organizations.principalIdRequired') }]}>
+            <Input placeholder={t('admin.organizations.principalIdPlaceholder')} style={{ width: 280 }} />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={addMemberMutation.isPending}>
-              添加成员
+              {t('admin.organizations.addMember')}
             </Button>
           </Form.Item>
         </Form>

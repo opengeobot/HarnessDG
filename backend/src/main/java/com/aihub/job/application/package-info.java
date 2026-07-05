@@ -5,6 +5,6 @@
  */
 
 /**
- * job 模块的 application 应用层，承载任务调度与重试编排。当前为骨架占位。
+ * job 模块的 application 应用层，承载任务调度与重试编排。
  */
 package com.aihub.job.application;

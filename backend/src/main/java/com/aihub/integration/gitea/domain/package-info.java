@@ -5,6 +5,6 @@
  */
 
 /**
- * integration.gitea 模块的 domain 领域层，定义 Gitea Port 与领域模型。当前为骨架占位。
+ * integration.gitea 模块的 domain 领域层，定义 Gitea Port 与领域模型。
  */
 package com.aihub.integration.gitea.domain;

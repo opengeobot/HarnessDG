@@ -5,6 +5,6 @@
  */
 
 /**
- * integration.minio 模块（Bucket、签名、对象元信息）的 api 适配层。当前为骨架占位。
+ * integration.minio 模块（Bucket、签名、对象元信息）的 api 适配层。
  */
 package com.aihub.integration.minio.api;
