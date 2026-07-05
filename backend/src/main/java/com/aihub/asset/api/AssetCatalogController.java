@@ -40,12 +40,13 @@ public class AssetCatalogController {
             @RequestParam(required = false) String task,
             @RequestParam(required = false) String tagId,
             @RequestParam(required = false) String owner,
+            @RequestParam(required = false) String sensitivity,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, AssetType.MODEL, namespace, null, framework, task, null, null, tagId, owner,
-                includeArchived, cursor, limit, AssetApiContext.principalId())));
+                null, sensitivity, includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 
     /**
@@ -57,13 +58,15 @@ public class AssetCatalogController {
             @RequestParam(required = false) String namespace,
             @RequestParam(required = false) String format,
             @RequestParam(required = false) String modality,
+            @RequestParam(required = false) String language,
             @RequestParam(required = false) String tagId,
             @RequestParam(required = false) String owner,
+            @RequestParam(required = false) String sensitivity,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, AssetType.DATASET, namespace, null, null, null, format, modality, tagId, owner,
-                includeArchived, cursor, limit, AssetApiContext.principalId())));
+                language, sensitivity, includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 }

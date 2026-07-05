@@ -120,6 +120,8 @@ export interface AssetSearchParams {
   task?: string;
   format?: string;
   modality?: string;
+  language?: string;
+  sensitivity?: string;
   tagId?: string;
   owner?: string;
   includeArchived?: boolean;

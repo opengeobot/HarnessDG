@@ -181,6 +181,16 @@
       "IN_PROGRESS": "建仓中",
       "COMPLETED": "建仓完成",
       "FAILED": "建仓失败"
+    },
+    "filter": {
+      "language": "语言",
+      "sensitivity": "敏感等级"
+    },
+    "sensitivity": {
+      "PUBLIC": "公开",
+      "INTERNAL": "内部",
+      "CONFIDENTIAL": "机密",
+      "SECRET": "绝密"
     }
   },
   "discussion": {

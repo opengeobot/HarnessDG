@@ -98,6 +98,7 @@ public class AssetSearchDao {
         appendJsonArrayContains(sql, params, "ad.modality_codes", "modalityCodes", criteria.modalityCodes());
         appendJsonArrayContains(sql, params, "ad.format_codes", "formatCodes", criteria.formatCodes());
         appendJsonArrayContains(sql, params, "ad.language_codes", "languageCodes", criteria.languageCodes());
+        appendEquals(sql, params, "COALESCE(am.sensitivity_code, ad.sensitivity_code)", "sensitivity", criteria.sensitivity());
         appendAccessScopeFilter(sql, params, criteria.accessScope());
         appendCursor(sql, params, criteria.cursor());
 

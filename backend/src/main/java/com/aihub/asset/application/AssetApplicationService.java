@@ -259,7 +259,10 @@ public class AssetApplicationService {
                 query.keyword(), query.type(), query.namespace(), query.organizationId(),
                 query.framework(), query.task(), query.format(), query.modality(),
                 query.tagId(), query.owner(), statuses, allowed, accessScope,
-                null, null, null, null, null,
+                null, null, null,
+                query.language() != null ? java.util.List.of(query.language()) : null,
+                null,
+                query.sensitivity(),
                 query.cursor(), query.limit());
         CursorPage<com.aihub.asset.domain.AssetSummary> page = assetRepository.search(criteria);
         return new CursorPage<>(
@@ -281,7 +284,7 @@ public class AssetApplicationService {
                 keyword, type, null, null, null, null, null, null,
                 null, null, statuses, allowed, accessScope,
                 null, null, null, null, null,
-                null, AssetSearchCriteria.MAX_LIMIT);
+                null, null, AssetSearchCriteria.MAX_LIMIT);
         Map<String, Map<String, Long>> raw = assetRepository.facet(criteria);
         long total = raw.containsKey("_total") ? raw.get("_total").getOrDefault("count", 0L) : 0L;
         return new AssetFacetView(

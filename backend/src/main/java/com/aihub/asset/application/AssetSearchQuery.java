@@ -20,6 +20,8 @@ import com.aihub.asset.domain.AssetType;
  * @param modality        数据模态过滤（可空）
  * @param tagId           受控标签 ID 过滤（可空，通过 asset_tag 关联表过滤）
  * @param owner           Owner 过滤（可空）
+ * @param language        语言过滤（可空）
+ * @param sensitivity     敏感等级过滤（可空）
  * @param includeArchived 是否包含归档资产（默认否，需管理员）
  * @param cursor          游标（首页为空）
  * @param limit           每页大小（&lt;=0 使用默认）
@@ -35,6 +37,8 @@ public record AssetSearchQuery(String keyword,
                                String modality,
                                String tagId,
                                String owner,
+                               String language,
+                               String sensitivity,
                                boolean includeArchived,
                                String cursor,
                                int limit,

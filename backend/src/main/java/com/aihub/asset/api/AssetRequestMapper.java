@@ -67,12 +67,15 @@ final class AssetRequestMapper {
                                           String modality,
                                           String tagId,
                                           String owner,
+                                          String language,
+                                          String sensitivity,
                                           boolean includeArchived,
                                           String cursor,
                                           int limit,
                                           String principalId) {
         return new AssetSearchQuery(keyword, type, namespace, organizationId, framework, task,
-                format, modality, tagId, owner, includeArchived, cursor, limit, principalId);
+                format, modality, tagId, owner, language, sensitivity,
+                includeArchived, cursor, limit, principalId);
     }
 
     private static ModelProfile toModelProfile(CreateAssetRequest.ModelInput input) {

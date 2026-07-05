@@ -33,6 +33,7 @@ import java.util.Set;
  * @param formatCodes         多值数据格式过滤（可空）
  * @param languageCodes       多值语言过滤（可空）
  * @param tagIds              多值受控标签过滤（可空）
+ * @param sensitivity         敏感等级过滤（可空）
  * @param cursor              游标（上一页末项编码），首页为 {@code null}
  * @param limit               每页大小
  */
@@ -54,6 +55,7 @@ public record AssetSearchCriteria(String keyword,
                                   List<String> formatCodes,
                                   List<String> languageCodes,
                                   List<String> tagIds,
+                                  String sensitivity,
                                   String cursor,
                                   int limit) {
 

@@ -181,6 +181,16 @@
       "IN_PROGRESS": "In Progress",
       "COMPLETED": "Completed",
       "FAILED": "Failed"
+    },
+    "filter": {
+      "language": "Language",
+      "sensitivity": "Sensitivity"
+    },
+    "sensitivity": {
+      "PUBLIC": "Public",
+      "INTERNAL": "Internal",
+      "CONFIDENTIAL": "Confidential",
+      "SECRET": "Secret"
     }
   },
   "discussion": {

@@ -15,6 +15,7 @@ import {
   Input,
   Popconfirm,
   Segmented,
+  Select,
   Space,
   Table,
   Tag,
@@ -24,6 +25,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
+import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
 import { deleteAsset, searchAssets } from './api';
 import { CreateAssetModal } from './CreateAssetModal';
 import type { AssetSummary, AssetType } from './types';
@@ -51,14 +53,23 @@ export function AssetsPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [language, setLanguage] = useState<string | undefined>();
+  const [sensitivity, setSensitivity] = useState<string | undefined>();
 
   const queryType = typeFilter === 'ALL' ? undefined : typeFilter;
 
   const query = useInfiniteQuery({
-    queryKey: ['assets', { type: queryType, keyword }],
+    queryKey: ['assets', { type: queryType, keyword, language, sensitivity }],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
-      searchAssets({ type: queryType, keyword: keyword || undefined, cursor: pageParam, limit: 10 }),
+      searchAssets({
+        type: queryType,
+        keyword: keyword || undefined,
+        language: language || undefined,
+        sensitivity: sensitivity || undefined,
+        cursor: pageParam,
+        limit: 10,
+      }),
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor ?? undefined : undefined),
   });
 
@@ -187,6 +198,35 @@ export function AssetsPage() {
         </Space>
       </Flex>
 
+      <Flex gap={8} wrap align="center">
+        <ControlledSelect
+          apiUrl="/system/dictionaries/language/items"
+          queryKey="dict-language"
+          extractOptions={(data) =>
+            (data as Array<{ itemCode: string }>).map(
+              (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+            )
+          }
+          placeholder={t('assets.filter.language')}
+          allowClear
+          style={{ width: 160 }}
+          value={language}
+          onChange={(v: string) => setLanguage(v ?? undefined)}
+        />
+        <Select
+          placeholder={t('assets.filter.sensitivity')}
+          allowClear
+          style={{ width: 160 }}
+          value={sensitivity}
+          onChange={(v) => setSensitivity(v)}
+          options={[
+            { value: 'PUBLIC', label: t('assets.sensitivity.PUBLIC') },
+            { value: 'INTERNAL', label: t('assets.sensitivity.INTERNAL') },
+            { value: 'CONFIDENTIAL', label: t('assets.sensitivity.CONFIDENTIAL') },
+            { value: 'SECRET', label: t('assets.sensitivity.SECRET') },
+          ]}
+        />
+      </Flex>
       <Table<AssetSummary>
         rowKey="assetId"
         columns={columns}

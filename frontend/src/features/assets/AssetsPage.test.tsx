@@ -62,4 +62,10 @@ describe('AssetsPage', () => {
     expect(screen.getByText('可见性')).toBeInTheDocument();
     expect(screen.getByText('状态')).toBeInTheDocument();
   });
+
+  it('渲染分类过滤面板（语言 + 敏感等级）', () => {
+    renderWithProviders(<AssetsPage />);
+    expect(screen.getByText('语言')).toBeInTheDocument();
+    expect(screen.getByText('敏感等级')).toBeInTheDocument();
+  });
 });
