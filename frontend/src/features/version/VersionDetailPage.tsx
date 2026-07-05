@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { getVersion, listArtifacts } from './api';
 import type { ArtifactView, VersionStatus } from './types';
+import { PreviewPanel } from '@/features/assets/PreviewPanel';
 
 const STATUS_COLOR: Record<VersionStatus, string> = {
   DRAFT: 'default',
@@ -161,6 +162,8 @@ export function VersionDetailPage() {
           locale={{ emptyText: <Empty description={t('version.noArtifacts')} /> }}
         />
       </Card>
+
+      <PreviewPanel assetId={assetId!} versionId={versionId} />
     </Flex>
   );
 }

@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/app/layout/AppLayout';
 import { RouteGuard } from '@/app/permission';
-import { AssetsPage, AssetDetailPage } from '@/features/assets';
+import { AssetsPage, AssetDetailPage, AssetSettingsPage } from '@/features/assets';
 import { VersionPage, VersionDetailPage, ReviewPage } from '@/features/version';
 import { UploadPage } from '@/features/upload';
 import { AccessPage } from '@/features/access';
@@ -50,6 +50,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/assets" replace /> },
       { path: 'assets', element: guarded(<AssetsPage />, ['asset:read']) },
       { path: 'assets/:assetId', element: guarded(<AssetDetailPage />, ['asset:read']) },
+      { path: 'assets/:assetId/settings', element: guarded(<AssetSettingsPage />, ['asset:write']) },
       { path: 'version', element: guarded(<VersionPage />, ['asset:read']) },
       { path: 'assets/:assetId/versions/:versionId', element: guarded(<VersionDetailPage />, ['asset:read']) },
       { path: 'upload', element: guarded(<UploadPage />, ['asset:write']) },

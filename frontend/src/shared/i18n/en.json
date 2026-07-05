@@ -190,6 +190,13 @@
       "COMPLETED": "Completed",
       "FAILED": "Failed"
     },
+    "settings": {
+      "title": "Asset Settings",
+      "basicInfo": "Basic Info",
+      "editMetadata": "Edit Metadata",
+      "lifecycle": "Lifecycle",
+      "assetId": "Asset ID"
+    },
     "filter": {
       "language": "Language",
       "sensitivity": "Sensitivity"
@@ -289,7 +296,11 @@
     "versionInfo": "Version Info",
     "publishedAt": "Published At",
     "publishedBy": "Published By",
-    "mediaType": "Media Type"
+    "mediaType": "Media Type",
+    "preview": "Data Preview",
+    "previewNotAvailable": "No preview available",
+    "previewEmpty": "Preview content is empty",
+    "previewTruncated": "Preview truncated, showing first 100 rows only"
   },
   "review": {
     "title": "Release Review",

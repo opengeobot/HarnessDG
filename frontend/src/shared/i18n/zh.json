@@ -190,6 +190,13 @@
       "COMPLETED": "建仓完成",
       "FAILED": "建仓失败"
     },
+    "settings": {
+      "title": "资产设置",
+      "basicInfo": "基本信息",
+      "editMetadata": "编辑元数据",
+      "lifecycle": "生命周期操作",
+      "assetId": "资产 ID"
+    },
     "filter": {
       "language": "语言",
       "sensitivity": "敏感等级"
@@ -289,7 +296,11 @@
     "versionInfo": "版本信息",
     "publishedAt": "发布时间",
     "publishedBy": "发布人",
-    "mediaType": "媒体类型"
+    "mediaType": "媒体类型",
+    "preview": "数据预览",
+    "previewNotAvailable": "暂无预览数据",
+    "previewEmpty": "预览内容为空",
+    "previewTruncated": "预览已截断，仅显示前 100 行"
   },
   "review": {
     "title": "发布审批",

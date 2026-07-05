@@ -2338,6 +2338,128 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  # ── 上传会话（UploadController） ──
+
+  /assets/{assetId}/versions/{versionId}/upload-sessions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: createUploadSession
+      summary: 创建上传会话
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                totalBytes: { type: integer, format: int64 }
+                fileCount: { type: integer }
+                ttlSeconds: { type: integer }
+              required: [totalBytes, fileCount]
+      responses:
+        '201':
+          description: 会话已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionView' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /upload-sessions/{sessionId}:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getUploadSession
+      summary: 查询上传会话详情
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 会话详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionView' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /upload-sessions/{sessionId}/parts/{partNumber}/presign:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+      - { name: partNumber, in: path, required: true, schema: { type: integer } }
+    get:
+      operationId: presignPartUpload
+      summary: 签发 Part 上传预签名 URL
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      responses:
+        '200':
+          description: 预签名 URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string }
+                required: [url]
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /upload-sessions/{sessionId}/complete:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: completeUploadSession
+      summary: 完成上传会话
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                parts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      partNumber: { type: integer }
+                      etag: { type: string }
+                    required: [partNumber, etag]
+              required: [parts]
+      responses:
+        '200':
+          description: 会话已完成
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionView' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /upload-sessions/{sessionId}/cancel:
+    parameters:
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cancelUploadSession
+      summary: 取消上传会话
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-required-permissions: [asset:manage]
+      responses:
+        '200':
+          description: 会话已取消
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionView' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
   # ── 下载票据（DownloadController） ──
 
   /versions/{versionId}/download:
@@ -3379,6 +3501,10 @@ components:
             fullName: { type: string }
             htmlUrl: { type: string }
             cloneUrl: { type: string }
+        provisioningStatus:
+          type: string
+          description: 建仓异步状态
+          enum: [PENDING, IN_PROGRESS, COMPLETED, FAILED]
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -3644,6 +3770,23 @@ components:
         prefix: { type: string }
 
     # ── 下载票据 schema ──
+
+    UploadSessionView:
+      type: object
+      description: 上传会话视图
+      required: [sessionId, assetId, versionId, principalId, status, totalBytes, fileCount, expiresAt, createdAt]
+      properties:
+        sessionId: { type: string }
+        assetId: { type: string }
+        versionId: { type: string }
+        principalId: { type: string }
+        status:
+          type: string
+          enum: [OPEN, COMMITTING, COMPLETED, CANCELLED, EXPIRED]
+        totalBytes: { type: integer, format: int64 }
+        fileCount: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
 
     DownloadTicket:
       type: object

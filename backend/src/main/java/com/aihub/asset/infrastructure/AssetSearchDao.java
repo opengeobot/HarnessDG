@@ -102,7 +102,7 @@ public class AssetSearchDao {
         appendAccessScopeFilter(sql, params, criteria.accessScope());
         appendCursor(sql, params, criteria.cursor());
 
-        sql.append(" ORDER BY a.created_at DESC, a.id DESC LIMIT :limit");
+        sql.append(" ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END, a.created_at DESC, a.id DESC LIMIT :limit");
         params.addValue("limit", criteria.limit() + 1);
 
         List<SearchRow> rows = jdbcTemplate.query(sql.toString(), params, this::mapRow);
