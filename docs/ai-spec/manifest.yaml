@@ -36,6 +36,7 @@ acceptedDecisions:
   - DEC-017
   - DEC-018
   - DEC-019
+  - DEC-020
 
 confirmedDirection:
   implementationFocus: P0

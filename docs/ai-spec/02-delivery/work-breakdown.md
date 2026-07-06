@@ -90,7 +90,7 @@ GOV（决策与基线）
 | `TASK-P0BR-024` | DEAD、人工重试/取消、通知和审计 E4 | AC-P0B-JOB-004/005 | P0BR-023 |
 | `TASK-P0BR-025` | 必审计成功/失败/拒绝覆盖和不可篡改 E4 | AC-P0B-AUD-001/003 | P0BR-015 |
 | `TASK-P0BR-026` | HTTP/MCP/Worker/URL/Payload 全边界 Secret 脱敏 E4 | AC-P0B-AUD-002/004/005 | P0BR-025 |
-| `TASK-P0BR-027` | 站内通知+Outbox 原子性和读取 E4 | AC-P0B-NOT-001/002 | P0BR-023 |
+| `TASK-P0BR-027` | 站内通知+Outbox 原子性和读取 E4；含 IdPrefix.EVENT("evt") 修复、publishOutboxEvent() 接入业务流程（DEC-020） | AC-P0B-NOT-001/002、DEC-020 | P0BR-023 |
 | `TASK-P0BR-028` | 签名 Webhook SSRF、重试、验签、去重 E4 | AC-P0B-NOT-003..005 | P0BR-027 |
 | `TASK-P0BR-029` | REST→Job 完整 Trace、Prometheus、健康和诊断 E4 | AC-P0B-OBS-001..004 | GOV-004、P0BR-023 |
 | `TASK-P0BR-030` | P0-B 必需告警在故障注入下触发/恢复 | AC-P0B-OBS-005 | P0BR-024/028/029 |

@@ -1,7 +1,7 @@
 # 已确认决策日志
 
 > 状态：`READY`
-> 当前生效的 Accepted Decision：18（`DEC-005` 已被 `DEC-008` 替代；`DEC-014`~`DEC-019` 为本次 grilling 新增）
+> 当前生效的 Accepted Decision：19（`DEC-005` 已被 `DEC-008` 替代；`DEC-014`~`DEC-020` 为本次 grilling 新增）
 
 ## 1. 规则
 
@@ -461,5 +461,30 @@ affected:
   requirements: [REQ-COM-001, REQ-UI-001]
   pages: []
   documents: [02-domain/error-catalog.md]
+requiresAdr: false
+```
+
+### DEC-020：Event Schema 与实现偏差修复
+
+```yaml
+decisionId: DEC-020
+questionIds: []
+status: ACCEPTED
+decision: >
+  发现 Event Schema（events-v1.yaml）与后端实现的 3 个偏差：
+  1. eventId 前缀不匹配：契约规定 `^evt_`，代码用 IdPrefix.REQUEST（`req_`）；
+     修复：IdPrefix.java 新增 EVENT("evt")，NotificationService 和 RepositoryProvisionJobHandler 使用。
+  2. ASSET_PROVISIONED 事件类型不在契约枚举：RepositoryProvisionJobHandler 硬编码但 events-v1.yaml 无此类型；
+     修复：events-v1.yaml 已追加 ASSET_PROVISIONED + AssetProvisionedPayload。
+  3. publishOutboxEvent() 零调用者：Outbox 事件发布尚未接入业务流程；
+     修复：TASK-P0BR-027（站内通知+Outbox 原子性）负责接入。
+  代码修复在 TASK-P0BR-027 和 TASK-P0BR-001 中执行。
+rationale: 契约与实现的偏差会导致 AI IDE 按契约写测试时断言失败；eventId 前缀是契约 bug 必须修复。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-NOT-001, REQ-WHK-001, REQ-COM-001]
+  pages: []
+  documents: [contracts/events/events-v1.yaml]
 requiresAdr: false
 ```

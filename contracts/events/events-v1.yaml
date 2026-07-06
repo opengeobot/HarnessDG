@@ -45,6 +45,7 @@ components:
       description: 稳定事件类型枚举。新增类型按兼容策略追加，不复用或重命名既有值。
       enum:
         - ASSET_CREATED
+        - ASSET_PROVISIONED
         - ASSET_UPDATED
         - ASSET_DEPRECATED
         - ASSET_ARCHIVED
@@ -118,6 +119,7 @@ components:
       description: 事件负载多态联合，按 eventType 区分。
       oneOf:
         - $ref: '#/components/schemas/AssetCreatedPayload'
+        - $ref: '#/components/schemas/AssetProvisionedPayload'
         - $ref: '#/components/schemas/AssetUpdatedPayload'
         - $ref: '#/components/schemas/AssetDeprecatedPayload'
         - $ref: '#/components/schemas/AssetArchivedPayload'
@@ -145,6 +147,19 @@ components:
         name: { type: string }
         type: { type: string, enum: [MODEL, DATASET] }
         createdBy: { type: string, pattern: '^prn_' }
+
+    AssetProvisionedPayload:
+      type: object
+      description: |
+        资产仓库开通完成事件。Gitea 建仓 Saga 成功后发出，
+        与 ASSET_CREATED 互补：CREATED 表示意图登记，PROVISIONED 表示仓库就绪。
+      additionalProperties: false
+      required: [assetId, namespace, name, type]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [MODEL, DATASET] }
 
     AssetUpdatedPayload:
       type: object
