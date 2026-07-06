@@ -114,7 +114,7 @@ GOV（决策与基线）
 | Task 候选 | 可观察结果 | 关键依赖/证据 |
 | --- | --- | --- |
 | `TASK-P1-001` | MODEL/DATASET 字段、Owner、坐标、别名和可见性需求/契约 READY | GOV-002/003、P0BR-046 |
-| `TASK-P1-002` | V21+ 资产数据回填：自由标签→受控标签映射、字符串 Owner→Team ID 回填、UNMAPPED 标记与管理端整改页 | E3 空库+升级、共识 7 |
+| `TASK-P1-002` | V23+ 资产数据回填：自由标签→受控标签映射、字符串 Owner→Team ID 回填、UNMAPPED 标记与管理端整改页（V22 已用于 P1 Schema 补充，下一可用版本 V23） | E3 空库+升级、共识 7 |
 | `TASK-P1-003` | 资产创建意图+Gitea 建仓 Saga，重放和远程不确定结果可恢复 | JRN-P1-001、E4 故障注入 |
 | `TASK-P1-004` | 权限过滤的资产搜索/Cursor/防枚举 | JRN-P1-002、10 万数据性能准备 |
 | `TASK-P1-005` | 资产详情展示 Card、治理、Owner、来源 Commit、历史停用项和"快速使用"代码片段面板（DEC-014） | PAGE-AST-003、E4 |
