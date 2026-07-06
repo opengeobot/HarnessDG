@@ -76,6 +76,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # PowerShell Core 在 ubuntu-latest runner 已预装；此处显式验证版本以确保可复现。
+      - name: Verify PowerShell
+        shell: bash
+        run: pwsh --version
       - name: Validate Spec
         shell: pwsh
         run: ./tools/validate-spec.ps1

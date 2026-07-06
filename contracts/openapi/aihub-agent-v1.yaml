@@ -6,6 +6,9 @@ openapi: 3.1.0
 info:
   title: AIHub Agent API
   version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
   description: |
     Agent-friendly subset of the AIHub REST API.
     Two profiles: read-only (asset search/inspect) and contribution (draft/create/upload).
@@ -29,7 +32,8 @@ paths:
   /agent/assets/search:
     get:
       operationId: agentSearchAssets
-      x-implementation-status: planned
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       tags: [read-only]
       summary: Search assets (read-only profile)
       description: |
@@ -65,7 +69,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/AssetSummary' }
-                  nextCursor: { type: string, nullable: true }
+                  nextCursor: { type: [string, 'null'] }
                   hasMore: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -73,7 +77,8 @@ paths:
   /agent/assets/{assetId}:
     get:
       operationId: agentGetAsset
-      x-implementation-status: planned
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND]
       tags: [read-only]
       summary: Get asset details (read-only profile)
       parameters:
@@ -94,7 +99,8 @@ paths:
   /agent/assets/{assetId}/versions:
     get:
       operationId: agentListVersions
-      x-implementation-status: planned
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_UNAUTHENTICATED, ASSET_NOT_FOUND]
       tags: [read-only]
       summary: List versions for an asset (read-only profile)
       parameters:
@@ -119,14 +125,15 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/VersionSummary' }
-                  nextCursor: { type: string, nullable: true }
+                  nextCursor: { type: [string, 'null'] }
                   hasMore: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /agent/versions/{versionId}/download:
     post:
       operationId: agentRequestDownload
-      x-implementation-status: planned
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
       tags: [read-only]
       summary: Request download ticket (returns handle, not URL)
       parameters:
@@ -140,7 +147,7 @@ paths:
             schema:
               type: object
               properties:
-                artifactId: { type: string, nullable: true }
+                artifactId: { type: [string, 'null'] }
       responses:
         '200':
           description: Download ticket
@@ -153,7 +160,8 @@ paths:
   /agent/assets/{assetId}/versions/draft:
     post:
       operationId: agentCreateDraftVersion
-      x-implementation-status: planned
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT]
       tags: [contribution]
       summary: Create a draft version (contribution profile)
       description: |
@@ -173,7 +181,7 @@ paths:
               required: [version]
               properties:
                 version: { type: string }
-                confirmationToken: { type: string, nullable: true }
+                confirmationToken: { type: [string, 'null'] }
       responses:
         '201':
           description: Draft version created
@@ -225,18 +233,18 @@ components:
         assetId: { type: string }
         version: { type: string }
         status: { type: string, enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED] }
-        gitTag: { type: string, nullable: true }
-        manifestDigest: { type: string, nullable: true }
-        publishedAt: { type: string, format: date-time, nullable: true }
+        gitTag: { type: [string, 'null'] }
+        manifestDigest: { type: [string, 'null'] }
+        publishedAt: { type: [string, 'null'], format: date-time }
 
     DownloadTicket:
       type: object
       properties:
         method: { type: string, enum: [PRESIGNED_URL, GIT_DVC] }
-        presignedUrl: { type: string, nullable: true }
-        expiresAt: { type: string, format: date-time, nullable: true }
-        fileName: { type: string, nullable: true }
-        fileSize: { type: integer, format: int64, nullable: true }
+        presignedUrl: { type: [string, 'null'] }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        fileName: { type: [string, 'null'] }
+        fileSize: { type: [integer, 'null'], format: int64 }
 
     ErrorResponse:
       type: object

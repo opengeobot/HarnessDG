@@ -17,7 +17,7 @@ import java.util.Set;
  *
  * @param issuer        签发方（{@code iss}）
  * @param audience      接收方（{@code aud}）
- * @param principalId   主体 ID（{@code sub}，如 {@code usr_}/{@code agt_} 前缀）
+ * @param principalId   主体 ID（{@code sub}，统一 {@code prn_} 前缀）
  * @param principalType 主体类型
  * @param jwtId         Token 唯一标识（{@code jti}，用于吊销/重放检测）
  * @param tokenVersion  主体 Token 版本，主体侧失效（改密/禁用）后递增使旧 Token 失效
