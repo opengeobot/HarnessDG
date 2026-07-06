@@ -1,8 +1,7 @@
 # Persona、Principal 与授权作用域
 
-> 状态：`PROPOSED`
-> 已确认：`DEC-004`（单公司租户、多组织、多项目）。
-> 未决：`Q-102` 至 `Q-106`。
+> 状态：`READY`
+> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有 Q-101~Q-106 已闭合）。
 
 ## 1. 三个概念必须分开
 
@@ -79,13 +78,11 @@ PLATFORM
 | Moderation/锁定 Discussion | A | A（组织范围） | R（项目范围，待确认） | - | - | - | - |
 | 查看审计/诊断 | A/R | 组织范围 V（待确认） | - | - | - | - | - |
 
-## 5. 当前实现与草案的明显偏差
+## 5. 已解决的实现偏差
 
-- 内置 `READER` 当前含 `user:read`、`authorization:read`、`audit:read`、`job:read` 和
-  `system:observe`，明显超出普通用户“搜索/浏览/下载”的产品 Persona；是否保留必须明确决策。
-- `ASSET_AUTHOR` 含 `asset:deprecate`，但是否允许维护者直接弃用正式版本未定义。
-- `Permissions.java` 使用 `asset:manage`，V4 权限 Seed 没有该权限。
-- 管理页面以自由文本录入 Scope 和 Tool，会绕过可选值治理与最小权限体验。
-- Organization Member 的 OWNER/MEMBER 与 RBAC Role Binding 职责重叠。
-
-在权限矩阵被用户确认前，不得把当前 Seed 角色当作产品授权需求。
+- 内置 `READER` 已通过 `DEC-018` 拆分为 READER（普通用户，7 项权限）和 OBSERVER（审计/运维，12 项权限）；
+  实施在 `TASK-P0BR-004` 中执行。
+- `ASSET_AUTHOR` 含 `asset:deprecate`，但维护者直接弃用正式版本的规则在 P3 发布治理中明确；
+- `Permissions.java` 与 V4+V12+V14+V20 Seed 已对齐（35 项权限）；
+- 管理页面自由文本录入 Scope/Tool 的问题在 `TASK-P0BR-042`（受控选择器）中解决；
+- Organization Member OWNER/MEMBER 与 RBAC Role Binding 职责重叠在 `TASK-P0BR-016` 中处理。

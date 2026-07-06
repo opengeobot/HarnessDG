@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.ai-spec/v1
 packageVersion: 0.2.0
-status: DRAFT
+status: APPROVED
 language: zh-CN
 createdAt: "2026-07-02"
 baseRevision:
@@ -11,9 +11,10 @@ purpose: >
   将 HarnessDG 产品设计拆成 AI 编程 IDE 可读取、可实施、可追踪、可自动验收的规格包。
 
 authority:
-  normativeAfterApproval: false
+  normativeAfterApproval: true
   approvedSlicesNormative: true
-  reason: 整包仍有组织/Owner、资产发布、UI 与非功能决策未关闭；approvedSlices 已由 DEC-008/009 确认并具规范效力，但实现仍受阶段与 Task 门禁约束。
+  approvedAt: "2026-07-06"
+  reason: 所有决策问题（Q-001~Q-305）已通过 DEC-010/011/012/013 闭合；approvedSlices 由 DEC-008/009 确认并具规范效力；DEC-007 代码冻结条件已满足，后续实施按 Task Card 门禁执行。
   sourcePriorityPolicy: 00-governance/source-and-status-policy.md
 
 acceptedDecisions:
@@ -29,6 +30,12 @@ acceptedDecisions:
   - DEC-011
   - DEC-012
   - DEC-013
+  - DEC-014
+  - DEC-015
+  - DEC-016
+  - DEC-017
+  - DEC-018
+  - DEC-019
 
 confirmedDirection:
   implementationFocus: P0
@@ -85,40 +92,40 @@ entrypoints:
 documents:
   - path: 00-governance/source-and-status-policy.md
     kind: governance
-    status: DRAFT
+    status: READY
   - path: 00-governance/open-questions.md
     kind: decisions
-    status: OPEN
+    status: CLOSED
   - path: 00-governance/decision-log.md
     kind: decisions
-    status: DRAFT
+    status: READY
   - path: 00-governance/current-state-audit-2026-07-02.md
     kind: evidence-audit
     status: DRAFT
   - path: 01-requirements/requirement-schema.md
     kind: schema
-    status: DRAFT
+    status: READY
   - path: 01-requirements/product-scope.md
     kind: product
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/glossary.md
     kind: domain
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/personas-and-scope.md
     kind: authorization
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/non-functional-requirements.md
     kind: quality
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/p0b-identity-authorization.md
     kind: requirements
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/p0b-platform-services.md
     kind: requirements
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/p1-asset-catalog.md
     kind: requirements
-    status: OPEN
+    status: READY
   - path: 01-requirements/dataset-experience.md
     kind: requirements
     status: READY
@@ -136,34 +143,37 @@ documents:
     status: OPEN
   - path: 02-domain/entity-invariants.md
     kind: domain
-    status: PROPOSED
+    status: READY
   - path: 02-domain/state-machines.md
     kind: domain
-    status: PROPOSED
+    status: READY
   - path: 02-domain/consistency-and-compensation.md
     kind: consistency
-    status: PROPOSED
+    status: READY
+  - path: 02-domain/error-catalog.md
+    kind: domain
+    status: READY
   - path: 02-delivery/traceability-matrix.md
     kind: traceability
     status: DRAFT
   - path: 02-delivery/work-breakdown.md
     kind: delivery-plan
-    status: PROPOSED
+    status: ACTIVE
   - path: 03-use-cases/user-journey-catalog.md
     kind: use-case-index
-    status: PROPOSED
+    status: READY
   - path: 04-ui/information-architecture.md
     kind: ui
-    status: PROPOSED
+    status: READY
   - path: 04-ui/page-catalog.md
     kind: ui
-    status: PROPOSED
+    status: READY
   - path: 04-ui/page-spec-template.md
     kind: template
     status: DRAFT
   - path: 05-acceptance/p0b-exit-catalog.md
     kind: acceptance
-    status: PROPOSED
+    status: READY
   - path: 05-acceptance/dataset-agent-exit-catalog.md
     kind: acceptance
     status: READY

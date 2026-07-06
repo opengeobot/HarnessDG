@@ -1,6 +1,6 @@
 # 稳定状态机
 
-> 状态：`PROPOSED`
+> 状态：`READY`
 > 规则：每个转换必须在 Java Enum/Domain、DB CHECK、OpenAPI/事件、前端生成类型和测试中一致。
 
 ## 1. 状态机通用规则

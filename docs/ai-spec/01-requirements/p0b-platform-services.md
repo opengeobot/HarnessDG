@@ -1,12 +1,13 @@
 # P0-B 治理、可靠性与观测需求
 
-> 状态：`PROPOSED`
+> 状态：`READY`
 > 依据：ADR-0002、设计 5.6-5.14、11、13-15。
+> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有相关 Q 已通过 DEC 闭合）。
 
 ## REQ-COM-001 统一 ID、上下文、响应与错误
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E3
@@ -41,7 +42,7 @@ minimumEvidenceLevel: E3
 ## REQ-TAX-001 字典与运行时国际化
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permissions: [dictionary:read, dictionary:manage]
@@ -76,7 +77,7 @@ minimumEvidenceLevel: E4
 ## REQ-TAG-001 平台/组织受控标签
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permissions: [tag:read, tag:manage]
@@ -110,7 +111,7 @@ minimumEvidenceLevel: E4
 ## REQ-CFG-001 类型化非敏感运行配置
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permission: system:configure
@@ -144,7 +145,7 @@ minimumEvidenceLevel: E4
 ## REQ-IDM-001 写接口幂等
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -158,7 +159,7 @@ minimumEvidenceLevel: E4
 ### 行为
 
 - key 与 principalId、method、canonical path、request digest 共同构成作用域；
-- 缺少 REQUIRED key 返回稳定错误（当前 Error Catalog 需补）；
+- 缺少 REQUIRED key 返回稳定错误（已通过 `IDEMPOTENCY_KEY_CONFLICT` 在 Error Catalog 中定义，DEC-019）；
 - 首次请求原子登记 IN_PROGRESS，业务完成后保存原始 status/response；
 - 同 key 同 digest 返回首次结果，不重复业务、审计、Outbox；
 - 同 key 不同 digest 返回 `IDEMPOTENCY_KEY_CONFLICT`；
@@ -176,7 +177,7 @@ minimumEvidenceLevel: E4
 ## REQ-JOB-001 PostgreSQL 可靠任务
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permissions: [job:read, job:manage]
@@ -215,7 +216,7 @@ pending/running/retry/dead、claim conflict、lease expiry、duration、attempt 
 ## REQ-LOG-001 结构化运行日志与脱敏
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -247,7 +248,7 @@ minimumEvidenceLevel: E4
 ## REQ-AUD-001 不可变业务审计
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permission: audit:read
@@ -276,7 +277,7 @@ minimumEvidenceLevel: E4
 ## REQ-NOT-001 站内通知与 Outbox
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permission: notification:read
@@ -308,7 +309,7 @@ minimumEvidenceLevel: E4
 ## REQ-WHK-001 签名 Webhook 投递
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -340,10 +341,9 @@ minimumEvidenceLevel: E4
 ## REQ-OBS-001 指标、Trace、健康、诊断与告警
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P0-B
-blockedBy: [AUD-005, Q-304]
 permission: system:observe
 minimumEvidenceLevel: E4/E5
 ```
@@ -369,7 +369,7 @@ minimumEvidenceLevel: E4/E5
 ## REQ-UI-001 公共管理端
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4

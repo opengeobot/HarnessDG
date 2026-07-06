@@ -1,14 +1,13 @@
 # P0-B 身份、组织与授权需求
 
-> 状态：`PROPOSED`
+> 状态：`READY`
 > 依据：ADR-0002、设计 5.4/5.5/11.1。
-> 已确认：`DEC-004`（单公司租户、多组织、多项目）。
-> 阻塞：用户跨组织、Team/Owner 与最终角色矩阵受 Q-102..106 影响。
+> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有 Q-101~Q-106 已通过 DEC 闭合）。
 
 ## REQ-IAM-001 Bootstrap 首个管理员
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: 部署管理员
@@ -42,7 +41,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-002 用户登录与首次改密
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: USER
@@ -90,7 +89,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-003 access JWT 校验与 PrincipalContext
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: 所有在线 Principal
@@ -134,7 +133,7 @@ locale/requestId/traceId`。
 ## REQ-IAM-004 refresh 轮换、并发与重放检测
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: USER 浏览器会话
@@ -170,7 +169,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-005 登出、禁用、改密和重置的会话失效
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actors: [USER, 用户管理员, Agent 管理员]
@@ -201,7 +200,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-006 用户全生命周期管理
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: 用户管理员
@@ -235,7 +234,7 @@ minimumEvidenceLevel: E4
 ## REQ-AGT-001 Agent 注册与凭据交换
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actors: [Agent 管理员, AGENT]
@@ -272,10 +271,10 @@ minimumEvidenceLevel: E4
 ## REQ-ORG-001 Organization、Project 与 Membership
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P0-B
-blockedBy: [Q-102, Q-105]
+
 minimumEvidenceLevel: E4
 ```
 
@@ -306,10 +305,10 @@ minimumEvidenceLevel: E4
 ## REQ-ORG-002 Team 与资产责任主体
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST if Team accepted
 phase: P0-B/P1 boundary
-blockedBy: [Q-103, Q-104, Q-105]
+
 minimumEvidenceLevel: E4
 ```
 
@@ -332,7 +331,7 @@ minimumEvidenceLevel: E4
 ## REQ-AUTH-001 统一实时授权判定
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actors: 所有 Principal/Adapter
@@ -378,7 +377,7 @@ principal + action/permission + scope + resource + resourceState
 ## REQ-AUTH-002 列表权限下推与防枚举
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -409,10 +408,10 @@ minimumEvidenceLevel: E4
 ## REQ-AUTH-003 Role、Binding 与 ACL 管理
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P0-B
-blockedBy: [Q-105, final permission matrix]
+
 minimumEvidenceLevel: E4
 ```
 

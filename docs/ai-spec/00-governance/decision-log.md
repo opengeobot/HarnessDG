@@ -1,7 +1,7 @@
 # 已确认决策日志
 
-> 状态：`DRAFT`
-> 当前生效的 Accepted Decision：12（`DEC-005` 已被 `DEC-008` 替代）
+> 状态：`READY`
+> 当前生效的 Accepted Decision：18（`DEC-005` 已被 `DEC-008` 替代；`DEC-014`~`DEC-019` 为本次 grilling 新增）
 
 ## 1. 规则
 
@@ -329,3 +329,137 @@ affected:
 requiresAdr: false
 ```
 
+### DEC-014：资产详情页"快速使用"代码片段面板
+
+```yaml
+decisionId: DEC-014
+questionIds: []
+status: ACCEPTED
+decision: >
+  P1 资产详情页（PAGE-AST-003）增加"快速使用"区块，展示可复制的代码片段：
+  git clone 命令、dvc pull 命令（如适用）、aih CLI 命令、预签名 URL 下载示例（仅 API 用户）。
+  参考魔搭社区模型详情页的"快速使用"面板设计。
+rationale: 内部平台用户需要快速获取资产的命令行操作方式，减少手动拼接命令的认知负担。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-AST-DETAIL-001]
+  pages: [PAGE-AST-003]
+  documents: [04-ui/page-catalog.md]
+requiresAdr: false
+```
+
+### DEC-015：数据集详情页 Subset/Split 选择器与统计面板
+
+```yaml
+decisionId: DEC-015
+questionIds: []
+status: ACCEPTED
+decision: >
+  P2 数据集详情页（PAGE-DST-001）补充：
+  (1) 预览区顶部增加 Subset 下拉选择器 + Split Tab 切换；
+  (2) 详情页右侧栏增加"统计"卡片（行数/大小/文件数/列数）。
+  首个可交付版本仅支持单 Subset 数据集，多 Subset 在后续迭代中开放。
+  参考魔搭社区数据集详情页的 Subset/Split 交互设计。
+rationale: 数据集消费者需要快速了解数据结构和规模，Subset/Split 是常见数据集的标准交互。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-DST-DETAIL-001, REQ-PRE-001]
+  pages: [PAGE-DST-001]
+  documents: [04-ui/page-catalog.md]
+requiresAdr: false
+```
+
+### DEC-016：下载量与热度统计推迟至 P5
+
+```yaml
+decisionId: DEC-016
+questionIds: []
+status: ACCEPTED
+decision: >
+  模型/数据集的下载量、热度统计展示推迟到 P5（质量与运维阶段）。
+  MVP 阶段不在 UI 上展示下载量/热度。
+  P1 必须确保 audit_log 中下载授权事件（download-ticket 签发）可聚合查询，
+  为后续 P5 统计面板预留数据源。
+rationale: 统计展示是运营功能而非核心治理能力，P5 统一建设更合理。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-OBS-001]
+  pages: []
+  documents: [02-delivery/work-breakdown.md]
+requiresAdr: false
+```
+
+### DEC-017：需求文档批量 READY 化
+
+```yaml
+decisionId: DEC-017
+questionIds: []
+status: ACCEPTED
+decision: >
+  规格包已批准（manifest.yaml status=APPROVED），所有决策问题已闭合，
+  因此 P0-B 和 P1 需求文档全部提升为 READY：
+  - requirement-schema.md: DRAFT→READY（作为 REQ/AC 格式规范）
+  - p0b-identity-authorization.md: PROPOSED→READY（删除已解决的 Q-102~Q-106 blockedBy）
+  - p0b-platform-services.md: PROPOSED→READY（删除已解决的 Q-304 blockedBy）
+  - p1-asset-catalog.md: OPEN→READY（删除已解决的 Q-101~Q-206 blockedBy）
+  - glossary.md、non-functional-requirements.md、personas-and-scope.md、product-scope.md: PROPOSED→READY
+  P2-P5 需求文档保持 OPEN，在对应阶段开始前再提升。
+rationale: Task Card validator 要求引用的 Requirement 必须为 READY 状态；阻塞已解除，不提升将阻止 Task Card 创建。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-IAM-001..006, REQ-AGT-001, REQ-ORG-001/002, REQ-AUTH-001..003, REQ-COM-001, REQ-TAX-001, REQ-TAG-001, REQ-CFG-001, REQ-IDM-001, REQ-JOB-001, REQ-LOG-001, REQ-AUD-001, REQ-NOT-001, REQ-WHK-001, REQ-OBS-001, REQ-UI-001, REQ-AST-001..009]
+  pages: []
+  documents: [01-requirements/*.md]
+requiresAdr: false
+```
+
+### DEC-018：拆分 READER 角色为普通用户与审计/运维
+
+```yaml
+decisionId: DEC-018
+questionIds: []
+status: ACCEPTED
+decision: >
+  将当前 READER 内置角色拆分为两个独立角色，符合最小权限原则：
+  - READER（普通用户 PER-007）：project:view, dictionary:read, tag:read, asset:read,
+    asset:download, asset:discuss, notification:read（7 项）
+  - OBSERVER（审计/运维 PER-011）：继承 READER 全部权限 + user:read, authorization:read,
+    audit:read, job:read, system:observe（共 12 项）
+  实施在 TASK-P0BR-004 中执行：新增 Flyway Migration 创建 OBSERVER 角色，
+  从 READER 移除 user:read/authorization:read/audit:read/job:read/system:observe。
+  ADMIN 角色保持全部权限不变。
+rationale: 当前 READER 混合了普通用户和运维人员的权限，违反最小权限原则；personas-and-scope.md 第 5 节已明确标记此偏差。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-AUTH-001, REQ-AUTH-003, REQ-UI-001]
+  pages: [PAGE-ADM-006, PAGE-ADM-013, PAGE-ADM-014, PAGE-ADM-016]
+  documents: [01-requirements/personas-and-scope.md]
+requiresAdr: false
+```
+
+### DEC-019：创建 Error Catalog 设计文档
+
+```yaml
+decisionId: DEC-019
+questionIds: []
+status: ACCEPTED
+decision: >
+  创建 docs/ai-spec/02-domain/error-catalog.md，将 ErrorCode.java 的 56 个错误码
+  文档化为 AI IDE 可读的设计规格。按 24 个领域模块分组，包含完整的 HTTP status、
+  i18nKey、retryable、alertLevel 映射和 API 错误响应格式规范。
+  权威源仍为 ErrorCode.java，文档必须与枚举保持同步。
+rationale: REQ-COM-001 要求 Error Catalog 完整定义；p0b-platform-services.md 标注"当前 Error Catalog 需补"；
+  AI IDE 需要知道每个 API 端点可能返回的错误码来规划错误处理。
+decidedBy: User
+decidedAt: "2026-07-06"
+affected:
+  requirements: [REQ-COM-001, REQ-UI-001]
+  pages: []
+  documents: [02-domain/error-catalog.md]
+requiresAdr: false
+```

@@ -1,9 +1,10 @@
 # AI 可执行工作分解与依赖
 
-> 状态：`PROPOSED`
+> 状态：`ACTIVE`
 > 注意：这是任务候选目录，不是实施授权。只有关联需求 READY、决策 ACCEPTED 后才能生成正式 Task Card。
-> 当前：`DEC-001` 至 `DEC-004`、`DEC-006` 至 `DEC-009` 为生效决策；`DEC-005` 已被替代。
-> `Q-007` 和第二轮组织/权限问题仍阻止产品实现，数据集/AI 规格可 READY 但不得跨阶段领取。
+> 当前：`DEC-001` 至 `DEC-004`、`DEC-006` 至 `DEC-019` 为生效决策；`DEC-005` 已被 `DEC-008` 替代。
+> 所有决策问题（Q-001~Q-305）已闭合。规格包已批准（`manifest.yaml` status=APPROVED, 2026-07-06），DEC-007 代码冻结已解除。
+> 后续实施按 DEC-009/DEC-010 的 Task Card 门禁执行，P0-B → P1 → P2 → P3 → P4 → P5 连续推进。
 
 ## 1. 切分规则
 
@@ -58,10 +59,12 @@ GOV（决策与基线）
 
 | Task 候选 | 结果 | 主要领取 | 依赖 |
 | --- | --- | --- | --- |
-| `TASK-P0BR-001` | OpenAPI 实现状态与真实证据同步，breaking diff 强制阻断 | AUD-003、AC-P0B-ENG-002/003 | GOV-005 |
+| `TASK-P0BR-000A` | 安装并验证 `pwsh`（PowerShell Core）在 Linux 开发环境和 CI 中可用 | 共识 8、AGENTS.md | 无 |
+| `TASK-P0BR-000B` | P0-B 管理页面 MIPS 文档（7 页交互元素+API+权限+i18n 前缀）+ 全局前端规范 | 共识 5、PAGE-ADM-* | 无 |
+| `TASK-P0BR-001` | OpenAPI 实现状态与真实证据同步，breaking diff 强制阻断；补契约一致性集成测试（springdoc vs YAML） | AUD-003、AC-P0B-ENG-002/003、共识 6 | GOV-005 |
 | `TASK-P0BR-002` | `principalId=prn_`、userId/agentId 语义在 JWT/API/DB/审计统一 | TERM-001、INV-COM-001 | GOV-005 |
 | `TASK-P0BR-003` | Permission Catalog、Java 常量、V4+ Seed、OpenAPI 和 UI 无漂移 | TERM-003、AUD-016 | GOV-002 |
-| `TASK-P0BR-004` | 内置角色按确认 Persona 最小权限重建 | AUD-017、personas matrix | P0BR-003 |
+| `TASK-P0BR-004` | 内置角色按确认 Persona 最小权限重建：拆分 READER 为 READER+OBSERVER（DEC-018） | AUD-017、personas matrix、DEC-018 | P0BR-003 |
 
 ### 4.2 身份与授权纵向旅程
 
@@ -97,7 +100,7 @@ GOV（决策与基线）
 | Task 候选 | 结果 | 主要领取 | 依赖 |
 | --- | --- | --- | --- |
 | `TASK-P0BR-040` | 前端 Auth、Route Catalog、缓存清理和 Token 存储 E4 | AC-P0B-UI-001/002 | P0BR-013/017 |
-| `TASK-P0BR-041` | 运行时 zh/en i18n 和统一错误/页面状态 E4 | AC-P0B-UI-003/005 | P0BR-020/040 |
+| `TASK-P0BR-041` | 运行时 zh/en i18n 和统一错误/页面状态 E4；含后端 `messages_zh/en.properties`、前端 `zh.json`/`en.json` 中全部 56 个 error.* key + 2 个前端额外 key（DEC-019）；Error Catalog 文档同步验证 | AC-P0B-UI-003/005、DEC-019 | P0BR-020/040 |
 | `TASK-P0BR-042` | 管理表单移除自由 Scope/Tool/Principal/Permission 输入 | AC-P0B-UI-004 | P0BR-014/016/017 |
 | `TASK-P0BR-043` | P0-B 管理页面组件测试+浏览器 E2E+视觉证据 | AC-P0B-UI-006、PAGE-ADM-* | P0BR-041/042 |
 | `TASK-P0BR-044` | Runbook、V 编号和 AC 覆盖映射同步 | AUD-002/007 | 所有 P0BR 功能任务 |
@@ -111,10 +114,10 @@ GOV（决策与基线）
 | Task 候选 | 可观察结果 | 关键依赖/证据 |
 | --- | --- | --- |
 | `TASK-P1-001` | MODEL/DATASET 字段、Owner、坐标、别名和可见性需求/契约 READY | GOV-002/003、P0BR-046 |
-| `TASK-P1-002` | V14+ 前向清点并迁移遗留 owner/tags/governed fields，无未解析数据放宽 | E3 空库+升级 |
+| `TASK-P1-002` | V21+ 资产数据回填：自由标签→受控标签映射、字符串 Owner→Team ID 回填、UNMAPPED 标记与管理端整改页 | E3 空库+升级、共识 7 |
 | `TASK-P1-003` | 资产创建意图+Gitea 建仓 Saga，重放和远程不确定结果可恢复 | JRN-P1-001、E4 故障注入 |
 | `TASK-P1-004` | 权限过滤的资产搜索/Cursor/防枚举 | JRN-P1-002、10 万数据性能准备 |
-| `TASK-P1-005` | 资产详情展示 Card、治理、Owner、来源 Commit 和历史停用项 | PAGE-AST-003、E4 |
+| `TASK-P1-005` | 资产详情展示 Card、治理、Owner、来源 Commit、历史停用项和"快速使用"代码片段面板（DEC-014） | PAGE-AST-003、E4 |
 | `TASK-P1-006` | 乐观锁更新、重命名/别名和 Gitea/投影一致 | JRN-P1-003、E4 |
 | `TASK-P1-007` | 弃用/归档/恢复与引用检查 | JRN-P1-004、E4 |
 | `TASK-P1-008` | 资产创建/发现/详情/设置/访问 UI 完整状态与两语言 | PAGE-AST-*、E2/E4 |
@@ -132,11 +135,11 @@ GOV（决策与基线）
 | `TASK-P2-003` | Upload Session/Part/签名/限额/过期 | E3/E4 |
 | `TASK-P2-004` | 浏览器 Multipart 暂停/刷新/失败 Part 恢复 | JRN-P2-002、PAGE-UPL-* |
 | `TASK-P2-005` | Materialization Worker 完成校验→DVC→Git→投影 Saga | 故障注入 E4 |
-| `TASK-P2-006` | 下载票据按权限/状态/敏感度签发，过期和日志脱敏 | JRN-P2-003、E4 |
+| `TASK-P2-006` | 下载票据按权限/状态/敏感度签发，过期和日志脱敏；audit_log 中下载授权事件必须可聚合查询（DEC-016 预留 P5 统计数据源） | JRN-P2-003、E4 |
 | `TASK-P2-007` | CLI/Web 上传和下载校验的干净 Compose 出口 | P2 全旅程 E4 |
-| `TASK-P2-008` | CSV/JSONL/Parquet 最小安全预览 Job、API 和页面 | REQ-PRE-001、AC-DST-PRE-* |
+| `TASK-P2-008` | CSV/JSONL/Parquet 最小安全预览 Job、API 和页面；Subset 下拉+Split Tab 选择器（首版单 Subset）+ 统计卡片（DEC-015） | REQ-PRE-001、AC-DST-PRE-* |
 | `TASK-P2-009` | `aih dataset search/inspect/pull/create/push/status` 薄 CLI 与稳定退出码 | REQ-DST-CLI-001、AC-DST-CLI-* |
-| `TASK-P2-010` | Dataset 详情的 Version/Files/Preview/CLI 纵向旅程 | JRN-P2-004、E4 |
+| `TASK-P2-010` | Dataset 详情的 Version/Files/Preview(Subset/Split/Stats)/CLI 纵向旅程 | JRN-P2-004、E4 |
 
 ## 7. Wave P3：发布治理
 
@@ -177,6 +180,7 @@ GOV（决策与基线）
 | `TASK-P5-005` | 上传/SSRF/凭据/Prompt 注入安全测试 | JRN-P5-004、E5 |
 | `TASK-P5-006` | 告警、Dashboard、容量与运维 Runbook | E5 |
 | `TASK-P5-007` | P0-P5 全量追踪无缺口的发布候选审计 | Completion Audit |
+| `TASK-P5-008` | 下载量/热度统计面板：基于 audit_log 下载授权事件聚合查询，模型/数据集卡片展示下载量（DEC-016） | REQ-OBS-001、E5 |
 
 ## 10. 正式 Task Card 生成规则
 
@@ -191,4 +195,5 @@ GOV（决策与基线）
 7. 生成初始 Evidence Manifest；
 8. 由产品/架构责任人把 Task 从 DRAFT 变为 READY；
 9. AI 才能开始产品代码修改。
-10. 运行 `tools/validate-task-card.ps1`；任何失败都使 Task 保持 DRAFT/不可实施。
+10. 运行 `tools/validate-task-card.ps1`（需 `pwsh`）；任何失败都使 Task 保持 DRAFT/不可实施。
+11. Task Card 的 `taskId` 必须在本文件的任务候选表中注册；未注册的 ID 被 validator 拒绝。

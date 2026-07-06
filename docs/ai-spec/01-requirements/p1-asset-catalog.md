@@ -1,7 +1,8 @@
 # P1 可治理资产目录需求
 
-> 状态：`OPEN`
-> 阻塞：P0-B 必须 VERIFIED；Q-101..106、Q-201/202 需确认。
+> 状态：`READY`
+> 前置：P0-B 必须 VERIFIED（Task Card 依赖链保证执行顺序）。
+> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有 Q-101~Q-206 已通过 DEC 闭合）。
 > 范围：MODEL、DATASET 的目录与 Gitea 仓库，不含 DVC 上传、发布审批和 MCP。
 > 数据集专项：`dataset-experience.md` 中 `REQ-DST-TAX-001`、`REQ-DST-DETAIL-001`、
 > `REQ-DST-DISC-001` 已由 `DEC-008` 确认为 MUST；本文件不得用通用 Asset 字段削弱其要求。
@@ -9,10 +10,9 @@
 ## REQ-AST-001 资产坐标、类型与责任模型
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P1
-blockedBy: [Q-101, Q-103, Q-104, Q-201, Q-202]
 minimumEvidenceLevel: E3
 ```
 
@@ -49,7 +49,7 @@ sensitivityCode/sampleCount/totalBytes/sizeBucketCode/tagIds`。Split、Schema�
 ## REQ-AST-002 创建资产与仓库开通
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P1
 actor: 资产维护者或显式授权 Agent
@@ -103,7 +103,7 @@ minimumEvidenceLevel: E4
 ## REQ-AST-003 权限过滤的资产搜索
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P1
 actor: 任意已认证且状态正常 Principal
@@ -148,7 +148,7 @@ DATASET 还必须完整实现 `REQ-DST-TAX-001` 的多值分类、权限过滤 F
 ## REQ-AST-004 资产详情与 Card 投影
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P1
 permission: asset:read
@@ -179,7 +179,7 @@ minimumEvidenceLevel: E4
 ## REQ-AST-005 更新资产元数据与卡片
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P1
 actor: Owner/Maintainer
@@ -215,14 +215,13 @@ GITEA_DEPENDENCY_UNAVAILABLE`。
 ## REQ-AST-006 Owner、Maintainer 与资产 ACL
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P1
-blockedBy: [Q-103, Q-104, final permission matrix]
 minimumEvidenceLevel: E4
 ```
 
-### 建议行为
+### 行为
 
 - Owner 是正式 Team 引用且至少一个；
 - Maintainer 是 Principal/Team 的 Role Binding，不与 Owner 字段重复表达权限；
@@ -243,10 +242,9 @@ minimumEvidenceLevel: E4
 ## REQ-AST-007 弃用、归档、恢复与删除
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P1/P3
-blockedBy: [Q-206]
 permissions: [asset:deprecate, asset:delete]
 idempotency: REQUIRED
 minimumEvidenceLevel: E4
@@ -273,7 +271,7 @@ minimumEvidenceLevel: E4
 ## REQ-AST-008 Gitea 仓库映射、权限投影与对账
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P1
 minimumEvidenceLevel: E4
@@ -301,10 +299,9 @@ minimumEvidenceLevel: E4
 ## REQ-AST-009 资产目录前端
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P1
-blockedBy: [REQ-AST-001, REQ-AST-006]
 minimumEvidenceLevel: E4
 ```
 
