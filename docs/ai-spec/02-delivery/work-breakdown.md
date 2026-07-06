@@ -61,7 +61,7 @@ GOV（决策与基线）
 | --- | --- | --- | --- |
 | `TASK-P0BR-000A` | 安装并验证 `pwsh`（PowerShell Core）在 Linux 开发环境和 CI 中可用 | 共识 8、AGENTS.md | 无 |
 | `TASK-P0BR-000B` | P0-B 管理页面 MIPS 文档（7 页交互元素+API+权限+i18n 前缀）+ 全局前端规范 | 共识 5、PAGE-ADM-* | 无 |
-| `TASK-P0BR-001` | OpenAPI 实现状态与真实证据同步，breaking diff 强制阻断；补契约一致性集成测试（springdoc vs YAML） | AUD-003、AC-P0B-ENG-002/003、共识 6 | GOV-005 |
+| `TASK-P0BR-001` | OpenAPI 实现状态与真实证据同步，breaking diff 强制阻断；补契约一致性集成测试（springdoc vs YAML）；每个端点添加 `x-error-codes` 扩展（DEC-019） | AUD-003、AC-P0B-ENG-002/003、共识 6 | GOV-005 |
 | `TASK-P0BR-002` | `principalId=prn_`、userId/agentId 语义在 JWT/API/DB/审计统一 | TERM-001、INV-COM-001 | GOV-005 |
 | `TASK-P0BR-003` | Permission Catalog、Java 常量、V4+ Seed、OpenAPI 和 UI 无漂移 | TERM-003、AUD-016 | GOV-002 |
 | `TASK-P0BR-004` | 内置角色按确认 Persona 最小权限重建：拆分 READER 为 READER+OBSERVER（DEC-018） | AUD-017、personas matrix、DEC-018 | P0BR-003 |

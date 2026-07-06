@@ -242,7 +242,17 @@ REQ-COM-001 要求：Error Catalog 每个 code 唯一绑定 HTTP status、i18nKe
 - 新增前端 Key 时需同步更新本节。
 - 后端 ErrorCode 新增时，前端不应再为此错误使用 `error.common.unknown` 回退。
 
-## 6. 维护规则
+## 6. 按 API 端点的错误映射
+
+> **状态**：待 `TASK-P0BR-001`（OpenAPI 契约同步）和 `TASK-P0BR-041`（i18n）实施时补充。
+>
+> 当前 OpenAPI `aihub-v1.yaml` 每个端点仅引用通用 `ErrorResponse`，未标注具体 ErrorCode。
+> 实施时需：
+> 1. 在每个端点的 OpenAPI 定义中添加 `x-error-codes` 扩展，列出该端点可能返回的 ErrorCode 子集；
+> 2. 在 MCP `tools.yaml` 中对每个 Tool 标注对应的 ErrorCode；
+> 3. 本节将在此工作完成后填充完整的 per-endpoint 映射表。
+
+## 7. 维护规则
 
 1. **权威源是 `ErrorCode.java`**——本文档必须与枚举保持同步。
 2. 新增 ErrorCode 时，必须同时更新本文档和 `ErrorCode.java`。
