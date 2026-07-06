@@ -29,6 +29,7 @@ paths:
   /agent/assets/search:
     get:
       operationId: agentSearchAssets
+      x-implementation-status: planned
       tags: [read-only]
       summary: Search assets (read-only profile)
       description: |
@@ -72,6 +73,7 @@ paths:
   /agent/assets/{assetId}:
     get:
       operationId: agentGetAsset
+      x-implementation-status: planned
       tags: [read-only]
       summary: Get asset details (read-only profile)
       parameters:
@@ -92,6 +94,7 @@ paths:
   /agent/assets/{assetId}/versions:
     get:
       operationId: agentListVersions
+      x-implementation-status: planned
       tags: [read-only]
       summary: List versions for an asset (read-only profile)
       parameters:
@@ -123,6 +126,7 @@ paths:
   /agent/versions/{versionId}/download:
     post:
       operationId: agentRequestDownload
+      x-implementation-status: planned
       tags: [read-only]
       summary: Request download ticket (returns handle, not URL)
       parameters:
@@ -149,6 +153,7 @@ paths:
   /agent/assets/{assetId}/versions/draft:
     post:
       operationId: agentCreateDraftVersion
+      x-implementation-status: planned
       tags: [contribution]
       summary: Create a draft version (contribution profile)
       description: |
