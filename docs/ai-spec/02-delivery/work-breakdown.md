@@ -158,7 +158,7 @@ GOV（决策与基线）
 
 | Task 候选 | 可观察结果 | 关键证据 |
 | --- | --- | --- |
-| `TASK-P4-001` | MCP Tool/Resource Schema 和错误/分页契约 READY，修复阶段/`write` 标记 | AUD-011 |
+| `TASK-P4-001` | MCP Tool/Resource Schema 和错误/分页契约 READY，修复阶段/`write` 标记；tools.yaml 与 McpToolCatalog 同步验证 | AUD-011 |
 | `TASK-P4-002` | Streamable HTTP initialize/list/call 与 JWT | 协议 E3/E4 |
 | `TASK-P4-003` | 只读搜索→精确版本→下载票据复用 REST Application Service | JRN-P4-001/002 |
 | `TASK-P4-004` | Tool Allowlist+Scope+Permission+资源策略拒绝 | JRN-P4-003 |

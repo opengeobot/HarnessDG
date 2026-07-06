@@ -5,7 +5,7 @@
 #       Tool 实现必须复用与 REST 相同的 Application Service，不得绕过权限或直接访问 Mapper。
 # 作者：AxeXie
 schemaVersion: 1
-contractStatus: implemented-p4
+contractStatus: implemented-p4-synced
 
 transport:
   protocol: streamable-http
@@ -99,12 +99,41 @@ tools:
     parameters:
       type: object
       additionalProperties: false
+      required: [versionId]
+      properties:
+        versionId: { type: string }
+
+  - name: asset_request_download
+    enabled: true
+    write: false
+    summary: 请求已发布版本的下载票据（返回 handle 或预签名 URL）。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: DownloadApplicationService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [versionId]
+      properties:
+        versionId: { type: string }
+        artifactId: { type: string, description: 可选工件 ID；省略表示整版本下载（GIT_DVC）。 }
+
+  # ---- P0-B 默认关闭的写工具（受 mcp.writeTools.enabled 与高风险 Scope 双控）----
+  - name: asset_create_draft
+    enabled: false
+    write: true
+    summary: 为资产创建草稿版本。P0-B 默认关闭；受 mcp.writeTools.enabled 控制。
+    requiredScopes: [asset:manage]
+    requiredPermissions: [asset:manage]
+    reusesApplicationService: VersionApplicationService
+    parameters:
+      type: object
+      additionalProperties: false
       required: [assetId, version]
       properties:
         assetId: { type: string }
         version: { type: string }
 
-  # ---- P0-B 默认关闭的写工具（受 mcp.writeTools.enabled 与高风险 Scope 双控）----
   - name: asset_publish_version
     enabled: false
     write: true
