@@ -1,0 +1,75 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR016-001
+status: DRAFT
+
+task:
+  taskId: TASK-P0BR-016
+  requirements: []
+  scenarios: []
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: null
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-016.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-016.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-016.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: null
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: null
+  os: null
+  timezone: null
+  java: null
+  node: null
+  pnpm: null
+  docker: null
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: null
+  command: null
+  startedAt: null
+  finishedAt: null
+  exitCode: null
+  result: null
+  evidenceLevel: null
+
+coverage:
+  proven: []
+  notProven: []
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: false
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: null
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

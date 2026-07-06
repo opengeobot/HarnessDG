@@ -202,6 +202,105 @@ documents:
   - path: tools/validate-task-card.ps1
     kind: validation-tool
     status: ACTIVE
+  - path: tasks/TASK-GOV-007.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-000A.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-000B.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-001.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-002.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-003.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-004.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-010.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-011.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-012.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-013.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-014.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-015.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-016.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-017.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-020.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-021.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-022.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-023.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-024.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-025.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-026.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-027.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-028.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-029.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-030.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-040.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-041.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-042.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-043.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-044.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-045.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P0BR-046.md
+    kind: task-card
+    status: READY
 
 openDecisionSets: []
 # 全部 OPEN 决策已由 DEC-010/011/012/013 闭合（全阶段连续实施）。

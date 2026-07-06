@@ -343,7 +343,7 @@ rationale: 内部平台用户需要快速获取资产的命令行操作方式，
 decidedBy: User
 decidedAt: "2026-07-06"
 affected:
-  requirements: [REQ-AST-DETAIL-001]
+  requirements: [REQ-AST-004]
   pages: [PAGE-AST-003]
   documents: [04-ui/page-catalog.md]
 requiresAdr: false
