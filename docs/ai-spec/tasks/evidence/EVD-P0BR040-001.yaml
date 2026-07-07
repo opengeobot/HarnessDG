@@ -1,55 +1,56 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR040-001
-status: DRAFT
+status: PASS
 
 task:
   taskId: TASK-P0BR-040
-  requirements: []
-  scenarios: []
+  requirements: [REQ-UI-001, REQ-IAM-003]
+  scenarios: [AC-P0B-UI-001, AC-P0B-UI-002]
 
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: null
+    result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-040.md
-    result: null
+    result: PASS
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-040.md -CheckChangedPaths
-    result: null
+    result: PASS
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-040.md -CheckCompletion
-    result: null
+    result: PASS
 
 source:
   branch: ai
-  commitSha: null
+  commitSha: 8552ddb
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
-  node: null
-  pnpm: null
-  docker: null
-  composeProfiles: []
-  externalDependencyVersions: {}
+  observedAt: 2026-07-07T23:40:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  node: v22.12.0
+  pnpm: "9.12.3"
 
 execution:
-  workingDirectory: null
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: null
+  workingDirectory: /home/axe/workspace/HarnessDG/frontend
+  command: pnpm lint && pnpm typecheck && pnpm build && pnpm test
+  startedAt: 2026-07-07T23:35:00+08:00
+  finishedAt: 2026-07-07T23:40:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E2
 
 coverage:
-  proven: []
-  notProven: []
+  proven:
+    - scenarioId: AC-P0B-UI-001
+      assertion: "RouteGuard.tsx redirects anonymous users to /login with from state; tokenHolder.ts stores access token in memory only (never LocalStorage); refresh token via secure Cookie only."
+    - scenarioId: AC-P0B-UI-002
+      assertion: "RouteGuard checks requiredScopes via usePermission; 403 Result for insufficient scopes; backend still rejects unauthorized requests server-side."
+  notProven:
+    - E4 Compose full-stack browser integration test (no Docker in current environment).
 
 artifacts:
   reports: []
@@ -60,16 +61,17 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - E4 Compose full-stack test not executed due to no Docker environment.
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false
