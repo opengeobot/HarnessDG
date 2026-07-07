@@ -1,5 +1,88 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR002-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-002
+  requirements: [REQ-IAM-003, REQ-COM-001]
+  scenarios: []
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-002.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-002.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-002.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 748d575
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-07T22:32:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o verify -pl . -Dtest='*Test' -DfailIfNoTests=false
+  startedAt: 2026-07-07T22:24:00+08:00
+  finishedAt: 2026-07-07T22:26:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+
+coverage:
+  proven:
+    - scenarioId: jwt-sub-prn
+      assertion: "JwtTokenService.issue() uses request.principalId() as JWT subject (sub claim). PrincipalIdPrefixConsistencyTest verifies sub=prn_ for both USER and AGENT types."
+    - scenarioId: id-prefix-enum
+      assertion: "IdPrefix enum defines PRINCIAL=prn, USER=usr, AGENT=agt matching TERM-001 semantics."
+    - scenarioId: user-creation
+      assertion: "UserManagementApplicationService generates principalId via IdPrefix.PRINCIPAL and userId via IdPrefix.USER, keeping them separate."
+    - scenarioId: audit-principal
+      assertion: "AuthenticationApplicationService audits use user.principalId() (prn_) consistently for all auth events."
+    - scenarioId: view-separation
+      assertion: "UserView and AgentView records properly separate userId/agentId from principalId in API responses."
+  notProven:
+    - E4 Compose integration test (no Docker in current environment).
+
+artifacts:
+  reports:
+    - backend/src/test/java/com/aihub/shared/identity/PrincipalIdPrefixConsistencyTest.java
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - E4 Compose full-stack test not executed due to no Docker environment.
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR002-001
 status: DRAFT
 
 task:

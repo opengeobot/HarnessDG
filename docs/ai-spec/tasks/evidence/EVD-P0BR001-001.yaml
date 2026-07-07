@@ -1,5 +1,85 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR001-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-001
+  requirements: [REQ-COM-001]
+  scenarios:
+    - AC-P0B-ENG-002
+    - AC-P0B-ENG-003
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-001.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-001.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-001.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 748d575
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-07T22:30:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  node: "20"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: npx @redocly/cli lint contracts/openapi/aihub-v1.yaml; npx @redocly/cli lint contracts/openapi/aihub-agent-v1.yaml
+  startedAt: 2026-07-07T22:28:00+08:00
+  finishedAt: 2026-07-07T22:30:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-ENG-002
+      assertion: "aihub-v1.yaml: 105 operations all have x-implementation-status=implemented and x-error-codes. aihub-agent-v1.yaml: 5 operations all have x-implementation-status=implemented and x-error-codes. Redocly lint passes for both contracts."
+    - scenarioId: AC-P0B-ENG-003
+      assertion: CI workflow uses --fail-on-breaking for PRs to main branch, blocking unapproved breaking changes.
+  notProven:
+    - MCP tools.yaml and events-v1.yaml x-implementation-status fields (MCP uses different metadata schema).
+
+artifacts:
+  reports:
+    - contracts/openapi/aihub-v1.yaml
+    - contracts/openapi/aihub-agent-v1.yaml
+    - .github/workflows/ci.yml
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR001-001
 status: DRAFT
 
 task:

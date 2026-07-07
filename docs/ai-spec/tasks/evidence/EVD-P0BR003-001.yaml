@@ -1,5 +1,89 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR003-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-003
+  requirements: [REQ-AUTH-003, REQ-AUTH-001]
+  scenarios: []
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-003.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-003.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-003.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 748d575
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-07T22:40:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='PermissionCatalogConsistencyTest' -DfailIfNoTests=false
+  startedAt: 2026-07-07T22:38:00+08:00
+  finishedAt: 2026-07-07T22:40:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E2
+
+coverage:
+  proven:
+    - scenarioId: permissions-match-seed
+      assertion: "PermissionCatalogConsistencyTest validates 35 Permissions.java constants exactly match V4(31)+V14(2)+V20(2) iam_permission seed codes."
+    - scenarioId: no-missing
+      assertion: "No seed permission is missing from Permissions.java constants."
+    - scenarioId: no-extra
+      assertion: "No extra permission constant exists without a database seed."
+    - scenarioId: count
+      assertion: "Total seed count is 35, matching expected sum."
+    - scenarioId: high-risk
+      assertion: "HIGH_RISK_ACTIONS (asset:publish, asset:delete, system:configure) are all valid permission codes."
+  notProven:
+    - OpenAPI securitySchemes permission alignment (covered by TASK-P0BR-001 contract validation).
+    - Frontend permission string alignment (covered by frontend tests in TASK-P0BR-040).
+
+artifacts:
+  reports:
+    - backend/src/test/java/com/aihub/authorization/domain/PermissionCatalogConsistencyTest.java
+    - backend/src/main/java/com/aihub/authorization/domain/Permissions.java
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR003-001
 status: DRAFT
 
 task:
