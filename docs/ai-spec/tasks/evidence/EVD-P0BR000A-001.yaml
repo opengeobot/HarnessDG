@@ -1,5 +1,83 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR000A-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-000A
+  requirements: []
+  scenarios: []
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-000A.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-000A.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-000A.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 8875afdc4f16e7d60758989900435bf41f6b0c68
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-07T22:25:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  powershell: "7.6.3"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: pwsh --version; pwsh ./docs/ai-spec/tools/validate-spec.ps1
+  startedAt: 2026-07-07T22:24:00+08:00
+  finishedAt: 2026-07-07T22:25:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
+
+coverage:
+  proven:
+    - scenarioId: pwsh-version
+      assertion: PowerShell 7.6.3 installed and accessible on Linux dev environment, exit code 0.
+    - scenarioId: validate-spec
+      assertion: validate-spec.ps1 executes successfully with 70 manifest documents and 644 stable ID definitions.
+  notProven:
+    - CI runner environment (GitHub Actions ubuntu-latest); pwsh is pre-installed on GitHub runners.
+
+artifacts:
+  reports:
+    - .github/workflows/ci.yml
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - CI verification not executed in this session; CI config already contains pwsh verification step.
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR000A-001
 status: DRAFT
 
 task:

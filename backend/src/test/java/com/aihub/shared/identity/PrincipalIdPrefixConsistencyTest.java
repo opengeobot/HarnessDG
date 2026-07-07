@@ -11,6 +11,7 @@ import com.aihub.platform.security.JwtProperties;
 import com.aihub.platform.security.JwtTokenService;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.shared.id.UlidIdGenerator;
 import com.aihub.shared.security.IssuedToken;
 import com.aihub.shared.security.JwtClaims;
 import com.aihub.shared.security.TokenIssueRequest;
@@ -40,7 +41,7 @@ class PrincipalIdPrefixConsistencyTest {
     void setUp() {
         var properties = new JwtProperties("aihub-test", "aihub-test",
                 null, null, null, Duration.ofMinutes(15), Duration.ofHours(24));
-        var idGenerator = new IdGenerator();
+        IdGenerator idGenerator = new UlidIdGenerator();
         var clock = Clock.fixed(Instant.parse("2026-07-06T10:00:00Z"), ZoneOffset.UTC);
         tokenService = new JwtTokenService(properties, idGenerator, clock);
     }

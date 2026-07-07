@@ -1,5 +1,83 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR000B-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-000B
+  requirements: [REQ-UI-001]
+  scenarios: []
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-000B.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-000B.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-000B.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 8875afdc4f16e7d60758989900435bf41f6b0c68
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-07T22:26:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+  startedAt: 2026-07-07T22:25:00+08:00
+  finishedAt: 2026-07-07T22:26:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
+
+coverage:
+  proven:
+    - scenarioId: mips-doc
+      assertion: admin-pages-mips.md contains 16 MIPS specifications covering all P0-B admin pages with Route, Permission, API, i18n prefix, interaction elements, boundary conditions, and state display for each page.
+    - scenarioId: frontend-conventions
+      assertion: frontend-conventions.md covers API client, Permission Provider, i18n, state management, component, routing, and testing conventions.
+    - scenarioId: global-constraints
+      assertion: Global interaction constraints documented for permission button visibility, controlled selectors, i18n, pagination, and state display.
+  notProven:
+    - Runtime page implementation; this is a documentation-only task.
+
+artifacts:
+  reports:
+    - docs/ai-spec/04-ui/admin-pages-mips.md
+    - docs/ai-spec/04-ui/frontend-conventions.md
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR000B-001
 status: DRAFT
 
 task:
