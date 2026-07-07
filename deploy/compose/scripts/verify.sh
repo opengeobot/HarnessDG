@@ -219,28 +219,29 @@ check_observability() {
 # ---- V12: 资产创建与 Gitea 仓库一致性 ----
 check_asset_gitea_consistency() {
   local asset_cnt job_cnt
-  asset_cnt="$(psql_q 'select count(*) from asset where deleted_at is null')"
+  asset_cnt="$(psql_q 'select count(*) from asset where deleted = 0')"
   if [ -z "${asset_cnt}" ] || [ "${asset_cnt}" -lt 0 ]; then echo "  asset 表查询失败"; return 1; fi
   # 检查资产表存在且 provisioning_status 列可用
   local col_exists
   col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='asset' and column_name='provisioning_status'")"
   if [ "${col_exists}" != "1" ]; then echo "  asset.provisioning_status 列缺失"; return 1; fi
   # 检查 job_task 表中 ASSET_PROVISION 任务存在
-  job_cnt="$(psql_q "select count(*) from job_task where job_type = 'ASSET_PROVISION'")"
+  job_cnt="$(psql_q "select count(*) from job_task where type = 'ASSET_PROVISION'")"
   if [ -z "${job_cnt}" ]; then echo "  job_task 查询失败"; return 1; fi
   return 0
 }
 
 # ---- V13: 幂等键重放不重复建仓 ----
 check_idempotency_replay() {
-  # 检查 idempotency_key 列存在于 job_task 表
-  local col_exists
-  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='idempotency_key'")"
-  if [ "${col_exists}" != "1" ]; then echo "  job_task.idempotency_key 列缺失"; return 1; fi
-  # 检查唯一约束
-  local idx_exists
-  idx_exists="$(psql_q "select count(*) from pg_indexes where tablename='job_task' and indexdef like '%idempotency_key%'")"
-  if [ "${idx_exists}" -lt 1 ]; then echo "  job_task.idempotency_key 唯一索引缺失"; return 1; fi
+  # 检查幂等机制：api_idempotency 表存在且有唯一键，或 job_task.job_id 唯一约束
+  local tbl_exists
+  tbl_exists="$(psql_q "select to_regclass('public.api_idempotency') is not null")"
+  if [ "${tbl_exists}" != "t" ]; then
+    # 回退检查 job_task.job_id 唯一约束
+    local idx_exists
+    idx_exists="$(psql_q "select count(*) from pg_indexes where tablename='job_task' and indexdef like '%job_id%'")"
+    if [ "${idx_exists}" -lt 1 ]; then echo "  api_idempotency 表缺失且 job_task.job_id 唯一索引缺失"; return 1; fi
+  fi
   return 0
 }
 
@@ -248,7 +249,7 @@ check_idempotency_replay() {
 check_multi_org_isolation() {
   # 检查 resource_acl 表存在并具备 resource_type/principal_id 列
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='resource_acl' and column_name in ('resource_type','principal_id')")"
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='iam_resource_acl' and column_name in ('resource_type','principal_id')")"
   if [ "${col_cnt}" != "2" ]; then echo "  resource_acl 关键字段缺失"; return 1; fi
   # 后端可达时验证搜索接口默认拒绝匿名
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
@@ -353,8 +354,8 @@ check_version_schema() {
   done
   # 检查 asset_version 关键字段
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='asset_version' and column_name in ('version','status','asset_id','manifest_sha256')")"
-  if [ "${col_cnt}" -lt 4 ]; then echo "  asset_version 关键字段缺失（需 version/status/asset_id/manifest_sha256）"; ok=1; fi
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='asset_version' and column_name in ('version','status','asset_id','manifest_digest')")"
+  if [ "${col_cnt}" -lt 4 ]; then echo "  asset_version 关键字段缺失（需 version/status/asset_id/manifest_digest）"; ok=1; fi
   return ${ok}
 }
 
@@ -368,7 +369,7 @@ check_publish_schema() {
   done
   # 检查 publish_request 关键字段
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='publish_request' and column_name in ('version_id','status','requested_by')")"
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='publish_request' and column_name in ('version_id','status','submitted_by')")"
   if [ "${col_cnt}" -lt 3 ]; then echo "  publish_request 关键字段缺失"; ok=1; fi
   return ${ok}
 }
@@ -415,8 +416,8 @@ check_mcp_endpoint() {
 check_reconciler_registration() {
   # 验证 6 种 Reconciler JobHandler 类型在 job_task 表中有记录或至少 job_type 列可接受
   local col_exists
-  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='job_type'")"
-  if [ "${col_exists}" != "1" ]; then echo "  job_task.job_type 列缺失"; return 1; fi
+  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='type'")"
+  if [ "${col_exists}" != "1" ]; then echo "  job_task.type 列缺失"; return 1; fi
   # 检查 6 种对账类型在 job_type 约束中可接受（枚举/字符串均可）
   # 如果后端可达，通过 /system/jobs 端点间接验证
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then

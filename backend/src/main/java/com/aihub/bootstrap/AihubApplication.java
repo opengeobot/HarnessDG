@@ -17,7 +17,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * Mapper 扫描限定到各模块 {@code infrastructure} 子包，骨架阶段暂无 Mapper。
  */
 @SpringBootApplication(scanBasePackages = "com.aihub")
-@MapperScan("com.aihub.*.infrastructure")
+@MapperScan("com.aihub.**.infrastructure")
 @EnableScheduling
 public class AihubApplication {
 

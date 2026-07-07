@@ -92,8 +92,8 @@ services:
       GITEA__storage__SERVE_DIRECT: "true"
     volumes:
       - gitea-data:/data
-    ports:
-      - "127.0.0.1:2222:22"
+    # ports:
+    #   - "127.0.0.1:2222:22"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s

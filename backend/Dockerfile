@@ -33,11 +33,7 @@ FROM runtime AS worker
 # 切回 root 安装系统与 Python 依赖
 USER root
 # 锁定 git 版本（jammy 仓库版本系列），并安装 pip 以装 dvc
-RUN sed -i \
-        -e 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
-        -e 's|http://security.ubuntu.com/ubuntu/|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
-        /etc/apt/sources.list \
-    && apt-get update \
+RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         git \
@@ -45,9 +41,7 @@ RUN sed -i \
         python3-pip \
     && rm -rf /var/lib/apt/lists/*
 # 使用清华 PyPI 镜像（HTTPS）安装锁定版本的 dvc[s3]
-RUN python3 -m pip install --no-cache-dir \
-        -i https://pypi.tuna.tsinghua.edu.cn/simple \
-        "dvc[s3]==3.55.2"
+RUN python3 -m pip install --no-cache-dir "dvc[s3]==3.55.2"
 USER aihub
 # Worker 以 worker Profile 启动，复用同一 jar 但承载后台任务角色
 ENTRYPOINT ["java", "-jar", "/app/app.jar", "--spring.profiles.active=worker"]

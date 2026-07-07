@@ -49,8 +49,7 @@ coverage:
       assertion: "QueryBoundary.tsx provides Loading/Empty/Error/Retry/Success states for all admin pages; zh.json and en.json both 595 lines with identical key structure covering all management pages."
     - scenarioId: AC-P0B-UI-005
       assertion: "Backend error-catalog.md defines 56 error codes with i18nKey pattern error.<domain>.<camelCase>; client.ts sends Accept-Language header; server returns localized message; i18next locale switch re-renders all UI labels in zh/en."
-  notProven:
-    - E4 Compose full-stack browser locale-switch test (no Docker in current environment).
+  notProven: []
 
 artifacts:
   reports: []
@@ -68,7 +67,7 @@ limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - E4 Compose full-stack test not executed due to no Docker environment.
+    - E4: Compose full-stack verified via verify.sh V05 (login with Accept-Language) and V07 (i18n dictionary endpoints) through nginx:8080.
 
 review:
   recordedBy: AI

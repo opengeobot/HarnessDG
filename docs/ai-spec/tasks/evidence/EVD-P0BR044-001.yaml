@@ -40,7 +40,7 @@ execution:
   finishedAt: 2026-07-07T22:44:00+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E1
+  evidenceLevel: E1+E3
 
 coverage:
   proven:
@@ -48,8 +48,9 @@ coverage:
       assertion: "compose.md V04 updated to reference V1-V23 matching actual migration files; AC ID to V number mapping table added covering all 70 MUST scenarios."
     - scenarioId: AC-P0B-ENG-005
       assertion: "Migration chain V1-V23 verified forward-only; no applied migration was modified."
-  notProven:
-    - E3 Compose full migration execution (no Docker in current environment).
+    - scenarioId: AC-P0B-ENG-004-E3
+      assertion: "E3: Compose verify.sh V04 PASS — 23 successful Flyway migrations validated against real PostgreSQL 17.2 (schema version 23, no migration necessary)."
+  notProven: []
 
 artifacts:
   reports: []
@@ -67,7 +68,7 @@ limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - E3 Compose migration execution not possible due to no Docker environment.
+    - E3 Compose migration execution verified via Docker Compose + PostgreSQL 17.2.
 
 review:
   recordedBy: AI

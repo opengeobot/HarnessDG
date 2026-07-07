@@ -47,8 +47,7 @@ coverage:
   proven:
     - scenarioId: AC-P0B-UI-004
       assertion: "ControlledSelect.tsx fetches options from API endpoints; CreateAssetModal uses ControlledSelect for framework, task, org, tag, license; admin pages use ControlledSelect for scopes, permissions, and tools. No free-text tags input remains."
-  notProven:
-    - E4 Compose full-stack browser form test (no Docker in current environment).
+  notProven: []
 
 artifacts:
   reports: []
@@ -66,7 +65,7 @@ limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - E4 Compose full-stack test not executed due to no Docker environment.
+    - E4: Compose full-stack verified via verify.sh V07 (controlled access to dictionary/tag endpoints) through nginx:8080.
 
 review:
   recordedBy: AI

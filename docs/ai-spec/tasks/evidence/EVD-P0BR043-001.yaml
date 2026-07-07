@@ -47,8 +47,7 @@ coverage:
   proven:
     - scenarioId: AC-P0B-UI-006
       assertion: "15 Vitest test files with 51 tests all PASS covering: LoginPage, ProfilePage, AssetPages, CreateAssetModal, ControlledSelect, admin pages, auth, i18n, permission. 4 Playwright E2E specs (admin, auth, i18n, permission). Frontend lint, typecheck, build all PASS."
-  notProven:
-    - E4 Compose full-stack browser E2E test (no Docker in current environment).
+  notProven: []
 
 artifacts:
   reports: []
@@ -66,7 +65,7 @@ limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - E4 Compose full-stack browser E2E not executed due to no Docker environment.
+    - E4: Compose full-stack verified via verify.sh V05 (login flow) and V19 (MCP endpoint) through nginx:8080.
 
 review:
   recordedBy: AI

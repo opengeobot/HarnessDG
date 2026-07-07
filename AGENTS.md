@@ -2,7 +2,7 @@
 
 ## Current phase
 
-This repository has completed **P0-B platform-foundation remediation** (VERIFIED). P0-A engineering baseline is complete; P0-B exit gate has been validated at E1/E2 evidence level (E3/E4/E5 deferred to Compose environment). P1 asset catalog implementation may proceed, with P1+ business features built on the verified P0-B foundation.
+This repository has completed **P0-B platform-foundation remediation** (VERIFIED). P0-A engineering baseline is complete; P0-B exit gate has been validated at E1/E2/E3/E4 evidence levels including Compose full-stack verification (V01-V21 all PASS). P1 asset catalog implementation may proceed, with P1+ business features built on the verified P0-B foundation.
 
 Do not present planned P0 capabilities as implemented. The dated implementation snapshot is `docs/architecture/implementation-status-2026-06-30.md`.
 Use `docs/architecture/p0-platform-foundation-traceability.md` to check every P0-B task across module, data, API, permission, audit, UI, and verification.

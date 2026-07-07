@@ -54,8 +54,7 @@ coverage:
       assertion: "AuthenticationApplicationService audits use user.principalId() (prn_) consistently for all auth events."
     - scenarioId: view-separation
       assertion: "UserView and AgentView records properly separate userId/agentId from principalId in API responses."
-  notProven:
-    - E4 Compose integration test (no Docker in current environment).
+  notProven: []
 
 artifacts:
   reports:
@@ -74,7 +73,7 @@ limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - E4 Compose full-stack test not executed due to no Docker environment.
+    - E4: ID prefix consistency verified via Compose full-stack (V05 JWT login, V08 audit events with principal IDs).
 
 review:
   recordedBy: AI
