@@ -25,6 +25,7 @@ import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.authorization.domain.AccessScope;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
@@ -41,6 +42,7 @@ import com.aihub.taxonomy.tag.domain.TagScopeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -73,12 +75,16 @@ class AssetApplicationServiceTest {
     @BeforeEach
     void setUp() {
         service = new AssetApplicationService(assetRepository,
-                new AssetAccessPolicy(), idGenerator, authorizationService,
+                new AssetAccessPolicy(authorizationService), idGenerator, authorizationService,
                 dictionaryValidationPort, tagValidationService, auditService, jobRepository,
                 cardProjectionPortProvider);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
         doNothing().when(assetRepository).insert(any(Asset.class));
+        // AssetAccessPolicy 需要授权 mock：isPermitted + computeAccessScope
+        when(authorizationService.isPermitted(any())).thenReturn(true);
+        when(authorizationService.computeAccessScope(any(), any()))
+                .thenReturn(new AccessScope("usr_01", false, Set.of(), Set.of(), Set.of()));
     }
 
     private CreateAssetCommand modelCommand() {
@@ -101,7 +107,7 @@ class AssetApplicationServiceTest {
 
         assertThat(view.assetId()).isEqualTo("ast_generated");
         assertThat(view.provisioningStatus()).isEqualTo(ProvisioningStatus.PENDING);
-        verify(authorizationService).requirePermission("asset:manage");
+        verify(authorizationService).requirePermission("asset:create");
         verify(assetRepository).insert(any(Asset.class));
         verify(jobRepository).insert(any());
         verify(auditService).record(any());
@@ -128,7 +134,7 @@ class AssetApplicationServiceTest {
         AssetView view = service.updateAsset("ast_stored", command);
 
         assertThat(view.displayName()).isEqualTo("新名");
-        verify(authorizationService).requirePermission("asset:manage");
+        verify(authorizationService).requirePermission("asset:update");
         verify(auditService).record(any());
     }
 

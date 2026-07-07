@@ -54,7 +54,8 @@ import org.springframework.util.StringUtils;
  *
  * <p>接入平台治理能力：
  * <ul>
- *   <li>授权：create/update/delete 需 {@code asset:manage}，read/search 需 {@code asset:read}。</li>
+ *   <li>授权：create 需 {@code asset:create}，update 需 {@code asset:update}，delete 需 {@code asset:delete}，
+ *       deprecate 需 {@code asset:deprecate}，archive/restore 需 {@code asset:manage}，read/search 需 {@code asset:read}。</li>
  *   <li>字典校验：license/framework/task/format/modality 按 asset type 语义校验 ACTIVE 字典项。</li>
  *   <li>标签校验：tagIds 经 {@link TagValidationService#resolveActiveTags} 校验全部存在且 ACTIVE。</li>
  *   <li>审计：写操作记录 ASSET_CREATED/ASSET_UPDATED/ASSET_DELETED；审计失败不阻塞主流程。</li>
@@ -115,7 +116,7 @@ public class AssetApplicationService {
         if (command.visibility() == null) {
             throw new ValidationException("asset visibility is required");
         }
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        authorizationService.requirePermission(Permissions.ASSET_CREATE);
         validateGovernanceFields(command.type(), command.license(),
                 modelFramework(command), modelTask(command),
                 datasetFormat(command), datasetModality(command));
@@ -147,7 +148,7 @@ public class AssetApplicationService {
      */
     @Transactional
     public AssetView updateAsset(String assetId, UpdateAssetCommand command) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        authorizationService.requirePermission(Permissions.ASSET_UPDATE);
         Asset asset = loadAccessible(assetId, command.principalId());
         validateGovernanceFields(asset.type(), command.license(),
                 modelFramework(command), modelTask(command),
@@ -178,7 +179,7 @@ public class AssetApplicationService {
      */
     @Transactional
     public void deleteAsset(String assetId, String principalId) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        authorizationService.requirePermission(Permissions.ASSET_DELETE);
         Asset asset = loadAccessible(assetId, principalId);
         assetRepository.softDelete(asset.assetId(), principalId);
         auditAsset("ASSET_DELETED", principalId, asset.assetId(), Map.of(
@@ -190,7 +191,7 @@ public class AssetApplicationService {
      */
     @Transactional
     public AssetView deprecateAsset(String assetId, String principalId) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        authorizationService.requirePermission(Permissions.ASSET_DEPRECATE);
         Asset asset = loadAccessible(assetId, principalId);
         try {
             asset.deprecate(principalId);
