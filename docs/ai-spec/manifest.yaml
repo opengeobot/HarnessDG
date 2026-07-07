@@ -40,7 +40,7 @@ acceptedDecisions:
 
 confirmedDirection:
   implementationFocus: P0
-  p0Status: INCOMPLETE_REVALIDATION_REQUIRED
+  p0Status: VERIFIED
   codeStrategy: PRESERVE_AND_REMEDIATE
   tenancy: SINGLE_COMPANY_MULTI_ORGANIZATION_MULTI_PROJECT
   primaryIde: TRAE

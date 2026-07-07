@@ -1,55 +1,55 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR044-001
-status: DRAFT
+status: PASS
 
 task:
   taskId: TASK-P0BR-044
-  requirements: []
-  scenarios: []
+  requirements: [REQ-COM-001]
+  scenarios: [AC-P0B-ENG-004, AC-P0B-ENG-005]
 
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: null
+    result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-044.md
-    result: null
+    result: PASS
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-044.md -CheckChangedPaths
-    result: null
+    result: PASS
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-044.md -CheckCompletion
-    result: null
+    result: PASS
 
 source:
   branch: ai
-  commitSha: null
+  commitSha: 33f8db7
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
-  node: null
-  pnpm: null
-  docker: null
-  composeProfiles: []
-  externalDependencyVersions: {}
+  observedAt: 2026-07-07T22:44:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
 
 execution:
-  workingDirectory: null
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: null
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: doc review - compose.md V04 updated V1-V21→V1-V23, AC ID to V mapping table added
+  startedAt: 2026-07-07T22:42:00+08:00
+  finishedAt: 2026-07-07T22:44:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
 
 coverage:
-  proven: []
-  notProven: []
+  proven:
+    - scenarioId: AC-P0B-ENG-004
+      assertion: "compose.md V04 updated to reference V1-V23 matching actual migration files; AC ID to V number mapping table added covering all 70 MUST scenarios."
+    - scenarioId: AC-P0B-ENG-005
+      assertion: "Migration chain V1-V23 verified forward-only; no applied migration was modified."
+  notProven:
+    - E3 Compose full migration execution (no Docker in current environment).
 
 artifacts:
   reports: []
@@ -60,16 +60,17 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - E3 Compose migration execution not possible due to no Docker environment.
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

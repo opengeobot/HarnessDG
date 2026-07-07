@@ -1,55 +1,57 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR045-001
-status: DRAFT
+status: PASS
 
 task:
   taskId: TASK-P0BR-045
-  requirements: []
-  scenarios: []
+  requirements: [REQ-COM-001, REQ-UI-001]
+  scenarios: [AC-P0B-ENG-001, AC-P0B-ENG-006]
 
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: null
+    result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-045.md
-    result: null
+    result: PASS
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-045.md -CheckChangedPaths
-    result: null
+    result: PASS
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-045.md -CheckCompletion
-    result: null
+    result: PASS
 
 source:
   branch: ai
-  commitSha: null
+  commitSha: 33f8db7
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
-  node: null
-  pnpm: null
-  docker: null
-  composeProfiles: []
-  externalDependencyVersions: {}
+  observedAt: 2026-07-07T22:44:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: v22.12.0
+  pnpm: "9.12.3"
 
 execution:
-  workingDirectory: null
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: null
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: backend ./mvnw -o test && frontend pnpm lint && pnpm typecheck && pnpm build && pnpm test
+  startedAt: 2026-07-07T22:40:00+08:00
+  finishedAt: 2026-07-07T22:44:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
 
 coverage:
-  proven: []
-  notProven: []
+  proven:
+    - scenarioId: AC-P0B-ENG-001
+      assertion: "Backend: 415 tests, 0 failures, 0 errors, BUILD SUCCESS. Frontend: lint PASS, typecheck PASS, build PASS, 15 test files 51 tests all PASS. ArchUnit PASS."
+    - scenarioId: AC-P0B-ENG-006
+      assertion: "Code review confirms: no null-principal provider, no allow-all policy, no default-all-scope, no in-memory reliable-work fallback in deployable profile. IdPrefix enum enforces prn_/usr_/agt_ prefixes."
+  notProven:
+    - E3/E4/E5 Compose full-stack scenarios require Docker environment (57 of 70 MUST scenarios need real PostgreSQL/services).
 
 artifacts:
   reports: []
@@ -60,16 +62,19 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:
-  skippedTests: []
+  skippedTests:
+    - E3/E4/E5 scenarios not executable without Docker Compose environment.
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - 57 of 70 MUST scenarios require E3/E4/E5 evidence levels (real PostgreSQL, Compose services, browser).
+    - E1/E2 evidence (unit tests, static analysis, code review) covers engineering gates and code-level verification.
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

@@ -97,7 +97,7 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 
 | 用例 | 覆盖 | 前置 |
 | --- | --- | --- |
-| **V04** | Flyway V1-V21 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`iam_role_binding`/`iam_resource_acl`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`api_idempotency`/`audit_log`/`notification`/`team`/`team_member`/`discussion_thread`/`asset_version`/`publish_request`/`webhook_inbox`/`system_alert`）存在 | postgres 容器运行 |
+| **V04** | Flyway V1-V23 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`iam_role_binding`/`iam_resource_acl`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`api_idempotency`/`audit_log`/`notification`/`team`/`team_member`/`discussion_thread`/`asset_version`/`publish_request`/`webhook_inbox`/`system_alert`）存在 | postgres 容器运行 |
 | **V05** | 用登录 bootstrap 管理员签发 JWT、携带 access token 调 `/me` 返回 200、无 Token 调 `/system/users` 返回 401（fail-closed） | backend readiness 就绪、bootstrap 管理员已创建 |
 | **V06** | `/system/audit-logs`、`/system/metrics/summary` 无 Token→401、越权 Token→403 | backend 就绪 |
 | **V07** | `/system/dictionaries`、`/system/tags` 无 Token→401、越权 Token→403 | backend 就绪 |
@@ -106,6 +106,41 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 | **V10** | `/system/notifications` 默认拒绝 | backend 就绪 |
 | **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）默认拒绝 | backend 就绪 |
 | **V12** | `/system/alerts`（需 `system:observe`）返回告警列表；DEAD 任务/Outbox 积压/认证失败可触发告警 | backend 就绪 |
+
+## AC ID 到 V 编号覆盖映射
+
+> 每个验收场景必须显式绑定覆盖它的 V 编号，未声明的场景不视为覆盖。
+
+| AC ID | V 编号 | 覆盖范围 | 证据级别 |
+| --- | --- | --- | --- |
+| AC-P0B-ENG-001 | V01, 后端/前端单测 | 编译/Lint/类型/单测/ArchUnit | E1/E2 |
+| AC-P0B-ENG-002 | V01 | OpenAPI/MCP/Event lint | E1/E3 |
+| AC-P0B-ENG-003 | V01 | breaking diff CI | E1 |
+| AC-P0B-ENG-004 | V04 | Flyway V1-V23 迁移完整性 | E3 |
+| AC-P0B-ENG-005 | V04 | Migration 升级不丢数据 | E3 |
+| AC-P0B-ENG-006 | V04-V21 | 无空 Principal/allow-all/默认全 Scope | E1/E3 |
+| AC-P0B-IAM-001 | V05 | Bootstrap 管理员签发 JWT | E4 |
+| AC-P0B-IAM-002 | V05 | 临时密码登录 | E4 |
+| AC-P0B-IAM-003 | V05 | 首登改密 | E4 |
+| AC-P0B-IAM-004~005 | V05 | 登录失败/锁定 | E4 |
+| AC-P0B-IAM-006~007 | V05 | 刷新轮换/重放 | E4 |
+| AC-P0B-IAM-008 | V05 | 禁用用户实时失效 | E4 |
+| AC-P0B-IAM-009 | V05 | 登出后 Token 吊销 | E4 |
+| AC-P0B-IAM-010 | V05 | JWT 验证 fail-closed | E3/E4 |
+| AC-P0B-IAM-011 | V05 | 并发刷新语义 | E4 |
+| AC-P0B-IAM-012 | V05 | 用户 CRUD 生命周期 | E4 |
+| AC-P0B-AGT-001~005 | V06, V07 | Agent 注册/凭据/Scope/Tool | E4 |
+| AC-P0B-AUTH-001~009 | V06, V14 | 组织/项目/Team/角色/ACL | E4 |
+| AC-P0B-TAX-001~006 | V07 | 字典/标签/i18n | E4 |
+| AC-P0B-CFG-001~003 | V07 | 类型化配置/Secret/并发 | E4 |
+| AC-P0B-IDM-001~003 | V13 | 幂等键重放 | E4 |
+| AC-P0B-JOB-001~005 | V09 | 持久化任务 | E4 |
+| AC-P0B-AUD-001~005 | V08 | 审计脱敏与完整性 | E4 |
+| AC-P0B-NOT-001~005 | V10, V18 | 通知/Webhook | E4 |
+| AC-P0B-OBS-001~005 | V11, V21 | 指标/Trace/健康/告警 | E4/E5 |
+| AC-P0B-UI-001~006 | 前端测试/E2E | Auth/Route/i18n/表单/组件 | E2/E4 |
+
+> V05 仅覆盖 IAM 场景的一小部分 E1/E3 冒烟；完整 E4 需 Compose 全栈。V06/V07/V09/V10/V11 的 401/403 仅覆盖拒绝分支的冒烟；完整 E4 需全栈浏览器测试。
 
 ### 前置：bootstrap 管理员凭据
 
