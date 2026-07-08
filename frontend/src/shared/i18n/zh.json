@@ -138,6 +138,11 @@
       "framework": "框架",
       "task": "任务",
       "architecture": "架构",
+      "parameterScale": "参数规模",
+      "precision": "精度",
+      "weightFormat": "权重格式",
+      "runtime": "运行时",
+      "sensitivity": "敏感级别",
       "datasetProfile": "数据集画像",
       "format": "格式",
       "modality": "模态",
@@ -154,7 +159,13 @@
       "sensitivityCode": "敏感等级",
       "sampleCount": "样本数",
       "totalBytes": "数据量",
-      "sizeBucketCode": "大小区间"
+      "sizeBucketCode": "大小区间",
+      "ownerTeam": "Owner 团队",
+      "rowVersion": "版本",
+      "aliases": "别名",
+      "knownRisks": "已知风险",
+      "usageRestrictions": "使用限制",
+      "settingsLink": "设置"
     },
     "create": {
       "title": "登记资产",
@@ -199,7 +210,21 @@
     },
     "filter": {
       "language": "语言",
-      "sensitivity": "敏感等级"
+      "sensitivity": "敏感等级",
+      "visibility": "可见性",
+      "status": "状态",
+      "team": "团队"
+    },
+    "deprecation": {
+      "reason": "弃用原因",
+      "reasonPlaceholder": "请选择弃用原因",
+      "note": "弃用说明",
+      "notePlaceholder": "请输入弃用说明...",
+      "replacement": "替代资产 ID",
+      "REPLACED": "已被替代",
+      "OUTDATED": "已过时",
+      "SECURITY_ISSUE": "安全问题",
+      "UNSUPPORTED": "不再支持"
     },
     "sensitivity": {
       "PUBLIC": "公开",

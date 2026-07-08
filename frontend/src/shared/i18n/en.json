@@ -138,6 +138,11 @@
       "framework": "Framework",
       "task": "Task",
       "architecture": "Architecture",
+      "parameterScale": "Parameter Scale",
+      "precision": "Precision",
+      "weightFormat": "Weight Format",
+      "runtime": "Runtime",
+      "sensitivity": "Sensitivity",
       "datasetProfile": "Dataset Profile",
       "format": "Format",
       "modality": "Modality",
@@ -154,7 +159,13 @@
       "sensitivityCode": "Sensitivity",
       "sampleCount": "Sample Count",
       "totalBytes": "Total Size",
-      "sizeBucketCode": "Size Bucket"
+      "sizeBucketCode": "Size Bucket",
+      "ownerTeam": "Owner Team",
+      "rowVersion": "Version",
+      "aliases": "Aliases",
+      "knownRisks": "Known Risks",
+      "usageRestrictions": "Usage Restrictions",
+      "settingsLink": "Settings"
     },
     "create": {
       "title": "Register Asset",
@@ -199,7 +210,21 @@
     },
     "filter": {
       "language": "Language",
-      "sensitivity": "Sensitivity"
+      "sensitivity": "Sensitivity",
+      "visibility": "Visibility",
+      "status": "Status",
+      "team": "Team"
+    },
+    "deprecation": {
+      "reason": "Deprecation Reason",
+      "reasonPlaceholder": "Select deprecation reason",
+      "note": "Deprecation Note",
+      "notePlaceholder": "Enter deprecation note...",
+      "replacement": "Replacement Asset ID",
+      "REPLACED": "Replaced",
+      "OUTDATED": "Outdated",
+      "SECURITY_ISSUE": "Security Issue",
+      "UNSUPPORTED": "No Longer Supported"
     },
     "sensitivity": {
       "PUBLIC": "Public",

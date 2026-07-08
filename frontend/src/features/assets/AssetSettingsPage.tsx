@@ -67,6 +67,7 @@ export function AssetSettingsPage() {
   });
 
   const [form] = Form.useForm();
+  const [deprecateForm] = Form.useForm();
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
@@ -75,7 +76,7 @@ export function AssetSettingsPage() {
 
   const updateMutation = useMutation({
     mutationFn: (values: UpdateAssetRequest) =>
-      updateAsset(assetId!, values),
+      updateAsset(assetId!, { ...values, expectedVersion: asset?.rowVersion ?? 0 }),
     onSuccess: () => {
       message.success(t('common.save'));
       invalidate();
@@ -86,7 +87,11 @@ export function AssetSettingsPage() {
   });
 
   const deprecateMutation = useMutation({
-    mutationFn: () => deprecateAsset(assetId!),
+    mutationFn: (body?: {
+      deprecationReason?: string;
+      deprecationNote?: string;
+      replacementAssetId?: string;
+    }) => deprecateAsset(assetId!, body),
     onSuccess: () => {
       message.success(t('assets.deprecated'));
       invalidate();
@@ -213,7 +218,14 @@ export function AssetSettingsPage() {
                 <Popconfirm
                   title={t('assets.confirmDeprecate')}
                   icon={<ExclamationCircleOutlined />}
-                  onConfirm={() => deprecateMutation.mutate()}
+                  onConfirm={() => {
+                    const values = deprecateForm.getFieldsValue();
+                    deprecateMutation.mutate({
+                      deprecationReason: values.deprecationReason || undefined,
+                      deprecationNote: values.deprecationNote || undefined,
+                      replacementAssetId: values.replacementAssetId || undefined,
+                    });
+                  }}
                 >
                   <Button icon={<StopOutlined />} loading={deprecateMutation.isPending}>
                     {t('assets.deprecate')}
@@ -229,6 +241,26 @@ export function AssetSettingsPage() {
                   </Button>
                 </Popconfirm>
               </Flex>
+              <Form form={deprecateForm} layout="vertical" size="small">
+                <Form.Item name="deprecationReason" label={t('assets.deprecation.reason')}>
+                  <Select
+                    placeholder={t('assets.deprecation.reasonPlaceholder')}
+                    allowClear
+                    options={[
+                      { value: 'REPLACED', label: t('assets.deprecation.REPLACED') },
+                      { value: 'OUTDATED', label: t('assets.deprecation.OUTDATED') },
+                      { value: 'SECURITY_ISSUE', label: t('assets.deprecation.SECURITY_ISSUE') },
+                      { value: 'UNSUPPORTED', label: t('assets.deprecation.UNSUPPORTED') },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item name="deprecationNote" label={t('assets.deprecation.note')}>
+                  <TextArea rows={2} placeholder={t('assets.deprecation.notePlaceholder')} />
+                </Form.Item>
+                <Form.Item name="replacementAssetId" label={t('assets.deprecation.replacement')}>
+                  <Input placeholder="ast_xxx" />
+                </Form.Item>
+              </Form>
             </>
           )}
           {(asset.status === 'DEPRECATED' || asset.status === 'ARCHIVED') && (

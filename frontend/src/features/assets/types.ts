@@ -12,6 +12,13 @@ export interface ModelProfile {
   framework?: string | null;
   task?: string | null;
   architecture?: string | null;
+  parameterScale?: string | null;
+  precision?: string | null;
+  weightFormat?: string | null;
+  runtime?: string | null;
+  knownRisks?: string[] | null;
+  usageRestrictions?: string[] | null;
+  sensitivityCode?: string | null;
 }
 
 export interface DatasetProfile {
@@ -49,6 +56,12 @@ export interface AssetFacetView {
   formats: Record<string, number>;
   modalities: Record<string, number>;
   licenses: Record<string, number>;
+  sensitivities: Record<string, number>;
+  sizeBuckets: Record<string, number>;
+  taskCodes: Record<string, number>;
+  modalityCodes: Record<string, number>;
+  formatCodes: Record<string, number>;
+  languageCodes: Record<string, number>;
   totalCount: number;
 }
 
@@ -82,6 +95,12 @@ export interface AssetView extends AssetSummary {
   repository?: RepositoryRef | null;
   provisioningStatus?: ProvisioningStatus;
   card?: CardView | null;
+  ownerTeamId?: string | null;
+  aliases?: string[] | null;
+  rowVersion: number;
+  deprecationReason?: string | null;
+  deprecationNote?: string | null;
+  replacementAssetId?: string | null;
   createdAt: string;
 }
 
@@ -99,12 +118,14 @@ export interface CreateAssetRequest {
   tags?: string[];
   tagIds?: string[];
   license?: string;
+  ownerTeamId?: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
 }
 
 /** 更新资产请求 */
 export interface UpdateAssetRequest {
+  expectedVersion: number;
   organizationId?: string;
   projectId?: string;
   displayName?: string;
@@ -114,6 +135,7 @@ export interface UpdateAssetRequest {
   tags?: string[];
   tagIds?: string[];
   license?: string;
+  ownerTeamId?: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
 }
@@ -124,6 +146,10 @@ export interface AssetSearchParams {
   type?: AssetType;
   namespace?: string;
   organizationId?: string;
+  projectId?: string;
+  visibility?: Visibility;
+  status?: AssetStatus;
+  teamId?: string;
   framework?: string;
   task?: string;
   format?: string;

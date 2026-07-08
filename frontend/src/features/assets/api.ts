@@ -56,9 +56,16 @@ export function getAssetFacets(
   });
 }
 
-/** 弃用资产 */
-export function deprecateAsset(assetId: string): Promise<AssetView> {
-  return apiClient.post<AssetView>(`/assets/${assetId}/deprecate`);
+/** 弃用资产：支持弃用原因与替代资产 */
+export function deprecateAsset(
+  assetId: string,
+  body?: {
+    deprecationReason?: string;
+    deprecationNote?: string;
+    replacementAssetId?: string;
+  },
+): Promise<AssetView> {
+  return apiClient.post<AssetView>(`/assets/${assetId}/deprecate`, body ?? {});
 }
 
 /** 归档资产 */

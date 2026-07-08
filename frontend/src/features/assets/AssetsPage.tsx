@@ -6,7 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   App,
   Button,
@@ -28,7 +28,7 @@ import { isApiError } from '@/shared/api';
 import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
 import { deleteAsset, searchAssets } from './api';
 import { CreateAssetModal } from './CreateAssetModal';
-import type { AssetSummary, AssetType } from './types';
+import type { AssetStatus, AssetSummary, AssetType, Visibility } from './types';
 
 type TypeFilter = 'ALL' | AssetType;
 
@@ -49,17 +49,42 @@ export function AssetsPage() {
   useDocumentTitle(t('assets.title'));
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
-  const [keyword, setKeyword] = useState('');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>(
+    (searchParams.get('type') as TypeFilter) || 'ALL',
+  );
+  const [keyword, setKeyword] = useState(searchParams.get('keyword') ?? '');
   const [createOpen, setCreateOpen] = useState(false);
-  const [language, setLanguage] = useState<string | undefined>();
-  const [sensitivity, setSensitivity] = useState<string | undefined>();
+  const [language, setLanguage] = useState<string | undefined>(searchParams.get('language') ?? undefined);
+  const [sensitivity, setSensitivity] = useState<string | undefined>(searchParams.get('sensitivity') ?? undefined);
+  const [visibility, setVisibility] = useState<Visibility | undefined>(
+    (searchParams.get('visibility') as Visibility) ?? undefined,
+  );
+  const [status, setStatus] = useState<AssetStatus | undefined>(
+    (searchParams.get('status') as AssetStatus) ?? undefined,
+  );
+  const [teamId, setTeamId] = useState<string | undefined>(searchParams.get('teamId') ?? undefined);
+  const [organizationId, setOrganizationId] = useState<string | undefined>(
+    searchParams.get('organizationId') ?? undefined,
+  );
+
+  // URL 同步
+  const updateParams = (updates: Record<string, string | undefined>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [k, v] of Object.entries(updates)) {
+        if (v) next.set(k, v);
+        else next.delete(k);
+      }
+      return next;
+    }, { replace: true });
+  };
 
   const queryType = typeFilter === 'ALL' ? undefined : typeFilter;
 
   const query = useInfiniteQuery({
-    queryKey: ['assets', { type: queryType, keyword, language, sensitivity }],
+    queryKey: ['assets', { type: queryType, keyword, language, sensitivity, visibility, status, teamId, organizationId }],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       searchAssets({
@@ -67,6 +92,10 @@ export function AssetsPage() {
         keyword: keyword || undefined,
         language: language || undefined,
         sensitivity: sensitivity || undefined,
+        visibility,
+        status,
+        teamId,
+        organizationId,
         cursor: pageParam,
         limit: 10,
       }),
@@ -200,6 +229,53 @@ export function AssetsPage() {
 
       <Flex gap={8} wrap align="center">
         <ControlledSelect
+          apiUrl="/system/organizations"
+          queryKey="filter-organizations"
+          extractOptions={(data) =>
+            (data as Array<{ organizationId: string; name: string }>).map(
+              (o): SelectOption => ({ value: o.organizationId, label: o.name }),
+            )
+          }
+          placeholder={t('assets.create.org')}
+          allowClear
+          style={{ width: 180 }}
+          value={organizationId}
+          onChange={(v: string) => {
+            setOrganizationId(v ?? undefined);
+            updateParams({ organizationId: v });
+          }}
+        />
+        <Select
+          placeholder={t('assets.filter.visibility')}
+          allowClear
+          style={{ width: 160 }}
+          value={visibility}
+          onChange={(v: Visibility) => {
+            setVisibility(v);
+            updateParams({ visibility: v });
+          }}
+          options={[
+            { value: 'PRIVATE', label: t('assets.create.private') },
+            { value: 'INTERNAL', label: t('assets.create.internal') },
+            { value: 'PUBLIC', label: t('assets.create.public') },
+          ]}
+        />
+        <Select
+          placeholder={t('assets.filter.status')}
+          allowClear
+          style={{ width: 160 }}
+          value={status}
+          onChange={(v: AssetStatus) => {
+            setStatus(v);
+            updateParams({ status: v });
+          }}
+          options={[
+            { value: 'ACTIVE', label: 'ACTIVE' },
+            { value: 'DEPRECATED', label: 'DEPRECATED' },
+            { value: 'ARCHIVED', label: 'ARCHIVED' },
+          ]}
+        />
+        <ControlledSelect
           apiUrl="/system/dictionaries/language/items"
           queryKey="dict-language"
           extractOptions={(data) =>
@@ -211,14 +287,20 @@ export function AssetsPage() {
           allowClear
           style={{ width: 160 }}
           value={language}
-          onChange={(v: string) => setLanguage(v ?? undefined)}
+          onChange={(v: string) => {
+            setLanguage(v ?? undefined);
+            updateParams({ language: v });
+          }}
         />
         <Select
           placeholder={t('assets.filter.sensitivity')}
           allowClear
           style={{ width: 160 }}
           value={sensitivity}
-          onChange={(v) => setSensitivity(v)}
+          onChange={(v) => {
+            setSensitivity(v);
+            updateParams({ sensitivity: v });
+          }}
           options={[
             { value: 'PUBLIC', label: t('assets.sensitivity.PUBLIC') },
             { value: 'INTERNAL', label: t('assets.sensitivity.INTERNAL') },
@@ -226,6 +308,26 @@ export function AssetsPage() {
             { value: 'SECRET', label: t('assets.sensitivity.SECRET') },
           ]}
         />
+        {organizationId && (
+          <ControlledSelect
+            apiUrl={`/system/organizations/${organizationId}/teams`}
+            queryKey={['filter-teams', organizationId]}
+            enabled={!!organizationId}
+            extractOptions={(data) =>
+              (data as Array<{ teamId: string; name: string }>).map(
+                (team): SelectOption => ({ value: team.teamId, label: team.name }),
+              )
+            }
+            placeholder={t('assets.filter.team')}
+            allowClear
+            style={{ width: 180 }}
+            value={teamId}
+            onChange={(v: string) => {
+              setTeamId(v ?? undefined);
+              updateParams({ teamId: v });
+            }}
+          />
+        )}
       </Flex>
       <Table<AssetSummary>
         rowKey="assetId"

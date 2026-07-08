@@ -29,11 +29,26 @@ interface FormValues {
   tags?: string[];
   tagIds?: string[];
   license?: string;
+  ownerTeamId?: string;
   framework?: string;
   task?: string;
   architecture?: string;
+  parameterScale?: string;
+  precision?: string;
+  weightFormat?: string;
+  runtime?: string;
+  knownRisks?: string[];
+  usageRestrictions?: string[];
+  modelSensitivity?: string;
   format?: string;
   modality?: string;
+  taskCodes?: string[];
+  modalityCodes?: string[];
+  formatCodes?: string[];
+  languageCodes?: string[];
+  datasetSensitivity?: string;
+  sampleCount?: number;
+  totalBytes?: number;
 }
 
 export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
@@ -75,17 +90,35 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           tags: values.tags,
           tagIds: values.tagIds,
           license: values.license,
+          ownerTeamId: values.ownerTeamId || undefined,
           model:
             values.type === 'MODEL'
               ? {
                   framework: values.framework,
                   task: values.task,
                   architecture: values.architecture,
+                  parameterScale: values.parameterScale,
+                  precision: values.precision,
+                  weightFormat: values.weightFormat,
+                  runtime: values.runtime,
+                  knownRisks: values.knownRisks,
+                  usageRestrictions: values.usageRestrictions,
+                  sensitivityCode: values.modelSensitivity,
                 }
               : undefined,
           dataset:
             values.type === 'DATASET'
-              ? { format: values.format, modality: values.modality }
+              ? {
+                  format: values.format,
+                  modality: values.modality,
+                  taskCodes: values.taskCodes,
+                  modalityCodes: values.modalityCodes,
+                  formatCodes: values.formatCodes,
+                  languageCodes: values.languageCodes,
+                  sensitivityCode: values.datasetSensitivity,
+                  sampleCount: values.sampleCount,
+                  totalBytes: values.totalBytes,
+                }
               : undefined,
         };
         mutation.mutate(payload);
@@ -259,6 +292,31 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
             <Form.Item name="architecture" label={t('assets.detail.architecture')}>
               <Input placeholder="decoder-only" />
             </Form.Item>
+            <Form.Item name="parameterScale" label={t('assets.detail.parameterScale')}>
+              <Input placeholder="7B" />
+            </Form.Item>
+            <Form.Item name="precision" label={t('assets.detail.precision')}>
+              <Select
+                mode="tags"
+                placeholder="fp16, bf16, int8"
+                options={[
+                  { value: 'fp16', label: 'fp16' },
+                  { value: 'bf16', label: 'bf16' },
+                  { value: 'int8', label: 'int8' },
+                  { value: 'fp32', label: 'fp32' },
+                ]}
+                allowClear
+              />
+            </Form.Item>
+            <Form.Item name="weightFormat" label={t('assets.detail.weightFormat')}>
+              <Input placeholder="safetensors" />
+            </Form.Item>
+            <Form.Item name="runtime" label={t('assets.detail.runtime')}>
+              <Input placeholder="vllm" />
+            </Form.Item>
+            <Form.Item name="modelSensitivity" label={t('assets.detail.sensitivity')}>
+              <Input placeholder="L1" />
+            </Form.Item>
           </>
         ) : (
           <>
@@ -287,6 +345,15 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
                 placeholder={t('assets.create.modalityPlaceholder')}
                 allowClear
               />
+            </Form.Item>
+            <Form.Item name="sampleCount" label={t('assets.detail.sampleCount')}>
+              <Input type="number" placeholder="10000" />
+            </Form.Item>
+            <Form.Item name="totalBytes" label={t('assets.detail.totalBytes')}>
+              <Input type="number" placeholder="1073741824" />
+            </Form.Item>
+            <Form.Item name="datasetSensitivity" label={t('assets.detail.sensitivity')}>
+              <Input placeholder="L1" />
             </Form.Item>
           </>
         )}

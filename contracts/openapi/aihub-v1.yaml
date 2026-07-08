@@ -1552,10 +1552,17 @@ paths:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: type, in: query, schema: { $ref: '#/components/schemas/AssetType' } }
         - { name: namespace, in: query, schema: { type: string } }
+        - { name: organizationId, in: query, schema: { type: string } }
+        - { name: projectId, in: query, schema: { type: string } }
+        - { name: visibility, in: query, schema: { $ref: '#/components/schemas/Visibility' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AssetStatus' } }
+        - { name: teamId, in: query, schema: { type: string } }
         - { name: framework, in: query, schema: { type: string } }
         - { name: task, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { type: string } }
         - { name: modality, in: query, schema: { type: string } }
+        - { name: language, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
         - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
@@ -1691,6 +1698,23 @@ paths:
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_DEPRECATED
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                deprecationReason:
+                  type: string
+                  description: 弃用原因编码（REPLACED/OUTDATED/SECURITY_ISSUE/UNSUPPORTED）
+                deprecationNote:
+                  type: string
+                  description: 弃用说明
+                replacementAssetId:
+                  type: string
+                  description: 替代资产 ID
       responses:
         '200':
           description: 弃用成功
@@ -3465,6 +3489,19 @@ components:
           description: model_task 字典的有效 itemCode。
           example: text-generation
         architecture: { type: string }
+        parameterScale: { type: [string, 'null'], description: 参数规模，如 7B }
+        precision: { type: [string, 'null'], description: 精度，如 fp16/bf16 }
+        weightFormat: { type: [string, 'null'], description: 权重格式，如 safetensors }
+        runtime: { type: [string, 'null'], description: 运行时，如 vllm }
+        knownRisks:
+          type: [array, 'null']
+          description: 已知风险列表
+          items: { type: string }
+        usageRestrictions:
+          type: [array, 'null']
+          description: 使用限制列表
+          items: { type: string }
+        sensitivityCode: { type: [string, 'null'], description: 敏感级别编码 }
 
     DatasetProfile:
       type: object
@@ -3478,6 +3515,26 @@ components:
           type: string
           description: dataset_modality 字典的有效 itemCode。
           example: text
+        taskCodes:
+          type: [array, 'null']
+          description: 任务分类编码列表
+          items: { type: string }
+        modalityCodes:
+          type: [array, 'null']
+          description: 模态分类编码列表
+          items: { type: string }
+        formatCodes:
+          type: [array, 'null']
+          description: 格式分类编码列表
+          items: { type: string }
+        languageCodes:
+          type: [array, 'null']
+          description: 语言编码列表
+          items: { type: string }
+        sensitivityCode: { type: [string, 'null'], description: 敏感级别编码 }
+        sampleCount: { type: [integer, 'null'], description: 样本数量 }
+        totalBytes: { type: [integer, 'null'], description: 数据总字节数 }
+        sizeBucketCode: { type: [string, 'null'], description: 大小区间编码 }
 
     TagReference:
       type: object
@@ -3529,6 +3586,9 @@ components:
           type: string
           description: license_catalog 字典的有效 itemCode。
           example: Apache-2.0
+        ownerTeamId:
+          type: string
+          description: 资产所属 Team ID
         model: { $ref: '#/components/schemas/ModelProfile' }
         dataset: { $ref: '#/components/schemas/DatasetProfile' }
 
@@ -3562,6 +3622,9 @@ components:
         license:
           type: string
           description: license_catalog 字典的有效 itemCode。
+        ownerTeamId:
+          type: string
+          description: 资产所属 Team ID
         model: { $ref: '#/components/schemas/ModelProfile' }
         dataset: { $ref: '#/components/schemas/DatasetProfile' }
 
@@ -3609,7 +3672,26 @@ components:
         provisioningStatus:
           type: string
           description: 建仓异步状态
-          enum: [PENDING, IN_PROGRESS, COMPLETED, FAILED]
+          enum: [NONE, PENDING, IN_PROGRESS, COMPLETED, FAILED]
+        ownerTeamId: { type: [string, 'null'], description: 资产所属 Team ID }
+        aliases:
+          type: [array, 'null']
+          description: 历史坐标别名（rename 后保留旧坐标）
+          items: { type: string }
+        rowVersion:
+          type: integer
+          description: 乐观锁版本号
+        deprecationReason: { type: [string, 'null'], description: 弃用原因编码 }
+        deprecationNote: { type: [string, 'null'], description: 弃用说明 }
+        replacementAssetId: { type: [string, 'null'], description: 替代资产 ID }
+        card:
+          type: [object, 'null']
+          description: Card 投影（来自仓库 README/asset.yaml）
+          properties:
+            readme: { type: [string, 'null'] }
+            assetYaml: { type: [string, 'null'] }
+            sourceCommit: { type: [string, 'null'] }
+            untrustedContent: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -3681,11 +3763,19 @@ components:
       type: object
       description: 资产 Facet 聚合视图
       properties:
-        type: { $ref: '#/components/schemas/FacetDimension' }
-        framework: { $ref: '#/components/schemas/FacetDimension' }
-        task: { $ref: '#/components/schemas/FacetDimension' }
-        modality: { $ref: '#/components/schemas/FacetDimension' }
-        format: { $ref: '#/components/schemas/FacetDimension' }
+        types: { type: object, additionalProperties: { type: integer } }
+        frameworks: { type: object, additionalProperties: { type: integer } }
+        tasks: { type: object, additionalProperties: { type: integer } }
+        formats: { type: object, additionalProperties: { type: integer } }
+        modalities: { type: object, additionalProperties: { type: integer } }
+        licenses: { type: object, additionalProperties: { type: integer } }
+        sensitivities: { type: object, additionalProperties: { type: integer } }
+        sizeBuckets: { type: object, additionalProperties: { type: integer } }
+        taskCodes: { type: object, additionalProperties: { type: integer } }
+        modalityCodes: { type: object, additionalProperties: { type: integer } }
+        formatCodes: { type: object, additionalProperties: { type: integer } }
+        languageCodes: { type: object, additionalProperties: { type: integer } }
+        totalCount: { type: integer, description: 匹配资产总数 }
 
     ThreadStatus:
       type: string

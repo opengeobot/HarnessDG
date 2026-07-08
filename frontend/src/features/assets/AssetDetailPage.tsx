@@ -5,7 +5,7 @@
  */
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
   App,
@@ -137,6 +137,9 @@ export function AssetDetailPage() {
               <Button type="primary">{t('assets.restore')}</Button>
             </Popconfirm>
           )}
+          <Button type="link" onClick={() => navigate(`/assets/${assetId}/settings`)}>
+            {t('assets.detail.settingsLink')}
+          </Button>
         </Space>
       </Flex>
 
@@ -161,9 +164,41 @@ export function AssetDetailPage() {
           <Descriptions.Item label={t('assets.detail.owners')} span={2}>
             {asset.owners?.join(', ') ?? '-'}
           </Descriptions.Item>
+          <Descriptions.Item label={t('assets.detail.ownerTeam')}>
+            {asset.ownerTeamId ?? '-'}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('assets.detail.rowVersion')}>
+            <Tag>v{asset.rowVersion}</Tag>
+          </Descriptions.Item>
           <Descriptions.Item label={t('common.description')} span={2}>
             {asset.description ?? '-'}
           </Descriptions.Item>
+          {asset.aliases && asset.aliases.length > 0 && (
+            <Descriptions.Item label={t('assets.detail.aliases')} span={2}>
+              <Space size={[0, 4]} wrap>
+                {asset.aliases.map(a => <Tag key={a} color="geekblue">{a}</Tag>)}
+              </Space>
+            </Descriptions.Item>
+          )}
+          {asset.status === 'DEPRECATED' && (
+            <>
+              <Descriptions.Item label={t('assets.deprecation.reason')}>
+                {asset.deprecationReason ? (
+                  <Tag color="orange">{t(`assets.deprecation.${asset.deprecationReason}`, asset.deprecationReason)}</Tag>
+                ) : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('assets.deprecation.note')}>
+                {asset.deprecationNote ?? '-'}
+              </Descriptions.Item>
+              {asset.replacementAssetId && (
+                <Descriptions.Item label={t('assets.deprecation.replacement')} span={2}>
+                  <Link to={`/assets/${asset.replacementAssetId}`}>
+                    <Typography.Text code>{asset.replacementAssetId}</Typography.Text>
+                  </Link>
+                </Descriptions.Item>
+              )}
+            </>
+          )}
           <Descriptions.Item label={t('assets.columns.tags')} span={2}>
             <Space size={[0, 4]} wrap>
               {asset.tags?.map((tag) => <Tag key={tag}>{tag}</Tag>)}
@@ -179,6 +214,29 @@ export function AssetDetailPage() {
             <Descriptions.Item label={t('assets.detail.framework')}>{asset.model.framework ?? '-'}</Descriptions.Item>
             <Descriptions.Item label={t('assets.detail.task')}>{asset.model.task ?? '-'}</Descriptions.Item>
             <Descriptions.Item label={t('assets.detail.architecture')}>{asset.model.architecture ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.parameterScale')}>{asset.model.parameterScale ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.precision')}>
+              {asset.model.precision ? <Tag>{asset.model.precision}</Tag> : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.weightFormat')}>{asset.model.weightFormat ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.runtime')}>{asset.model.runtime ?? '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.sensitivity')}>
+              {asset.model.sensitivityCode ? (
+                <Tag color={asset.model.sensitivityCode === 'PUBLIC' ? 'green' : asset.model.sensitivityCode === 'SECRET' ? 'red' : 'orange'}>
+                  {t(`assets.sensitivity.${asset.model.sensitivityCode}`, asset.model.sensitivityCode)}
+                </Tag>
+              ) : '-'}
+            </Descriptions.Item>
+            {asset.model.knownRisks && asset.model.knownRisks.length > 0 && (
+              <Descriptions.Item label={t('assets.detail.knownRisks')} span={3}>
+                <Space size={[0, 4]} wrap>{asset.model.knownRisks.map(r => <Tag key={r} color="warning">{r}</Tag>)}</Space>
+              </Descriptions.Item>
+            )}
+            {asset.model.usageRestrictions && asset.model.usageRestrictions.length > 0 && (
+              <Descriptions.Item label={t('assets.detail.usageRestrictions')} span={3}>
+                <Space size={[0, 4]} wrap>{asset.model.usageRestrictions.map(r => <Tag key={r} color="error">{r}</Tag>)}</Space>
+              </Descriptions.Item>
+            )}
           </Descriptions>
         </Card>
       )}
