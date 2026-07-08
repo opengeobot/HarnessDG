@@ -100,6 +100,7 @@ class AssetControllerTest {
         Asset asset = Asset.create("ast_demo", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "一个领域问答模型", Visibility.INTERNAL,
                 List.of("team-nlp"), List.of("text-generation"), List.of("tag_001"), "Apache-2.0",
+                null,
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
         return AssetView.from(asset);
     }
@@ -174,7 +175,7 @@ class AssetControllerTest {
 
     @Test
     void deprecateAssetReturnsUpdatedView() throws Exception {
-        given(assetService.deprecateAsset(any(), any())).willReturn(modelView());
+        given(assetService.deprecateAsset(any(), any(), any(), any(), any())).willReturn(modelView());
 
         mockMvc.perform(post("/api/v1/assets/ast_demo/deprecate")
                         .header(HttpHeaders.AUTHORIZATION, bearer()))

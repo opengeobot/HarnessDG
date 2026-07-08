@@ -90,7 +90,7 @@ class AssetApplicationServiceTest {
     private CreateAssetCommand modelCommand() {
         return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation"), null, "Apache-2.0",
+                List.of("text-generation"), null, "Apache-2.0", null,
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
@@ -98,6 +98,7 @@ class AssetApplicationServiceTest {
         return Asset.create("ast_stored", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
                 List.of("text-generation"), null, "Apache-2.0",
+                null,
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
@@ -128,8 +129,9 @@ class AssetApplicationServiceTest {
         when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
         doNothing().when(assetRepository).update(any(Asset.class));
 
-        UpdateAssetCommand command = new UpdateAssetCommand(null, null, "新名", "新描述",
+        UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, "新名", "新描述",
                 Visibility.PUBLIC, List.of("team-platform"), List.of("llm"), null, "MIT",
+                null,
                 new ModelProfile("vllm", "chat", null), null, "usr_02");
         AssetView view = service.updateAsset("ast_stored", command);
 
@@ -183,7 +185,7 @@ class AssetApplicationServiceTest {
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "bad-model", "Bad Model", null, Visibility.INTERNAL, List.of("team-nlp"), null, null,
-                "Bad-License", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+                "Bad-License", null, new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
 
         assertThatThrownBy(() -> service.createAsset(command))
                 .isInstanceOf(ValidationException.class);
@@ -198,7 +200,7 @@ class AssetApplicationServiceTest {
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "tagged-model", "Tagged Model", null, Visibility.INTERNAL, List.of("team-nlp"),
-                null, List.of("tag_001"), "Apache-2.0",
+                null, List.of("tag_001"), "Apache-2.0", null,
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
         AssetView view = service.createAsset(command);
 
@@ -213,7 +215,7 @@ class AssetApplicationServiceTest {
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "bad-tag-model", "Bad Tag Model", null, Visibility.INTERNAL, List.of("team-nlp"),
-                null, List.of("tag_unknown"), "Apache-2.0",
+                null, List.of("tag_unknown"), "Apache-2.0", null,
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
 
         assertThatThrownBy(() -> service.createAsset(command))
@@ -237,7 +239,7 @@ class AssetApplicationServiceTest {
         Asset asset = storedModel();
         when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
 
-        AssetView view = service.deprecateAsset("ast_stored", "usr_01");
+        AssetView view = service.deprecateAsset("ast_stored", "usr_01", null, null, null);
 
         assertThat(view.status()).isEqualTo(AssetStatus.DEPRECATED);
         verify(assetRepository).update(any(Asset.class));
@@ -276,7 +278,7 @@ class AssetApplicationServiceTest {
         asset.archive("usr_01");
         when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
 
-        assertThatThrownBy(() -> service.deprecateAsset("ast_stored", "usr_01"))
+        assertThatThrownBy(() -> service.deprecateAsset("ast_stored", "usr_01", null, null, null))
                 .isInstanceOf(ConflictException.class);
     }
 }

@@ -109,6 +109,11 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .set(AssetEntity::getOwners, asset.owners(), JSONB_LIST_HANDLER)
                 .set(AssetEntity::getTags, asset.tags(), JSONB_LIST_HANDLER)
                 .set(AssetEntity::getLicense, asset.license())
+                .set(AssetEntity::getOwnerTeamId, asset.ownerTeamId())
+                .set(AssetEntity::getAliases, asset.aliases(), JSONB_LIST_HANDLER)
+                .set(AssetEntity::getDeprecationReason, asset.deprecationReason())
+                .set(AssetEntity::getDeprecationNote, asset.deprecationNote())
+                .set(AssetEntity::getReplacementAssetId, asset.replacementAssetId())
                 .set(AssetEntity::getRowVersion, currentVersion + 1)
                 .set(AssetEntity::getUpdatedBy, asset.updatedBy())
                 .set(AssetEntity::getUpdatedAt, asset.updatedAt())
@@ -258,6 +263,8 @@ public class MyBatisAssetRepository implements AssetRepository {
         entity.setOwners(asset.owners());
         entity.setTags(asset.tags());
         entity.setLicense(asset.license());
+        entity.setOwnerTeamId(asset.ownerTeamId());
+        entity.setAliases(asset.aliases());
         AssetRepositoryRef ref = asset.repository();
         if (ref != null) {
             entity.setRepoFullName(ref.fullName());
@@ -274,6 +281,9 @@ public class MyBatisAssetRepository implements AssetRepository {
         entity.setUpdatedBy(asset.updatedBy());
         entity.setCreatedAt(asset.createdAt());
         entity.setUpdatedAt(asset.updatedAt());
+        entity.setDeprecationReason(asset.deprecationReason());
+        entity.setDeprecationNote(asset.deprecationNote());
+        entity.setReplacementAssetId(asset.replacementAssetId());
         entity.setDeleted(0);
         return entity;
     }
@@ -296,6 +306,8 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .tags(entity.getTags())
                 .tagIds(tagIds)
                 .license(entity.getLicense())
+                .ownerTeamId(entity.getOwnerTeamId())
+                .aliases(entity.getAliases())
                 .rowVersion(entity.getRowVersion() == null ? 0L : entity.getRowVersion())
                 .createdBy(entity.getCreatedBy())
                 .updatedBy(entity.getUpdatedBy())
@@ -307,6 +319,9 @@ public class MyBatisAssetRepository implements AssetRepository {
         builder.sourceCommit(entity.getSourceCommit());
         builder.cardReadme(entity.getCardReadme());
         builder.cardAssetYaml(entity.getCardAssetYaml());
+        builder.deprecationReason(entity.getDeprecationReason());
+        builder.deprecationNote(entity.getDeprecationNote());
+        builder.replacementAssetId(entity.getReplacementAssetId());
         if (entity.getRepoFullName() != null) {
             builder.repository(new AssetRepositoryRef(
                     entity.getRepoFullName(), entity.getRepoHtmlUrl(), entity.getRepoCloneUrl()));

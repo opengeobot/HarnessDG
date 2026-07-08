@@ -64,7 +64,7 @@ class AssetCatalogIT {
     private CreateAssetCommand modelCommand(String name) {
         return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", name, name + " 展示名",
                 "领域问答模型，关键词 qwendomain", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation", "llm"), null, "Apache-2.0",
+                List.of("text-generation", "llm"), null, "Apache-2.0", null,
                 new ModelProfile("pytorch", "text-generation", "decoder-only"), null, "usr_01");
     }
 
@@ -88,8 +88,9 @@ class AssetCatalogIT {
                 null, null, "tensorflow", null, null, null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(miss.items()).isEmpty();
 
-        assetService.updateAsset(created.assetId(), new UpdateAssetCommand(null, null, "改名后", "新描述",
+        assetService.updateAsset(created.assetId(), new UpdateAssetCommand(0L, null, null, "改名后", "新描述",
                 Visibility.PUBLIC, List.of("team-platform"), List.of("chat"), null, "MIT",
+                null,
                 new ModelProfile("vllm", "chat", null), null, "usr_02"));
         AssetView updated = assetService.getAsset(created.assetId(), "usr_02");
         assertThat(updated.displayName()).isEqualTo("改名后");
@@ -109,7 +110,7 @@ class AssetCatalogIT {
 
         AssetView dataset = assetService.createAsset(new CreateAssetCommand(AssetType.DATASET, null, null,
                 "vision", "defect-images", "缺陷图像", "图像数据集", Visibility.PRIVATE,
-                List.of("team-cv"), List.of("vision"), null, "CC-BY-4.0", null,
+                List.of("team-cv"), List.of("vision"), null, "CC-BY-4.0", null, null,
                 new DatasetProfile("parquet", "image"), "usr_01"));
         assertThat(dataset.dataset().format()).isEqualTo("parquet");
 

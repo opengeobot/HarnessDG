@@ -137,6 +137,6 @@ class DownloadApplicationServiceTest {
                 "org_1", null, "testorg", "test-asset",
                 "Test Asset", "Description", Visibility.PUBLIC,
                 List.of("creator_1"), List.of(), List.of(), null,
-                null, null, "creator_1");
+                null, null, null, "creator_1");
     }
 }

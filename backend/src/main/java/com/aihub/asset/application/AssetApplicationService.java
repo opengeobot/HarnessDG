@@ -150,6 +150,13 @@ public class AssetApplicationService {
     public AssetView updateAsset(String assetId, UpdateAssetCommand command) {
         authorizationService.requirePermission(Permissions.ASSET_UPDATE);
         Asset asset = loadAccessible(assetId, command.principalId());
+        if (asset.rowVersion() != command.expectedVersion()) {
+            throw new ConflictException(ErrorCode.ASSET_CONCURRENT_MODIFICATION,
+                    "asset was modified concurrently: " + assetId,
+                    Map.of("assetId", assetId,
+                            "expectedVersion", command.expectedVersion(),
+                            "currentVersion", asset.rowVersion()));
+        }
         validateGovernanceFields(asset.type(), command.license(),
                 modelFramework(command), modelTask(command),
                 datasetFormat(command), datasetModality(command));
@@ -167,6 +174,7 @@ public class AssetApplicationService {
                 command.license(),
                 command.model(),
                 command.dataset(),
+                command.ownerTeamId(),
                 command.principalId());
         assetRepository.update(asset);
         auditAsset("ASSET_UPDATED", command.principalId(), asset.assetId(), Map.of(
@@ -187,21 +195,24 @@ public class AssetApplicationService {
     }
 
     /**
-     * 弃用资产：仍可访问但检索降权。仅 ACTIVE 可弃用。
+     * 弃用资产：仍可访问但检索降权。支持弃用原因与替代资产。
      */
     @Transactional
-    public AssetView deprecateAsset(String assetId, String principalId) {
+    public AssetView deprecateAsset(String assetId, String principalId,
+                                    String deprecationReason, String deprecationNote,
+                                    String replacementAssetId) {
         authorizationService.requirePermission(Permissions.ASSET_DEPRECATE);
         Asset asset = loadAccessible(assetId, principalId);
         try {
-            asset.deprecate(principalId);
+            asset.deprecate(principalId, deprecationReason, deprecationNote, replacementAssetId);
         } catch (IllegalStateException ex) {
             throw new ConflictException(ErrorCode.ASSET_STATE_NOT_ALLOWED, ex.getMessage(),
                     Map.of("assetId", assetId, "status", asset.status().name()));
         }
         assetRepository.update(asset);
         auditAsset("ASSET_DEPRECATED", principalId, asset.assetId(), Map.of(
-                "namespace", asset.namespace(), "name", asset.name()));
+                "namespace", asset.namespace(), "name", asset.name(),
+                "reason", deprecationReason != null ? deprecationReason : ""));
         return AssetView.from(asset);
     }
 
@@ -329,10 +340,15 @@ public class AssetApplicationService {
                     .tags(asset.tags())
                     .tagIds(asset.tagIds())
                     .license(asset.license())
+                    .ownerTeamId(asset.ownerTeamId())
+                    .aliases(asset.aliases())
                     .modelProfile(asset.modelProfile())
                     .datasetProfile(asset.datasetProfile())
                     .repository(asset.repository())
                     .provisioningStatus(asset.provisioningStatus())
+                    .deprecationReason(asset.deprecationReason())
+                    .deprecationNote(asset.deprecationNote())
+                    .replacementAssetId(asset.replacementAssetId())
                     .rowVersion(asset.rowVersion())
                     .createdBy(asset.createdBy())
                     .updatedBy(principalId)
@@ -365,6 +381,7 @@ public class AssetApplicationService {
                     command.tags(),
                     tagIds,
                     command.license(),
+                    command.ownerTeamId(),
                     command.model(),
                     command.dataset(),
                     command.principalId());

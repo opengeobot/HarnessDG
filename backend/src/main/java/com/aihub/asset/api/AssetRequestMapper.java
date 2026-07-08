@@ -36,6 +36,7 @@ final class AssetRequestMapper {
                 request.tags(),
                 request.tagIds(),
                 request.license(),
+                request.ownerTeamId(),
                 toModelProfile(request.model()),
                 toDatasetProfile(request.dataset()),
                 principalId);
@@ -43,6 +44,7 @@ final class AssetRequestMapper {
 
     static UpdateAssetCommand toUpdateCommand(UpdateAssetRequest request, String principalId) {
         return new UpdateAssetCommand(
+                request.expectedVersion(),
                 request.organizationId(),
                 request.projectId(),
                 request.displayName(),
@@ -52,6 +54,7 @@ final class AssetRequestMapper {
                 request.tags(),
                 request.tagIds(),
                 request.license(),
+                request.ownerTeamId(),
                 toModelProfile(request.model()),
                 toDatasetProfile(request.dataset()),
                 principalId);
@@ -79,10 +82,22 @@ final class AssetRequestMapper {
     }
 
     private static ModelProfile toModelProfile(CreateAssetRequest.ModelInput input) {
-        return input == null ? null : new ModelProfile(input.framework(), input.task(), input.architecture());
+        if (input == null) {
+            return null;
+        }
+        return new ModelProfile(input.framework(), input.task(), input.architecture(),
+                input.parameterScale(), input.precision(), input.weightFormat(),
+                input.runtime(), input.knownRisks(), input.usageRestrictions(),
+                input.sensitivityCode());
     }
 
     private static DatasetProfile toDatasetProfile(CreateAssetRequest.DatasetInput input) {
-        return input == null ? null : new DatasetProfile(input.format(), input.modality());
+        if (input == null) {
+            return null;
+        }
+        return new DatasetProfile(input.format(), input.modality(),
+                input.taskCodes(), input.modalityCodes(), input.formatCodes(),
+                input.languageCodes(), input.sensitivityCode(),
+                input.sampleCount(), input.totalBytes(), input.sizeBucketCode());
     }
 }

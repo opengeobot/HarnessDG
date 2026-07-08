@@ -55,6 +55,15 @@ public class AssetEntity {
     @TableField("status")
     private String status;
 
+    @TableField("deprecation_reason")
+    private String deprecationReason;
+
+    @TableField("deprecation_note")
+    private String deprecationNote;
+
+    @TableField("replacement_asset_id")
+    private String replacementAssetId;
+
     @TableField("provisioning_status")
     private String provisioningStatus;
 
@@ -66,6 +75,12 @@ public class AssetEntity {
 
     @TableField("license")
     private String license;
+
+    @TableField("owner_team_id")
+    private String ownerTeamId;
+
+    @TableField(value = "aliases", typeHandler = JsonbStringListTypeHandler.class)
+    private List<String> aliases;
 
     @TableField("repo_full_name")
     private String repoFullName;
@@ -192,6 +207,30 @@ public class AssetEntity {
         this.status = status;
     }
 
+    public String getDeprecationReason() {
+        return deprecationReason;
+    }
+
+    public void setDeprecationReason(String deprecationReason) {
+        this.deprecationReason = deprecationReason;
+    }
+
+    public String getDeprecationNote() {
+        return deprecationNote;
+    }
+
+    public void setDeprecationNote(String deprecationNote) {
+        this.deprecationNote = deprecationNote;
+    }
+
+    public String getReplacementAssetId() {
+        return replacementAssetId;
+    }
+
+    public void setReplacementAssetId(String replacementAssetId) {
+        this.replacementAssetId = replacementAssetId;
+    }
+
     public String getProvisioningStatus() {
         return provisioningStatus;
     }
@@ -222,6 +261,22 @@ public class AssetEntity {
 
     public void setLicense(String license) {
         this.license = license;
+    }
+
+    public String getOwnerTeamId() {
+        return ownerTeamId;
+    }
+
+    public void setOwnerTeamId(String ownerTeamId) {
+        this.ownerTeamId = ownerTeamId;
+    }
+
+    public List<String> getAliases() {
+        return aliases;
+    }
+
+    public void setAliases(List<String> aliases) {
+        this.aliases = aliases;
     }
 
     public String getRepoFullName() {

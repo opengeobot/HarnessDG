@@ -36,14 +36,43 @@ public record CreateAssetRequest(AssetType type,
                                  List<String> tags,
                                  List<String> tagIds,
                                  String license,
+                                 String ownerTeamId,
                                  ModelInput model,
                                  DatasetInput dataset) {
 
     /** 模型画像输入。 */
-    public record ModelInput(String framework, String task, String architecture) {
+    public record ModelInput(String framework,
+                             String task,
+                             String architecture,
+                             String parameterScale,
+                             String precision,
+                             String weightFormat,
+                             String runtime,
+                             List<String> knownRisks,
+                             List<String> usageRestrictions,
+                             String sensitivityCode) {
+
+        /** 兼容 P0-B 三参数构造。 */
+        public ModelInput(String framework, String task, String architecture) {
+            this(framework, task, architecture, null, null, null, null, null, null, null);
+        }
     }
 
     /** 数据集画像输入。 */
-    public record DatasetInput(String format, String modality) {
+    public record DatasetInput(String format,
+                               String modality,
+                               List<String> taskCodes,
+                               List<String> modalityCodes,
+                               List<String> formatCodes,
+                               List<String> languageCodes,
+                               String sensitivityCode,
+                               Long sampleCount,
+                               Long totalBytes,
+                               String sizeBucketCode) {
+
+        /** 兼容 P0-B 两参数构造。 */
+        public DatasetInput(String format, String modality) {
+            this(format, modality, null, null, null, null, null, null, null, null);
+        }
     }
 }

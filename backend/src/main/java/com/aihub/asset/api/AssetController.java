@@ -153,12 +153,18 @@ public class AssetController {
     }
 
     /**
-     * 弃用资产：仍可访问但检索降权。
+     * 弃用资产：仍可访问但检索降权。支持弃用原因与替代资产。
      */
     @PostMapping("/{assetId}/deprecate")
-    public ApiResponse<AssetView> deprecateAsset(@PathVariable String assetId) {
+    public ApiResponse<AssetView> deprecateAsset(
+            @PathVariable String assetId,
+            @RequestBody(required = false) DeprecateAssetRequest request) {
+        String reason = request != null ? request.deprecationReason() : null;
+        String note = request != null ? request.deprecationNote() : null;
+        String replacementId = request != null ? request.replacementAssetId() : null;
         return AssetApiContext.respond(
-                assetService.deprecateAsset(assetId, AssetApiContext.principalId()));
+                assetService.deprecateAsset(assetId, AssetApiContext.principalId(),
+                        reason, note, replacementId));
     }
 
     /**

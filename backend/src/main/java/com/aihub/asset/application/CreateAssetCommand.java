@@ -26,6 +26,7 @@ import java.util.List;
  * @param tags        标签列表（legacy 自由标签，只读回显）
  * @param tagIds      受控标签 ID 列表（经 TagValidationService 校验，写入 asset_tag 关联）
  * @param license     许可证
+ * @param ownerTeamId 主 Owner 团队 ID
  * @param model       模型画像（仅模型类有效，可空）
  * @param dataset     数据集画像（仅数据集类有效，可空）
  * @param principalId 操作者主体 ID（可空，P1 未接入认证）
@@ -42,6 +43,7 @@ public record CreateAssetCommand(AssetType type,
                                  List<String> tags,
                                  List<String> tagIds,
                                  String license,
+                                 String ownerTeamId,
                                  ModelProfile model,
                                  DatasetProfile dataset,
                                  String principalId) {
