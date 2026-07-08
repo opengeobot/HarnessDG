@@ -23,6 +23,9 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +66,7 @@ public class DictionaryApplicationService implements DictionaryValidationPort {
      * 列出全部字典类型。
      */
     @Transactional(readOnly = true)
+    @Cacheable("dictionaryTypes")
     public List<DictionaryTypeView> listTypes() {
         return repository.findAllTypes().stream().map(DictionaryTypeView::from).toList();
     }
@@ -74,6 +78,7 @@ public class DictionaryApplicationService implements DictionaryValidationPort {
      * @param includeDisabled 是否含停用项（true 用于历史回显，false 仅可引用项）
      */
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "dictionaryItems", key = "#dictCode + ':' + #includeDisabled")
     public List<DictionaryItemView> listItems(String dictCode, boolean includeDisabled) {
         requireTypeExists(dictCode);
         return repository.findItems(dictCode, includeDisabled).stream()
@@ -84,6 +89,7 @@ public class DictionaryApplicationService implements DictionaryValidationPort {
      * 新建字典项。
      */
     @Transactional
+    @CacheEvict(cacheNames = {"dictionaryItems", "dictionaryTypes"}, allEntries = true)
     public DictionaryItemView createItem(String dictCode, CreateDictionaryItemCommand command, String actorId) {
         requireTypeExists(dictCode);
         if (command == null) {
@@ -118,6 +124,7 @@ public class DictionaryApplicationService implements DictionaryValidationPort {
      * 更新字典项（修改 i18nKey/sortOrder 或停用/启用）。
      */
     @Transactional
+    @CacheEvict(cacheNames = {"dictionaryItems", "dictionaryTypes"}, allEntries = true)
     public DictionaryItemView updateItem(String dictCode, String itemCode,
                                          UpdateDictionaryItemCommand command, String actorId) {
         requireTypeExists(dictCode);
@@ -153,6 +160,7 @@ public class DictionaryApplicationService implements DictionaryValidationPort {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "dictionaryValidation", key = "#dictCode + ':' + #itemCode")
     public boolean isKnown(String dictCode, String itemCode) {
         return repository.findItem(dictCode, itemCode).isPresent();
     }
