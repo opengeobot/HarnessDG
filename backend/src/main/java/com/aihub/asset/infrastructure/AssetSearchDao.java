@@ -201,9 +201,17 @@ public class AssetSearchDao {
         if (!StringUtils.hasText(keyword)) {
             return;
         }
-        sql.append(" AND (a.name ILIKE :kw OR a.display_name ILIKE :kw OR a.description ILIKE :kw"
-                + " OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(a.tags) t WHERE t ILIKE :kw))");
-        params.addValue("kw", "%" + keyword.trim() + "%");
+        String trimmed = keyword.trim();
+        // name/display_name: ILIKE 利用 pg_trgm GIN 索引
+        // description: tsvector @@ plainto_tsquery 利用 GIN 全文索引
+        // tags: 通过 asset_tag 关联表 EXISTS 子查询替代 jsonb_array_elements_text
+        sql.append(" AND (a.name ILIKE :kw OR a.display_name ILIKE :kw"
+                + " OR to_tsvector('simple', COALESCE(a.description, '')) @@ plainto_tsquery('simple', :kwRaw)"
+                + " OR EXISTS (SELECT 1 FROM asset_tag at2"
+                + " JOIN system_tag st ON st.tag_id = at2.tag_id WHERE at2.asset_id = a.asset_id"
+                + " AND (st.name ILIKE :kw OR st.tag_code ILIKE :kw)))");
+        params.addValue("kw", "%" + trimmed + "%");
+        params.addValue("kwRaw", trimmed);
     }
 
     private void appendTagIdFilter(StringBuilder sql, MapSqlParameterSource params, String tagId) {
