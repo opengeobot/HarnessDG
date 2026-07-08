@@ -62,6 +62,13 @@ public class AssetSearchDao {
             SELECT asset_id, tag_id FROM asset_tag WHERE asset_id IN (:assetIds)
             """;
 
+    private static final String FACET_FROM = """
+            FROM asset a
+            LEFT JOIN asset_model am ON am.asset_id = a.asset_id
+            LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
+            WHERE a.deleted = 0 AND a.provisioning_status = 'COMPLETED'
+            """;
+
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public AssetSearchDao(NamedParameterJdbcTemplate jdbcTemplate) {
@@ -78,6 +85,83 @@ public class AssetSearchDao {
         StringBuilder sql = new StringBuilder(BASE_SELECT);
         MapSqlParameterSource params = new MapSqlParameterSource();
 
+        appendCommonFilters(sql, params, criteria);
+        appendCursor(sql, params, criteria.cursor());
+
+        sql.append(" ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END, a.created_at DESC, a.id DESC LIMIT :limit");
+        params.addValue("limit", criteria.limit() + 1);
+
+        List<SearchRow> rows = jdbcTemplate.query(sql.toString(), params, this::mapRow);
+        return toPage(rows, criteria.limit());
+    }
+
+    /**
+     * 按维度统计资产数量（Facet），使用 SQL GROUP BY + UNION ALL 消除内存计数。
+     *
+     * @param criteria 检索条件（仅使用过滤和权限部分，忽略分页）
+     * @return 各维度计数映射
+     */
+    public Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        StringBuilder where = new StringBuilder();
+        appendCommonFilters(where, params, criteria);
+        String w = where.toString();
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT 'types' AS dim, a.type AS val, COUNT(*) AS cnt").append(FACET_FROM).append(w).append(" GROUP BY a.type");
+        sql.append(" UNION ALL SELECT 'licenses', a.license, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY a.license");
+        sql.append(" UNION ALL SELECT 'frameworks', am.framework, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY am.framework");
+        sql.append(" UNION ALL SELECT 'tasks', am.task, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY am.task");
+        sql.append(" UNION ALL SELECT 'formats', ad.format, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY ad.format");
+        sql.append(" UNION ALL SELECT 'modalities', ad.modality, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY ad.modality");
+        sql.append(" UNION ALL SELECT 'sensitivities', COALESCE(am.sensitivity_code, ad.sensitivity_code), COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY COALESCE(am.sensitivity_code, ad.sensitivity_code)");
+        sql.append(" UNION ALL SELECT 'sizeBuckets', ad.size_bucket_code, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY ad.size_bucket_code");
+        sql.append(" UNION ALL SELECT 'taskCodes', t.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.task_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.task_codes) t(val) GROUP BY t.val");
+        sql.append(" UNION ALL SELECT 'modalityCodes', m.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.modality_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.modality_codes) m(val) GROUP BY m.val");
+        sql.append(" UNION ALL SELECT 'formatCodes', f.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.format_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.format_codes) f(val) GROUP BY f.val");
+        sql.append(" UNION ALL SELECT 'languageCodes', l.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.language_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.language_codes) l(val) GROUP BY l.val");
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params);
+
+        Map<String, Map<String, Long>> result = new LinkedHashMap<>();
+        result.put("types", new LinkedHashMap<>());
+        result.put("licenses", new LinkedHashMap<>());
+        result.put("frameworks", new LinkedHashMap<>());
+        result.put("tasks", new LinkedHashMap<>());
+        result.put("formats", new LinkedHashMap<>());
+        result.put("modalities", new LinkedHashMap<>());
+        result.put("sensitivities", new LinkedHashMap<>());
+        result.put("sizeBuckets", new LinkedHashMap<>());
+        result.put("taskCodes", new LinkedHashMap<>());
+        result.put("modalityCodes", new LinkedHashMap<>());
+        result.put("formatCodes", new LinkedHashMap<>());
+        result.put("languageCodes", new LinkedHashMap<>());
+
+        long total = 0;
+        for (Map<String, Object> row : rows) {
+            String dim = (String) row.get("dim");
+            Object val = row.get("val");
+            long cnt = ((Number) row.get("cnt")).longValue();
+            if (val != null && result.containsKey(dim)) {
+                result.get(dim).put(String.valueOf(val), cnt);
+            }
+            if ("types".equals(dim)) {
+                total += cnt;
+            }
+        }
+        result.put("_total", Map.of("count", total));
+        return result;
+    }
+
+    /**
+     * 追加 search 和 facet 共用的 WHERE 过滤条件。
+     */
+    private void appendCommonFilters(StringBuilder sql, MapSqlParameterSource params,
+                                     AssetSearchCriteria criteria) {
         sql.append(" AND a.status IN (:statuses)");
         params.addValue("statuses", criteria.statusNames());
         sql.append(" AND a.visibility IN (:visibilities)");
@@ -102,73 +186,6 @@ public class AssetSearchDao {
         appendJsonArrayContains(sql, params, "ad.language_codes", "languageCodes", criteria.languageCodes());
         appendEquals(sql, params, "COALESCE(am.sensitivity_code, ad.sensitivity_code)", "sensitivity", criteria.sensitivity());
         appendAccessScopeFilter(sql, params, criteria.accessScope());
-        appendCursor(sql, params, criteria.cursor());
-
-        sql.append(" ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END, a.created_at DESC, a.id DESC LIMIT :limit");
-        params.addValue("limit", criteria.limit() + 1);
-
-        List<SearchRow> rows = jdbcTemplate.query(sql.toString(), params, this::mapRow);
-        return toPage(rows, criteria.limit());
-    }
-
-    /**
-     * 按维度统计资产数量（Facet），应用与 search 相同的访问作用域过滤。
-     *
-     * @param criteria 检索条件（仅使用过滤和权限部分，忽略分页）
-     * @return 各维度计数映射
-     */
-    public Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria) {
-        StringBuilder sql = new StringBuilder("""
-                SELECT a.type, a.license, am.framework, am.task, ad.format, ad.modality
-                FROM asset a
-                LEFT JOIN asset_model am ON am.asset_id = a.asset_id
-                LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
-                WHERE a.deleted = 0
-                AND a.provisioning_status = 'COMPLETED'
-                """);
-        MapSqlParameterSource params = new MapSqlParameterSource();
-
-        sql.append(" AND a.status IN (:statuses)");
-        params.addValue("statuses", criteria.statusNames());
-        sql.append(" AND a.visibility IN (:visibilities)");
-        params.addValue("visibilities", criteria.visibilityNames());
-
-        appendKeyword(sql, params, criteria.keyword());
-        appendAccessScopeFilter(sql, params, criteria.accessScope());
-
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params);
-        Map<String, Map<String, Long>> result = new LinkedHashMap<>();
-        Map<String, Long> types = new LinkedHashMap<>();
-        Map<String, Long> frameworks = new LinkedHashMap<>();
-        Map<String, Long> tasks = new LinkedHashMap<>();
-        Map<String, Long> formats = new LinkedHashMap<>();
-        Map<String, Long> modalities = new LinkedHashMap<>();
-        Map<String, Long> licenses = new LinkedHashMap<>();
-
-        for (Map<String, Object> row : rows) {
-            countIfNotNull(types, row.get("type"));
-            countIfNotNull(frameworks, row.get("framework"));
-            countIfNotNull(tasks, row.get("task"));
-            countIfNotNull(formats, row.get("format"));
-            countIfNotNull(modalities, row.get("modality"));
-            countIfNotNull(licenses, row.get("license"));
-        }
-        result.put("types", types);
-        result.put("frameworks", frameworks);
-        result.put("tasks", tasks);
-        result.put("formats", formats);
-        result.put("modalities", modalities);
-        result.put("licenses", licenses);
-        result.put("_total", Map.of("count", (long) rows.size()));
-        return result;
-    }
-
-    private void countIfNotNull(Map<String, Long> map, Object value) {
-        if (value == null) {
-            return;
-        }
-        String key = String.valueOf(value);
-        map.merge(key, 1L, Long::sum);
     }
 
     private void appendEquals(StringBuilder sql, MapSqlParameterSource params,

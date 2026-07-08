@@ -329,6 +329,12 @@ public class AssetApplicationService {
                 raw.getOrDefault("formats", Map.of()),
                 raw.getOrDefault("modalities", Map.of()),
                 raw.getOrDefault("licenses", Map.of()),
+                raw.getOrDefault("sensitivities", Map.of()),
+                raw.getOrDefault("sizeBuckets", Map.of()),
+                raw.getOrDefault("taskCodes", Map.of()),
+                raw.getOrDefault("modalityCodes", Map.of()),
+                raw.getOrDefault("formatCodes", Map.of()),
+                raw.getOrDefault("languageCodes", Map.of()),
                 total);
     }
 
