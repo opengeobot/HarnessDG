@@ -27,3 +27,7 @@ END $$;
 -- Facet 维度索引（partial WHERE deleted=0）
 CREATE INDEX IF NOT EXISTS ix_asset_facet_type ON asset (type) WHERE deleted = 0;
 CREATE INDEX IF NOT EXISTS ix_asset_facet_license ON asset (license) WHERE deleted = 0 AND license IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_asset_model_framework ON asset_model (framework) WHERE framework IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_asset_model_task ON asset_model (task) WHERE task IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_asset_dataset_format ON asset_dataset (format) WHERE format IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_asset_dataset_modality ON asset_dataset (modality) WHERE modality IS NOT NULL;

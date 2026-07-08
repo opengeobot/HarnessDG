@@ -20,11 +20,18 @@ import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -43,32 +50,155 @@ public class MyBatisAssetRepository implements AssetRepository {
     private static final String JSONB_LIST_HANDLER =
             "typeHandler=com.aihub.asset.infrastructure.JsonbStringListTypeHandler";
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<List<String>> LIST_TYPE = new TypeReference<>() {};
+
+    private static final String FIND_BY_ID_JOIN_SQL = """
+            SELECT a.id, a.asset_id, a.type, a.namespace, a.organization_id, a.project_id, a.name,
+                   a.display_name, a.description, a.visibility, a.status, a.license,
+                   a.owners::text AS owners_json, a.tags::text AS tags_json,
+                   a.owner_team_id, a.aliases::text AS aliases_json,
+                   a.provisioning_status, a.source_commit, a.card_readme, a.card_asset_yaml,
+                   a.deprecation_reason, a.deprecation_note, a.replacement_asset_id,
+                   a.repo_full_name, a.repo_html_url, a.repo_clone_url,
+                   a.row_version, a.created_by, a.updated_by, a.created_at, a.updated_at,
+                   am.framework, am.task, am.architecture, am.parameter_scale, am.precision,
+                   am.weight_format, am.runtime, am.known_risks::text AS m_known_risks_json,
+                   am.usage_restrictions::text AS m_usage_restrictions_json, am.sensitivity_code AS m_sensitivity,
+                   ad.format, ad.modality, ad.task_codes::text AS d_task_codes_json,
+                   ad.modality_codes::text AS d_modality_codes_json, ad.format_codes::text AS d_format_codes_json,
+                   ad.language_codes::text AS d_language_codes_json, ad.sensitivity_code AS d_sensitivity,
+                   ad.sample_count, ad.total_bytes, ad.size_bucket_code,
+                   at2.tag_id AS tag_id
+            FROM asset a
+            LEFT JOIN asset_model am ON am.asset_id = a.asset_id
+            LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
+            LEFT JOIN asset_tag at2 ON at2.asset_id = a.asset_id
+            WHERE a.asset_id = :assetId AND a.deleted = 0
+            """;
+
     private final AssetMapper assetMapper;
     private final AssetModelMapper assetModelMapper;
     private final AssetDatasetMapper assetDatasetMapper;
     private final AssetTagMapper assetTagMapper;
     private final AssetSearchDao assetSearchDao;
+    private final NamedParameterJdbcTemplate jdbcTemplate;
 
     public MyBatisAssetRepository(AssetMapper assetMapper,
                                   AssetModelMapper assetModelMapper,
                                   AssetDatasetMapper assetDatasetMapper,
                                   AssetTagMapper assetTagMapper,
-                                  AssetSearchDao assetSearchDao) {
+                                  AssetSearchDao assetSearchDao,
+                                  NamedParameterJdbcTemplate jdbcTemplate) {
         this.assetMapper = assetMapper;
         this.assetModelMapper = assetModelMapper;
         this.assetDatasetMapper = assetDatasetMapper;
         this.assetTagMapper = assetTagMapper;
         this.assetSearchDao = assetSearchDao;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     public Optional<Asset> findByAssetId(String assetId) {
-        AssetEntity entity = assetMapper.selectOne(
-                Wrappers.<AssetEntity>lambdaQuery().eq(AssetEntity::getAssetId, assetId));
-        if (entity == null) {
+        MapSqlParameterSource params = new MapSqlParameterSource("assetId", assetId);
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(FIND_BY_ID_JOIN_SQL, params);
+        if (rows.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(toDomain(entity));
+        return Optional.of(buildDomainFromJoin(rows));
+    }
+
+    private Asset buildDomainFromJoin(List<Map<String, Object>> rows) {
+        Map<String, Object> first = rows.get(0);
+        AssetType type = AssetType.valueOf((String) first.get("type"));
+        List<String> tagIds = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String tagId = (String) row.get("tag_id");
+            if (tagId != null) {
+                tagIds.add(tagId);
+            }
+        }
+        Asset.Builder builder = new Asset.Builder()
+                .assetId((String) first.get("asset_id"))
+                .organizationId((String) first.get("organization_id"))
+                .projectId((String) first.get("project_id"))
+                .type(type)
+                .namespace((String) first.get("namespace"))
+                .name((String) first.get("name"))
+                .displayName((String) first.get("display_name"))
+                .description((String) first.get("description"))
+                .visibility(Visibility.valueOf((String) first.get("visibility")))
+                .status(AssetStatus.valueOf((String) first.get("status")))
+                .owners(parseJsonList((String) first.get("owners_json")))
+                .tags(parseJsonList((String) first.get("tags_json")))
+                .tagIds(tagIds)
+                .license((String) first.get("license"))
+                .ownerTeamId((String) first.get("owner_team_id"))
+                .aliases(parseJsonList((String) first.get("aliases_json")))
+                .rowVersion(first.get("row_version") == null ? 0L : ((Number) first.get("row_version")).longValue())
+                .createdBy((String) first.get("created_by"))
+                .updatedBy((String) first.get("updated_by"))
+                .createdAt(toInstant(first.get("created_at")))
+                .updatedAt(toInstant(first.get("updated_at")));
+        String provStatus = (String) first.get("provisioning_status");
+        if (provStatus != null) {
+            builder.provisioningStatus(ProvisioningStatus.valueOf(provStatus));
+        }
+        builder.sourceCommit((String) first.get("source_commit"));
+        builder.cardReadme((String) first.get("card_readme"));
+        builder.cardAssetYaml((String) first.get("card_asset_yaml"));
+        builder.deprecationReason((String) first.get("deprecation_reason"));
+        builder.deprecationNote((String) first.get("deprecation_note"));
+        builder.replacementAssetId((String) first.get("replacement_asset_id"));
+        String repoFullName = (String) first.get("repo_full_name");
+        if (repoFullName != null) {
+            builder.repository(new AssetRepositoryRef(
+                    repoFullName, (String) first.get("repo_html_url"), (String) first.get("repo_clone_url")));
+        }
+        if (type == AssetType.MODEL) {
+            builder.modelProfile(new ModelProfile(
+                    (String) first.get("framework"), (String) first.get("task"),
+                    (String) first.get("architecture"), (String) first.get("parameter_scale"),
+                    (String) first.get("precision"), (String) first.get("weight_format"),
+                    (String) first.get("runtime"),
+                    parseJsonList((String) first.get("m_known_risks_json")),
+                    parseJsonList((String) first.get("m_usage_restrictions_json")),
+                    (String) first.get("m_sensitivity")));
+        } else {
+            builder.datasetProfile(new DatasetProfile(
+                    (String) first.get("format"), (String) first.get("modality"),
+                    parseJsonList((String) first.get("d_task_codes_json")),
+                    parseJsonList((String) first.get("d_modality_codes_json")),
+                    parseJsonList((String) first.get("d_format_codes_json")),
+                    parseJsonList((String) first.get("d_language_codes_json")),
+                    (String) first.get("d_sensitivity"),
+                    toLong(first.get("sample_count")), toLong(first.get("total_bytes")),
+                    (String) first.get("size_bucket_code")));
+        }
+        return builder.build();
+    }
+
+    private static List<String> parseJsonList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(json, LIST_TYPE);
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    private static Instant toInstant(Object value) {
+        if (value == null) return null;
+        if (value instanceof Instant i) return i;
+        if (value instanceof OffsetDateTime odt) return odt.toInstant();
+        return null;
+    }
+
+    private static Long toLong(Object value) {
+        if (value == null) return null;
+        return ((Number) value).longValue();
     }
 
     @Override
@@ -176,12 +306,6 @@ public class MyBatisAssetRepository implements AssetRepository {
         insertTagAssociations(asset);
     }
 
-    private List<String> loadTagIds(String assetId) {
-        List<AssetTagEntity> tags = assetTagMapper.selectList(Wrappers.<AssetTagEntity>lambdaQuery()
-                .eq(AssetTagEntity::getAssetId, assetId));
-        return tags.stream().map(AssetTagEntity::getTagId).toList();
-    }
-
     private void insertProfile(Asset asset) {
         if (asset.type() == AssetType.MODEL) {
             ModelProfile profile = asset.modelProfile() == null ? ModelProfile.empty() : asset.modelProfile();
@@ -286,67 +410,5 @@ public class MyBatisAssetRepository implements AssetRepository {
         entity.setReplacementAssetId(asset.replacementAssetId());
         entity.setDeleted(0);
         return entity;
-    }
-
-    private Asset toDomain(AssetEntity entity) {
-        AssetType type = AssetType.valueOf(entity.getType());
-        List<String> tagIds = loadTagIds(entity.getAssetId());
-        Asset.Builder builder = new Asset.Builder()
-                .assetId(entity.getAssetId())
-                .organizationId(entity.getOrganizationId())
-                .projectId(entity.getProjectId())
-                .type(type)
-                .namespace(entity.getNamespace())
-                .name(entity.getName())
-                .displayName(entity.getDisplayName())
-                .description(entity.getDescription())
-                .visibility(Visibility.valueOf(entity.getVisibility()))
-                .status(AssetStatus.valueOf(entity.getStatus()))
-                .owners(entity.getOwners())
-                .tags(entity.getTags())
-                .tagIds(tagIds)
-                .license(entity.getLicense())
-                .ownerTeamId(entity.getOwnerTeamId())
-                .aliases(entity.getAliases())
-                .rowVersion(entity.getRowVersion() == null ? 0L : entity.getRowVersion())
-                .createdBy(entity.getCreatedBy())
-                .updatedBy(entity.getUpdatedBy())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt());
-        if (entity.getProvisioningStatus() != null) {
-            builder.provisioningStatus(ProvisioningStatus.valueOf(entity.getProvisioningStatus()));
-        }
-        builder.sourceCommit(entity.getSourceCommit());
-        builder.cardReadme(entity.getCardReadme());
-        builder.cardAssetYaml(entity.getCardAssetYaml());
-        builder.deprecationReason(entity.getDeprecationReason());
-        builder.deprecationNote(entity.getDeprecationNote());
-        builder.replacementAssetId(entity.getReplacementAssetId());
-        if (entity.getRepoFullName() != null) {
-            builder.repository(new AssetRepositoryRef(
-                    entity.getRepoFullName(), entity.getRepoHtmlUrl(), entity.getRepoCloneUrl()));
-        }
-        attachProfile(builder, type, entity.getAssetId());
-        return builder.build();
-    }
-
-    private void attachProfile(Asset.Builder builder, AssetType type, String assetId) {
-        if (type == AssetType.MODEL) {
-            AssetModelEntity model = assetModelMapper.selectById(assetId);
-            builder.modelProfile(model == null
-                    ? ModelProfile.empty()
-                    : new ModelProfile(model.getFramework(), model.getTask(), model.getArchitecture(),
-                            model.getParameterScale(), model.getPrecision(), model.getWeightFormat(),
-                            model.getRuntime(), model.getKnownRisks(), model.getUsageRestrictions(),
-                            model.getSensitivityCode()));
-            return;
-        }
-        AssetDatasetEntity dataset = assetDatasetMapper.selectById(assetId);
-        builder.datasetProfile(dataset == null
-                ? DatasetProfile.empty()
-                : new DatasetProfile(dataset.getFormat(), dataset.getModality(),
-                        dataset.getTaskCodes(), dataset.getModalityCodes(), dataset.getFormatCodes(),
-                        dataset.getLanguageCodes(), dataset.getSensitivityCode(),
-                        dataset.getSampleCount(), dataset.getTotalBytes(), dataset.getSizeBucketCode()));
     }
 }
