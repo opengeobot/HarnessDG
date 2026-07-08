@@ -102,6 +102,7 @@
     "confirmDelete": "Confirm deleting this asset?",
     "deleted": "Asset deleted",
     "deleteFailed": "Delete failed",
+    "conflictReload": "Asset was modified by another user. Latest data has been reloaded.",
     "deprecated": "Deprecated",
     "archived": "Archived",
     "restored": "Restored",
@@ -224,7 +225,12 @@
       "REPLACED": "Replaced",
       "OUTDATED": "Outdated",
       "SECURITY_ISSUE": "Security Issue",
-      "UNSUPPORTED": "No Longer Supported"
+      "UNSUPPORTED": "No Longer Supported",
+      "MERGED": "Merged",
+      "quickStart": "Quick Start",
+      "cloneUrl": "Git Clone",
+      "pipInstall": "Python Install",
+      "dvcPull": "DVC Pull"
     },
     "sensitivity": {
       "PUBLIC": "Public",

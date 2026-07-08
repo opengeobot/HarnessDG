@@ -102,6 +102,7 @@
     "confirmDelete": "确认删除该资产？",
     "deleted": "已删除资产",
     "deleteFailed": "删除失败",
+    "conflictReload": "资产已被其他人修改，已重新加载最新数据",
     "deprecated": "已弃用",
     "archived": "已归档",
     "restored": "已恢复",
@@ -224,7 +225,12 @@
       "REPLACED": "已被替代",
       "OUTDATED": "已过时",
       "SECURITY_ISSUE": "安全问题",
-      "UNSUPPORTED": "不再支持"
+      "UNSUPPORTED": "不再支持",
+      "MERGED": "已合并",
+      "quickStart": "快速使用",
+      "cloneUrl": "Git Clone",
+      "pipInstall": "Python 安装",
+      "dvcPull": "DVC 拉取"
     },
     "sensitivity": {
       "PUBLIC": "公开",

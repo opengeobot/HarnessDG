@@ -17,8 +17,8 @@ import {
   Input,
   Popconfirm,
   Select,
+  Skeleton,
   Space,
-  Spin,
   Typography,
   Divider,
 } from 'antd';
@@ -82,7 +82,12 @@ export function AssetSettingsPage() {
       invalidate();
     },
     onError: (err: unknown) => {
-      message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      if (isApiError(err) && err.httpStatus === 409) {
+        message.warning(t('assets.conflictReload'));
+        queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
+      } else {
+        message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      }
     },
   });
 
@@ -97,7 +102,12 @@ export function AssetSettingsPage() {
       invalidate();
     },
     onError: (err: unknown) => {
-      message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      if (isApiError(err) && err.httpStatus === 409) {
+        message.warning(t('assets.conflictReload'));
+        queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
+      } else {
+        message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      }
     },
   });
 
@@ -108,7 +118,12 @@ export function AssetSettingsPage() {
       invalidate();
     },
     onError: (err: unknown) => {
-      message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      if (isApiError(err) && err.httpStatus === 409) {
+        message.warning(t('assets.conflictReload'));
+        queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
+      } else {
+        message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      }
     },
   });
 
@@ -119,7 +134,12 @@ export function AssetSettingsPage() {
       invalidate();
     },
     onError: (err: unknown) => {
-      message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      if (isApiError(err) && err.httpStatus === 409) {
+        message.warning(t('assets.conflictReload'));
+        queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
+      } else {
+        message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      }
     },
   });
 
@@ -130,14 +150,21 @@ export function AssetSettingsPage() {
       navigate('/assets');
     },
     onError: (err: unknown) => {
-      message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      if (isApiError(err) && err.httpStatus === 409) {
+        message.warning(t('assets.conflictReload'));
+        queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
+      } else {
+        message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      }
     },
   });
 
   if (isLoading) {
     return (
-      <Flex justify="center" align="center" style={{ minHeight: 400 }}>
-        <Spin size="large" />
+      <Flex vertical gap={24} style={{ maxWidth: 800 }}>
+        <Skeleton.Input active size="large" style={{ width: 200 }} />
+        <Skeleton active paragraph={{ rows: 4 }} />
+        <Skeleton active paragraph={{ rows: 6 }} />
       </Flex>
     );
   }
@@ -251,6 +278,7 @@ export function AssetSettingsPage() {
                       { value: 'OUTDATED', label: t('assets.deprecation.OUTDATED') },
                       { value: 'SECURITY_ISSUE', label: t('assets.deprecation.SECURITY_ISSUE') },
                       { value: 'UNSUPPORTED', label: t('assets.deprecation.UNSUPPORTED') },
+                      { value: 'MERGED', label: t('assets.deprecation.MERGED') },
                     ]}
                   />
                 </Form.Item>

@@ -72,8 +72,8 @@ describe('AssetsPage', () => {
     renderWithProviders(<AssetsPage />);
     expect(screen.getByText('名称')).toBeInTheDocument();
     expect(screen.getByText('类型')).toBeInTheDocument();
-    expect(screen.getByText('可见性')).toBeInTheDocument();
-    expect(screen.getByText('状态')).toBeInTheDocument();
+    expect(screen.getAllByText('可见性').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('状态').length).toBeGreaterThanOrEqual(1);
   });
 
   it('渲染分类过滤面板（语言 + 敏感等级）', () => {

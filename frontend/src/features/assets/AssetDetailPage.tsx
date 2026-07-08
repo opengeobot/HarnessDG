@@ -16,8 +16,8 @@ import {
   Empty,
   Flex,
   Popconfirm,
+  Skeleton,
   Space,
-  Spin,
   Tag,
   Typography,
 } from 'antd';
@@ -88,7 +88,14 @@ export function AssetDetailPage() {
   const deprecateMut = useMutation({
     mutationFn: () => deprecateAsset(assetId!),
     onSuccess: () => { message.success(t('assets.deprecated')); invalidate(); },
-    onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
+    onError: (err) => {
+      if (isApiError(err) && err.httpStatus === 409) {
+        message.warning(t('assets.conflictReload'));
+        invalidate();
+      } else {
+        message.error(isApiError(err) ? err.message : t('common.operationFailed'));
+      }
+    },
   });
   const archiveMut = useMutation({
     mutationFn: () => archiveAsset(assetId!),
@@ -101,7 +108,12 @@ export function AssetDetailPage() {
     onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
   });
 
-  if (query.isLoading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
+  if (query.isLoading) return (
+    <Flex vertical gap={16}>
+      <Skeleton.Input active size="large" style={{ width: 300 }} />
+      <Skeleton active paragraph={{ rows: 8 }} />
+    </Flex>
+  );
   if (query.isError || !query.data) return <Empty description={t('assets.notExist')} />;
 
   const asset: AssetView = query.data;
@@ -334,6 +346,36 @@ export function AssetDetailPage() {
       {assetId && <VersionListPanel assetId={assetId} />}
 
       {assetId && <DiscussionPanel assetId={assetId} />}
+
+      {/* DEC-014 Quick Start 快速使用面板 */}
+      {asset.repository && (
+        <Card title={t('assets.deprecation.quickStart')} size="small">
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <div>
+              <Typography.Text strong>{t('assets.deprecation.cloneUrl')}</Typography.Text>
+              <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
+                git clone {asset.repository.cloneUrl || `${asset.repository.htmlUrl}.git`}
+              </Typography.Paragraph>
+            </div>
+            {asset.type === 'MODEL' && asset.model?.framework && (
+              <div>
+                <Typography.Text strong>{t('assets.deprecation.pipInstall')}</Typography.Text>
+                <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
+                  pip install {asset.namespace}/{asset.name}
+                </Typography.Paragraph>
+              </div>
+            )}
+            {asset.type === 'DATASET' && (
+              <div>
+                <Typography.Text strong>{t('assets.deprecation.dvcPull')}</Typography.Text>
+                <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
+                  dvc pull {asset.namespace}/{asset.name}
+                </Typography.Paragraph>
+              </div>
+            )}
+          </Space>
+        </Card>
+      )}
     </Flex>
   );
 }
