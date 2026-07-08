@@ -161,7 +161,7 @@ class AssetApplicationServiceTest {
         when(assetRepository.search(any())).thenReturn(new CursorPage<>(List.of(summary), null, false));
 
         AssetSearchQuery query = new AssetSearchQuery("qwen", AssetType.MODEL, null, null, null, null,
-                null, null, null, null, null, null, false, null, 20, "usr_01");
+                null, null, null, null, null, null, null, null, null, null, false, null, 20, "usr_01");
         CursorPage<AssetSummaryView> page = service.searchAssets(query);
 
         assertThat(page.items()).hasSize(1);

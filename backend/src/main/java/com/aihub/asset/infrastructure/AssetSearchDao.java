@@ -86,6 +86,8 @@ public class AssetSearchDao {
         appendEquals(sql, params, "a.type", "type", typeName(criteria.type()));
         appendEquals(sql, params, "a.namespace", "namespace", criteria.namespace());
         appendEquals(sql, params, "a.organization_id", "organizationId", criteria.organizationId());
+        appendEquals(sql, params, "a.project_id", "projectId", criteria.projectId());
+        appendEquals(sql, params, "a.owner_team_id", "teamId", criteria.teamId());
         appendEquals(sql, params, "am.framework", "framework", criteria.framework());
         appendEquals(sql, params, "am.task", "task", criteria.task());
         appendEquals(sql, params, "ad.format", "format", criteria.format());

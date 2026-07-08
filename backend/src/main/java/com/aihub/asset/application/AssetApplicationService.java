@@ -263,12 +263,35 @@ public class AssetApplicationService {
     public CursorPage<AssetSummaryView> searchAssets(AssetSearchQuery query) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
         Set<Visibility> allowed = accessPolicy.visibleVisibilities(query.principalId());
+        // 如果请求指定了可见性过滤，与权限交集
+        if (query.visibility() != null) {
+            try {
+                Visibility requested = Visibility.valueOf(query.visibility());
+                if (allowed.contains(requested)) {
+                    allowed = Set.of(requested);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // 无效可见性值，忽略
+            }
+        }
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
         Set<AssetStatus> statuses = query.includeArchived()
                 ? Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED, AssetStatus.ARCHIVED)
                 : Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
+        // 如果请求指定了状态过滤，与状态集交集
+        if (query.status() != null) {
+            try {
+                AssetStatus requested = AssetStatus.valueOf(query.status());
+                if (statuses.contains(requested)) {
+                    statuses = Set.of(requested);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // 无效状态值，忽略
+            }
+        }
         AssetSearchCriteria criteria = new AssetSearchCriteria(
                 query.keyword(), query.type(), query.namespace(), query.organizationId(),
+                query.projectId(), query.teamId(),
                 query.framework(), query.task(), query.format(), query.modality(),
                 query.tagId(), query.owner(), statuses, allowed, accessScope,
                 null, null, null,
@@ -293,7 +316,7 @@ public class AssetApplicationService {
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
         Set<AssetStatus> statuses = Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
         AssetSearchCriteria criteria = new AssetSearchCriteria(
-                keyword, type, null, null, null, null, null, null,
+                keyword, type, null, null, null, null, null, null, null, null,
                 null, null, statuses, allowed, accessScope,
                 null, null, null, null, null,
                 null, null, AssetSearchCriteria.MAX_LIMIT);

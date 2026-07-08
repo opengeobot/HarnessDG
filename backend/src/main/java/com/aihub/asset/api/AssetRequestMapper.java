@@ -64,6 +64,10 @@ final class AssetRequestMapper {
                                           AssetType type,
                                           String namespace,
                                           String organizationId,
+                                          String projectId,
+                                          String visibility,
+                                          String status,
+                                          String teamId,
                                           String framework,
                                           String task,
                                           String format,
@@ -76,8 +80,8 @@ final class AssetRequestMapper {
                                           String cursor,
                                           int limit,
                                           String principalId) {
-        return new AssetSearchQuery(keyword, type, namespace, organizationId, framework, task,
-                format, modality, tagId, owner, language, sensitivity,
+        return new AssetSearchQuery(keyword, type, namespace, organizationId, projectId, visibility,
+                status, teamId, framework, task, format, modality, tagId, owner, language, sensitivity,
                 includeArchived, cursor, limit, principalId);
     }
 

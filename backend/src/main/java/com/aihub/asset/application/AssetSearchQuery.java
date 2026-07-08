@@ -14,6 +14,10 @@ import com.aihub.asset.domain.AssetType;
  * @param type            类型过滤（可空）
  * @param namespace       命名空间过滤（可空）
  * @param organizationId  组织 ID 过滤（可空，治理作用域下推）
+ * @param projectId       项目 ID 过滤（可空）
+ * @param visibility      可见性过滤（可空）
+ * @param status          状态过滤（可空）
+ * @param teamId          团队 ID 过滤（可空，匹配 ownerTeamId）
  * @param framework       模型框架过滤（可空）
  * @param task            模型任务过滤（可空）
  * @param format          数据格式过滤（可空）
@@ -31,6 +35,10 @@ public record AssetSearchQuery(String keyword,
                                AssetType type,
                                String namespace,
                                String organizationId,
+                               String projectId,
+                               String visibility,
+                               String status,
+                               String teamId,
                                String framework,
                                String task,
                                String format,
