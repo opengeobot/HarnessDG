@@ -411,4 +411,27 @@ public class MyBatisAssetRepository implements AssetRepository {
         entity.setDeleted(0);
         return entity;
     }
+
+    @Override
+    public void insertAlias(String assetId, String oldNamespace, String oldName) {
+        try {
+            jdbcTemplate.update(
+                    "INSERT INTO asset_alias (asset_id, old_namespace, old_name) VALUES (:assetId, :ns, :name)",
+                    new MapSqlParameterSource()
+                            .addValue("assetId", assetId)
+                            .addValue("ns", oldNamespace)
+                            .addValue("name", oldName));
+        } catch (DuplicateKeyException ignored) {
+            // 幂等：同一旧坐标已记录则跳过
+        }
+    }
+
+    @Override
+    public Optional<String> findByAlias(String namespace, String name) {
+        List<String> ids = jdbcTemplate.queryForList(
+                "SELECT asset_id FROM asset_alias WHERE old_namespace = :ns AND old_name = :name LIMIT 1",
+                new MapSqlParameterSource("ns", namespace).addValue("name", name),
+                String.class);
+        return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
+    }
 }

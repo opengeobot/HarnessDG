@@ -111,7 +111,8 @@ public class McpToolCatalog {
                     int limit = intArg(args, "limit", 20);
                     AssetSearchQuery query = new AssetSearchQuery(
                             keyword, type, namespace, null, null, null, null, null,
-                            null, null, null, null, tagId, null, null, null, false, null, limit, principalId);
+                            null, null, null, null, tagId, null, null, null,
+                            null, null, null, false, null, limit, principalId);
                     CursorPage<AssetSummaryView> page = assetService.searchAssets(query);
                     return Map.of("items", page.items(), "nextCursor", nullSafe(page.nextCursor()),
                             "hasMore", page.hasMore());

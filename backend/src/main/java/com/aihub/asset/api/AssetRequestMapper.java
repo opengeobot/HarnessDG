@@ -11,6 +11,7 @@ import com.aihub.asset.application.UpdateAssetCommand;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.DatasetProfile;
 import com.aihub.asset.domain.ModelProfile;
+import java.util.List;
 
 /**
  * 资产请求映射器。
@@ -76,12 +77,16 @@ final class AssetRequestMapper {
                                           String owner,
                                           String language,
                                           String sensitivity,
+                                          List<String> taskCodes,
+                                          List<String> modalityCodes,
+                                          List<String> formatCodes,
                                           boolean includeArchived,
                                           String cursor,
                                           int limit,
                                           String principalId) {
         return new AssetSearchQuery(keyword, type, namespace, organizationId, projectId, visibility,
                 status, teamId, framework, task, format, modality, tagId, owner, language, sensitivity,
+                taskCodes, modalityCodes, formatCodes,
                 includeArchived, cursor, limit, principalId);
     }
 

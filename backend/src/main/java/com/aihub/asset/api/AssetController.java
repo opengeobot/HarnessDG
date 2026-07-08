@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -95,13 +96,17 @@ public class AssetController {
             @RequestParam(required = false) String owner,
             @RequestParam(required = false) String language,
             @RequestParam(required = false) String sensitivity,
+            @RequestParam(required = false) List<String> taskCodes,
+            @RequestParam(required = false) List<String> modalityCodes,
+            @RequestParam(required = false) List<String> formatCodes,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, type, namespace, organizationId, projectId, visibility, status, teamId,
                 framework, task, format, modality, tagId, owner,
-                language, sensitivity, includeArchived, cursor, limit, AssetApiContext.principalId())));
+                language, sensitivity, taskCodes, modalityCodes, formatCodes,
+                includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 
     /**

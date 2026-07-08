@@ -71,6 +71,7 @@ public class AssetApplicationService {
     private static final String DICT_TASK = "model_task";
     private static final String DICT_FORMAT = "dataset_format";
     private static final String DICT_MODALITY = "dataset_modality";
+    private static final String DICT_DEPRECATION_REASON = "deprecation_reason";
 
     private final AssetRepository assetRepository;
     private final AssetAccessPolicy accessPolicy;
@@ -162,6 +163,8 @@ public class AssetApplicationService {
                 datasetFormat(command), datasetModality(command));
         List<String> validatedTagIds = resolveValidatedTagIds(command.tagIds(),
                 command.organizationId() != null ? command.organizationId() : asset.organizationId());
+        // 保存旧 displayName，用于 displayName 变更时记录永久别名
+        String oldDisplayName = asset.displayName();
         asset.updateMetadata(
                 command.organizationId(),
                 command.projectId(),
@@ -176,6 +179,10 @@ public class AssetApplicationService {
                 command.dataset(),
                 command.ownerTeamId(),
                 command.principalId());
+        // displayName 变更时记录旧名称到 asset_alias 永久别名表
+        if (command.displayName() != null && !command.displayName().equals(oldDisplayName)) {
+            assetRepository.insertAlias(asset.assetId(), asset.namespace(), oldDisplayName != null ? oldDisplayName : asset.name());
+        }
         assetRepository.update(asset);
         auditAsset("ASSET_UPDATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
@@ -203,6 +210,7 @@ public class AssetApplicationService {
                                     String replacementAssetId) {
         authorizationService.requirePermission(Permissions.ASSET_DEPRECATE);
         Asset asset = loadAccessible(assetId, principalId);
+        validateDictItem(DICT_DEPRECATION_REASON, deprecationReason);
         try {
             asset.deprecate(principalId, deprecationReason, deprecationNote, replacementAssetId);
         } catch (IllegalStateException ex) {
@@ -294,7 +302,7 @@ public class AssetApplicationService {
                 query.projectId(), query.teamId(),
                 query.framework(), query.task(), query.format(), query.modality(),
                 query.tagId(), query.owner(), statuses, allowed, accessScope,
-                null, null, null,
+                query.taskCodes(), query.modalityCodes(), query.formatCodes(),
                 query.language() != null ? java.util.List.of(query.language()) : null,
                 null,
                 query.sensitivity(),

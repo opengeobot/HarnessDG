@@ -222,11 +222,14 @@ public final class Asset {
         touch(updatedBy);
     }
 
-    /** 重命名资产：保留旧坐标到 aliases。 */
-    public void rename(String newNamespace, String newName, String updatedBy) {
+    /** 重命名资产：保留旧坐标到 aliases，newName 用于 displayName（不做 slug 校验）。 */
+    public void rename(String newNamespace, String newDisplayName, String updatedBy) {
         requireSlug(newNamespace, "namespace");
-        requireSlug(newName, "name");
-        if (newNamespace.equals(this.namespace) && newName.equals(this.name)) {
+        // displayName 是自由文本，不做 slug 校验
+        if (newDisplayName == null || newDisplayName.isBlank()) {
+            throw new IllegalArgumentException("displayName must not be blank");
+        }
+        if (newNamespace.equals(this.namespace) && newDisplayName.equals(this.displayName)) {
             return;
         }
         String oldAlias = this.namespace + "/" + this.type.name().toLowerCase() + "/" + this.name;
@@ -237,7 +240,7 @@ public final class Asset {
         }
         // 注意：namespace/name 坐标不变（V2 唯一约束），重命名仅修改 displayName + aliases
         // 真正的坐标重命名需要 asset_alias 表 + 异步重定向，P1 阶段仅记录别名
-        this.displayName = newName;
+        this.displayName = newDisplayName;
         touch(updatedBy);
     }
 

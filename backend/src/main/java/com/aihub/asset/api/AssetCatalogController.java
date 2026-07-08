@@ -45,8 +45,10 @@ public class AssetCatalogController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
-                keyword, AssetType.MODEL, namespace, null, framework, task, null, null, tagId, owner,
-                null, sensitivity, includeArchived, cursor, limit, AssetApiContext.principalId())));
+                keyword, AssetType.MODEL, namespace, null, null, null, null, null,
+                framework, task, null, null, tagId, owner,
+                null, sensitivity, null, null, null,
+                includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 
     /**
@@ -66,7 +68,9 @@ public class AssetCatalogController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
-                keyword, AssetType.DATASET, namespace, null, null, null, format, modality, tagId, owner,
-                language, sensitivity, includeArchived, cursor, limit, AssetApiContext.principalId())));
+                keyword, AssetType.DATASET, namespace, null, null, null, null, null,
+                null, null, format, modality, tagId, owner,
+                language, sensitivity, null, null, null,
+                includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 }

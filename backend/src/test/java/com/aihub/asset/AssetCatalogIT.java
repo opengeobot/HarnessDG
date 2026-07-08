@@ -80,12 +80,12 @@ class AssetCatalogIT {
 
         // 关键词 + 框架 + owner 过滤命中。
         CursorPage<?> hit = assetService.searchAssets(new AssetSearchQuery("qwendomain", AssetType.MODEL,
-                "nlp", null, null, null, null, null, "pytorch", null, null, null, null, "team-nlp", null, null, false, null, 10, "usr_01"));
+                "nlp", null, null, null, null, null, "pytorch", null, null, null, null, "team-nlp", null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(hit.items()).hasSize(1);
 
         // 不匹配的框架过滤为空。
         CursorPage<?> miss = assetService.searchAssets(new AssetSearchQuery(null, AssetType.MODEL,
-                null, null, null, null, null, null, "tensorflow", null, null, null, null, null, null, null, false, null, 10, "usr_01"));
+                null, null, null, null, null, null, "tensorflow", null, null, null, null, null, null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(miss.items()).isEmpty();
 
         assetService.updateAsset(created.assetId(), new UpdateAssetCommand(0L, null, null, "改名后", "新描述",
@@ -115,7 +115,7 @@ class AssetCatalogIT {
         assertThat(dataset.dataset().format()).isEqualTo("parquet");
 
         CursorPage<?> datasets = assetService.searchAssets(new AssetSearchQuery(null, AssetType.DATASET,
-                null, null, null, null, null, null, null, null, "parquet", "image", null, null, null, null, false, null, 10, "usr_01"));
+                null, null, null, null, null, null, null, null, "parquet", "image", null, null, null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(datasets.items()).hasSize(1);
     }
 }

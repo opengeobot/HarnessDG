@@ -6,6 +6,7 @@
 package com.aihub.asset.application;
 
 import com.aihub.asset.domain.AssetType;
+import java.util.List;
 
 /**
  * 资产检索查询输入。
@@ -26,6 +27,9 @@ import com.aihub.asset.domain.AssetType;
  * @param owner           Owner 过滤（可空）
  * @param language        语言过滤（可空）
  * @param sensitivity     敏感等级过滤（可空）
+ * @param taskCodes       多值模型任务过滤（可空，DATASET 多值分类）
+ * @param modalityCodes   多值数据模态过滤（可空，DATASET 多值分类）
+ * @param formatCodes     多值数据格式过滤（可空，DATASET 多值分类）
  * @param includeArchived 是否包含归档资产（默认否，需管理员）
  * @param cursor          游标（首页为空）
  * @param limit           每页大小（&lt;=0 使用默认）
@@ -47,6 +51,9 @@ public record AssetSearchQuery(String keyword,
                                String owner,
                                String language,
                                String sensitivity,
+                               List<String> taskCodes,
+                               List<String> modalityCodes,
+                               List<String> formatCodes,
                                boolean includeArchived,
                                String cursor,
                                int limit,
