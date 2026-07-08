@@ -45,8 +45,12 @@ components:
       description: 稳定事件类型枚举。新增类型按兼容策略追加，不复用或重命名既有值。
       enum:
         - ASSET_CREATED
+        - ASSET_CREATE_REQUESTED
+        - ASSET_CREATE_FAILED
         - ASSET_PROVISIONED
         - ASSET_UPDATED
+        - ASSET_DELETED
+        - ASSET_RENAMED
         - ASSET_DEPRECATED
         - ASSET_ARCHIVED
         - ASSET_RESTORED
@@ -119,8 +123,12 @@ components:
       description: 事件负载多态联合，按 eventType 区分。
       oneOf:
         - $ref: '#/components/schemas/AssetCreatedPayload'
+        - $ref: '#/components/schemas/AssetCreateRequestedPayload'
+        - $ref: '#/components/schemas/AssetCreateFailedPayload'
         - $ref: '#/components/schemas/AssetProvisionedPayload'
         - $ref: '#/components/schemas/AssetUpdatedPayload'
+        - $ref: '#/components/schemas/AssetDeletedPayload'
+        - $ref: '#/components/schemas/AssetRenamedPayload'
         - $ref: '#/components/schemas/AssetDeprecatedPayload'
         - $ref: '#/components/schemas/AssetArchivedPayload'
         - $ref: '#/components/schemas/AssetRestoredPayload'
@@ -196,6 +204,58 @@ components:
       properties:
         assetId: { type: string }
         restoredBy: { type: string, pattern: '^prn_' }
+
+    AssetCreateRequestedPayload:
+      type: object
+      description: |
+        资产创建请求已受理事件。表示创建意图已登记，建仓 Job 已创建但尚未完成。
+      additionalProperties: false
+      required: [assetId, namespace, name, type, requestedBy]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [MODEL, DATASET] }
+        requestedBy: { type: string, pattern: '^prn_' }
+
+    AssetCreateFailedPayload:
+      type: object
+      description: |
+        资产创建失败事件。建仓 Job 失败后发出，包含错误信息。
+      additionalProperties: false
+      required: [assetId, namespace, name, type, errorCode]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [MODEL, DATASET] }
+        errorCode: { type: string, description: 语义错误码。 }
+        retryable: { type: boolean, default: false }
+        failedAt: { type: string, format: date-time }
+
+    AssetDeletedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, deletedBy]
+      properties:
+        assetId: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        deletedBy: { type: string, pattern: '^prn_' }
+
+    AssetRenamedPayload:
+      type: object
+      description: |
+        资产重命名事件。保留旧坐标到 aliases，新坐标生效。
+      additionalProperties: false
+      required: [assetId, oldNamespace, oldName, newNamespace, newName, renamedBy]
+      properties:
+        assetId: { type: string }
+        oldNamespace: { type: string }
+        oldName: { type: string }
+        newNamespace: { type: string }
+        newName: { type: string }
+        renamedBy: { type: string, pattern: '^prn_' }
 
     DiscussionCreatedPayload:
       type: object
