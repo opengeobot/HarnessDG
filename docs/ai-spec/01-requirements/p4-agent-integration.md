@@ -1,6 +1,6 @@
 # P4 Agent 接入需求
 
-> 状态：`OPEN`
+> 状态：`READY`
 > 阻塞：P3 VERIFIED；目标 OpenClaw/QwenPaw 最低版本需在实施时锁定。
 > 原则：Agent 与人使用同一业务授权；MCP/REST 只是 Adapter。
 > 产品决策：`DEC-008` 已将 AI 数据集搜索、下载、创建草稿和上传设为 P4 MUST；
@@ -9,7 +9,7 @@
 ## REQ-MCP-001 MCP Streamable HTTP 端点与会话
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P4
 transport: Streamable HTTP
@@ -47,7 +47,7 @@ minimumEvidenceLevel: E4
 ## REQ-MCP-002 Tool Catalog、Schema 与双重授权
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P4
 permission: mcp:invoke + tool permission
@@ -108,7 +108,7 @@ auditEvents: [...]
 ## REQ-MCP-003 资产搜索与详情只读 Tools
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P4
 tools: [asset_search, asset_get]
@@ -144,7 +144,7 @@ minimumEvidenceLevel: E4
 ## REQ-MCP-004 精确版本与下载 Tools
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P4
 tools: [asset_list_versions, asset_get_version, asset_request_download]
@@ -205,7 +205,7 @@ minimumEvidenceLevel: E4
 ## REQ-MCP-006 MCP Resources
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: SHOULD
 phase: P4
 minimumEvidenceLevel: E4
@@ -231,7 +231,7 @@ minimumEvidenceLevel: E4
 ## REQ-AGT-002 Agent Skill 接入包
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P4
 blockedBy: [Q-004, locked client versions]
@@ -271,7 +271,7 @@ UI 截图/配置示例只针对锁定版本，不在服务端绑定私有配置�
 ## REQ-API-AGT-001 Agent 友好 OpenAPI
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P4
 minimumEvidenceLevel: E4
@@ -295,7 +295,7 @@ minimumEvidenceLevel: E4
 ## REQ-COMP-AGT-001 Agent 客户端兼容与 30 分钟接入
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P4
 blockedBy: locked OpenClaw/QwenPaw versions
