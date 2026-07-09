@@ -35,6 +35,7 @@
   "nav": {
     "assetCatalog": "Asset Catalog",
     "versionCenter": "Version Center",
+    "reviewCenter": "Publish Review",
     "uploadCenter": "Upload Center",
     "accessCredentials": "Access & Credentials",
     "agentIntegration": "Agent Integration",
@@ -331,7 +332,12 @@
     "preview": "Data Preview",
     "previewNotAvailable": "No preview available",
     "previewEmpty": "Preview content is empty",
-    "previewTruncated": "Preview truncated, showing first 100 rows only"
+    "previewTruncated": "Preview truncated, showing first 100 rows only",
+    "validationReport": "Validation Report",
+    "policyVersion": "Policy Version",
+    "findings": "Findings",
+    "deprecate": "Deprecate",
+    "archive": "Archive"
   },
   "review": {
     "title": "Release Review",

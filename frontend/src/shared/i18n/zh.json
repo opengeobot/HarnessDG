@@ -35,6 +35,7 @@
   "nav": {
     "assetCatalog": "资产目录",
     "versionCenter": "版本中心",
+    "reviewCenter": "发布审批",
     "uploadCenter": "上传中心",
     "accessCredentials": "访问与凭据",
     "agentIntegration": "Agent 接入",
@@ -331,7 +332,12 @@
     "preview": "数据预览",
     "previewNotAvailable": "暂无预览数据",
     "previewEmpty": "预览内容为空",
-    "previewTruncated": "预览已截断，仅显示前 100 行"
+    "previewTruncated": "预览已截断，仅显示前 100 行",
+    "validationReport": "校验报告",
+    "policyVersion": "策略版本",
+    "findings": "校验结果",
+    "deprecate": "弃用",
+    "archive": "归档"
   },
   "review": {
     "title": "发布审批",

@@ -4,6 +4,7 @@ import com.aihub.audit.application.AuditEvent;
 import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.application.JobApplicationService;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
@@ -121,7 +122,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public void submitDecision(String requestId, String decision, String comments) {
-        authorizationService.requirePermission("asset:publish");
+        authorizationService.requirePermission(Permissions.ASSET_REVIEW);
 
         String reviewerId = PrincipalContextHolder.current()
                 .map(c -> c.principalId())
@@ -173,6 +174,20 @@ public class PublishApplicationService {
             return;
         }
 
+        // REQUEST_CHANGES: 要求修改，版本回 DRAFT
+        if ("REQUEST_CHANGES".equals(decision)) {
+            jdbcTemplate.update("UPDATE publish_request SET status = 'CHANGES_REQUESTED', decided_at = ? WHERE request_id = ?",
+                    Instant.now(), requestId);
+            String versionId = String.valueOf(request.get("version_id"));
+            Version version = versionRepository.findByVersionId(versionId).orElse(null);
+            if (version != null && version.status() == VersionStatus.PENDING_REVIEW) {
+                version.transitionTo(VersionStatus.DRAFT);
+                versionRepository.update(version);
+            }
+            LOG.info("publish request changes-requested requestId={} versionId={}", requestId, versionId);
+            return;
+        }
+
         // 如果是 APPROVE，检查是否所有必需审批人都已审批
         // P3 简化：单一审批即可
         if ("APPROVE".equals(decision)) {
@@ -198,7 +213,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public void deprecateVersion(String versionId) {
-        authorizationService.requirePermission("asset:write");
+        authorizationService.requirePermission(Permissions.ASSET_DEPRECATE);
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
                         "version not found", Map.of("versionId", versionId)));
@@ -216,7 +231,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public void archiveVersion(String versionId) {
-        authorizationService.requirePermission("asset:write");
+        authorizationService.requirePermission(Permissions.ASSET_DEPRECATE);
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
                         "version not found", Map.of("versionId", versionId)));

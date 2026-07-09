@@ -7,6 +7,7 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
+import { listPublishRequests } from './api';
 
 interface PublishRequest {
   requestId: string;
@@ -41,20 +42,16 @@ export function ReviewPage() {
     if (!assetId) return;
     setError(null);
     try {
-      const versions = await apiClient.get<Array<{ versionId: string; version: string; status: string }>>(
-        `/assets/${assetId}/versions`,
-      );
-      const publishedRequests = versions
-        .filter((v) => ['PENDING_REVIEW', 'PUBLISHED'].includes(v.status))
-        .map((v) => ({
-          requestId: `pub_${v.versionId}`,
-          versionId: v.versionId,
-          frozenDigest: 'pending',
-          status: v.status === 'PUBLISHED' ? 'PUBLISHED' : 'SUBMITTED',
-          submittedBy: 'system',
-          submittedAt: new Date().toISOString(),
-        }));
-      setRequests(publishedRequests);
+      const rows = await listPublishRequests(assetId);
+      const mapped: PublishRequest[] = rows.map((r) => ({
+        requestId: String(r.request_id),
+        versionId: String(r.version_id),
+        frozenDigest: String(r.frozen_digest ?? ''),
+        status: String(r.status),
+        submittedBy: String(r.submitted_by),
+        submittedAt: String(r.created_at),
+      }));
+      setRequests(mapped);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.loadFailedMsg'));
     }

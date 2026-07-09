@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import {
+  getValidationReport,
   issueDownloadTicket,
   listArtifacts,
   listVersions,
@@ -30,6 +31,7 @@ export function VersionPage() {
   const [versions, setVersions] = useState<VersionView[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<VersionView | null>(null);
   const [artifacts, setArtifacts] = useState<ArtifactView[]>([]);
+  const [validationReport, setValidationReport] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,17 +55,27 @@ export function VersionPage() {
 
   const handleSelectVersion = async (v: VersionView) => {
     setSelectedVersion(v);
+    setValidationReport(null);
     try {
       const arts = await listArtifacts(assetId, v.versionId);
       setArtifacts(arts);
     } catch {
       setArtifacts([]);
     }
+    // 加载校验报告（非 DRAFT 状态）
+    if (v.status !== 'DRAFT') {
+      try {
+        const report = await getValidationReport(assetId, v.versionId);
+        if (report.status !== 'NOT_FOUND') setValidationReport(report);
+      } catch {
+        /* ignore */
+      }
+    }
   };
 
   const handleTransition = async (v: VersionView, target: string) => {
     try {
-      const updated = await transitionVersion(v.versionId, target);
+      const updated = await transitionVersion(assetId, v.versionId, target);
       setVersions((prev) =>
         prev.map((x) => (x.versionId === v.versionId ? updated : x)),
       );
@@ -168,6 +180,28 @@ export function VersionPage() {
                     >
                       {t('version.downloadDvc')}
                     </button>
+                    <button
+                      className="text-xs px-2 py-1 bg-orange-100 rounded"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTransition(v, 'DEPRECATED');
+                      }}
+                    >
+                      {t('version.deprecate')}
+                    </button>
+                  </div>
+                )}
+                {v.status === 'DEPRECATED' && (
+                  <div className="mt-2 flex gap-1">
+                    <button
+                      className="text-xs px-2 py-1 bg-gray-100 rounded"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTransition(v, 'ARCHIVED');
+                      }}
+                    >
+                      {t('version.archive')}
+                    </button>
                   </div>
                 )}
               </div>
@@ -222,6 +256,39 @@ export function VersionPage() {
                   <span className="text-sm">{selectedVersion.createdBy}</span>
                 </div>
               </div>
+
+              {/* 校验报告 */}
+              {validationReport && (
+                <div>
+                  <h3 className="font-semibold mb-2">{t('version.validationReport')}</h3>
+                  <div className="border rounded p-4 space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Report ID</span>
+                      <span className="font-mono text-sm">{String(validationReport.report_id)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">{t('version.policyVersion')}</span>
+                      <span className="text-sm">{String(validationReport.policy_version)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">{t('common.status')}</span>
+                      <span className={`text-sm ${validationReport.status === 'PASSED' ? 'text-green-600' : 'text-red-600'}`}>
+                        {String(validationReport.status)}
+                      </span>
+                    </div>
+                    {validationReport.findings ? (
+                      <div>
+                        <span className="text-gray-500 text-sm">{t('version.findings')}</span>
+                        <pre className="text-xs bg-gray-50 p-2 rounded mt-1 overflow-auto max-h-48">
+                          {typeof validationReport.findings === 'string'
+                            ? (validationReport.findings as string)
+                            : JSON.stringify(validationReport.findings, null, 2)}
+                        </pre>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h3 className="font-semibold mb-2">
