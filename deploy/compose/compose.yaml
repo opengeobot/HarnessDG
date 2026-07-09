@@ -179,6 +179,37 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     restart: unless-stopped
 
+  # ---- 可观测性（optional profile，非默认启动） ----
+
+  prometheus:
+    image: docker.m.daocloud.io/prom/prometheus:v2.53.0
+    profiles: ["observability"]
+    volumes:
+      - ./prometheus/prom.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./grafana/alerting-rules.yaml:/etc/prometheus/alerting-rules.yaml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: docker.m.daocloud.io/grafana/grafana:11.1.0
+    profiles: ["observability"]
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/aihub-dashboard.json:/var/lib/grafana/dashboards/aihub-dashboard.json:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   minio-data:

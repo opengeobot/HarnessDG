@@ -29,6 +29,7 @@ import com.aihub.identity.api.RefreshCookieFactory;
 import com.aihub.identity.api.RefreshCookieProperties;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.shared.security.IssuedToken;
 import com.aihub.shared.security.TokenIssueRequest;
@@ -80,6 +81,8 @@ class McpControllerTest {
     private ResourceAclRepository resourceAclRepository;
     @MockitoBean
     private AgentToolRepository agentToolRepository;
+    @MockitoBean
+    private PlatformMetrics platformMetrics;
 
     @BeforeEach
     void stubAuthorizationRepositories() {

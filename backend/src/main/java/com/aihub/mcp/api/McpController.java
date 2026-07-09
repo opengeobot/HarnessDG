@@ -3,6 +3,7 @@ package com.aihub.mcp.api;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,13 +34,16 @@ public class McpController {
     private final McpToolCatalog toolCatalog;
     private final McpResourceHandler resourceHandler;
     private final AuthorizationService authorizationService;
+    private final PlatformMetrics platformMetrics;
 
     public McpController(McpToolCatalog toolCatalog,
                          McpResourceHandler resourceHandler,
-                         AuthorizationService authorizationService) {
+                         AuthorizationService authorizationService,
+                         PlatformMetrics platformMetrics) {
         this.toolCatalog = toolCatalog;
         this.resourceHandler = resourceHandler;
         this.authorizationService = authorizationService;
+        this.platformMetrics = platformMetrics;
     }
 
     @PostMapping
@@ -120,10 +124,12 @@ public class McpController {
 
         try {
             Object result = toolCatalog.callTool(toolName, arguments);
+            platformMetrics.recordToolCall(toolName, "success");
             return Map.of("isError", false, "content",
                     List.of(Map.of("type", "text", "text", String.valueOf(result))));
         } catch (Exception e) {
             LOG.warn("MCP tool call failed tool={} error={}", toolName, e.getMessage());
+            platformMetrics.recordToolCall(toolName, "error");
             return Map.of("isError", true, "content",
                     List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
         }

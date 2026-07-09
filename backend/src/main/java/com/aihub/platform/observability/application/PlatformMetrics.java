@@ -8,6 +8,10 @@ package com.aihub.platform.observability.application;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -28,11 +32,17 @@ public class PlatformMetrics {
     private static final String CRITICAL_EVENTS_COUNTER = "aihub_webhook_critical_events_total";
     private static final String RECONCILIATION_COUNTER = "aihub_reconciliation_discrepancies_total";
     private static final String UPLOAD_EXPIRED_COUNTER = "aihub_upload_sessions_expired_total";
+    private static final String MCP_TOOL_CALLS_COUNTER = "aihub_mcp_tool_calls_total";
+    private static final String UPLOAD_SESSIONS_ACTIVE_GAUGE = "aihub_upload_sessions_active";
+    private static final String ASSET_COUNT_BY_STATUS_GAUGE = "aihub_asset_count_by_status";
+    private static final String JOB_PROCESSING_DURATION_TIMER = "aihub_job_processing_duration_seconds";
 
     private final MeterRegistry meterRegistry;
     private final AtomicLong jobQueueDepth = new AtomicLong();
     private final AtomicLong jobDeadCount = new AtomicLong();
     private final AtomicLong webhookInboxPending = new AtomicLong();
+    private final AtomicLong uploadSessionsActive = new AtomicLong();
+    private final Map<String, AtomicLong> assetCountByStatus = new ConcurrentHashMap<>();
 
     public PlatformMetrics(ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.meterRegistry = meterRegistryProvider.getIfAvailable();
@@ -49,6 +59,9 @@ public class PlatformMetrics {
                 .register(meterRegistry);
         Gauge.builder("aihub_webhook_inbox_pending", webhookInboxPending, AtomicLong::doubleValue)
                 .description("Pending webhook inbox events")
+                .register(meterRegistry);
+        Gauge.builder(UPLOAD_SESSIONS_ACTIVE_GAUGE, uploadSessionsActive, AtomicLong::doubleValue)
+                .description("Active upload sessions")
                 .register(meterRegistry);
     }
 
@@ -135,6 +148,63 @@ public class PlatformMetrics {
      */
     public void updateWebhookInboxPending(long count) {
         webhookInboxPending.set(count);
+    }
+
+    /**
+     * 记录一次 MCP 工具调用。
+     *
+     * @param tool   工具名称
+     * @param status 调用结果（success / error）
+     */
+    public void recordToolCall(String tool, String status) {
+        if (meterRegistry == null) return;
+        Counter.builder(MCP_TOOL_CALLS_COUNTER)
+                .tag("tool", tool != null ? tool : "unknown")
+                .tag("status", status != null ? status : "unknown")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * 更新活跃上传会话数。
+     */
+    public void updateUploadSessionsActive(long count) {
+        uploadSessionsActive.set(count);
+    }
+
+    /**
+     * 更新指定状态的资产计数。
+     *
+     * @param status 资产状态（如 DRAFT / PUBLISHED）
+     * @param count  当前数量
+     */
+    public void updateAssetCountByStatus(String status, long count) {
+        AtomicLong gauge = assetCountByStatus.computeIfAbsent(status, s -> {
+            AtomicLong val = new AtomicLong();
+            if (meterRegistry != null) {
+                Gauge.builder(ASSET_COUNT_BY_STATUS_GAUGE, val, AtomicLong::doubleValue)
+                        .tag("status", s)
+                        .description("Asset count by status")
+                        .register(meterRegistry);
+            }
+            return val;
+        });
+        gauge.set(count);
+    }
+
+    /**
+     * 记录 Job 处理耗时。
+     *
+     * @param jobType  Job 类型
+     * @param duration 处理耗时
+     */
+    public void recordJobProcessingDuration(String jobType, Duration duration) {
+        if (meterRegistry == null) return;
+        Timer.builder(JOB_PROCESSING_DURATION_TIMER)
+                .tag("type", jobType != null ? jobType : "unknown")
+                .description("Job processing duration in seconds")
+                .register(meterRegistry)
+                .record(duration);
     }
 
     /**
