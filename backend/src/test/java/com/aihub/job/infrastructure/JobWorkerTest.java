@@ -26,6 +26,7 @@ import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobStatus;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
@@ -48,6 +49,8 @@ class JobWorkerTest {
     private final ObjectProvider<JobNotificationPort> notificationPortProvider = mock(ObjectProvider.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<MeterRegistry> meterRegistryProvider = mock(ObjectProvider.class);
+    @SuppressWarnings("unchecked")
+    private final ObjectProvider<PlatformMetrics> platformMetricsProvider = mock(ObjectProvider.class);
     private JobNotificationPort notificationPort;
     private Clock clock;
 
@@ -61,6 +64,7 @@ class JobWorkerTest {
         notificationPort = mock(JobNotificationPort.class);
         when(notificationPortProvider.getIfAvailable()).thenReturn(notificationPort);
         when(meterRegistryProvider.getIfAvailable()).thenReturn(null);
+        when(platformMetricsProvider.getIfAvailable()).thenReturn(null);
         clock = Clock.fixed(Instant.parse("2026-07-01T10:00:00Z"), ZoneOffset.UTC);
     }
 
@@ -68,7 +72,7 @@ class JobWorkerTest {
     void shouldDoNothingWhenNoJobClaimed() {
         when(jobRepository.claimNext(anyString(), any(), anyLong())).thenReturn(Optional.empty());
         JobWorker worker = new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry,
-                backoff, notificationPortProvider, clock, meterRegistryProvider);
+                backoff, notificationPortProvider, clock, meterRegistryProvider, platformMetricsProvider);
         worker.tick();
         verify(jobRepository, never()).markSucceeded(anyString(), any());
     }
@@ -81,7 +85,7 @@ class JobWorkerTest {
         when(handlerRegistry.resolve("sample.noop")).thenReturn(Optional.of(handler));
 
         JobWorker worker = new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry,
-                backoff, notificationPortProvider, clock, meterRegistryProvider);
+                backoff, notificationPortProvider, clock, meterRegistryProvider, platformMetricsProvider);
         worker.tick();
 
         verify(jobRepository).markSucceeded(eq("job_1"), any());
@@ -100,7 +104,7 @@ class JobWorkerTest {
         when(backoff.nextRunAt(anyInt(), any())).thenReturn(nextRun);
 
         JobWorker worker = new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry,
-                backoff, notificationPortProvider, clock, meterRegistryProvider);
+                backoff, notificationPortProvider, clock, meterRegistryProvider, platformMetricsProvider);
         worker.tick();
 
         verify(jobRepository).markRetryWait(eq("job_2"), eq(1), eq(nextRun), any());
@@ -116,7 +120,7 @@ class JobWorkerTest {
         doThrow(new RuntimeException("boom")).when(handler).handle(any(JobContext.class));
 
         JobWorker worker = new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry,
-                backoff, notificationPortProvider, clock, meterRegistryProvider);
+                backoff, notificationPortProvider, clock, meterRegistryProvider, platformMetricsProvider);
         worker.tick();
 
         verify(jobRepository).markDead(eq("job_3"), anyString(), any());
@@ -130,7 +134,7 @@ class JobWorkerTest {
         when(handlerRegistry.resolve("unknown.type")).thenReturn(Optional.empty());
 
         JobWorker worker = new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry,
-                backoff, notificationPortProvider, clock, meterRegistryProvider);
+                backoff, notificationPortProvider, clock, meterRegistryProvider, platformMetricsProvider);
         worker.tick();
 
         verify(jobRepository).markDead(eq("job_4"), eq("JOB_HANDLER_NOT_FOUND"), any());

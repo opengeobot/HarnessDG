@@ -13,6 +13,7 @@ import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobAttemptRepository;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.error.PlatformException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -48,6 +49,7 @@ public class JobWorker {
     private final Counter jobsSucceeded;
     private final Counter jobsFailed;
     private final Counter jobsDead;
+    private final PlatformMetrics platformMetrics;
 
     public JobWorker(JobRepository jobRepository,
                      JobAttemptRepository jobAttemptRepository,
@@ -55,7 +57,8 @@ public class JobWorker {
                      BackoffCalculator backoff,
                      ObjectProvider<JobNotificationPort> notificationPortProvider,
                      Clock clock,
-                     ObjectProvider<MeterRegistry> meterRegistryProvider) {
+                     ObjectProvider<MeterRegistry> meterRegistryProvider,
+                     ObjectProvider<PlatformMetrics> platformMetricsProvider) {
         this.jobRepository = jobRepository;
         this.jobAttemptRepository = jobAttemptRepository;
         this.handlerRegistry = handlerRegistry;
@@ -63,6 +66,7 @@ public class JobWorker {
         this.notificationPortProvider = notificationPortProvider;
         this.clock = clock;
         this.workerId = "worker-" + Integer.toHexString((int) ProcessHandle.current().pid());
+        this.platformMetrics = platformMetricsProvider.getIfAvailable();
         MeterRegistry registry = meterRegistryProvider.getIfAvailable();
         if (registry != null) {
             this.jobsClaimed = registry.counter("job.processed", "result", "claimed");
@@ -106,6 +110,10 @@ public class JobWorker {
             jobAttemptRepository.insert(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
                     "SUCCESS", null, null, Duration.between(startedAt, endedAt).toMillis()));
             jobsSucceeded.increment();
+            if (platformMetrics != null) {
+                platformMetrics.recordJobProcessingDuration(
+                        job.type(), Duration.between(startedAt, endedAt));
+            }
             LOG.info("job succeeded jobId={} type={} attempt={}", job.jobId(), job.type(), attemptNo);
         } catch (Exception ex) {
             handleFailure(job, attemptNo, startedAt, ex);
