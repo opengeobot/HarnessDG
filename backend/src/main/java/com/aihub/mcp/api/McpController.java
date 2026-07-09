@@ -100,17 +100,19 @@ public class McpController {
                     List.of(Map.of("type", "text", "text", "Missing tool name")));
         }
 
-        // 授权检查
+        // 授权检查（fail-closed：principalId 为 null 时拒绝）
         String principalId = PrincipalContextHolder.current()
                 .map(c -> c.principalId())
                 .orElse(null);
-        if (principalId != null) {
-            try {
-                authorizationService.requireToolAllowed(principalId, toolName);
-            } catch (Exception e) {
-                return Map.of("isError", true, "content",
-                        List.of(Map.of("type", "text", "text", "Tool not allowed: " + toolName)));
-            }
+        if (principalId == null) {
+            return Map.of("isError", true, "content",
+                    List.of(Map.of("type", "text", "text", "Unauthenticated")));
+        }
+        try {
+            authorizationService.requireToolAllowed(principalId, toolName);
+        } catch (Exception e) {
+            return Map.of("isError", true, "content",
+                    List.of(Map.of("type", "text", "text", "Tool not allowed: " + toolName)));
         }
 
         @SuppressWarnings("unchecked")

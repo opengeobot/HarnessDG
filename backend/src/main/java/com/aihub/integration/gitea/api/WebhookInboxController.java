@@ -61,10 +61,10 @@ public class WebhookInboxController {
             return ResponseEntity.badRequest().build();
         }
 
-        // 签名验证
-        boolean signatureValid = verifySignature(rawBody, signature);
-        if (!signatureValid && webhookSecret != null && !webhookSecret.isEmpty()) {
-            LOG.warn("webhook signature invalid deliveryId={}", deliveryId);
+        // 签名验证（fail-closed：未配置密钥时拒绝所有请求）
+        if (!verifySignature(rawBody, signature)) {
+            LOG.warn("webhook signature rejected deliveryId={} secretConfigured={}",
+                    deliveryId, webhookSecret != null && !webhookSecret.isEmpty());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -83,7 +83,7 @@ public class WebhookInboxController {
             int inserted = jdbcTemplate.update(
                     "INSERT INTO webhook_inbox (delivery_id, event_type, signature_valid, payload) " +
                             "VALUES (?, ?, ?, ?::jsonb) ON CONFLICT (delivery_id) DO NOTHING",
-                    deliveryId, eventType, signatureValid, payloadJson);
+                    deliveryId, eventType, true, payloadJson);
             if (inserted == 0) {
                 LOG.debug("webhook duplicate deliveryId={}", deliveryId);
             }
@@ -102,7 +102,7 @@ public class WebhookInboxController {
 
     private boolean verifySignature(byte[] body, String signature) {
         if (webhookSecret == null || webhookSecret.isEmpty()) {
-            return true; // 未配置密钥时跳过验证
+            return false; // fail-closed: 未配置密钥时拒绝所有请求
         }
         if (signature == null || !signature.startsWith("sha256=")) {
             return false;

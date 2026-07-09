@@ -30,6 +30,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>{@code /api/v1/auth/token}</li>
  *   <li>{@code /api/v1/auth/refresh}</li>
  *   <li>{@code GET /actuator/health}、{@code /actuator/health/**}</li>
+ *   <li>{@code POST /api/v1/webhooks/gitea}（HMAC 签名作为认证机制）</li>
  *   <li>{@code /v3/api-docs/**}、{@code /swagger-ui/**}、{@code /swagger-ui.html}（仅非生产）</li>
  * </ul>
  */
@@ -69,6 +70,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/auth/token", "/api/v1/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/gitea").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(handling -> handling
