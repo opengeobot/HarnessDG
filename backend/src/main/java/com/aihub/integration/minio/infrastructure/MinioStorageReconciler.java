@@ -2,6 +2,7 @@ package com.aihub.integration.minio.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -23,9 +24,11 @@ public class MinioStorageReconciler implements JobHandler {
     private static final int BATCH_SIZE = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public MinioStorageReconciler(JdbcTemplate jdbcTemplate) {
+    public MinioStorageReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -89,6 +92,9 @@ public class MinioStorageReconciler implements JobHandler {
                         "WHERE status = 'OPEN' AND expires_at < NOW()");
         if (expired > 0) {
             LOG.info("expired {} stale upload sessions jobId={}", expired, jobId);
+            for (int i = 0; i < expired; i++) {
+                platformMetrics.recordUploadSessionExpired();
+            }
         }
         return expired;
     }
@@ -136,6 +142,7 @@ public class MinioStorageReconciler implements JobHandler {
         if (result == ReconcileResult.SECURITY_INCIDENT) {
             LOG.error("SECURITY INCIDENT: artifact {} has critical inconsistency", artifactId);
         }
+        platformMetrics.recordReconciliationDiscrepancy("MinioStorage", result.name());
         try {
             String deliveryId = "minio-reconcile-" + artifactId + "-" + System.currentTimeMillis();
             jdbcTemplate.update(

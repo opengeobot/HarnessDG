@@ -2,6 +2,7 @@ package com.aihub.integration.gitea.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -29,9 +30,11 @@ public class PublishedVersionReconciler implements JobHandler {
     private static final Pattern VALID_COMMIT_SHA = Pattern.compile("^[a-f0-9]{40}$");
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public PublishedVersionReconciler(JdbcTemplate jdbcTemplate) {
+    public PublishedVersionReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -68,19 +71,23 @@ public class PublishedVersionReconciler implements JobHandler {
                 // 校验 git_tag 格式：必须以 v 前缀开始
                 if (gitTag == null || gitTag.isEmpty()) {
                     LOG.warn("PUBLISHED version missing git_tag versionId={}", versionId);
+                    platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "MISSING_GIT_TAG");
                     discrepancies++;
                 } else if (!VALID_GIT_TAG.matcher(gitTag).matches()) {
                     LOG.warn("PUBLISHED version has invalid git_tag format versionId={} tag={}", versionId, gitTag);
+                    platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "INVALID_GIT_TAG");
                     discrepancies++;
                 }
 
                 // 校验 manifest_digest 格式：SHA-256 hex
                 if (manifestDigest == null || manifestDigest.isEmpty()) {
                     LOG.warn("PUBLISHED version missing manifest_digest versionId={}", versionId);
+                    platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "MISSING_DIGEST");
                     discrepancies++;
                 } else if (!VALID_DIGEST.matcher(manifestDigest).matches()) {
                     LOG.warn("PUBLISHED version has invalid digest format versionId={} digest={} (expected 64 hex chars)",
                             versionId, manifestDigest.substring(0, Math.min(8, manifestDigest.length())) + "...");
+                    platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "INVALID_DIGEST");
                     discrepancies++;
                 }
 
@@ -88,10 +95,12 @@ public class PublishedVersionReconciler implements JobHandler {
                 String sourceCommit = (String) row.get("source_commit");
                 if (sourceCommit == null || sourceCommit.isEmpty()) {
                     LOG.warn("PUBLISHED version missing source_commit versionId={}", versionId);
+                    platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "MISSING_COMMIT");
                     discrepancies++;
                 } else if (!VALID_COMMIT_SHA.matcher(sourceCommit).matches()) {
                     LOG.warn("PUBLISHED version has invalid commit SHA versionId={} commit={}",
                             versionId, sourceCommit.substring(0, Math.min(8, sourceCommit.length())) + "...");
+                    platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "INVALID_COMMIT");
                     discrepancies++;
                 }
                 totalChecked++;

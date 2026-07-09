@@ -2,6 +2,7 @@ package com.aihub.integration.gitea.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
@@ -25,10 +26,13 @@ public class WebhookInboxHandler implements JobHandler {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final PlatformMetrics platformMetrics;
 
-    public WebhookInboxHandler(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public WebhookInboxHandler(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+                               PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -126,6 +130,7 @@ public class WebhookInboxHandler implements JobHandler {
         if ("tag".equals(refType)) {
             LOG.warn("CRITICAL: Tag deletion detected repo={} tag={} deliveryId={}",
                     repoFullName, ref, deliveryId);
+            platformMetrics.recordCriticalEvent(deliveryId, "TAG_DELETION");
         } else {
             LOG.info("delete event repo={} refType={} ref={} deliveryId={}",
                     repoFullName, refType, ref, deliveryId);

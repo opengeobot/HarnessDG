@@ -2,6 +2,7 @@ package com.aihub.integration.gitea.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -23,9 +24,11 @@ public class AssetRepositoryReconciler implements JobHandler {
     private static final int BATCH_SIZE = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public AssetRepositoryReconciler(JdbcTemplate jdbcTemplate) {
+    public AssetRepositoryReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -120,6 +123,7 @@ public class AssetRepositoryReconciler implements JobHandler {
         if (result == ReconcileResult.SECURITY_INCIDENT) {
             LOG.error("SECURITY INCIDENT: asset {} has critical inconsistency", assetId);
         }
+        platformMetrics.recordReconciliationDiscrepancy("AssetRepository", result.name());
         // 记录对账差异到 webhook_inbox 以供审计追溯
         try {
             String deliveryId = "reconcile-" + assetId + "-" + System.currentTimeMillis();

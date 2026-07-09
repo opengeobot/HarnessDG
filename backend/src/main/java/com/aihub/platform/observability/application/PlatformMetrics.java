@@ -6,6 +6,7 @@
 package com.aihub.platform.observability.application;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.ObjectProvider;
@@ -24,11 +25,31 @@ public class PlatformMetrics {
 
     private static final String AUDIT_EVENTS_COUNTER = "aihub_audit_events_total";
     private static final String WEBHOOK_DELIVERIES_COUNTER = "aihub_webhook_deliveries_total";
+    private static final String CRITICAL_EVENTS_COUNTER = "aihub_webhook_critical_events_total";
+    private static final String RECONCILIATION_COUNTER = "aihub_reconciliation_discrepancies_total";
+    private static final String UPLOAD_EXPIRED_COUNTER = "aihub_upload_sessions_expired_total";
 
     private final MeterRegistry meterRegistry;
+    private final AtomicLong jobQueueDepth = new AtomicLong();
+    private final AtomicLong jobDeadCount = new AtomicLong();
+    private final AtomicLong webhookInboxPending = new AtomicLong();
 
     public PlatformMetrics(ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.meterRegistry = meterRegistryProvider.getIfAvailable();
+        registerGauges();
+    }
+
+    private void registerGauges() {
+        if (meterRegistry == null) return;
+        Gauge.builder("aihub_job_queue_depth", jobQueueDepth, AtomicLong::doubleValue)
+                .description("Current job queue depth")
+                .register(meterRegistry);
+        Gauge.builder("aihub_job_dead_count", jobDeadCount, AtomicLong::doubleValue)
+                .description("Number of dead jobs")
+                .register(meterRegistry);
+        Gauge.builder("aihub_webhook_inbox_pending", webhookInboxPending, AtomicLong::doubleValue)
+                .description("Pending webhook inbox events")
+                .register(meterRegistry);
     }
 
     /**
@@ -54,13 +75,66 @@ public class PlatformMetrics {
      * @param status 投递结果状态（DELIVERED / FAILED / DEAD）
      */
     public void recordWebhookDelivery(String status) {
-        if (meterRegistry == null) {
-            return;
-        }
+        if (meterRegistry == null) return;
         Counter.builder(WEBHOOK_DELIVERIES_COUNTER)
                 .tag("status", status)
                 .register(meterRegistry)
                 .increment();
+    }
+
+    /**
+     * 记录一次关键 Webhook 事件（Tag 删除、Force Push）。
+     */
+    public void recordCriticalEvent(String deliveryId, String eventType) {
+        if (meterRegistry == null) return;
+        Counter.builder(CRITICAL_EVENTS_COUNTER)
+                .tag("deliveryId", deliveryId != null ? deliveryId : "unknown")
+                .tag("type", eventType)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * 记录对账差异。
+     */
+    public void recordReconciliationDiscrepancy(String reconciler, String category) {
+        if (meterRegistry == null) return;
+        Counter.builder(RECONCILIATION_COUNTER)
+                .tag("reconciler", reconciler)
+                .tag("category", category)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * 记录上传会话过期。
+     */
+    public void recordUploadSessionExpired() {
+        if (meterRegistry == null) return;
+        Counter.builder(UPLOAD_EXPIRED_COUNTER)
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * 更新 Job 队列深度指标。
+     */
+    public void updateJobQueueDepth(long depth) {
+        jobQueueDepth.set(depth);
+    }
+
+    /**
+     * 更新 Dead Job 计数。
+     */
+    public void updateJobDeadCount(long count) {
+        jobDeadCount.set(count);
+    }
+
+    /**
+     * 更新 Webhook Inbox 待处理计数。
+     */
+    public void updateWebhookInboxPending(long count) {
+        webhookInboxPending.set(count);
     }
 
     /**

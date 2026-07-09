@@ -2,6 +2,7 @@ package com.aihub.integration.minio.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -23,9 +24,11 @@ public class SessionStagingReconciler implements JobHandler {
     private static final int BATCH_SIZE = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public SessionStagingReconciler(JdbcTemplate jdbcTemplate) {
+    public SessionStagingReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -118,6 +121,7 @@ public class SessionStagingReconciler implements JobHandler {
         if (result == ReconcileResult.SECURITY_INCIDENT) {
             LOG.error("SECURITY INCIDENT: session {} has critical inconsistency", sessionId);
         }
+        platformMetrics.recordReconciliationDiscrepancy("SessionStaging", result.name());
         try {
             String deliveryId = "session-reconcile-" + sessionId + "-" + System.currentTimeMillis();
             jdbcTemplate.update(

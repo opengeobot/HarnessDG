@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.job.domain.JobContext;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,12 +26,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class AssetRepositoryReconcilerTest {
 
     private JdbcTemplate jdbcTemplate;
+    private PlatformMetrics platformMetrics;
     private AssetRepositoryReconciler reconciler;
 
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
-        reconciler = new AssetRepositoryReconciler(jdbcTemplate);
+        platformMetrics = mock(PlatformMetrics.class);
+        reconciler = new AssetRepositoryReconciler(jdbcTemplate, platformMetrics);
     }
 
     @Test

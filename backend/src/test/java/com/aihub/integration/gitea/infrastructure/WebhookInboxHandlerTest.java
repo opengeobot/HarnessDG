@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.job.domain.JobContext;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,13 +27,15 @@ class WebhookInboxHandlerTest {
 
     private JdbcTemplate jdbcTemplate;
     private ObjectMapper objectMapper;
+    private PlatformMetrics platformMetrics;
     private WebhookInboxHandler handler;
 
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
         objectMapper = new ObjectMapper();
-        handler = new WebhookInboxHandler(jdbcTemplate, objectMapper);
+        platformMetrics = mock(PlatformMetrics.class);
+        handler = new WebhookInboxHandler(jdbcTemplate, objectMapper, platformMetrics);
     }
 
     @Test

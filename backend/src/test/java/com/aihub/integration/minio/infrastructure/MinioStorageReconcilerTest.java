@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.job.domain.JobContext;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,12 +25,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class MinioStorageReconcilerTest {
 
     private JdbcTemplate jdbcTemplate;
+    private PlatformMetrics platformMetrics;
     private MinioStorageReconciler reconciler;
 
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
-        reconciler = new MinioStorageReconciler(jdbcTemplate);
+        platformMetrics = mock(PlatformMetrics.class);
+        reconciler = new MinioStorageReconciler(jdbcTemplate, platformMetrics);
     }
 
     @Test
