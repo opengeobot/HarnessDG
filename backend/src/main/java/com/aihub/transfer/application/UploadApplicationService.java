@@ -5,6 +5,7 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -43,17 +44,20 @@ public class UploadApplicationService {
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final IdGenerator idGenerator;
+    private final NotificationService notificationService;
 
     public UploadApplicationService(UploadSessionRepository sessionRepository,
                                     StoragePort storagePort,
                                     AuthorizationService authorizationService,
                                     AuditService auditService,
-                                    IdGenerator idGenerator) {
+                                    IdGenerator idGenerator,
+                                    NotificationService notificationService) {
         this.sessionRepository = sessionRepository;
         this.storagePort = storagePort;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
+        this.notificationService = notificationService;
     }
 
     /** 创建上传会话。 */
@@ -134,6 +138,9 @@ public class UploadApplicationService {
         sessionRepository.update(session);
         auditUpload("UPLOAD_SESSION_COMPLETED", principalId, sessionId, session.assetId(),
                 Map.of());
+        publishOutbox("UPLOAD_SESSION", sessionId, "UPLOAD_COMPLETED",
+                Map.of("sessionId", sessionId, "assetId", session.assetId(),
+                        "versionId", session.versionId()));
         return UploadSessionView.from(session);
     }
 
@@ -187,6 +194,17 @@ public class UploadApplicationService {
         } catch (Exception ex) {
             LOG.error("failed to record audit event eventType={} resourceId={}",
                     eventType, resourceId, ex);
+        }
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
         }
     }
 }

@@ -24,6 +24,7 @@ import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobStatus;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -82,6 +83,7 @@ public class AssetApplicationService {
     private final AuditService auditService;
     private final JobRepository jobRepository;
     private final ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
+    private final NotificationService notificationService;
 
     public AssetApplicationService(AssetRepository assetRepository,
                                    AssetAccessPolicy accessPolicy,
@@ -91,7 +93,8 @@ public class AssetApplicationService {
                                    TagValidationService tagValidationService,
                                    AuditService auditService,
                                    JobRepository jobRepository,
-                                   ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider) {
+                                   ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider,
+                                   NotificationService notificationService) {
         this.assetRepository = assetRepository;
         this.accessPolicy = accessPolicy;
         this.idGenerator = idGenerator;
@@ -101,6 +104,7 @@ public class AssetApplicationService {
         this.auditService = auditService;
         this.jobRepository = jobRepository;
         this.cardProjectionPortProvider = cardProjectionPortProvider;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -131,6 +135,9 @@ public class AssetApplicationService {
         createProvisionJob(asset, command.principalId());
         auditAsset("ASSET_CREATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name(), "type", asset.type().name()));
+        publishOutbox("ASSET", asset.assetId(), "ASSET_CREATED",
+                Map.of("assetId", asset.assetId(), "namespace", asset.namespace(),
+                        "name", asset.name(), "type", asset.type().name()));
         return AssetView.from(asset);
     }
 
@@ -186,6 +193,9 @@ public class AssetApplicationService {
         assetRepository.update(asset);
         auditAsset("ASSET_UPDATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
+        publishOutbox("ASSET", asset.assetId(), "ASSET_UPDATED",
+                Map.of("assetId", asset.assetId(), "namespace", asset.namespace(),
+                        "name", asset.name()));
         return AssetView.from(asset);
     }
 
@@ -199,6 +209,9 @@ public class AssetApplicationService {
         assetRepository.softDelete(asset.assetId(), principalId);
         auditAsset("ASSET_DELETED", principalId, asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
+        publishOutbox("ASSET", asset.assetId(), "ASSET_DELETED",
+                Map.of("assetId", asset.assetId(), "namespace", asset.namespace(),
+                        "name", asset.name()));
     }
 
     /**
@@ -526,5 +539,16 @@ public class AssetApplicationService {
 
     private static String datasetModality(UpdateAssetCommand command) {
         return command.dataset() == null ? null : command.dataset().modality();
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
+        }
     }
 }

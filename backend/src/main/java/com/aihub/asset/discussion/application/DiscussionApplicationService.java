@@ -10,6 +10,7 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -40,15 +41,18 @@ public class DiscussionApplicationService {
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final IdGenerator idGenerator;
+    private final NotificationService notificationService;
 
     public DiscussionApplicationService(DiscussionRepository discussionRepository,
                                         AuthorizationService authorizationService,
                                         AuditService auditService,
-                                        IdGenerator idGenerator) {
+                                        IdGenerator idGenerator,
+                                        NotificationService notificationService) {
         this.discussionRepository = discussionRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
+        this.notificationService = notificationService;
     }
 
     /** 创建讨论线程。 */
@@ -69,6 +73,8 @@ public class DiscussionApplicationService {
         discussionRepository.insertThread(thread);
         auditDiscussion("DISCUSSION_CREATED", principalId, threadId, assetId,
                 Map.of("title", title));
+        publishOutbox("ASSET", assetId, "DISCUSSION_CREATED",
+                Map.of("threadId", threadId, "assetId", assetId, "title", title));
         return ThreadView.from(thread);
     }
 
@@ -105,6 +111,9 @@ public class DiscussionApplicationService {
         discussionRepository.updateThread(thread);
         auditDiscussion("COMMENT_CREATED", principalId, commentId, thread.assetId(),
                 Map.of("threadId", threadId));
+        publishOutbox("ASSET", thread.assetId(), "COMMENT_CREATED",
+                Map.of("commentId", commentId, "threadId", threadId,
+                        "assetId", thread.assetId()));
         return CommentView.from(comment);
     }
 
@@ -254,6 +263,17 @@ public class DiscussionApplicationService {
         } catch (Exception ex) {
             LOG.error("failed to record audit event eventType={} resourceId={}",
                     eventType, resourceId, ex);
+        }
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
         }
     }
 }

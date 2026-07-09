@@ -43,13 +43,15 @@ class UploadApplicationServiceTest {
     @Mock private AuthorizationService authorizationService;
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
+    @Mock private com.aihub.notification.application.NotificationService notificationService;
 
     private UploadApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new UploadApplicationService(
-                sessionRepository, storagePort, authorizationService, auditService, idGenerator);
+                sessionRepository, storagePort, authorizationService, auditService, idGenerator,
+                notificationService);
     }
 
     @Test

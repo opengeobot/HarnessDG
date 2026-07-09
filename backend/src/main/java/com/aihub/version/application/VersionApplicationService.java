@@ -5,6 +5,7 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -38,17 +39,20 @@ public class VersionApplicationService {
     private final AuditService auditService;
     private final IdGenerator idGenerator;
     private final JdbcTemplate jdbcTemplate;
+    private final NotificationService notificationService;
 
     public VersionApplicationService(VersionRepository versionRepository,
                                      AuthorizationService authorizationService,
                                      AuditService auditService,
                                      IdGenerator idGenerator,
-                                     JdbcTemplate jdbcTemplate) {
+                                     JdbcTemplate jdbcTemplate,
+                                     NotificationService notificationService) {
         this.versionRepository = versionRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.jdbcTemplate = jdbcTemplate;
+        this.notificationService = notificationService;
     }
 
     /** 创建草稿版本。 */
@@ -121,6 +125,9 @@ public class VersionApplicationService {
         versionRepository.update(v);
         auditVersion("VERSION_PUBLISHED", principalId, versionId, v.assetId(),
                 Map.of("version", v.version(), "gitTag", gitTag));
+        publishOutbox("ASSET_VERSION", versionId, "VERSION_PUBLISHED",
+                Map.of("versionId", versionId, "assetId", v.assetId(),
+                        "version", v.version(), "gitTag", gitTag));
         return VersionView.from(v);
     }
 
@@ -167,6 +174,17 @@ public class VersionApplicationService {
         } catch (Exception ex) {
             LOG.error("failed to record audit event eventType={} resourceId={}",
                     eventType, resourceId, ex);
+        }
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
         }
     }
 }

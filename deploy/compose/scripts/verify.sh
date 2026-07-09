@@ -386,7 +386,7 @@ check_webhook_inbox() {
   # 后端可达时验证端点默认拒绝
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
     local anon
-    anon="$(http_status POST /api/v1/integrations/webhooks/gitea)"
+    anon="$(http_status POST /api/v1/webhooks/gitea)"
     if [ "${anon}" != "401" ] && [ "${anon}" != "400" ] && [ "${anon}" != "200" ]; then
       echo "  webhook 端点返回 ${anon}，期望 401/400/200"; return 1
     fi
@@ -476,6 +476,23 @@ if postgres_reachable; then
   step V21 "告警 Schema 与端点验证" check_alerts
 else
   skip V21 "告警 Schema 与端点验证" "postgres 不可达"
+fi
+
+# ---- V22: Outbox 事件表验证 ----
+check_outbox() {
+  if [ "$(psql_q "select to_regclass('public.outbox_event') is not null")" != "t" ]; then
+    echo "  outbox_event 表缺失"; return 1
+  fi
+  local col_cnt
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='outbox_event' and column_name in ('aggregate_type','aggregate_id','event_type','payload','created_at')")"
+  if [ "${col_cnt}" -lt 5 ]; then echo "  outbox_event 关键字段缺失"; return 1; fi
+  return 0
+}
+
+if postgres_reachable; then
+  step V22 "Outbox 事件表验证" check_outbox
+else
+  skip V22 "Outbox 事件表验证" "postgres 不可达"
 fi
 
 echo ""

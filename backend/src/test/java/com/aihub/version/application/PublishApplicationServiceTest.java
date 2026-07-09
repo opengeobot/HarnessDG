@@ -48,6 +48,7 @@ class PublishApplicationServiceTest {
     @Mock private AuthorizationService authorizationService;
     @Mock private AuditService auditService;
     @Mock private JobApplicationService jobApplicationService;
+    @Mock private com.aihub.notification.application.NotificationService notificationService;
 
     private PublishApplicationService service;
 
@@ -56,7 +57,7 @@ class PublishApplicationServiceTest {
         service = new PublishApplicationService(
                 versionRepository, jdbcTemplate, idGenerator,
                 authorizationService, auditService, jobApplicationService,
-                new ObjectMapper());
+                new ObjectMapper(), notificationService);
         PrincipalContextHolder.set(new PrincipalContext(
                 "usr_reviewer", PrincipalType.USER, null, null,
                 List.of(), Set.of(), Set.of("asset:review", "asset:submit", "asset:deprecate"),

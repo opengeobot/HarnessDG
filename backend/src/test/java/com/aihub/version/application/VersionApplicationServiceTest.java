@@ -43,13 +43,15 @@ class VersionApplicationServiceTest {
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
     @Mock private JdbcTemplate jdbcTemplate;
+    @Mock private com.aihub.notification.application.NotificationService notificationService;
 
     private VersionApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new VersionApplicationService(
-                versionRepository, authorizationService, auditService, idGenerator, jdbcTemplate);
+                versionRepository, authorizationService, auditService, idGenerator, jdbcTemplate,
+                notificationService);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ver_generated");
     }
 

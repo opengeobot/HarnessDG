@@ -49,13 +49,15 @@ class DiscussionApplicationServiceTest {
     @Mock private AuthorizationService authorizationService;
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
+    @Mock private com.aihub.notification.application.NotificationService notificationService;
 
     private DiscussionApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new DiscussionApplicationService(
-                discussionRepository, authorizationService, auditService, idGenerator);
+                discussionRepository, authorizationService, auditService, idGenerator,
+                notificationService);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("gen_id");
     }
 

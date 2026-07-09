@@ -69,6 +69,7 @@ class AssetApplicationServiceTest {
     @Mock private AuditService auditService;
     @Mock private JobRepository jobRepository;
     @Mock private ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
+    @Mock private com.aihub.notification.application.NotificationService notificationService;
 
     private AssetApplicationService service;
 
@@ -77,7 +78,7 @@ class AssetApplicationServiceTest {
         service = new AssetApplicationService(assetRepository,
                 new AssetAccessPolicy(authorizationService), idGenerator, authorizationService,
                 dictionaryValidationPort, tagValidationService, auditService, jobRepository,
-                cardProjectionPortProvider);
+                cardProjectionPortProvider, notificationService);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
         doNothing().when(assetRepository).insert(any(Asset.class));

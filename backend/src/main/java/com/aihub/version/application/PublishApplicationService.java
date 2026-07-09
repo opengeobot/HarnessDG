@@ -6,6 +6,7 @@ import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.id.IdGenerator;
@@ -42,6 +43,7 @@ public class PublishApplicationService {
     private final AuditService auditService;
     private final JobApplicationService jobApplicationService;
     private final ObjectMapper objectMapper;
+    private final NotificationService notificationService;
 
     public PublishApplicationService(VersionRepository versionRepository,
                                      JdbcTemplate jdbcTemplate,
@@ -49,7 +51,8 @@ public class PublishApplicationService {
                                      AuthorizationService authorizationService,
                                      AuditService auditService,
                                      JobApplicationService jobApplicationService,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     NotificationService notificationService) {
         this.versionRepository = versionRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.idGenerator = idGenerator;
@@ -57,6 +60,7 @@ public class PublishApplicationService {
         this.auditService = auditService;
         this.jobApplicationService = jobApplicationService;
         this.objectMapper = objectMapper;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -111,6 +115,8 @@ public class PublishApplicationService {
                 Map.of("requestId", requestId)));
 
         LOG.info("publish request submitted versionId={} requestId={}", versionId, requestId);
+        publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REVIEW_REQUESTED",
+                Map.of("requestId", requestId, "versionId", versionId));
         return requestId;
     }
 
@@ -172,6 +178,8 @@ public class PublishApplicationService {
                 versionRepository.update(version);
             }
             LOG.info("publish request rejected requestId={} versionId={}", requestId, versionId);
+            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED",
+                    Map.of("requestId", requestId, "versionId", versionId, "decision", "REJECT"));
             return;
         }
 
@@ -186,6 +194,8 @@ public class PublishApplicationService {
                 versionRepository.update(version);
             }
             LOG.info("publish request changes-requested requestId={} versionId={}", requestId, versionId);
+            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED",
+                    Map.of("requestId", requestId, "versionId", versionId, "decision", "REQUEST_CHANGES"));
             return;
         }
 
@@ -206,6 +216,8 @@ public class PublishApplicationService {
             }
 
             LOG.info("publish request approved, publish job submitted requestId={} versionId={}", requestId, versionId);
+            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_APPROVED",
+                    Map.of("requestId", requestId, "versionId", versionId));
         }
     }
 
@@ -224,6 +236,8 @@ public class PublishApplicationService {
                 "VERSION_DEPRECATED", "version:deprecate",
                 null, null, "VERSION", versionId, null, null,
                 AuditResult.SUCCEEDED, null, Map.of()));
+        publishOutbox("VERSION", versionId, "VERSION_DEPRECATED",
+                Map.of("versionId", versionId));
         LOG.info("version deprecated versionId={}", versionId);
     }
 
@@ -267,5 +281,16 @@ public class PublishApplicationService {
                 SELECT review_id, reviewer_id, decision, comments, created_at
                 FROM review_decision WHERE request_id = ? ORDER BY created_at DESC
                 """, requestId);
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
+        }
     }
 }
