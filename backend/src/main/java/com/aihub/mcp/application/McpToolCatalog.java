@@ -9,6 +9,7 @@ import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.transfer.application.UploadApplicationService;
+import com.aihub.version.application.PublishApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import java.util.Collections;
@@ -43,10 +44,11 @@ public class McpToolCatalog {
             VersionApplicationService versionService,
             DownloadApplicationService downloadService,
             UploadApplicationService uploadService,
+            PublishApplicationService publishService,
             @Value("${mcp.writeTools.enabled:false}") boolean writeToolsEnabled) {
         this.writeToolsEnabled = writeToolsEnabled;
         registerReadOnlyTools(assetService, versionService, downloadService);
-        registerWriteTools(assetService, versionService, uploadService);
+        registerWriteTools(assetService, versionService, uploadService, publishService);
         LOG.info("MCP Tool Catalog initialized: {} tools registered (writeTools={})",
                 tools.size(), writeToolsEnabled);
     }
@@ -174,7 +176,8 @@ public class McpToolCatalog {
 
     private void registerWriteTools(AssetApplicationService assetService,
                                     VersionApplicationService versionService,
-                                    UploadApplicationService uploadService) {
+                                    UploadApplicationService uploadService,
+                                    PublishApplicationService publishService) {
         // asset_create_draft
         register("asset_create_draft",
                 "Create a new draft version for an asset. Write tool, disabled by default.",
@@ -224,6 +227,26 @@ public class McpToolCatalog {
                         "sessionId", Map.of("type", "string"))),
                 true, "asset:read",
                 args -> uploadService.getSession(str(args, "sessionId")));
+
+        // asset_publish_version (high-risk, disabled)
+        register("asset_publish_version",
+                "Publish an asset version. High-risk write tool, disabled by default.",
+                schema(Map.of(
+                        "versionId", Map.of("type", "string"))),
+                true, "asset:publish",
+                args -> publishService.submitPublishRequest(str(args, "versionId")));
+
+        // asset_delete (high-risk, disabled)
+        register("asset_delete",
+                "Delete an asset. High-risk write tool, disabled by default.",
+                schema(Map.of(
+                        "assetId", Map.of("type", "string"))),
+                true, "asset:delete",
+                args -> {
+                    String principalId = currentPrincipalId();
+                    assetService.deleteAsset(str(args, "assetId"), principalId);
+                    return Map.of("deleted", true);
+                });
     }
 
     // ---- 辅助方法 ----

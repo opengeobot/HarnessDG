@@ -144,7 +144,7 @@ check_buckets() {
 check_migrations() {
   local count ok=0
   count="$(psql_q 'select count(*) from flyway_schema_history where success = true')"
-  if [ -z "${count}" ] || [ "${count}" -lt 21 ]; then echo "  成功迁移数 ${count} < 21"; return 1; fi
+  if [ -z "${count}" ] || [ "${count}" -lt 26 ]; then echo "  成功迁移数 ${count} < 26"; return 1; fi
   for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"; ok=1

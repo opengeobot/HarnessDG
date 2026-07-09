@@ -20,6 +20,7 @@ import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.transfer.application.UploadApplicationService;
+import com.aihub.version.application.PublishApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.VersionStatus;
@@ -40,6 +41,7 @@ class McpToolCatalogTest {
     private VersionApplicationService versionService;
     private DownloadApplicationService downloadService;
     private UploadApplicationService uploadService;
+    private PublishApplicationService publishService;
     private McpToolCatalog catalog;
 
     @BeforeEach
@@ -48,7 +50,9 @@ class McpToolCatalogTest {
         versionService = mock(VersionApplicationService.class);
         downloadService = mock(DownloadApplicationService.class);
         uploadService = mock(UploadApplicationService.class);
-        catalog = new McpToolCatalog(assetService, versionService, downloadService, uploadService, true);
+        publishService = mock(PublishApplicationService.class);
+        catalog = new McpToolCatalog(assetService, versionService, downloadService, uploadService,
+                publishService, true);
 
         // 设置 PrincipalContext
         PrincipalContextHolder.set(new PrincipalContext("usr_test", PrincipalType.USER,
@@ -114,7 +118,8 @@ class McpToolCatalogTest {
     @Test
     void writeToolsDisabledShouldRejectWriteCalls() {
         McpToolCatalog disabledCatalog = new McpToolCatalog(
-                assetService, versionService, downloadService, uploadService, false);
+                assetService, versionService, downloadService, uploadService,
+                publishService, false);
 
         assertThatThrownBy(() -> disabledCatalog.callTool("asset_create_draft",
                 Map.of("assetId", "ast_1", "version", "v1")))
