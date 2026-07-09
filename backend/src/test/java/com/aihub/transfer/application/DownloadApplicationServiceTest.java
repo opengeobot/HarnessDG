@@ -2,6 +2,7 @@ package com.aihub.transfer.application;
 
 import com.aihub.asset.domain.Asset;
 import com.aihub.asset.domain.AssetRepository;
+import com.aihub.asset.domain.AssetRepositoryRef;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
@@ -56,7 +57,7 @@ class DownloadApplicationServiceTest {
     @DisplayName("签发 GIT_DVC 票据 — 整版本下载")
     void shouldIssueGitDvcTicket() {
         Version version = createPublishedVersion();
-        Asset asset = createAsset();
+        Asset asset = createAssetWithRepo();
         when(versionRepository.findByVersionId("ver_1")).thenReturn(Optional.of(version));
         when(assetRepository.findByAssetId("asset_1")).thenReturn(Optional.of(asset));
 
@@ -64,6 +65,11 @@ class DownloadApplicationServiceTest {
 
         assertThat(ticket.method()).isEqualTo("GIT_DVC");
         assertThat(ticket.presignedUrl()).isNull();
+        assertThat(ticket.gitCloneUrl()).isEqualTo("https://git.example.com/org/test-asset.git");
+        assertThat(ticket.revision()).isEqualTo("commit_sha");
+        assertThat(ticket.dvcCredentialsUrl()).isEqualTo("/api/v1/assets/asset_1/dvc/credentials");
+        assertThat(ticket.assetId()).isEqualTo("asset_1");
+        assertThat(ticket.expiresAt()).isAfter(Instant.now().plusSeconds(14 * 60));
         verify(authorizationService).requirePermission("asset:read");
         verify(auditService).record(any());
     }
@@ -72,7 +78,7 @@ class DownloadApplicationServiceTest {
     @DisplayName("签发 PRESIGNED_URL 票据 — 单工件下载")
     void shouldIssuePresignedUrlTicket() throws Exception {
         Version version = createPublishedVersion();
-        Asset asset = createAsset();
+        Asset asset = createAssetWithRepo();
         Artifact artifact = new Artifact("art_1", "ver_1", "model.bin",
                 null, null, "sha256abc", 1024L, "application/octet-stream");
 
@@ -116,7 +122,7 @@ class DownloadApplicationServiceTest {
     @DisplayName("工件不存在应抛出 NotFoundException")
     void shouldThrowNotFoundWhenArtifactMissing() {
         Version version = createPublishedVersion();
-        Asset asset = createAsset();
+        Asset asset = createAssetWithRepo();
         when(versionRepository.findByVersionId("ver_1")).thenReturn(Optional.of(version));
         when(assetRepository.findByAssetId("asset_1")).thenReturn(Optional.of(asset));
         when(versionRepository.listArtifactsByVersion("ver_1")).thenReturn(List.of());
@@ -132,11 +138,16 @@ class DownloadApplicationServiceTest {
                 "notes", 1L, "creator_1", now, now);
     }
 
-    private Asset createAsset() {
-        return Asset.create("asset_1", com.aihub.asset.domain.AssetType.MODEL,
+    private Asset createAssetWithRepo() {
+        Asset asset = Asset.create("asset_1", com.aihub.asset.domain.AssetType.MODEL,
                 "org_1", null, "testorg", "test-asset",
                 "Test Asset", "Description", Visibility.PUBLIC,
                 List.of("creator_1"), List.of(), List.of(), null,
                 null, null, null, "creator_1");
+        asset.attachRepository(new AssetRepositoryRef(
+                "testorg/test-asset",
+                "https://git.example.com/org/test-asset",
+                "https://git.example.com/org/test-asset.git"));
+        return asset;
     }
 }

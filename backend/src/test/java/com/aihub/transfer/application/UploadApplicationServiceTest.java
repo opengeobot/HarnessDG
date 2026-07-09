@@ -3,6 +3,7 @@ package com.aihub.transfer.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -12,6 +13,9 @@ import static org.mockito.Mockito.when;
 
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.job.application.JobApplicationService;
+import com.aihub.job.domain.Job;
+import com.aihub.job.domain.JobStatus;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.error.ValidationException;
@@ -21,6 +25,7 @@ import com.aihub.transfer.domain.StoragePort;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
@@ -44,14 +49,16 @@ class UploadApplicationServiceTest {
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
     @Mock private com.aihub.notification.application.NotificationService notificationService;
+    @Mock private JobApplicationService jobApplicationService;
 
     private UploadApplicationService service;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
         service = new UploadApplicationService(
                 sessionRepository, storagePort, authorizationService, auditService, idGenerator,
-                notificationService);
+                notificationService, jobApplicationService, objectMapper);
     }
 
     @Test
@@ -116,6 +123,7 @@ class UploadApplicationServiceTest {
         UploadSession session = createOpenSession();
         session.bindMinioUploadId("minio-id");
         session.commit();
+        session.markProcessing();
         session.complete();
         when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
 
@@ -124,16 +132,25 @@ class UploadApplicationServiceTest {
     }
 
     @Test
-    void completeSessionTransitionsToCompleted() {
+    void completeSessionEnqueuesMaterializeAndLeavesProcessing() {
         UploadSession session = createOpenSession();
         session.bindMinioUploadId("minio-id");
         when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+        Job job = mock(Job.class);
+        when(job.jobId()).thenReturn("job_mat_01");
+        when(jobApplicationService.enqueue(eq("UPLOAD_MATERIALIZE"), anyString(), any(), any(),
+                eq("ast_01"), eq(3))).thenReturn(job);
 
         List<StoragePort.PartInfo> parts = List.of(new StoragePort.PartInfo(1, "etag1"));
-        UploadSessionView view = service.completeSession("upl_01", parts, "usr_01");
+        List<UploadApplicationService.FileMetadata> files = List.of(
+                new UploadApplicationService.FileMetadata("data.csv", "abc", 100L, "text/csv", null));
+        UploadSessionView view = service.completeSession("upl_01", parts, files, "usr_01");
 
-        assertThat(view.status()).isEqualTo(UploadSessionStatus.COMPLETED);
+        assertThat(view.status()).isEqualTo(UploadSessionStatus.PROCESSING);
+        assertThat(view.materializeJobId()).isEqualTo("job_mat_01");
         verify(storagePort).completeMultipartUpload(anyString(), anyString(), anyString(), any());
+        verify(jobApplicationService).enqueue(eq("UPLOAD_MATERIALIZE"), anyString(), eq("usr_01"),
+                eq(null), eq("ast_01"), eq(3));
         verify(auditService).record(any());
     }
 

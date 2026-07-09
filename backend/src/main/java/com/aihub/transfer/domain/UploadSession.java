@@ -6,7 +6,8 @@ import java.util.Objects;
 /**
  * 上传会话聚合根。
  *
- * <p>追踪 Multipart 上传生命周期：OPEN → COMMITTING → COMPLETED/CANCELLED/EXPIRED。
+ * <p>追踪 Multipart 上传生命周期：OPEN → COMMITTING → PROCESSING → COMPLETED/FAILED，
+ * 或 CANCELLED/EXPIRED。
  * 单会话限额 20GiB，超过应引导使用 CLI/DVC。
  */
 public final class UploadSession {
@@ -79,19 +80,41 @@ public final class UploadSession {
         this.updatedAt = Instant.now();
     }
 
-    /** 标记完成。 */
-    public void complete() {
+    /** 进入 PROCESSING 状态（Multipart 已完成，等待物化 Job）。 */
+    public void markProcessing() {
         if (this.status != UploadSessionStatus.COMMITTING) {
             throw new IllegalStateException(
-                    "only COMMITTING sessions can complete, current: " + this.status);
+                    "only COMMITTING sessions can enter PROCESSING, current: " + this.status);
+        }
+        this.status = UploadSessionStatus.PROCESSING;
+        this.updatedAt = Instant.now();
+    }
+
+    /** 标记物化完成。 */
+    public void complete() {
+        if (this.status != UploadSessionStatus.PROCESSING && this.status != UploadSessionStatus.COMMITTING) {
+            throw new IllegalStateException(
+                    "only PROCESSING or COMMITTING sessions can complete, current: " + this.status);
         }
         this.status = UploadSessionStatus.COMPLETED;
         this.updatedAt = Instant.now();
     }
 
+    /** 标记物化失败。 */
+    public void markFailed() {
+        if (this.status != UploadSessionStatus.PROCESSING) {
+            throw new IllegalStateException(
+                    "only PROCESSING sessions can fail, current: " + this.status);
+        }
+        this.status = UploadSessionStatus.FAILED;
+        this.updatedAt = Instant.now();
+    }
+
     /** 取消会话。 */
     public void cancel() {
-        if (this.status == UploadSessionStatus.COMPLETED || this.status == UploadSessionStatus.CANCELLED) {
+        if (this.status == UploadSessionStatus.COMPLETED
+                || this.status == UploadSessionStatus.CANCELLED
+                || this.status == UploadSessionStatus.PROCESSING) {
             throw new IllegalStateException(
                     "cannot cancel session in status: " + this.status);
         }

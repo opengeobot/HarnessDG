@@ -63,7 +63,13 @@ public class UploadController {
         List<StoragePort.PartInfo> parts = body.parts().stream()
                 .map(p -> new StoragePort.PartInfo(p.partNumber(), p.etag()))
                 .toList();
-        return uploadApplicationService.completeSession(sessionId, parts, null);
+        List<UploadApplicationService.FileMetadata> files = body.files() == null
+                ? List.of()
+                : body.files().stream()
+                        .map(f -> new UploadApplicationService.FileMetadata(
+                                f.path(), f.sha256(), f.size(), f.mediaType(), f.sampleContent()))
+                        .toList();
+        return uploadApplicationService.completeSession(sessionId, parts, files, null);
     }
 
     /** 取消上传会话。 */
@@ -85,8 +91,12 @@ public class UploadController {
     public record CreateSessionRequest(long totalBytes, int fileCount, Integer ttlSeconds) {}
 
     /** 完成上传会话请求体。 */
-    public record CompleteSessionRequest(List<PartEntry> parts) {}
+    public record CompleteSessionRequest(List<PartEntry> parts, List<FileEntry> files) {}
 
     /** Part 条目。 */
     public record PartEntry(int partNumber, String etag) {}
+
+    /** 文件元数据条目。 */
+    public record FileEntry(String path, String sha256, long size,
+                            String mediaType, String sampleContent) {}
 }

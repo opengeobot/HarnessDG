@@ -74,4 +74,18 @@ class ManifestTest {
         String digest = manifest.computeDigest();
         assertThat(digest).matches("[0-9a-f]{64}");
     }
+
+    @Test
+    void forVersionBuildsManifestV1Structure() {
+        Manifest manifest = Manifest.forVersion("ast_1", "ver_1", List.of(
+                new Manifest.ArtifactEntry("b.csv", "hash_b", 20L, "text/csv"),
+                new Manifest.ArtifactEntry("a.csv", "hash_a", 10L, "text/csv")));
+
+        String canonical = manifest.canonicalize();
+        assertThat(canonical).contains("schemaVersion=aihub/manifest-v1");
+        assertThat(canonical).contains("assetId=ast_1");
+        assertThat(canonical).contains("versionId=ver_1");
+        assertThat(canonical).contains("path:a.csv");
+        assertThat(canonical.indexOf("path:a.csv")).isLessThan(canonical.indexOf("path:b.csv"));
+    }
 }

@@ -81,7 +81,7 @@ class DownloadControllerTest {
         Instant expires = Instant.parse("2026-07-05T12:00:00Z");
         given(downloadService.issueTicket(eq("ver_01"), eq("art_01")))
                 .willReturn(new DownloadTicket("PRESIGNED_URL", "https://minio/dvc-cache/obj",
-                        expires, "model.bin", 1024L));
+                        expires, "model.bin", 1024L, null, null, null, "ast_01"));
         mockMvc.perform(get("/api/v1/versions/ver_01/download")
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("asset:read")))
                         .param("artifactId", "art_01"))
@@ -93,11 +93,16 @@ class DownloadControllerTest {
     @Test
     void issueDownloadTicketWithoutArtifactIdReturnsDvc() throws Exception {
         given(downloadService.issueTicket(eq("ver_01"), isNull()))
-                .willReturn(new DownloadTicket("GIT_DVC", null, null, null, null));
+                .willReturn(new DownloadTicket("GIT_DVC", null,
+                        Instant.parse("2026-07-05T12:15:00Z"), null, null,
+                        "https://git.example.com/repo.git", "commit_sha",
+                        "/api/v1/assets/ast_01/dvc/credentials", "ast_01"));
         mockMvc.perform(get("/api/v1/versions/ver_01/download")
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("asset:read"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.method").value("GIT_DVC"));
+                .andExpect(jsonPath("$.method").value("GIT_DVC"))
+                .andExpect(jsonPath("$.gitCloneUrl").value("https://git.example.com/repo.git"))
+                .andExpect(jsonPath("$.dvcCredentialsUrl").value("/api/v1/assets/ast_01/dvc/credentials"));
     }
 
     @Test

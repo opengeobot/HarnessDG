@@ -2299,6 +2299,221 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  # ── 版本管理（VersionController） ──
+
+  /assets/{assetId}/versions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listVersions
+      summary: 列出版本（游标分页）
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageVersionView'
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createDraftVersion
+      summary: 创建草稿版本
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
+      x-required-permissions: [asset:update]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVersionRequest' }
+      responses:
+        '200':
+          description: 草稿版本已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VersionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/publish-requests:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listPublishRequestsByAsset
+      summary: 查询资产发布请求列表
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 发布请求列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { type: object }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/publish-requests/{requestId}/decisions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listPublishDecisions
+      summary: 查询审批决策历史
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 决策历史
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { type: object }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getVersion
+      summary: 查询版本详情
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 版本详情
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VersionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}/artifacts:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listArtifacts
+      summary: 列出版本工件
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 工件列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ArtifactView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}/transition:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: transitionVersion
+      summary: 推进版本状态
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionVersionRequest' }
+      responses:
+        '200':
+          description: 版本状态已更新
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VersionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}/validation-report:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getValidationReport
+      summary: 查询校验报告
+      tags: [version]
+      x-implementation-status: implemented
+      x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 校验报告
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: object }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   # ── 版本审批与生命周期（ReviewController） ──
 
   /versions/{versionId}/publish-requests:
@@ -2421,6 +2636,39 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/previews/generate:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: triggerPreviewGeneration
+      summary: 触发预览生成 Job
+      tags: [assets]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                versionId: { type: string }
+                content: { type: string }
+                contentType: { type: string }
+              required: [versionId]
+      responses:
+        '200':
+          description: 预览 Job 已入队
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/dvc/config:
     parameters:
       - { name: assetId, in: path, required: true, schema: { type: string } }
@@ -2460,6 +2708,27 @@ paths:
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
   # ── 上传会话（UploadController） ──
+
+  /assets/{assetId}/upload-sessions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listUploadSessions
+      summary: 列出资产上传会话
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 上传会话列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CursorPageUploadSessionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /assets/{assetId}/versions/{versionId}/upload-sessions:
     parameters:
@@ -2559,6 +2828,16 @@ paths:
                       partNumber: { type: integer }
                       etag: { type: string }
                     required: [partNumber, etag]
+                files:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      sha256: { type: string }
+                      size: { type: integer, format: int64 }
+                      mediaType: { type: string }
+                      sampleContent: { type: string }
               required: [parts]
       responses:
         '200':
@@ -3990,24 +4269,90 @@ components:
         principalId: { type: string }
         status:
           type: string
-          enum: [OPEN, COMMITTING, COMPLETED, CANCELLED, EXPIRED]
+          enum: [OPEN, COMMITTING, PROCESSING, COMPLETED, FAILED, CANCELLED, EXPIRED]
         totalBytes: { type: integer, format: int64 }
         fileCount: { type: integer }
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+        materializeJobId: { type: [string, 'null'] }
+
+    CursorPageUploadSessionView:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UploadSessionView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+
+    VersionView:
+      type: object
+      properties:
+        versionId: { type: string }
+        assetId: { type: string }
+        version: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED]
+        sourceCommit: { type: [string, 'null'] }
+        manifestDigest: { type: [string, 'null'] }
+        gitTag: { type: [string, 'null'] }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        publishedBy: { type: [string, 'null'] }
+        notes: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    ArtifactView:
+      type: object
+      properties:
+        artifactId: { type: string }
+        versionId: { type: string }
+        path: { type: string }
+        dvcFile: { type: [string, 'null'] }
+        dvcHash: { type: [string, 'null'] }
+        sha256: { type: string }
+        size: { type: integer, format: int64 }
+        mediaType: { type: [string, 'null'] }
+
+    CreateVersionRequest:
+      type: object
+      required: [version]
+      properties:
+        version: { type: string }
+
+    TransitionVersionRequest:
+      type: object
+      required: [targetStatus]
+      properties:
+        targetStatus:
+          type: string
+          enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED]
+
+    CursorPageVersionView:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VersionView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
 
     DownloadTicket:
       type: object
       description: 下载票据
-      required: [method, presignedUrl, expiresAt, fileName, fileSize]
+      required: [method]
       properties:
         method:
           type: string
           enum: [PRESIGNED_URL, GIT_DVC]
-        presignedUrl: { type: string, format: uri }
-        expiresAt: { type: string, format: date-time }
-        fileName: { type: string }
-        fileSize: { type: [integer, 'null'] }
+        presignedUrl: { type: [string, 'null'], format: uri }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        fileName: { type: [string, 'null'] }
+        fileSize: { type: [integer, 'null'], format: int64 }
+        gitCloneUrl: { type: [string, 'null'], format: uri }
+        revision: { type: [string, 'null'] }
+        dvcCredentialsUrl: { type: [string, 'null'] }
+        assetId: { type: [string, 'null'] }
 
     # ── MCP schema ──
 

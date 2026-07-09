@@ -8,11 +8,16 @@ import java.time.Instant;
 public record UploadSessionView(String sessionId, String assetId, String versionId,
                                 String principalId, UploadSessionStatus status,
                                 long totalBytes, int fileCount,
-                                Instant expiresAt, Instant createdAt) {
+                                Instant expiresAt, Instant createdAt,
+                                String materializeJobId) {
 
     public static UploadSessionView from(UploadSession s) {
+        return from(s, null);
+    }
+
+    public static UploadSessionView from(UploadSession s, String materializeJobId) {
         return new UploadSessionView(s.sessionId(), s.assetId(), s.versionId(),
                 s.principalId(), s.status(), s.totalBytes(), s.fileCount(),
-                s.expiresAt(), s.createdAt());
+                s.expiresAt(), s.createdAt(), materializeJobId);
     }
 }

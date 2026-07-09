@@ -212,11 +212,10 @@ cmd_dataset_pull() {
 
     [[ -z "$version_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --version"
 
-    local body="{\"versionId\":\"${version_id}\""
-    [[ -n "$artifact_id" ]] && body+=",\"artifactId\":\"${artifact_id}\""
-    body+="}"
+    local path="/api/v1/versions/${version_id}/download"
+    [[ -n "$artifact_id" ]] && path+="?artifactId=${artifact_id}"
 
-    http_request POST "/downloads/ticket" "$body"
+    http_request GET "$path"
 }
 
 cmd_dataset_create() {

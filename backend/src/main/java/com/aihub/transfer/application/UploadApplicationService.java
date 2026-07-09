@@ -5,6 +5,8 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.JobApplicationService;
+import com.aihub.job.domain.Job;
 import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
@@ -17,9 +19,13 @@ import com.aihub.transfer.domain.StoragePort;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -30,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 上传应用服务。
  *
- * <p>编排上传会话的创建、Part 签名、完成、取消，同时接入授权、审计、存储。
+ * <p>编排上传会话的创建、Part 签名、完成、取消，同时接入授权、审计、存储与物化 Job 入队。
  */
 @Service
 public class UploadApplicationService {
@@ -45,19 +51,25 @@ public class UploadApplicationService {
     private final AuditService auditService;
     private final IdGenerator idGenerator;
     private final NotificationService notificationService;
+    private final JobApplicationService jobApplicationService;
+    private final ObjectMapper objectMapper;
 
     public UploadApplicationService(UploadSessionRepository sessionRepository,
                                     StoragePort storagePort,
                                     AuthorizationService authorizationService,
                                     AuditService auditService,
                                     IdGenerator idGenerator,
-                                    NotificationService notificationService) {
+                                    NotificationService notificationService,
+                                    JobApplicationService jobApplicationService,
+                                    ObjectMapper objectMapper) {
         this.sessionRepository = sessionRepository;
         this.storagePort = storagePort;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.notificationService = notificationService;
+        this.jobApplicationService = jobApplicationService;
+        this.objectMapper = objectMapper;
     }
 
     /** 创建上传会话。 */
@@ -117,10 +129,11 @@ public class UploadApplicationService {
                 "asset-staging", objectKey, session.minioUploadId(), partNumber, PRESIGN_EXPIRY);
     }
 
-    /** 完成上传会话。 */
+    /** 完成上传会话并入队物化 Job。 */
     @Transactional
     public UploadSessionView completeSession(String sessionId,
                                              List<StoragePort.PartInfo> parts,
+                                             List<FileMetadata> files,
                                              String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         UploadSession session = loadSession(sessionId);
@@ -141,14 +154,17 @@ public class UploadApplicationService {
                             "versionId", session.versionId(), "reason", ex.getMessage()));
             throw ex;
         }
-        session.complete();
+        session.markProcessing();
         sessionRepository.update(session);
+
+        String jobId = enqueueMaterializeJob(session, files, principalId);
+
         auditUpload("UPLOAD_SESSION_COMPLETED", principalId, sessionId, session.assetId(),
-                Map.of());
-        publishOutbox("UPLOAD_SESSION", sessionId, "UPLOAD_COMPLETED",
+                Map.of("jobId", jobId));
+        publishOutbox("UPLOAD_SESSION", sessionId, "UPLOAD_PROCESSING",
                 Map.of("sessionId", sessionId, "assetId", session.assetId(),
-                        "versionId", session.versionId()));
-        return UploadSessionView.from(session);
+                        "versionId", session.versionId(), "jobId", jobId));
+        return UploadSessionView.from(session, jobId);
     }
 
     /** 取消上传会话。 */
@@ -184,6 +200,57 @@ public class UploadApplicationService {
 
     // ---- 私有辅助 ----
 
+    private String enqueueMaterializeJob(UploadSession session, List<FileMetadata> files,
+                                         String principalId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("sessionId", session.sessionId());
+        payload.put("assetId", session.assetId());
+        payload.put("versionId", session.versionId());
+        payload.put("files", toFilePayload(files, session.fileCount()));
+        try {
+            Job job = jobApplicationService.enqueue(
+                    "UPLOAD_MATERIALIZE",
+                    objectMapper.writeValueAsString(payload),
+                    principalId,
+                    null,
+                    session.assetId(),
+                    3);
+            return job.jobId();
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("failed to serialize materialize payload", ex);
+        }
+    }
+
+    private List<Map<String, Object>> toFilePayload(List<FileMetadata> files, int fileCount) {
+        if (files == null || files.isEmpty()) {
+            if (fileCount <= 0) {
+                return List.of();
+            }
+            List<Map<String, Object>> placeholders = new ArrayList<>();
+            for (int i = 0; i < fileCount; i++) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("path", "upload-" + (i + 1) + ".bin");
+                entry.put("sha256", "");
+                entry.put("size", 0L);
+                placeholders.add(entry);
+            }
+            return placeholders;
+        }
+        return files.stream().map(f -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("path", f.path());
+            entry.put("sha256", f.sha256() != null ? f.sha256() : "");
+            entry.put("size", f.size());
+            if (f.mediaType() != null) {
+                entry.put("mediaType", f.mediaType());
+            }
+            if (f.sampleContent() != null && !f.sampleContent().isBlank()) {
+                entry.put("sampleContent", f.sampleContent());
+            }
+            return entry;
+        }).toList();
+    }
+
     private UploadSession loadSession(String sessionId) {
         return sessionRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.UPLOAD_SESSION_NOT_FOUND,
@@ -214,4 +281,8 @@ public class UploadApplicationService {
                     eventType, aggregateId, ex);
         }
     }
+
+    /** 上传文件元数据（完成会话时携带）。 */
+    public record FileMetadata(String path, String sha256, long size,
+                               String mediaType, String sampleContent) {}
 }

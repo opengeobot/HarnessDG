@@ -63,10 +63,11 @@ public class MinioStorageAdapter implements StoragePort {
 
     @Override
     public String createMultipartUpload(String bucketName, String objectKey, String contentType) {
-        // MinIO Java SDK 不直接暴露 createMultipartUpload API，
-        // 使用预签名 URL 方式：客户端通过预签名 URL 自行完成 Multipart。
-        // 此处返回 objectKey 作为 uploadId（简化实现，生产环境应使用更完善的方案）。
-        LOG.info("createMultipartUpload bucket={} key={} contentType={}", bucketName, objectKey, contentType);
+        // MinIO Java SDK 8.x 未暴露 S3 CreateMultipartUpload；当前以 objectKey 作为 uploadId 占位，
+        // presignPartUpload/completeMultipartUpload 按单对象预签名 PUT 路径工作。
+        // 生产环境可切换 AWS SDK v2 S3Client#createMultipartUpload 获取真实 uploadId。
+        LOG.info("createMultipartUpload bucket={} key={} contentType={} uploadId={}",
+                bucketName, objectKey, contentType, objectKey);
         return objectKey;
     }
 

@@ -80,11 +80,7 @@ public class PreviewJobHandler implements JobHandler {
         } else if ("application/x-ndjson".equals(contentType) || "application/jsonl".equals(contentType)) {
             previewJson = parseJsonl(content);
         } else if ("application/x-parquet".equals(contentType) || "parquet".equals(contentType)) {
-            // P5: Parquet 格式预览（需要 Apache Parquet 库，当前返回占位信息）
-            previewJson = objectMapper.writeValueAsString(Map.of(
-                    "format", "parquet",
-                    "message", "Parquet preview requires native library, pending integration",
-                    "rows", List.of()));
+            throw new UnsupportedOperationException("PREVIEW_UNSUPPORTED_FORMAT: Parquet preview requires native library");
         } else {
             // 其他类型：原样截取
             previewJson = objectMapper.writeValueAsString(Map.of("raw", truncate(content, MAX_ROWS * 100)));

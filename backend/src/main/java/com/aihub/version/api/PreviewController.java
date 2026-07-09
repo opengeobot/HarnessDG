@@ -1,9 +1,20 @@
+/*
+ * 功能: 资产预览 REST 控制器，查询与触发预览生成。
+ * 时间: 2026-07-10
+ * 作者: AxeXie
+ */
 package com.aihub.version.api;
 
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.shared.identity.PrincipalContext;
+import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.version.application.PreviewApplicationService;
+import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,11 +30,14 @@ public class PreviewController {
 
     private final JdbcTemplate jdbcTemplate;
     private final AuthorizationService authorizationService;
+    private final PreviewApplicationService previewApplicationService;
 
     public PreviewController(JdbcTemplate jdbcTemplate,
-                             AuthorizationService authorizationService) {
+                             AuthorizationService authorizationService,
+                             PreviewApplicationService previewApplicationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.authorizationService = authorizationService;
+        this.previewApplicationService = previewApplicationService;
     }
 
     /**
@@ -52,8 +66,27 @@ public class PreviewController {
     }
 
     /**
-     * 预览视图。
+     * 触发预览生成 Job。
      */
+    @PostMapping("/generate")
+    public Map<String, String> triggerPreviewGeneration(@PathVariable String assetId,
+                                                        @RequestBody GeneratePreviewRequest body) {
+        authorizationService.requirePermission("asset:manage");
+        String principalId = PrincipalContextHolder.current()
+                .map(PrincipalContext::principalId).orElse(null);
+        String jobId = previewApplicationService.enqueuePreview(
+                assetId,
+                body.versionId(),
+                body.content(),
+                body.contentType(),
+                principalId);
+        return Map.of("jobId", jobId);
+    }
+
+    /** 预览视图。 */
     public record PreviewView(String previewId, String contentType,
                               String content, String generatedAt) {}
+
+    /** 触发预览生成请求。 */
+    public record GeneratePreviewRequest(String versionId, String content, String contentType) {}
 }

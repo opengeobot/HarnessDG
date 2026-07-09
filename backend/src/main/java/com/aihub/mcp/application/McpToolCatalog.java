@@ -217,7 +217,7 @@ public class McpToolCatalog {
                 args -> {
                     String principalId = currentPrincipalId();
                     return uploadService.completeSession(
-                            str(args, "sessionId"), List.of(), principalId);
+                            str(args, "sessionId"), List.of(), List.of(), principalId);
                 });
 
         // asset_get_upload_status
