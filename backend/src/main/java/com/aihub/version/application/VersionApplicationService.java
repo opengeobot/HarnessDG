@@ -107,6 +107,11 @@ public class VersionApplicationService {
         versionRepository.update(v);
         auditVersion("VERSION_STATUS_CHANGED", principalId, versionId, v.assetId(),
                 Map.of("from", v.status().name(), "to", target.name()));
+        if (target == VersionStatus.DEPRECATED) {
+            publishOutbox("ASSET_VERSION", versionId, "VERSION_DEPRECATED",
+                    Map.of("versionId", versionId, "assetId", v.assetId(),
+                            "version", v.version()));
+        }
         return VersionView.from(v);
     }
 

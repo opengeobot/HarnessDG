@@ -132,8 +132,15 @@ public class UploadApplicationService {
         }
         String objectKey = "staging/" + session.assetId() + "/" + session.versionId()
                 + "/" + sessionId;
-        storagePort.completeMultipartUpload(
-                "asset-staging", objectKey, session.minioUploadId(), parts);
+        try {
+            storagePort.completeMultipartUpload(
+                    "asset-staging", objectKey, session.minioUploadId(), parts);
+        } catch (Exception ex) {
+            publishOutbox("UPLOAD_SESSION", sessionId, "UPLOAD_FAILED",
+                    Map.of("sessionId", sessionId, "assetId", session.assetId(),
+                            "versionId", session.versionId(), "reason", ex.getMessage()));
+            throw ex;
+        }
         session.complete();
         sessionRepository.update(session);
         auditUpload("UPLOAD_SESSION_COMPLETED", principalId, sessionId, session.assetId(),
