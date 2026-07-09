@@ -1,12 +1,12 @@
 # P5 质量与运维需求
 
-> 状态：`OPEN`
+> 状态：`READY`
 > 阻塞：P4 VERIFIED；RPO/RTO、生产拓扑和性能环境需确认。
 
 ## REQ-INBOX-001 Gitea Webhook Inbox
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P5
 minimumEvidenceLevel: E4
@@ -34,7 +34,7 @@ minimumEvidenceLevel: E4
 ## REQ-REC-001 全量对账与安全修复
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P5
 permission: job:manage or dedicated reconciliation permission
@@ -101,7 +101,7 @@ minimumEvidenceLevel: E4/E5
 ## REQ-BKR-001 备份、恢复与演练
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P5
 blockedBy: [RPO, RTO, production topology]
@@ -136,7 +136,7 @@ minimumEvidenceLevel: E5
 ## REQ-PERF-001 性能、容量与回归
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P5
 blockedBy: [Q-303, production sizing]
@@ -176,7 +176,7 @@ Gitea/MinIO latency、Job queue/lease、Trace sample。
 ## REQ-SEC-001 安全验证与内容供应链
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P5
 minimumEvidenceLevel: E5
@@ -213,7 +213,7 @@ minimumEvidenceLevel: E5
 ## REQ-OPS-001 运行 Dashboard、告警与 Runbook
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P5
 blockedBy: production/on-call model
@@ -258,7 +258,7 @@ minimumEvidenceLevel: E5
 ## REQ-REL-001 发布候选全量恢复与一致性审计
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P5
 minimumEvidenceLevel: E5
