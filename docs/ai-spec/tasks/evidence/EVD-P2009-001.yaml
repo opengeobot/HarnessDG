@@ -40,15 +40,13 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: E4
+  command: scripts/aih/aih dataset pull --version ver_test (manual smoke)
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
+  proven:
+    - dataset pull uses GET /api/v1/versions/{versionId}/download
   notProven: [AC-DST-CLI-001, AC-DST-CLI-002, AC-DST-CLI-003, AC-DST-CLI-004, AC-DST-CLI-005, AC-DST-CLI-006]
 
 artifacts:

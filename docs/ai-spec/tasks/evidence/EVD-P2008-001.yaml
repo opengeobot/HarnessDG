@@ -40,15 +40,15 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: E4
+  command: cd backend && ./mvnw -o test -Dtest='PreviewJobHandlerTest,UploadMaterializeJobHandlerTest'
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
+  proven:
+    - PREVIEW_GENERATE enqueued after dataset materialization with sample content
+    - POST /assets/{assetId}/previews/generate triggers job
+    - Parquet returns PREVIEW_UNSUPPORTED_FORMAT error
   notProven: [AC-DST-PRE-001, AC-DST-PRE-002, AC-DST-PRE-003, AC-DST-PRE-004]
 
 artifacts:

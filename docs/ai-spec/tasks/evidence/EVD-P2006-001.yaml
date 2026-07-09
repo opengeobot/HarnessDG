@@ -40,16 +40,14 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: 
+  command: cd backend && ./mvnw -o test -Dtest='DownloadApplicationServiceTest'
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - GIT_DVC ticket includes gitCloneUrl revision dvcCredentialsUrl expiresAt
+  notProven: end-to-end dvc pull
 
 artifacts:
   reports: []

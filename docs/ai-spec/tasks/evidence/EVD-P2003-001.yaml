@@ -40,16 +40,14 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: 
+  command: cd backend && ./mvnw -o test -Dtest='*Upload*,*Download*,*Manifest*,*Preview*'
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - completeSession enqueues UPLOAD_MATERIALIZE and leaves session PROCESSING
+  notProven: Compose E4 upload flow
 
 artifacts:
   reports: []
