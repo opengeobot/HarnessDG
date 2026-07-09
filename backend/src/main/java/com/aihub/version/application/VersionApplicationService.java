@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,15 +37,18 @@ public class VersionApplicationService {
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final IdGenerator idGenerator;
+    private final JdbcTemplate jdbcTemplate;
 
     public VersionApplicationService(VersionRepository versionRepository,
                                      AuthorizationService authorizationService,
                                      AuditService auditService,
-                                     IdGenerator idGenerator) {
+                                     IdGenerator idGenerator,
+                                     JdbcTemplate jdbcTemplate) {
         this.versionRepository = versionRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /** 创建草稿版本。 */
@@ -130,6 +134,21 @@ public class VersionApplicationService {
     }
 
     // ---- 私有辅助 ----
+
+    /** 查询校验报告（最新版本）。 */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getValidationReport(String versionId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        loadVersion(versionId); // 验证版本存在
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT report_id, policy_version, status, findings, created_at " +
+                        "FROM validation_report WHERE version_id = ? ORDER BY created_at DESC LIMIT 1",
+                versionId);
+        if (rows.isEmpty()) {
+            return Map.of("status", "NOT_FOUND");
+        }
+        return rows.get(0);
+    }
 
     private Version loadVersion(String versionId) {
         return versionRepository.findByVersionId(versionId)

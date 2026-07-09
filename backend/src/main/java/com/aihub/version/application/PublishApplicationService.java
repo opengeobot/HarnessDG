@@ -15,6 +15,7 @@ import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -242,5 +243,29 @@ public class PublishApplicationService {
                 null, null, "VERSION", versionId, null, null,
                 AuditResult.SUCCEEDED, null, Map.of()));
         LOG.info("version archived versionId={}", versionId);
+    }
+
+    /** 查询发布请求列表（按 assetId 下的版本关联）。 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listPublishRequests(String assetId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        return jdbcTemplate.queryForList("""
+                SELECT pr.request_id, pr.version_id, pr.frozen_digest, pr.policy_version,
+                       pr.status, pr.submitted_by, pr.decided_at, pr.created_at
+                FROM publish_request pr
+                JOIN asset_version av ON pr.version_id = av.version_id
+                WHERE av.asset_id = ?
+                ORDER BY pr.created_at DESC
+                """, assetId);
+    }
+
+    /** 查询审批决策历史。 */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> listDecisions(String requestId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        return jdbcTemplate.queryForList("""
+                SELECT review_id, reviewer_id, decision, comments, created_at
+                FROM review_decision WHERE request_id = ? ORDER BY created_at DESC
+                """, requestId);
     }
 }

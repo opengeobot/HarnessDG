@@ -18,6 +18,7 @@ import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
 import java.util.List;
@@ -41,13 +42,14 @@ class VersionApplicationServiceTest {
     @Mock private AuthorizationService authorizationService;
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
+    @Mock private JdbcTemplate jdbcTemplate;
 
     private VersionApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new VersionApplicationService(
-                versionRepository, authorizationService, auditService, idGenerator);
+                versionRepository, authorizationService, auditService, idGenerator, jdbcTemplate);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ver_generated");
     }
 

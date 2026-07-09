@@ -1,18 +1,11 @@
 package com.aihub.integration.gitea.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Map;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
+import com.aihub.integration.gitea.application.WebhookInboxApplicationService;
+import com.aihub.integration.gitea.application.WebhookInboxApplicationService.ReceiveResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -20,10 +13,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Gitea Webhook Inbox 控制器。
+ * Gitea Webhook Inbox 控制器（适配器）。
  *
- * <p>接收 Gitea Webhook 推送，验证 HMAC-SHA256 签名后幂等入库，快速返回 202。
- * 正式 Tag 删除/改指向触发 CRITICAL 事件告警。
+ * <p>接收 Gitea Webhook 推送，委托 {@link WebhookInboxApplicationService} 处理，
+ * 根据结果返回对应 HTTP 状态码。控制器不包含业务逻辑。
  */
 @RestController
 @RequestMapping("/api/v1/webhooks/gitea")
@@ -31,24 +24,16 @@ public class WebhookInboxController {
 
     private static final Logger LOG = LoggerFactory.getLogger(WebhookInboxController.class);
 
-    private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
-    private final String webhookSecret;
+    private final WebhookInboxApplicationService webhookInboxService;
 
-    public WebhookInboxController(
-            JdbcTemplate jdbcTemplate,
-            ObjectMapper objectMapper,
-            @Value("${aihub.gitea.webhook-secret:}") String webhookSecret) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = objectMapper;
-        this.webhookSecret = webhookSecret;
+    public WebhookInboxController(WebhookInboxApplicationService webhookInboxService) {
+        this.webhookInboxService = webhookInboxService;
     }
 
     /**
      * 接收 Gitea Webhook。
      *
-     * <p>签名验证 → 幂等入库 → 返回 202 Accepted。
-     * 重复 delivery 直接返回 202（幂等）。
+     * <p>委托服务处理，根据结果映射 HTTP 状态码。
      */
     @PostMapping
     public ResponseEntity<Void> receiveWebhook(
@@ -61,86 +46,13 @@ public class WebhookInboxController {
             return ResponseEntity.badRequest().build();
         }
 
-        // 签名验证（fail-closed：未配置密钥时拒绝所有请求）
-        if (!verifySignature(rawBody, signature)) {
-            LOG.warn("webhook signature rejected deliveryId={} secretConfigured={}",
-                    deliveryId, webhookSecret != null && !webhookSecret.isEmpty());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        ReceiveResult result = webhookInboxService.receive(deliveryId, eventType, signature, rawBody);
 
-        // 解析 payload
-        String payloadJson;
-        try {
-            Object payload = objectMapper.readValue(rawBody, Object.class);
-            payloadJson = objectMapper.writeValueAsString(payload);
-        } catch (Exception e) {
-            LOG.error("webhook payload parse failed deliveryId={}", deliveryId, e);
-            return ResponseEntity.badRequest().build();
-        }
-
-        // 幂等入库
-        try {
-            int inserted = jdbcTemplate.update(
-                    "INSERT INTO webhook_inbox (delivery_id, event_type, signature_valid, payload) " +
-                            "VALUES (?, ?, ?, ?::jsonb) ON CONFLICT (delivery_id) DO NOTHING",
-                    deliveryId, eventType, true, payloadJson);
-            if (inserted == 0) {
-                LOG.debug("webhook duplicate deliveryId={}", deliveryId);
-            }
-        } catch (Exception e) {
-            LOG.error("webhook inbox insert failed deliveryId={}", deliveryId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-
-        // 检测高风险事件
-        if (isCriticalEvent(eventType, payloadJson)) {
-            LOG.warn("CRITICAL webhook event detected deliveryId={} eventType={}", deliveryId, eventType);
-        }
-
-        return ResponseEntity.accepted().build();
-    }
-
-    private boolean verifySignature(byte[] body, String signature) {
-        if (webhookSecret == null || webhookSecret.isEmpty()) {
-            return false; // fail-closed: 未配置密钥时拒绝所有请求
-        }
-        if (signature == null || !signature.startsWith("sha256=")) {
-            return false;
-        }
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            byte[] hash = mac.doFinal(body);
-            String expected = "sha256=" + hexEncode(hash);
-            return constantTimeEquals(expected, signature);
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-            LOG.error("HMAC-SHA256 computation failed", e);
-            return false;
-        }
-    }
-
-    private boolean isCriticalEvent(String eventType, String payload) {
-        // Tag 删除或 push 中包含 ref 删除
-        if ("delete".equals(eventType)) {
-            return payload.contains("\"ref_type\":\"tag\"");
-        }
-        return false;
-    }
-
-    private static String hexEncode(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
-    private static boolean constantTimeEquals(String a, String b) {
-        if (a.length() != b.length()) return false;
-        int result = 0;
-        for (int i = 0; i < a.length(); i++) {
-            result |= a.charAt(i) ^ b.charAt(i);
-        }
-        return result == 0;
+        return switch (result) {
+            case ACCEPTED -> ResponseEntity.accepted().build();
+            case UNAUTHORIZED -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            case BAD_REQUEST -> ResponseEntity.badRequest().build();
+            case INTERNAL_ERROR -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        };
     }
 }

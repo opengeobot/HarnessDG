@@ -1,6 +1,5 @@
 package com.aihub.version.api;
 
-import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.job.application.JobApplicationService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.api.CursorPage;
@@ -14,7 +13,6 @@ import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,9 +22,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 版本 REST 控制器。
+ * 版本 REST 控制器（适配器）。
  *
- * <p>提供版本列表、详情、草稿创建与工件查询接口。
+ * <p>提供版本列表、详情、草稿创建、工件查询、状态推进、校验报告与发布审批查询。
+ * 所有业务逻辑和数据访问委托给 Application Service。
  */
 @RestController
 @RequestMapping("/api/v1/assets/{assetId}/versions")
@@ -35,21 +34,15 @@ public class VersionController {
     private final VersionApplicationService versionService;
     private final PublishApplicationService publishApplicationService;
     private final JobApplicationService jobApplicationService;
-    private final AuthorizationService authorizationService;
-    private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
     public VersionController(VersionApplicationService versionService,
                              PublishApplicationService publishApplicationService,
                              JobApplicationService jobApplicationService,
-                             AuthorizationService authorizationService,
-                             JdbcTemplate jdbcTemplate,
                              ObjectMapper objectMapper) {
         this.versionService = versionService;
         this.publishApplicationService = publishApplicationService;
         this.jobApplicationService = jobApplicationService;
-        this.authorizationService = authorizationService;
-        this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
     }
 
@@ -111,48 +104,27 @@ public class VersionController {
         return respond(updated);
     }
 
-    /** 查询校验报告。 */
+    /** 查询校验报告（委托 VersionApplicationService）。 */
     @GetMapping("/{versionId}/validation-report")
     public ApiResponse<Map<String, Object>> getValidationReport(
             @PathVariable String assetId,
             @PathVariable String versionId) {
-        authorizationService.requirePermission("asset:read");
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT report_id, policy_version, status, findings, created_at FROM validation_report WHERE version_id = ? ORDER BY created_at DESC LIMIT 1",
-                versionId);
-        if (rows.isEmpty()) {
-            return respond(Map.of("status", "NOT_FOUND"));
-        }
-        return respond(rows.get(0));
+        return respond(versionService.getValidationReport(versionId));
     }
 
-    /** 查询发布请求列表（按 assetId 下的版本关联）。 */
+    /** 查询发布请求列表（委托 PublishApplicationService）。 */
     @GetMapping("/publish-requests")
     public ApiResponse<List<Map<String, Object>>> listPublishRequests(
             @PathVariable String assetId) {
-        authorizationService.requirePermission("asset:read");
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-                SELECT pr.request_id, pr.version_id, pr.frozen_digest, pr.policy_version,
-                       pr.status, pr.submitted_by, pr.decided_at, pr.created_at
-                FROM publish_request pr
-                JOIN asset_version av ON pr.version_id = av.version_id
-                WHERE av.asset_id = ?
-                ORDER BY pr.created_at DESC
-                """, assetId);
-        return respond(rows);
+        return respond(publishApplicationService.listPublishRequests(assetId));
     }
 
-    /** 查询审批决策历史。 */
+    /** 查询审批决策历史（委托 PublishApplicationService）。 */
     @GetMapping("/publish-requests/{requestId}/decisions")
     public ApiResponse<List<Map<String, Object>>> listDecisions(
             @PathVariable String assetId,
             @PathVariable String requestId) {
-        authorizationService.requirePermission("asset:read");
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
-                SELECT review_id, reviewer_id, decision, comments, created_at
-                FROM review_decision WHERE request_id = ? ORDER BY created_at DESC
-                """, requestId);
-        return respond(rows);
+        return respond(publishApplicationService.listDecisions(requestId));
     }
 
     public record CreateVersionRequest(String version) {}
