@@ -77,6 +77,8 @@ aihub:
     base-url: ${AIHUB_GITEA_BASE_URL:}
     token: ${AIHUB_GITEA_TOKEN:}
     default-branch: ${AIHUB_GITEA_DEFAULT_BRANCH:main}
+    # Webhook HMAC 签名密钥（生产环境必填，fail-closed 策略下为空将拒绝所有 Gitea 事件）
+    webhook-secret: ${AIHUB_GITEA_WEBHOOK_SECRET:}
   # 认证签名密钥（部署期注入 Secret）。测试 Profile 无须配置，由实现按 dev-only 临时密钥兜底。
   security:
     jwt:
