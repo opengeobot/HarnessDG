@@ -337,6 +337,20 @@ public final class Asset {
         return name;
     }
 
+    /**
+     * 人类可读稳定坐标：{@code aih://{namespace}/{type}/{name}}，type 为小写 model/dataset。
+     */
+    public String coordinate() {
+        return formatCoordinate(namespace, type, name);
+    }
+
+    /**
+     * 由命名空间、类型与名称构造稳定坐标 URI。
+     */
+    public static String formatCoordinate(String namespace, AssetType type, String name) {
+        return "aih://" + namespace + "/" + type.name().toLowerCase() + "/" + name;
+    }
+
     public String displayName() {
         return displayName;
     }

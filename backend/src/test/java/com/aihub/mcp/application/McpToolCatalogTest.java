@@ -87,7 +87,7 @@ class McpToolCatalogTest {
 
     @Test
     void callToolAssetGetShouldDelegateToService() {
-        AssetView view = new AssetView("ast_1", AssetType.MODEL, "nlp", "org_1", null,
+        AssetView view = new AssetView("ast_1", "aih://nlp/model/test-model", AssetType.MODEL, "nlp", "org_1", null,
                 "test-model", "Test Model", "desc", Visibility.INTERNAL, AssetStatus.ACTIVE,
                 List.of(), null, null, List.of(), List.of(), "Apache-2.0", null, null, null,
                 ProvisioningStatus.COMPLETED, null, 0L, null, null, null,

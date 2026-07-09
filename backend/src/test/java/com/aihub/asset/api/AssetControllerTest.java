@@ -106,10 +106,11 @@ class AssetControllerTest {
     }
 
     private AssetSummaryView summaryView() {
-        return new AssetSummaryView("ast_demo", AssetType.MODEL, "nlp", null, null, "qwen-domain-7b",
+        return new AssetSummaryView("ast_demo", "aih://nlp/model/qwen-domain-7b",
+                AssetType.MODEL, "nlp", null, null, "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, AssetStatus.ACTIVE,
                 List.of("team-nlp"), List.of("text-generation"), List.of("tag_001"), "Apache-2.0",
-                "pytorch", "text-generation", null, null, Instant.now());
+                "pytorch", "text-generation", null, null, Instant.now(), List.of());
     }
 
     @Test

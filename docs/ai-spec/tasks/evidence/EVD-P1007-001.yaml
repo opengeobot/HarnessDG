@@ -52,6 +52,7 @@ coverage:
   proven:
     - scenarioId: AC-P1-AST-011
       assertion: Deprecate/archive/restore guard active published versions and search visibility
+      note: archiveAsset rejects when VersionRepository reports PUBLISHED versions (ASSET_HAS_ACTIVE_VERSIONS)
   notProven:
     - AC-P1-AST-011
 

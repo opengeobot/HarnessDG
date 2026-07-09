@@ -52,6 +52,7 @@ coverage:
   proven:
     - scenarioId: AC-P1-AST-001
       assertion: OpenAPI asset schemas and entity invariants define coordinate, Owner, alias and visibility model
+      note: Added computed coordinate field to AssetView/AssetSummaryView, Asset.coordinate(), OpenAPI schemas, unit tests
   notProven:
     - AC-P1-AST-001
 

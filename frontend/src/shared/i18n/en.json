@@ -231,7 +231,8 @@
       "quickStart": "Quick Start",
       "cloneUrl": "Git Clone",
       "pipInstall": "Python Install",
-      "dvcPull": "DVC Pull"
+      "dvcPull": "DVC Pull",
+      "aihCli": "AIH CLI"
     },
     "sensitivity": {
       "PUBLIC": "Public",

@@ -82,6 +82,15 @@ public class MyBatisVersionRepository implements VersionRepository {
     }
 
     @Override
+    public long countByAssetIdAndStatus(String assetId, VersionStatus status) {
+        Long count = versionMapper.selectCount(
+                Wrappers.<VersionEntity>lambdaQuery()
+                        .eq(VersionEntity::getAssetId, assetId)
+                        .eq(VersionEntity::getStatus, status.name()));
+        return count == null ? 0L : count;
+    }
+
+    @Override
     public void insertArtifact(Artifact artifact) {
         ArtifactEntity entity = new ArtifactEntity();
         entity.setArtifactId(artifact.artifactId());

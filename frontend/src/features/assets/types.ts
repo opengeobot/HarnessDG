@@ -68,6 +68,7 @@ export interface AssetFacetView {
 /** 资产检索摘要 */
 export interface AssetSummary {
   assetId: string;
+  coordinate: string;
   type: AssetType;
   namespace: string;
   organizationId?: string | null;
@@ -86,6 +87,7 @@ export interface AssetSummary {
   format?: string | null;
   modality?: string | null;
   updatedAt: string;
+  matchedFields?: string[];
 }
 
 /** 资产详情 */

@@ -39,6 +39,8 @@ import com.aihub.taxonomy.tag.application.TagDtos.TagScopeContext;
 import com.aihub.taxonomy.tag.application.TagDtos.TagView;
 import com.aihub.taxonomy.tag.application.TagValidationService;
 import com.aihub.taxonomy.tag.domain.TagScopeType;
+import com.aihub.version.domain.VersionRepository;
+import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -70,6 +72,7 @@ class AssetApplicationServiceTest {
     @Mock private JobRepository jobRepository;
     @Mock private ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
     @Mock private com.aihub.notification.application.NotificationService notificationService;
+    @Mock private VersionRepository versionRepository;
 
     private AssetApplicationService service;
 
@@ -78,7 +81,7 @@ class AssetApplicationServiceTest {
         service = new AssetApplicationService(assetRepository,
                 new AssetAccessPolicy(authorizationService), idGenerator, authorizationService,
                 dictionaryValidationPort, tagValidationService, auditService, jobRepository,
-                cardProjectionPortProvider, notificationService);
+                cardProjectionPortProvider, notificationService, versionRepository);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
         doNothing().when(assetRepository).insert(any(Asset.class));
@@ -86,6 +89,7 @@ class AssetApplicationServiceTest {
         when(authorizationService.isPermitted(any())).thenReturn(true);
         when(authorizationService.computeAccessScope(any(), any()))
                 .thenReturn(new AccessScope("usr_01", false, Set.of(), Set.of(), Set.of()));
+        when(versionRepository.countByAssetIdAndStatus(any(), eq(VersionStatus.PUBLISHED))).thenReturn(0L);
     }
 
     private CreateAssetCommand modelCommand() {
@@ -158,7 +162,8 @@ class AssetApplicationServiceTest {
                 "ast_stored", AssetType.MODEL, "nlp", null, null, "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, AssetStatus.ACTIVE,
                 List.of("team-nlp"), List.of("text-generation"), List.of(), "Apache-2.0",
-                "pytorch", "text-generation", null, null, Instant.now());
+                "pytorch", "text-generation", null, null, Instant.now(),
+                List.of("name", "displayName"));
         when(assetRepository.search(any())).thenReturn(new CursorPage<>(List.of(summary), null, false));
 
         AssetSearchQuery query = new AssetSearchQuery("qwen", AssetType.MODEL, null, null, null, null,
@@ -167,7 +172,28 @@ class AssetApplicationServiceTest {
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().get(0).name()).isEqualTo("qwen-domain-7b");
+        assertThat(page.items().get(0).matchedFields()).containsExactly("name", "displayName");
         verify(authorizationService).requirePermission("asset:read");
+    }
+
+    @Test
+    void createAssetReturnsCoordinateInView() {
+        AssetView view = service.createAsset(modelCommand());
+
+        assertThat(view.coordinate()).isEqualTo("aih://nlp/model/qwen-domain-7b");
+    }
+
+    @Test
+    void archiveAssetRejectsWhenPublishedVersionsExist() {
+        Asset asset = storedModel();
+        asset.deprecate("usr_01");
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+        when(versionRepository.countByAssetIdAndStatus("ast_stored", VersionStatus.PUBLISHED))
+                .thenReturn(2L);
+
+        assertThatThrownBy(() -> service.archiveAsset("ast_stored", "usr_01"))
+                .isInstanceOf(ConflictException.class);
+        verify(assetRepository, never()).update(any(Asset.class));
     }
 
     @Test

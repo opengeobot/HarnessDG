@@ -81,7 +81,8 @@ secrets:
 
 limitations:
   skippedTests: []
-  assumptions: []
+  assumptions:
+    - AssetRepositoryReconciler Gitea existence check and reprovision enqueue implemented (REQ-AST-008)
   environmentDifferences: []
 
 review:

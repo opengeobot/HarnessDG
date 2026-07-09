@@ -19,6 +19,9 @@ public interface VersionRepository {
 
     Optional<Version> findByCoordinate(String assetId, String version);
 
+    /** 统计资产下处于指定状态的版本数量（用于归档前活跃版本守卫）。 */
+    long countByAssetIdAndStatus(String assetId, VersionStatus status);
+
     // ---- 工件操作 ----
 
     void insertArtifact(Artifact artifact);

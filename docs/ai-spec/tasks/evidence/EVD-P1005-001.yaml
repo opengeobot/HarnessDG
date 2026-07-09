@@ -52,6 +52,7 @@ coverage:
   proven:
     - scenarioId: AC-P1-AST-008
       assertion: Detail returns Card projection, disabled governance markers and DEC-014 quick-use snippets without secrets
+      note: Quick Use panel shows coordinate, git clone, dvc pull, aih CLI snippets with copyable blocks
   notProven:
     - AC-P1-AST-008
 

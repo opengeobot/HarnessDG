@@ -22,6 +22,7 @@ import java.util.List;
  * <p>对外只暴露业务字段，绝不返回持久化实体。模型/数据集画像按类型择一返回，另一为 {@code null}。
  *
  * @param assetId        业务资产 ID
+ * @param coordinate     稳定坐标 {@code aih://{namespace}/{type}/{name}}
  * @param type           资产类型
  * @param namespace      命名空间
  * @param organizationId 组织 ID（治理作用域）
@@ -50,6 +51,7 @@ import java.util.List;
  * @param updatedAt           更新时间
  */
 public record AssetView(String assetId,
+                        String coordinate,
                         AssetType type,
                         String namespace,
                         String organizationId,
@@ -111,6 +113,7 @@ public record AssetView(String assetId,
     public static AssetView from(Asset asset) {
         return new AssetView(
                 asset.assetId(),
+                asset.coordinate(),
                 asset.type(),
                 asset.namespace(),
                 asset.organizationId(),

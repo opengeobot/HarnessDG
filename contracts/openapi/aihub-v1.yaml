@@ -3634,6 +3634,10 @@ components:
       required: [assetId, type, namespace, name, visibility, status]
       properties:
         assetId: { type: string, example: ast_01J... }
+        coordinate:
+          type: string
+          description: 稳定坐标 aih://{namespace}/{type}/{name}，type 为小写 model/dataset
+          example: aih://nlp/model/qwen-domain-7b
         type: { $ref: '#/components/schemas/AssetType' }
         namespace: { type: string }
         organizationId: { type: [string, 'null'], description: 所属组织 ID }
@@ -3701,6 +3705,9 @@ components:
       required: [assetId, type, namespace, name, visibility, status]
       properties:
         assetId: { type: string }
+        coordinate:
+          type: string
+          description: 稳定坐标 aih://{namespace}/{type}/{name}
         type: { $ref: '#/components/schemas/AssetType' }
         namespace: { type: string }
         organizationId: { type: [string, 'null'], description: 所属组织 ID }
@@ -3727,6 +3734,12 @@ components:
         format: { type: string }
         modality: { type: string }
         updatedAt: { type: string, format: date-time }
+        matchedFields:
+          type: array
+          description: 关键词检索命中的字段名（无关键词时为空）
+          items:
+            type: string
+            enum: [name, displayName, description, taskCodes]
 
     CursorPageAssetSummary:
       type: object

@@ -55,6 +55,7 @@ coverage:
   proven:
     - scenarioId: AC-DST-TAX-001
       assertion: DATASET created with governed fields discoverable by combined search with matchedFields
+      note: AssetSummaryView.matchedFields populated from keyword hits on name/displayName/description/taskCodes
     - scenarioId: AC-DST-TAX-002
       assertion: Two principals see disjoint facet counts and items for same filter
     - scenarioId: AC-DST-TAX-003

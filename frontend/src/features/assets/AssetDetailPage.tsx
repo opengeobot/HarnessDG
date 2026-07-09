@@ -158,7 +158,9 @@ export function AssetDetailPage() {
       <Card title={t('assets.detail.basicInfo')}>
         <Descriptions column={2} bordered size="small">
           <Descriptions.Item label={t('assets.detail.coordinate')}>
-            <Typography.Text code>{asset.namespace}/{asset.type}/{asset.name}</Typography.Text>
+            <Typography.Text code>
+              {asset.coordinate ?? `aih://${asset.namespace}/${asset.type.toLowerCase()}/${asset.name}`}
+            </Typography.Text>
           </Descriptions.Item>
           <Descriptions.Item label={t('common.type')}>
             <Tag color={asset.type === 'MODEL' ? 'geekblue' : 'purple'}>
@@ -347,35 +349,41 @@ export function AssetDetailPage() {
 
       {assetId && <DiscussionPanel assetId={assetId} />}
 
-      {/* DEC-014 Quick Start 快速使用面板 */}
-      {asset.repository && (
-        <Card title={t('assets.deprecation.quickStart')} size="small">
-          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+      {/* DEC-014 Quick Use 快速使用面板 */}
+      <Card title={t('assets.deprecation.quickStart')} size="small">
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <div>
+            <Typography.Text strong>{t('assets.detail.coordinate')}</Typography.Text>
+            <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
+              {asset.coordinate ?? `aih://${asset.namespace}/${asset.type.toLowerCase()}/${asset.name}`}
+            </Typography.Paragraph>
+          </div>
+          {asset.repository?.cloneUrl && (
             <div>
               <Typography.Text strong>{t('assets.deprecation.cloneUrl')}</Typography.Text>
               <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
-                git clone {asset.repository.cloneUrl || `${asset.repository.htmlUrl}.git`}
+                git clone {asset.repository.cloneUrl}
               </Typography.Paragraph>
             </div>
-            {asset.type === 'MODEL' && asset.model?.framework && (
-              <div>
-                <Typography.Text strong>{t('assets.deprecation.pipInstall')}</Typography.Text>
-                <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
-                  pip install {asset.namespace}/{asset.name}
-                </Typography.Paragraph>
-              </div>
-            )}
-            {asset.type === 'DATASET' && (
-              <div>
-                <Typography.Text strong>{t('assets.deprecation.dvcPull')}</Typography.Text>
-                <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
-                  dvc pull {asset.namespace}/{asset.name}
-                </Typography.Paragraph>
-              </div>
-            )}
-          </Space>
-        </Card>
-      )}
+          )}
+          {asset.type === 'DATASET' && (
+            <div>
+              <Typography.Text strong>{t('assets.deprecation.dvcPull')}</Typography.Text>
+              <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
+                dvc pull {asset.coordinate ?? `aih://${asset.namespace}/dataset/${asset.name}`}
+              </Typography.Paragraph>
+            </div>
+          )}
+          <div>
+            <Typography.Text strong>{t('assets.deprecation.aihCli')}</Typography.Text>
+            <Typography.Paragraph code copyable style={{ marginTop: 4 }}>
+              {asset.type === 'DATASET'
+                ? `aih dataset pull ${asset.coordinate ?? `aih://${asset.namespace}/dataset/${asset.name}`}`
+                : `aih model pull ${asset.coordinate ?? `aih://${asset.namespace}/model/${asset.name}`}`}
+            </Typography.Paragraph>
+          </div>
+        </Space>
+      </Card>
     </Flex>
   );
 }

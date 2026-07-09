@@ -50,6 +50,7 @@ public class AssetSearchDao {
                    a.display_name, a.description, a.visibility, a.status,
                    a.owners::text AS owners_json, a.tags::text AS tags_json, a.license,
                    am.framework, am.task, ad.format, ad.modality,
+                   ad.task_codes::text AS task_codes_json,
                    a.provisioning_status, a.created_at, a.updated_at
             FROM asset a
             LEFT JOIN asset_model am ON am.asset_id = a.asset_id
@@ -92,7 +93,7 @@ public class AssetSearchDao {
         params.addValue("limit", criteria.limit() + 1);
 
         List<SearchRow> rows = jdbcTemplate.query(sql.toString(), params, this::mapRow);
-        return toPage(rows, criteria.limit());
+        return toPage(rows, criteria.limit(), criteria.keyword());
     }
 
     /**
@@ -207,6 +208,8 @@ public class AssetSearchDao {
         // tags: 通过 asset_tag 关联表 EXISTS 子查询替代 jsonb_array_elements_text
         sql.append(" AND (a.name ILIKE :kw OR a.display_name ILIKE :kw"
                 + " OR to_tsvector('simple', COALESCE(a.description, '')) @@ plainto_tsquery('simple', :kwRaw)"
+                + " OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(ad.task_codes, '[]'::jsonb)) tc"
+                + " WHERE tc ILIKE :kw)"
                 + " OR EXISTS (SELECT 1 FROM asset_tag at2"
                 + " JOIN system_tag st ON st.tag_id = at2.tag_id WHERE at2.asset_id = a.asset_id"
                 + " AND (st.name ILIKE :kw OR st.tag_code ILIKE :kw)))");
@@ -285,12 +288,12 @@ public class AssetSearchDao {
         params.addValue("cursorId", decoded.id());
     }
 
-    private CursorPage<AssetSummary> toPage(List<SearchRow> rows, int limit) {
+    private CursorPage<AssetSummary> toPage(List<SearchRow> rows, int limit, String keyword) {
         boolean hasMore = rows.size() > limit;
         List<SearchRow> pageRows = hasMore ? rows.subList(0, limit) : rows;
         Map<String, List<String>> tagIdsByAsset = batchLoadTagIds(pageRows);
         List<AssetSummary> summaries = pageRows.stream()
-                .map(row -> row.toSummary(tagIdsByAsset.getOrDefault(row.assetId, List.of())))
+                .map(row -> row.toSummary(tagIdsByAsset.getOrDefault(row.assetId, List.of()), keyword))
                 .toList();
         if (!hasMore || pageRows.isEmpty()) {
             return CursorPage.last(summaries);
@@ -333,6 +336,7 @@ public class AssetSearchDao {
                 AssetStatus.valueOf(rs.getString("status")),
                 parseJsonList(rs.getString("owners_json")),
                 parseJsonList(rs.getString("tags_json")),
+                parseJsonList(rs.getString("task_codes_json")),
                 rs.getString("license"), framework, task, format, modality, updatedAt, createdAt, id);
     }
 
@@ -378,14 +382,53 @@ public class AssetSearchDao {
     private record SearchRow(String assetId, AssetType type, String organizationId, String projectId,
                             String namespace, String name, String displayName, String description,
                             Visibility visibility, AssetStatus status,
-                            List<String> owners, List<String> tags, String license,
+                            List<String> owners, List<String> tags, List<String> taskCodes, String license,
                             String framework, String task, String format, String modality,
                             Instant updatedAt, Instant createdAt, long id) {
 
-        AssetSummary toSummary(List<String> tagIds) {
+        AssetSummary toSummary(List<String> tagIds, String keyword) {
             return new AssetSummary(assetId, type, namespace, organizationId, projectId, name,
                     displayName, description, visibility, status, owners, tags, tagIds, license,
-                    framework, task, format, modality, updatedAt);
+                    framework, task, format, modality, updatedAt,
+                    computeMatchedFields(keyword));
+        }
+
+        private List<String> computeMatchedFields(String keyword) {
+            if (!StringUtils.hasText(keyword)) {
+                return List.of();
+            }
+            String kw = keyword.trim().toLowerCase();
+            List<String> matched = new ArrayList<>();
+            if (containsIgnoreCase(name, kw)) {
+                matched.add("name");
+            }
+            if (containsIgnoreCase(displayName, kw)) {
+                matched.add("displayName");
+            }
+            if (descriptionMatches(description, keyword.trim())) {
+                matched.add("description");
+            }
+            if (taskCodes != null && taskCodes.stream().anyMatch(code -> containsIgnoreCase(code, kw))) {
+                matched.add("taskCodes");
+            }
+            return List.copyOf(matched);
+        }
+
+        private static boolean containsIgnoreCase(String value, String keywordLower) {
+            return value != null && value.toLowerCase().contains(keywordLower);
+        }
+
+        private static boolean descriptionMatches(String description, String keyword) {
+            if (description == null || description.isBlank()) {
+                return false;
+            }
+            String lower = description.toLowerCase();
+            for (String token : keyword.toLowerCase().split("\\s+")) {
+                if (!token.isBlank() && lower.contains(token)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

@@ -36,6 +36,8 @@ import com.aihub.taxonomy.dictionary.application.DictionaryValidationPort;
 import com.aihub.taxonomy.tag.application.TagDtos.TagScopeContext;
 import com.aihub.taxonomy.tag.application.TagValidationService;
 import com.aihub.taxonomy.tag.domain.TagScopeType;
+import com.aihub.version.domain.VersionRepository;
+import com.aihub.version.domain.VersionStatus;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -84,6 +86,7 @@ public class AssetApplicationService {
     private final JobRepository jobRepository;
     private final ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
     private final NotificationService notificationService;
+    private final VersionRepository versionRepository;
 
     public AssetApplicationService(AssetRepository assetRepository,
                                    AssetAccessPolicy accessPolicy,
@@ -94,7 +97,8 @@ public class AssetApplicationService {
                                    AuditService auditService,
                                    JobRepository jobRepository,
                                    ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider,
-                                   NotificationService notificationService) {
+                                   NotificationService notificationService,
+                                   VersionRepository versionRepository) {
         this.assetRepository = assetRepository;
         this.accessPolicy = accessPolicy;
         this.idGenerator = idGenerator;
@@ -105,6 +109,7 @@ public class AssetApplicationService {
         this.jobRepository = jobRepository;
         this.cardProjectionPortProvider = cardProjectionPortProvider;
         this.notificationService = notificationService;
+        this.versionRepository = versionRepository;
     }
 
     /**
@@ -240,12 +245,18 @@ public class AssetApplicationService {
     /**
      * 归档资产：默认不返回，仅管理员可恢复。ACTIVE 或 DEPRECATED 可归档。
      *
-     * <p>归档前预留检查活跃发布版本（P2 Version 模块就绪后接入）。
+     * <p>存在 {@link VersionStatus#PUBLISHED} 版本时拒绝归档。
      */
     @Transactional
     public AssetView archiveAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         Asset asset = loadAccessible(assetId, principalId);
+        long publishedCount = versionRepository.countByAssetIdAndStatus(assetId, VersionStatus.PUBLISHED);
+        if (publishedCount > 0) {
+            throw new ConflictException(ErrorCode.ASSET_HAS_ACTIVE_VERSIONS,
+                    "asset has active published versions and cannot be archived: " + assetId,
+                    Map.of("assetId", assetId, "publishedVersionCount", publishedCount));
+        }
         try {
             asset.archive(principalId);
         } catch (IllegalStateException ex) {

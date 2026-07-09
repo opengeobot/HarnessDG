@@ -231,7 +231,8 @@
       "quickStart": "快速使用",
       "cloneUrl": "Git Clone",
       "pipInstall": "Python 安装",
-      "dvcPull": "DVC 拉取"
+      "dvcPull": "DVC 拉取",
+      "aihCli": "AIH CLI"
     },
     "sensitivity": {
       "PUBLIC": "公开",
