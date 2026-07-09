@@ -135,13 +135,13 @@ documents:
     status: READY
   - path: 01-requirements/p3-release-governance.md
     kind: requirements
-    status: OPEN
+    status: READY
   - path: 01-requirements/p4-agent-integration.md
     kind: requirements
-    status: OPEN
+    status: READY
   - path: 01-requirements/p5-quality-operations.md
     kind: requirements
-    status: OPEN
+    status: READY
   - path: 02-domain/entity-invariants.md
     kind: domain
     status: READY
@@ -182,6 +182,15 @@ documents:
     kind: acceptance
     status: READY
   - path: 05-acceptance/p2-exit-catalog.md
+    kind: acceptance
+    status: READY
+  - path: 05-acceptance/p3-exit-catalog.md
+    kind: acceptance
+    status: READY
+  - path: 05-acceptance/p4-exit-catalog.md
+    kind: acceptance
+    status: READY
+  - path: 05-acceptance/p5-exit-catalog.md
     kind: acceptance
     status: READY
   - path: 05-acceptance/ai-execution-gate-catalog.md
@@ -371,6 +380,84 @@ documents:
     kind: task-card
     status: READY
   - path: tasks/TASK-P2-010.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-001.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-002.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-003.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-004.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-005.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-006.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-007.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-008.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-001.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-002.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-003.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-004.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-005.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-006.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-007.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-008.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-009.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P4-010.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-001.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-002.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-003.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-004.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-005.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-006.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-007.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P5-008.md
     kind: task-card
     status: READY
 
