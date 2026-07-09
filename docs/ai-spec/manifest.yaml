@@ -132,7 +132,7 @@ documents:
     status: READY
   - path: 01-requirements/p2-version-transfer.md
     kind: requirements
-    status: OPEN
+    status: READY
   - path: 01-requirements/p3-release-governance.md
     kind: requirements
     status: OPEN
@@ -179,6 +179,9 @@ documents:
     kind: acceptance
     status: READY
   - path: 05-acceptance/p1-exit-catalog.md
+    kind: acceptance
+    status: READY
+  - path: 05-acceptance/p2-exit-catalog.md
     kind: acceptance
     status: READY
   - path: 05-acceptance/ai-execution-gate-catalog.md
@@ -338,6 +341,36 @@ documents:
     kind: task-card
     status: READY
   - path: tasks/TASK-P1-012.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-001.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-002.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-003.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-004.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-005.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-006.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-007.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-008.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-009.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-010.md
     kind: task-card
     status: READY
 
