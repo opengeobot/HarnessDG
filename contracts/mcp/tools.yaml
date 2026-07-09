@@ -134,6 +134,52 @@ tools:
         assetId: { type: string }
         version: { type: string }
 
+  - name: asset_create_upload_session
+    enabled: false
+    write: true
+    summary: 创建上传会话。写工具，默认关闭；受 mcp.writeTools.enabled 控制。
+    requiredScopes: [asset:manage]
+    requiredPermissions: [asset:manage]
+    reusesApplicationService: UploadApplicationService
+    idempotency: required
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, totalBytes, fileCount]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        totalBytes: { type: integer }
+        fileCount: { type: integer }
+
+  - name: asset_complete_upload
+    enabled: false
+    write: true
+    summary: 完成上传会话。写工具，默认关闭。
+    requiredScopes: [asset:manage]
+    requiredPermissions: [asset:manage]
+    reusesApplicationService: UploadApplicationService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+
+  - name: asset_get_upload_status
+    enabled: false
+    write: true
+    summary: 查询上传会话状态。写工具，默认关闭。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: UploadApplicationService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+
   - name: asset_publish_version
     enabled: false
     write: true

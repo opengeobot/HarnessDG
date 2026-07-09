@@ -19,6 +19,7 @@ import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.transfer.application.DownloadApplicationService;
+import com.aihub.transfer.application.UploadApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.VersionStatus;
@@ -38,6 +39,7 @@ class McpToolCatalogTest {
     private AssetApplicationService assetService;
     private VersionApplicationService versionService;
     private DownloadApplicationService downloadService;
+    private UploadApplicationService uploadService;
     private McpToolCatalog catalog;
 
     @BeforeEach
@@ -45,7 +47,8 @@ class McpToolCatalogTest {
         assetService = mock(AssetApplicationService.class);
         versionService = mock(VersionApplicationService.class);
         downloadService = mock(DownloadApplicationService.class);
-        catalog = new McpToolCatalog(assetService, versionService, downloadService, true);
+        uploadService = mock(UploadApplicationService.class);
+        catalog = new McpToolCatalog(assetService, versionService, downloadService, uploadService, true);
 
         // 设置 PrincipalContext
         PrincipalContextHolder.set(new PrincipalContext("usr_test", PrincipalType.USER,
@@ -64,7 +67,9 @@ class McpToolCatalogTest {
         assertThat(tools).isNotEmpty();
         assertThat(tools.stream().map(McpToolCatalog.ToolDefinition::name).toList())
                 .contains("asset_search", "asset_get", "asset_list_versions",
-                        "asset_get_version", "asset_request_download", "asset_create_draft");
+                        "asset_get_version", "asset_request_download", "asset_create_draft",
+                        "asset_create_upload_session", "asset_complete_upload",
+                        "asset_get_upload_status");
     }
 
     @Test
@@ -109,7 +114,7 @@ class McpToolCatalogTest {
     @Test
     void writeToolsDisabledShouldRejectWriteCalls() {
         McpToolCatalog disabledCatalog = new McpToolCatalog(
-                assetService, versionService, downloadService, false);
+                assetService, versionService, downloadService, uploadService, false);
 
         assertThatThrownBy(() -> disabledCatalog.callTool("asset_create_draft",
                 Map.of("assetId", "ast_1", "version", "v1")))

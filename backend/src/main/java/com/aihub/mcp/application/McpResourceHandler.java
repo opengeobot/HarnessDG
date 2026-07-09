@@ -31,6 +31,7 @@ public class McpResourceHandler {
     private static final Pattern ASSET_URI = Pattern.compile("^aih://asset/([^/]+)$");
     private static final Pattern VERSION_URI = Pattern.compile("^aih://asset/([^/]+)/version/([^/]+)$");
     private static final Pattern CARD_URI = Pattern.compile("^aih://asset/([^/]+)/card$");
+    private static final Pattern MANIFEST_URI = Pattern.compile("^aih://asset/([^/]+)/manifest/([^/]+)$");
 
     private final AssetApplicationService assetService;
     private final VersionApplicationService versionService;
@@ -52,7 +53,9 @@ public class McpResourceHandler {
                 resourceTemplate("aih://asset/{assetId}/version/{versionId}", "Version details",
                         "application/json"),
                 resourceTemplate("aih://asset/{assetId}/card", "Asset card (README)",
-                        "text/markdown"));
+                        "text/markdown"),
+                resourceTemplate("aih://asset/{assetId}/manifest/{versionId}", "Version manifest",
+                        "application/json"));
     }
 
     /** 读取指定 URI 的 Resource 内容。 */
@@ -79,6 +82,23 @@ public class McpResourceHandler {
             String card = (view.card() != null && view.card().readme() != null)
                     ? view.card().readme() : "(no card available)";
             return contentEntry(uri, "text/markdown", card);
+        }
+
+        // asset/{id}/manifest/{v}
+        Matcher manifestMatcher = MANIFEST_URI.matcher(uri);
+        if (manifestMatcher.matches()) {
+            String versionId = manifestMatcher.group(2);
+            authorizationService.requirePermission("asset:read");
+            VersionView view = versionService.getVersion(versionId);
+            Map<String, Object> manifest = new LinkedHashMap<>();
+            manifest.put("versionId", view.versionId());
+            manifest.put("version", view.version());
+            manifest.put("manifestDigest", view.manifestDigest());
+            manifest.put("gitTag", view.gitTag());
+            manifest.put("sourceCommit", view.sourceCommit());
+            manifest.put("status", view.status().name());
+            manifest.put("untrusted", true);
+            return contentEntry(uri, "application/json", manifest);
         }
 
         // asset/{id}

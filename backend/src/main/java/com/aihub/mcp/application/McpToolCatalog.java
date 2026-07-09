@@ -8,6 +8,7 @@ import com.aihub.asset.domain.AssetType;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.transfer.application.DownloadApplicationService;
+import com.aihub.transfer.application.UploadApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import java.util.Collections;
@@ -41,10 +42,11 @@ public class McpToolCatalog {
             AssetApplicationService assetService,
             VersionApplicationService versionService,
             DownloadApplicationService downloadService,
+            UploadApplicationService uploadService,
             @Value("${mcp.writeTools.enabled:false}") boolean writeToolsEnabled) {
         this.writeToolsEnabled = writeToolsEnabled;
         registerReadOnlyTools(assetService, versionService, downloadService);
-        registerWriteTools(assetService, versionService);
+        registerWriteTools(assetService, versionService, uploadService);
         LOG.info("MCP Tool Catalog initialized: {} tools registered (writeTools={})",
                 tools.size(), writeToolsEnabled);
     }
@@ -171,7 +173,8 @@ public class McpToolCatalog {
     // ---- 写工具注册 ----
 
     private void registerWriteTools(AssetApplicationService assetService,
-                                    VersionApplicationService versionService) {
+                                    VersionApplicationService versionService,
+                                    UploadApplicationService uploadService) {
         // asset_create_draft
         register("asset_create_draft",
                 "Create a new draft version for an asset. Write tool, disabled by default.",
@@ -184,6 +187,43 @@ public class McpToolCatalog {
                     return versionService.createDraftVersion(
                             str(args, "assetId"), str(args, "version"), principalId);
                 });
+
+        // asset_create_upload_session
+        register("asset_create_upload_session",
+                "Create an upload session for a draft version. Write tool, disabled by default.",
+                schema(Map.of(
+                        "assetId", Map.of("type", "string"),
+                        "versionId", Map.of("type", "string"),
+                        "totalBytes", Map.of("type", "integer"),
+                        "fileCount", Map.of("type", "integer"))),
+                true, "asset:manage",
+                args -> {
+                    String principalId = currentPrincipalId();
+                    return uploadService.createSession(
+                            str(args, "assetId"), str(args, "versionId"),
+                            longArg(args, "totalBytes", 0), intArg(args, "fileCount", 1),
+                            principalId);
+                });
+
+        // asset_complete_upload
+        register("asset_complete_upload",
+                "Complete an upload session. Write tool, disabled by default.",
+                schema(Map.of(
+                        "sessionId", Map.of("type", "string"))),
+                true, "asset:manage",
+                args -> {
+                    String principalId = currentPrincipalId();
+                    return uploadService.completeSession(
+                            str(args, "sessionId"), List.of(), principalId);
+                });
+
+        // asset_get_upload_status
+        register("asset_get_upload_status",
+                "Get upload session status. Write tool, disabled by default.",
+                schema(Map.of(
+                        "sessionId", Map.of("type", "string"))),
+                true, "asset:read",
+                args -> uploadService.getSession(str(args, "sessionId")));
     }
 
     // ---- 辅助方法 ----
@@ -218,6 +258,15 @@ public class McpToolCatalog {
         if (v instanceof Number n) return n.intValue();
         if (v instanceof String s) {
             try { return Integer.parseInt(s); } catch (NumberFormatException e) { /* fall through */ }
+        }
+        return defaultValue;
+    }
+
+    private static long longArg(Map<String, Object> args, String key, long defaultValue) {
+        Object v = args.get(key);
+        if (v instanceof Number n) return n.longValue();
+        if (v instanceof String s) {
+            try { return Long.parseLong(s); } catch (NumberFormatException e) { /* fall through */ }
         }
         return defaultValue;
     }

@@ -16,6 +16,9 @@
 | `asset_get_version` | read | Get specific version details |
 | `asset_request_download` | read | Request download ticket (handle, not URL) |
 | `asset_create_draft` | write | Create draft version (requires explicit enable) |
+| `asset_create_upload_session` | write | Create upload session (requires explicit enable) |
+| `asset_complete_upload` | write | Complete upload session (requires explicit enable) |
+| `asset_get_upload_status` | write | Get upload session status (requires explicit enable) |
 
 ### Resources
 
@@ -24,6 +27,7 @@
 | `aih://asset/{id}` | Asset details (JSON) |
 | `aih://asset/{id}/version/{v}` | Version details (JSON) |
 | `aih://asset/{id}/card` | Asset card / README (Markdown) |
+| `aih://asset/{id}/manifest/{versionId}` | Version manifest (JSON, untrusted) |
 
 ### Authentication
 
