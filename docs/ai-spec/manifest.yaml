@@ -178,6 +178,9 @@ documents:
   - path: 05-acceptance/dataset-agent-exit-catalog.md
     kind: acceptance
     status: READY
+  - path: 05-acceptance/p1-exit-catalog.md
+    kind: acceptance
+    status: READY
   - path: 05-acceptance/ai-execution-gate-catalog.md
     kind: acceptance
     status: READY
@@ -299,6 +302,42 @@ documents:
     kind: task-card
     status: READY
   - path: tasks/TASK-P0BR-046.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-001.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-002.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-003.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-004.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-005.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-006.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-007.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-008.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-009.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-010.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-011.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-012.md
     kind: task-card
     status: READY
 

@@ -1,0 +1,79 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1008-001
+status: DRAFT
+
+task:
+  taskId: TASK-P1-008
+  requirements: [REQ-AST-009]
+  scenarios:
+    - AC-P1-AST-013
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: null
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-008.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-008.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-008.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: null
+  os: null
+  timezone: null
+  java: null
+  node: null
+  pnpm: null
+  docker: null
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: null
+  startedAt: null
+  finishedAt: null
+  exitCode: null
+  result: null
+  evidenceLevel: E4
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-013
+      assertion: PAGE-AST-001..006 full async states, permission gates and zh/en i18n with component and E2E tests
+  notProven:
+    - AC-P1-AST-013
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: false
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: null
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

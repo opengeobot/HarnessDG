@@ -1,0 +1,83 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1002-001
+status: DRAFT
+
+task:
+  taskId: TASK-P1-002
+  requirements: [REQ-AST-001, REQ-AST-006]
+  scenarios:
+    - AC-P1-AST-001
+    - AC-P1-AST-010
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: null
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-002.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-002.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-002.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: null
+  os: null
+  timezone: null
+  java: null
+  node: null
+  pnpm: null
+  docker: null
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: null
+  startedAt: null
+  finishedAt: null
+  exitCode: null
+  result: null
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-001
+      assertion: Flyway V27+ backfill maps legacy coordinates and governed fields to Team Owner model
+    - scenarioId: AC-P1-AST-010
+      assertion: Backfill string Owner to Team ID and seed ACL rows with UNMAPPED remediation markers
+  notProven:
+    - AC-P1-AST-001
+    - AC-P1-AST-010
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: false
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: null
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

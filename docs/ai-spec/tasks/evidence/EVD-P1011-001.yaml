@@ -1,0 +1,91 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1011-001
+status: DRAFT
+
+task:
+  taskId: TASK-P1-011
+  requirements: [REQ-DST-DETAIL-001]
+  scenarios:
+    - AC-DST-DETAIL-001
+    - AC-DST-DETAIL-002
+    - AC-DST-DETAIL-003
+    - AC-DST-DETAIL-004
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: null
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-011.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-011.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-011.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: null
+  os: null
+  timezone: null
+  java: null
+  node: null
+  pnpm: null
+  docker: null
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: null
+  startedAt: null
+  finishedAt: null
+  exitCode: null
+  result: null
+  evidenceLevel: E4
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: Dataset detail binds Card, tags and files to selected published version
+    - scenarioId: AC-DST-DETAIL-002
+      assertion: Detail URL and cache stay on selected version when latestPublished changes
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: Unauthorized list/detail/files use anti-enumeration semantics
+    - scenarioId: AC-DST-DETAIL-004
+      assertion: Gitea unavailable returns stale projection with timestamp not forged content
+  notProven:
+    - AC-DST-DETAIL-001
+    - AC-DST-DETAIL-002
+    - AC-DST-DETAIL-003
+    - AC-DST-DETAIL-004
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: false
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: null
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
