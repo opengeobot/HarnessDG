@@ -9,7 +9,11 @@
 #       V16 版本 Schema 验证；V17 发布审批 Schema 验证；
 #       V18 Webhook Inbox 验证；V19 MCP 端点可用性；
 #       V20 对账 Worker 注册验证；
-#       V21 告警 Schema 与端点验证。
+#       V21 告警 Schema 与端点验证；
+#       V22 Outbox 事件表验证；
+#       V23 下载统计默认拒绝；V24 预览生成默认拒绝；
+#       V25 Agent 令牌端点存在性；V26 MCP /mcp 默认拒绝；
+#       V27 资产 ACL 默认拒绝；V28 DEPRECATED 搜索降权（源码断言）。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。
 # 时间: 2026-07-04
@@ -514,6 +518,81 @@ if postgres_reachable; then
 else
   skip V22 "Outbox 事件表验证" "postgres 不可达"
 fi
+
+# ---- V23: 下载统计默认拒绝 ----
+check_download_stats_default_deny() {
+  local code
+  code="$(http_status GET /api/v1/assets/ast_x/stats)"
+  if [ "${code}" != "401" ]; then echo "  无 Token GET /assets/ast_x/stats 返回 ${code}，期望 401"; return 1; fi
+  code="$(http_status GET /api/v1/system/metrics/downloads)"
+  if [ "${code}" != "401" ]; then echo "  无 Token GET /system/metrics/downloads 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V24: 预览生成默认拒绝 ----
+check_preview_generate_default_deny() {
+  local code
+  code="$(http_status POST /api/v1/assets/ast_x/previews/generate "" '{}')"
+  if [ "${code}" != "401" ]; then echo "  无 Token POST /assets/ast_x/previews/generate 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V25: Agent 令牌端点存在性 ----
+check_agent_token_path() {
+  local code
+  code="$(http_status POST /api/v1/auth/agent/token "" '{}')"
+  case "${code}" in
+    401|400|422) return 0 ;;
+    404) echo "  POST /api/v1/auth/agent/token 返回 404（端点不存在）"; return 1 ;;
+    *) echo "  POST /api/v1/auth/agent/token 返回 ${code}，期望 401/400/422"; return 1 ;;
+  esac
+}
+
+# ---- V26: MCP /mcp 默认拒绝 ----
+check_mcp_default_deny() {
+  local code
+  code="$(http_status POST /mcp "" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')"
+  if [ "${code}" != "401" ]; then echo "  无 Token POST /mcp 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V27: 资产 ACL 默认拒绝 ----
+check_asset_access_default_deny() {
+  local code
+  code="$(http_status GET /api/v1/assets/ast_x/access)"
+  if [ "${code}" != "401" ]; then echo "  无 Token GET /assets/ast_x/access 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V28: DEPRECATED 搜索降权（源码/SQL 断言，无需后端）----
+check_deprecation_sort() {
+  local repo_root dao_file
+  repo_root="$(cd "${COMPOSE_DIR}/../.." && pwd)"
+  dao_file="${repo_root}/backend/src/main/java/com/aihub/asset/infrastructure/AssetSearchDao.java"
+  if [ ! -f "${dao_file}" ]; then echo "  AssetSearchDao.java 不存在"; return 1; fi
+  if ! grep -q "ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END" "${dao_file}"; then
+    echo "  AssetSearchDao ORDER BY 未包含 DEPRECATED 降权子句"
+    return 1
+  fi
+  return 0
+}
+
+# P1-P5 行为级默认拒绝与源码断言（V23-V28）
+if [ "${BACKEND_UP}" -eq 1 ]; then
+  step V23 "下载统计默认拒绝" check_download_stats_default_deny
+  step V24 "预览生成默认拒绝" check_preview_generate_default_deny
+  step V25 "Agent 令牌端点存在性" check_agent_token_path
+  step V26 "MCP /mcp 默认拒绝" check_mcp_default_deny
+  step V27 "资产 ACL 默认拒绝" check_asset_access_default_deny
+else
+  skip V23 "下载统计默认拒绝" "backend 不可达"
+  skip V24 "预览生成默认拒绝" "backend 不可达"
+  skip V25 "Agent 令牌端点存在性" "backend 不可达"
+  skip V26 "MCP /mcp 默认拒绝" "backend 不可达"
+  skip V27 "资产 ACL 默认拒绝" "backend 不可达"
+fi
+
+step V28 "DEPRECATED 搜索降权（AssetSearchDao ORDER BY）" check_deprecation_sort
 
 echo ""
 if [ "${SKIPPED}" -ne 0 ]; then

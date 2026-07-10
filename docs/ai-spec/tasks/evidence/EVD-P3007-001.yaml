@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
-evidenceId: EVD-P3007
-status: DRAFT
+evidenceId: EVD-P3007-001
+status: PARTIAL
 
 task:
   taskId: TASK-P3-007
@@ -23,15 +23,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 10ffb20d7c1850a7e5a87893a7d2274cb491e737
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -39,19 +39,21 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='AssetSearchDaoTest'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:56:00+08:00
+  exitCode: 0
+  result: PASS
   evidenceLevel: E3
 
 coverage:
   proven:
+    - scenarioId: AC-P3-DEP-001-partial
+      assertion: AssetSearchDao ORDER BY demotes DEPRECATED after ACTIVE; AssetSearchDaoTest asserts SQL clause and result ordering
+  notProven:
     - scenarioId: AC-P3-DEP-001
-      assertion: AssetSearchDao ORDER BY demotes DEPRECATED after ACTIVE; unit test AssetSearchDaoTest
-  notProven: []
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -68,10 +70,11 @@ secrets:
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - Live search ranking with real assets not exercised in Compose this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

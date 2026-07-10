@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P1003-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P1-003
@@ -27,15 +27,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -43,29 +43,29 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: E4
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='AssetApplicationServiceTest,RepositoryProvisionJobHandlerTest,AssetControllerTest'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:57:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
   proven:
-    - scenarioId: AC-P1-AST-002
-      assertion: CreateAsset normal path completes Provision Saga with Gitea repo and initial commit
-    - scenarioId: AC-P1-AST-003
-      assertion: Idempotency-Key replay returns first response without duplicate repo
-    - scenarioId: AC-P1-AST-004
-      assertion: Gitea failure injection leaves retriable intent and recovers on retry
-    - scenarioId: AC-P1-AST-005
-      assertion: Unauthorized and cross-scope create rejected with no side effects
+    - scenarioId: AC-P1-AST-002-partial
+      assertion: createAsset sets provisioningStatus PENDING and enqueues provision job; AssetApplicationServiceTest.createAssetReturnsCoordinateInView
+    - scenarioId: AC-P1-AST-005-partial
+      assertion: createAsset rejects disabled dictionary items, unregistered tagIds, and free-form owners; fail-closed validation in AssetApplicationServiceTest
   notProven:
-    - AC-P1-AST-002
-    - AC-P1-AST-003
-    - AC-P1-AST-004
-    - AC-P1-AST-005
+    - scenarioId: AC-P1-AST-002
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-P1-AST-003
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-P1-AST-004
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-P1-AST-005
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -83,10 +83,11 @@ limitations:
   skippedTests: []
   assumptions:
     - AssetRepositoryReconciler Gitea existence check and reprovision enqueue implemented (REQ-AST-008)
-  environmentDifferences: []
+  environmentDifferences:
+    - Full Provision Saga with live Gitea not exercised in this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

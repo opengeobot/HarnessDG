@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P1010-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P1-010
@@ -27,15 +27,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -43,30 +43,29 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: E4
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='AssetApplicationServiceTest,AssetSearchDaoTest'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:57:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
   proven:
-    - scenarioId: AC-DST-TAX-001
-      assertion: DATASET created with governed fields discoverable by combined search with matchedFields
-      note: AssetSummaryView.matchedFields populated from keyword hits on name/displayName/description/taskCodes
-    - scenarioId: AC-DST-TAX-002
-      assertion: Two principals see disjoint facet counts and items for same filter
-    - scenarioId: AC-DST-TAX-003
-      assertion: Disabled dict/tag historical display with new reference rejected
-    - scenarioId: AC-DST-TAX-004
-      assertion: Invalid display name, free tag, unknown code and bad cursor fail closed
+    - scenarioId: AC-DST-TAX-001-partial
+      assertion: AssetSummaryView.matchedFields populated from keyword hits on name/displayName/description/taskCodes; AssetApplicationServiceTest.searchAssetsReturnsSummaryPage
+    - scenarioId: AC-DST-TAX-004-partial
+      assertion: createAsset rejects disabled dictionary items and unregistered tagIds; fail-closed in AssetApplicationServiceTest
   notProven:
-    - AC-DST-TAX-001
-    - AC-DST-TAX-002
-    - AC-DST-TAX-003
-    - AC-DST-TAX-004
+    - scenarioId: AC-DST-TAX-001
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-DST-TAX-002
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-DST-TAX-003
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-DST-TAX-004
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -83,10 +82,11 @@ secrets:
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - Multi-principal facet isolation not exercised in Compose this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

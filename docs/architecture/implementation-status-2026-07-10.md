@@ -62,3 +62,17 @@
 | Task Card `-CheckCompletion` | 未通过（Evidence 仍 DRAFT） |
 
 因此：**构建与定向测试通过 ≠ P1–P5 阶段验收完成。**
+
+## 6. W1–W7 gap closure progress
+
+| 波次 | Commit | 摘要 |
+| --- | --- | --- |
+| W1 | `46a3837` | docs+contract：刷新实现状态、修复 V29 backfill 槽位、启用 Gitea |
+| W2 | `057c63c` | P1：Owner/Team 治理、资产 ACL、rename Saga、Facet UX、mention、noop gate |
+| W3 | `68560da` | P2：真实 MinIO multipart、上传持久化、DVC/Git 物化、manifest fixtures、幂等、scoped DVC creds、parquet preview、aih CLI |
+| W4 | `72de8a4` | P3：发布治理 reconciler、quorum、review UI 深化 |
+| W5 | `9e08b3a` | P4：Agent REST 适配器、MCP 幂等、batch latestPublished、auth alias、onboarding |
+| W6 | `2482eb1` | P5：DEAD_JOB 告警、preview limits、i18n badge、E5 drill stubs |
+| W7 | `fec5aae` | evidence 卫生：P0BR REQ 修复、verify.sh V23–V28、EVD PARTIAL 诚实更新、CheckCompletion 尝试 |
+
+W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。

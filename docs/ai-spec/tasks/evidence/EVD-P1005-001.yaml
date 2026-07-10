@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P1005-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P1-005
@@ -24,37 +24,37 @@ governance:
 
 source:
   branch: ai
-  commitSha: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
-  node: null
-  pnpm: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: "22"
+  pnpm: "9"
   docker: null
   composeProfiles: []
   externalDependencyVersions: {}
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: E4
+  command: cd backend && ./mvnw -o test -Dtest='AssetApplicationServiceTest' && cd ../frontend && pnpm test -- src/features/assets/
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:58:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
   proven:
-    - scenarioId: AC-P1-AST-008
-      assertion: Detail returns Card projection, disabled governance markers and DEC-014 quick-use snippets without secrets
-      note: Quick Use panel shows coordinate, git clone, dvc pull, aih CLI snippets with copyable blocks
+    - scenarioId: AC-P1-AST-008-partial
+      assertion: Asset detail projection and Quick Use panel render coordinate/git/dvc/aih snippets without secrets; frontend asset feature tests PASS
   notProven:
-    - AC-P1-AST-008
+    - scenarioId: AC-P1-AST-008
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -71,10 +71,11 @@ secrets:
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - Live Card projection from Gitea not exercised in Compose this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

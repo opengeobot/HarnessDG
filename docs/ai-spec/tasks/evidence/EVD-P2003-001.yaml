@@ -1,11 +1,12 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P2003-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P2-003
-  requirements: 
-  scenarios: 
+  requirements: [REQ-UPL-001]
+  scenarios:
+    - AC-P2-UPL-001
 
 governance:
   specValidation:
@@ -23,15 +24,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 26c3985c5092d1c64def2c33e8db1e5d6ac4a256
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -39,15 +40,21 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Upload*,*Download*,*Manifest*,*Preview*'
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='*Upload*,*Download*,*Manifest*,*Preview*'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:58:00+08:00
+  exitCode: 0
   result: PASS
   evidenceLevel: E3
 
 coverage:
   proven:
-    - completeSession enqueues UPLOAD_MATERIALIZE and leaves session PROCESSING
-  notProven: Compose E4 upload flow
+    - scenarioId: AC-P2-UPL-001-partial
+      assertion: completeSession enqueues UPLOAD_MATERIALIZE and leaves session PROCESSING; UploadApplicationServiceTest
+  notProven:
+    - scenarioId: AC-P2-UPL-001
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -64,10 +71,11 @@ secrets:
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - Real multipart MinIO upload flow not exercised in Compose this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

@@ -1,11 +1,12 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P2005-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P2-005
-  requirements: 
-  scenarios: 
+  requirements: [REQ-UPL-003]
+  scenarios:
+    - AC-P2-UPL-003
 
 governance:
   specValidation:
@@ -23,15 +24,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 26c3985c5092d1c64def2c33e8db1e5d6ac4a256
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -39,15 +40,21 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='UploadMaterializeJobHandlerTest'
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='UploadMaterializeJobHandlerTest'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:56:00+08:00
+  exitCode: 0
   result: PASS
   evidenceLevel: E3
 
 coverage:
   proven:
-    - handler processes PROCESSING to COMPLETED with manifest-v1 digest
-  notProven: staging cleanup job
+    - scenarioId: AC-P2-UPL-003-partial
+      assertion: UploadMaterializeJobHandler processes PROCESSING to COMPLETED with manifest-v1 digest
+  notProven:
+    - scenarioId: AC-P2-UPL-003
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -64,10 +71,11 @@ secrets:
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - Staging cleanup job and live DVC materialization not exercised in Compose this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

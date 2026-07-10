@@ -1,11 +1,11 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P4001-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P4-001
-  requirements: 
-  scenarios: 
+  requirements: [REQ-MCP-002]
+  scenarios: [AC-P4-SCH-001]
 
 governance:
   specValidation:
@@ -23,15 +23,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 59f40d28dab5a9fb5fdeb5cb29080219b10ee4a6
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -39,17 +39,21 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
-  startedAt: null
-  finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: 
+  workingDirectory: /home/axe/workspace/HarnessDG/backend
+  command: ./mvnw -o test -Dtest='McpToolCatalogTest'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:56:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: AC-P4-SCH-001
+      assertion: McpToolCatalog.listTools syncs with tools.yaml schema, write flags, and enabledByDefault invariants; McpToolCatalogTest
+  notProven:
+    - scenarioId: AC-P4-MCP-001
+      reason: Compose E4 journey not executed this session
 
 artifacts:
   reports: []
@@ -66,10 +70,11 @@ secrets:
 limitations:
   skippedTests: []
   assumptions: []
-  environmentDifferences: []
+  environmentDifferences:
+    - Live MCP initialize/list/call on /mcp not exercised in Compose this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false

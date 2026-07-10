@@ -4,7 +4,7 @@ status: PASS
 
 task:
   taskId: TASK-P0BR-030
-  requirements: [REQ-OBS-005]
+  requirements: [REQ-OBS-001]
   scenarios: []
 
 governance:

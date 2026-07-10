@@ -4,7 +4,7 @@ status: PASS
 
 task:
   taskId: TASK-P0BR-026
-  requirements: [REQ-AUD-002]
+  requirements: [REQ-AUD-001]
   scenarios: []
 
 governance:

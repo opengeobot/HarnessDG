@@ -4,7 +4,7 @@ status: PASS
 
 task:
   taskId: TASK-P0BR-024
-  requirements: [REQ-JOB-002]
+  requirements: [REQ-JOB-001]
   scenarios: []
 
 governance:

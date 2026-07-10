@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P5005-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P5-005
@@ -23,15 +23,15 @@ governance:
 
 source:
   branch: ai
-  commitSha: 9e08b3a
+  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: null
-  os: null
-  timezone: null
-  java: null
+  observedAt: 2026-07-10T22:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
   node: null
   pnpm: null
   docker: null
@@ -40,9 +40,9 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: ./deploy/security/run-redaction-canary.sh
-  startedAt: null
-  finishedAt: null
+  command: ./deploy/security/run-redaction-canary.sh && cd backend && ./mvnw -o test -Dtest='SensitiveDataMaskerTest,SecurityVerificationTest,AuditServiceTest'
+  startedAt: 2026-07-10T21:55:00+08:00
+  finishedAt: 2026-07-10T21:58:00+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E3
@@ -50,8 +50,12 @@ execution:
 coverage:
   proven:
     - scenarioId: AC-P5-SEC-001-partial
-      assertion: SensitiveDataMaskerTest + SecurityVerificationTest + AuditServiceTest mask canary PASS
-  notProven: [AC-P5-SEC-001-E5-SAST-dependency-image]
+      assertion: SensitiveDataMaskerTest + SecurityVerificationTest + AuditServiceTest mask canary PASS; run-redaction-canary.sh exit 0
+  notProven:
+    - scenarioId: AC-P5-SEC-001
+      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-P5-SEC-001-E5-SAST-dependency-image
+      reason: E5 SAST/dependency/image scan not executed this session
 
 artifacts:
   reports:
@@ -72,10 +76,11 @@ limitations:
   skippedTests: []
   assumptions:
     - Full SAST/dependency/image scan E5 deferred to TASK-P5-005 allowedPaths under deploy/security
-  environmentDifferences: []
+  environmentDifferences:
+    - E5 security drill stubs present but not executed as exit evidence this session
 
 review:
-  recordedBy: null
+  recordedBy: AI
   reviewedBy: null
   reviewedAt: null
   accepted: false
