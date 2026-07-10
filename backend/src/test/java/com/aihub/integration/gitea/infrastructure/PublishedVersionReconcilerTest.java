@@ -1,5 +1,5 @@
 /*
- * 功能: PublishedVersionReconciler 单元测试——PG 格式校验与 Gitea Tag 校验。
+ * 功能: PublishedVersionReconciler 单元测试——PG 格式校验、Gitea Tag/Manifest 校验与 Profile 行为。
  * 时间: 2026-07-10
  * 作者: AxeXie
  */
@@ -22,6 +22,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class PublishedVersionReconcilerTest {
@@ -30,6 +31,7 @@ class PublishedVersionReconcilerTest {
     private PlatformMetrics platformMetrics;
     private ObjectProvider<GiteaTagVerificationPort> giteaTagProvider;
     private GiteaTagVerificationPort giteaTagPort;
+    private Environment environment;
     private PublishedVersionReconciler reconciler;
 
     @BeforeEach
@@ -38,8 +40,10 @@ class PublishedVersionReconcilerTest {
         platformMetrics = mock(PlatformMetrics.class);
         giteaTagPort = mock(GiteaTagVerificationPort.class);
         giteaTagProvider = mock(ObjectProvider.class);
+        environment = mock(Environment.class);
         when(giteaTagProvider.getIfAvailable()).thenReturn(giteaTagPort);
-        reconciler = new PublishedVersionReconciler(jdbcTemplate, platformMetrics, giteaTagProvider);
+        when(environment.getActiveProfiles()).thenReturn(new String[] {});
+        reconciler = new PublishedVersionReconciler(jdbcTemplate, platformMetrics, giteaTagProvider, environment);
     }
 
     @Test
@@ -48,9 +52,12 @@ class PublishedVersionReconcilerTest {
     }
 
     @Test
-    void checkPublishedVersionConsistentWhenGiteaTagMatches() {
+    void checkPublishedVersionConsistentWhenGiteaTagAndDigestMatch() {
+        String digest = "a".repeat(64);
         when(giteaTagPort.verifyTag("ai-lab", "my-model", "v1.0.0", "a".repeat(40)))
                 .thenReturn(GiteaTagVerificationPort.TagVerifyResult.MATCHES);
+        when(giteaTagPort.fetchManifestDigest("ai-lab", "my-model", "v1.0.0"))
+                .thenReturn(GiteaTagVerificationPort.ManifestDigestResult.computed(digest));
 
         Map<String, Object> row = validRow();
         assertThat(reconciler.checkPublishedVersion(row))
@@ -64,6 +71,7 @@ class PublishedVersionReconcilerTest {
 
         assertThat(reconciler.checkPublishedVersion(validRow()))
                 .isEqualTo(PublishedVersionReconciler.ReconcileResult.MANUAL_REVIEW);
+        verify(giteaTagPort, never()).fetchManifestDigest(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -76,10 +84,41 @@ class PublishedVersionReconcilerTest {
     }
 
     @Test
+    void checkPublishedVersionSecurityIncidentWhenManifestDigestMismatch() {
+        when(giteaTagPort.verifyTag("ai-lab", "my-model", "v1.0.0", "a".repeat(40)))
+                .thenReturn(GiteaTagVerificationPort.TagVerifyResult.MATCHES);
+        when(giteaTagPort.fetchManifestDigest("ai-lab", "my-model", "v1.0.0"))
+                .thenReturn(GiteaTagVerificationPort.ManifestDigestResult.computed("b".repeat(64)));
+
+        assertThat(reconciler.checkPublishedVersion(validRow()))
+                .isEqualTo(PublishedVersionReconciler.ReconcileResult.SECURITY_INCIDENT);
+    }
+
+    @Test
+    void checkPublishedVersionManualReviewWhenGiteaUnavailableInComposeProfile() {
+        when(environment.getActiveProfiles()).thenReturn(new String[] {"compose"});
+        when(giteaTagPort.verifyTag("ai-lab", "my-model", "v1.0.0", "a".repeat(40)))
+                .thenReturn(GiteaTagVerificationPort.TagVerifyResult.UNAVAILABLE);
+
+        assertThat(reconciler.checkPublishedVersion(validRow()))
+                .isEqualTo(PublishedVersionReconciler.ReconcileResult.MANUAL_REVIEW);
+    }
+
+    @Test
+    void checkPublishedVersionConsistentWhenGiteaUnavailableInDevProfile() {
+        when(giteaTagPort.verifyTag("ai-lab", "my-model", "v1.0.0", "a".repeat(40)))
+                .thenReturn(GiteaTagVerificationPort.TagVerifyResult.UNAVAILABLE);
+
+        assertThat(reconciler.checkPublishedVersion(validRow()))
+                .isEqualTo(PublishedVersionReconciler.ReconcileResult.CONSISTENT);
+    }
+
+    @Test
     void checkPublishedVersionSkipsGiteaWhenPortUnavailable() {
         when(giteaTagProvider.getIfAvailable()).thenReturn(null);
 
-        PublishedVersionReconciler local = new PublishedVersionReconciler(jdbcTemplate, platformMetrics, giteaTagProvider);
+        PublishedVersionReconciler local =
+                new PublishedVersionReconciler(jdbcTemplate, platformMetrics, giteaTagProvider, environment);
         assertThat(local.checkPublishedVersion(validRow()))
                 .isEqualTo(PublishedVersionReconciler.ReconcileResult.CONSISTENT);
         verify(giteaTagPort, never()).verifyTag(anyString(), anyString(), anyString(), anyString());

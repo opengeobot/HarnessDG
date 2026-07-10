@@ -18,7 +18,7 @@ import java.util.List;
  *
  * <p>将 REST 请求体转换为应用层命令/查询，隔离传输模型与应用模型。
  */
-final class AssetRequestMapper {
+public final class AssetRequestMapper {
 
     private AssetRequestMapper() {
     }

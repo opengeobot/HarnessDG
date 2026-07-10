@@ -1,13 +1,20 @@
 /**
- * 功能: 发布审批页面——版本列表、提交发布、审批决策。
- * 时间: 2026-07-05
+ * 功能: 发布审批页面——版本列表、校验报告、工件差异、提交发布与审批决策。
+ * 时间: 2026-07-10
  * 作者: AxeXie
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
-import { listPublishRequests } from './api';
+import {
+  getValidationReport,
+  listArtifacts,
+  listDecisions,
+  listPublishRequests,
+  listVersions,
+} from './api';
+import type { ArtifactView } from './types';
 
 interface PublishRequest {
   requestId: string;
@@ -19,14 +26,59 @@ interface PublishRequest {
   submittedAt: string;
 }
 
+type ReviewDecision = 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES';
+
+interface ValidationFinding {
+  code?: string;
+  severity?: string;
+  message?: string;
+  path?: string;
+}
+
+interface ArtifactDiffEntry {
+  path: string;
+  change: 'added' | 'removed' | 'changed';
+  currentSha?: string;
+  previousSha?: string;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   SUBMITTED: 'bg-blue-100 text-blue-800',
   APPROVED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
+  CHANGES_REQUESTED: 'bg-orange-100 text-orange-800',
   PUBLISHING: 'bg-yellow-100 text-yellow-800',
   PUBLISHED: 'bg-green-200 text-green-900',
   FAILED: 'bg-red-200 text-red-900',
 };
+
+function computeArtifactDiff(
+  current: ArtifactView[],
+  previous: ArtifactView[],
+): ArtifactDiffEntry[] {
+  const prevByPath = new Map(previous.map((a) => [a.path, a]));
+  const currByPath = new Map(current.map((a) => [a.path, a]));
+  const paths = new Set([...prevByPath.keys(), ...currByPath.keys()]);
+  const diff: ArtifactDiffEntry[] = [];
+
+  for (const path of [...paths].sort()) {
+    const prev = prevByPath.get(path);
+    const curr = currByPath.get(path);
+    if (prev && !curr) {
+      diff.push({ path, change: 'removed', previousSha: prev.sha256 });
+    } else if (!prev && curr) {
+      diff.push({ path, change: 'added', currentSha: curr.sha256 });
+    } else if (prev && curr && prev.sha256 !== curr.sha256) {
+      diff.push({
+        path,
+        change: 'changed',
+        currentSha: curr.sha256,
+        previousSha: prev.sha256,
+      });
+    }
+  }
+  return diff;
+}
 
 export function ReviewPage() {
   const { t } = useTranslation();
@@ -34,10 +86,15 @@ export function ReviewPage() {
   const [assetId, setAssetId] = useState('');
   const [requests, setRequests] = useState<PublishRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<PublishRequest | null>(null);
-  const [decision, setDecision] = useState<'APPROVE' | 'REJECT'>('APPROVE');
+  const [decision, setDecision] = useState<ReviewDecision>('APPROVE');
   const [comments, setComments] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [validationReport, setValidationReport] = useState<Record<string, unknown> | null>(null);
+  const [findings, setFindings] = useState<ValidationFinding[]>([]);
+  const [artifactDiff, setArtifactDiff] = useState<ArtifactDiffEntry[]>([]);
+  const [decisionHistory, setDecisionHistory] = useState<Record<string, unknown>[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const loadRequests = useCallback(async () => {
     if (!assetId) return;
@@ -58,6 +115,73 @@ export function ReviewPage() {
       setError(e instanceof Error ? e.message : t('review.loadFailedMsg'));
     }
   }, [assetId, t]);
+
+  useEffect(() => {
+    if (!selectedRequest || !assetId) {
+      setValidationReport(null);
+      setFindings([]);
+      setArtifactDiff([]);
+      setDecisionHistory([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadDetails = async () => {
+      setDetailLoading(true);
+      try {
+        const [report, artifacts, versions, decisions] = await Promise.all([
+          getValidationReport(assetId, selectedRequest.versionId),
+          listArtifacts(assetId, selectedRequest.versionId),
+          listVersions(assetId, undefined, 50),
+          listDecisions(assetId, selectedRequest.requestId),
+        ]);
+        if (cancelled) return;
+
+        setValidationReport(report.status === 'NOT_FOUND' ? null : report);
+        const rawFindings = Array.isArray(report.findings) ? report.findings : [];
+        setFindings(
+          rawFindings.map((f) => {
+            const row = f as Record<string, unknown>;
+            return {
+              code: String(row.code ?? ''),
+              severity: String(row.severity ?? ''),
+              message: String(row.message ?? row.summary ?? ''),
+              path: String(row.path ?? ''),
+            };
+          }),
+        );
+        setDecisionHistory(decisions);
+
+        const published = versions.items.filter(
+          (v) => v.status === 'PUBLISHED' && v.versionId !== selectedRequest.versionId,
+        );
+        const previous = published[0];
+        if (previous) {
+          const prevArtifacts = await listArtifacts(assetId, previous.versionId);
+          if (!cancelled) {
+            setArtifactDiff(computeArtifactDiff(artifacts, prevArtifacts));
+          }
+        } else {
+          setArtifactDiff(
+            artifacts.map((a) => ({ path: a.path, change: 'added' as const, currentSha: a.sha256 })),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setValidationReport(null);
+          setFindings([]);
+          setArtifactDiff([]);
+        }
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    };
+
+    loadDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRequest, assetId]);
 
   const submitPublishRequest = async (versionId: string) => {
     try {
@@ -167,11 +291,13 @@ export function ReviewPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">{t('review.frozenDigest')}</span>
-                  <span className="font-mono text-xs">{selectedRequest.frozenDigest}</span>
+                  <span className="font-mono text-xs break-all">{selectedRequest.frozenDigest}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">{t('version.commit')}</span>
-                  <span className="font-mono text-xs">{selectedRequest.frozenSourceCommit || '-'}</span>
+                  <span className="text-gray-500">{t('review.frozenCommit')}</span>
+                  <span className="font-mono text-xs break-all">
+                    {selectedRequest.frozenSourceCommit || '-'}
+                  </span>
                 </div>
                 {selectedRequest.frozenDigest && (
                   <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
@@ -186,6 +312,79 @@ export function ReviewPage() {
                 </div>
               </div>
 
+              {detailLoading && (
+                <p className="text-sm text-gray-500">{t('review.loadingDetails')}</p>
+              )}
+
+              {!detailLoading && validationReport && (
+                <div className="border rounded p-4">
+                  <h3 className="text-sm font-semibold mb-2">{t('review.validationReport')}</h3>
+                  <p className="text-xs text-gray-500 mb-2">
+                    {t('version.policyVersion')}: {String(validationReport.policy_version ?? '-')}
+                    {' | '}
+                    {t('common.status')}: {String(validationReport.status ?? '-')}
+                  </p>
+                  {findings.length > 0 ? (
+                    <ul className="text-xs space-y-1 max-h-40 overflow-y-auto">
+                      {findings.map((f, idx) => (
+                        <li key={`${f.code}-${idx}`} className="font-mono">
+                          <span
+                            className={
+                              f.severity === 'FAILED' || f.severity === 'ERROR'
+                                ? 'text-red-700'
+                                : 'text-gray-700'
+                            }
+                          >
+                            [{f.severity || 'INFO'}] {f.code}
+                          </span>
+                          {f.path ? ` @ ${f.path}` : ''}
+                          {f.message ? ` — ${f.message}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-gray-400">{t('review.noFindings')}</p>
+                  )}
+                </div>
+              )}
+
+              {!detailLoading && artifactDiff.length > 0 && (
+                <div className="border rounded p-4">
+                  <h3 className="text-sm font-semibold mb-2">{t('review.artifactDiff')}</h3>
+                  <ul className="text-xs space-y-1 max-h-32 overflow-y-auto font-mono">
+                    {artifactDiff.map((d) => (
+                      <li key={d.path}>
+                        <span
+                          className={
+                            d.change === 'added'
+                              ? 'text-green-700'
+                              : d.change === 'removed'
+                                ? 'text-red-700'
+                                : 'text-amber-700'
+                          }
+                        >
+                          {t(`review.diff.${d.change}`)}
+                        </span>{' '}
+                        {d.path}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {decisionHistory.length > 0 && (
+                <div className="border rounded p-4">
+                  <h3 className="text-sm font-semibold mb-2">{t('review.decisionHistory')}</h3>
+                  <ul className="text-xs space-y-1">
+                    {decisionHistory.map((d) => (
+                      <li key={String(d.review_id)}>
+                        {String(d.reviewer_id)}: {String(d.decision)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {selectedRequest.status === 'SUBMITTED' && (
                 <div className="space-y-3">
                   <div>
@@ -193,10 +392,11 @@ export function ReviewPage() {
                     <select
                       className="border rounded px-3 py-2 w-full"
                       value={decision}
-                      onChange={(e) => setDecision(e.target.value as 'APPROVE' | 'REJECT')}
+                      onChange={(e) => setDecision(e.target.value as ReviewDecision)}
                     >
                       <option value="APPROVE">{t('review.approve')}</option>
                       <option value="REJECT">{t('review.reject')}</option>
+                      <option value="REQUEST_CHANGES">{t('review.requestChanges')}</option>
                     </select>
                   </div>
                   <div>
@@ -213,7 +413,9 @@ export function ReviewPage() {
                     className={`px-4 py-2 text-white rounded ${
                       decision === 'APPROVE'
                         ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-red-600 hover:bg-red-700'
+                        : decision === 'REQUEST_CHANGES'
+                          ? 'bg-orange-600 hover:bg-orange-700'
+                          : 'bg-red-600 hover:bg-red-700'
                     }`}
                     onClick={() => submitDecision(selectedRequest.requestId)}
                   >

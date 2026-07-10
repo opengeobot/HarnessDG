@@ -231,9 +231,23 @@ public class PublishApplicationService {
             return;
         }
 
-        // 如果是 APPROVE，检查是否所有必需审批人都已审批
-        // P3 简化：单一审批即可
+        // 如果是 APPROVE，检查是否达到敏感级别要求的审批法定人数
         if ("APPROVE".equals(decision)) {
+            String assetId = version.assetId();
+            String sensitivityCode = resolveAssetSensitivity(assetId);
+            int required = ReviewQuorumPolicy.requiredApprovals(sensitivityCode);
+            Long approveCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(DISTINCT reviewer_id) FROM review_decision "
+                            + "WHERE request_id = ? AND decision = 'APPROVE'",
+                    Long.class, requestId);
+            long approvals = approveCount == null ? 0L : approveCount;
+
+            if (approvals < required) {
+                LOG.info("publish request awaiting quorum requestId={} approvals={}/{} sensitivity={}",
+                        requestId, approvals, required, sensitivityCode);
+                return;
+            }
+
             jdbcTemplate.update("UPDATE publish_request SET status = 'APPROVED', decided_at = ? WHERE request_id = ?",
                     Instant.now(), requestId);
 
@@ -247,9 +261,24 @@ public class PublishApplicationService {
                 throw new IllegalStateException("failed to serialize publish payload", e);
             }
 
-            LOG.info("publish request approved, publish job submitted requestId={} versionId={}", requestId, versionIdForPublish);
+            LOG.info("publish request approved, publish job submitted requestId={} versionId={} quorum={}/{}",
+                    requestId, versionIdForPublish, approvals, required);
             publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_APPROVED",
                     Map.of("requestId", requestId, "versionId", versionIdForPublish));
+        }
+    }
+
+    private String resolveAssetSensitivity(String assetId) {
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT COALESCE(am.sensitivity_code, ad.sensitivity_code)
+                    FROM asset a
+                    LEFT JOIN asset_model am ON am.asset_id = a.asset_id
+                    LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
+                    WHERE a.asset_id = ?
+                    """, String.class, assetId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException ex) {
+            return null;
         }
     }
 

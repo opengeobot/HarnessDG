@@ -48,8 +48,10 @@ execution:
   evidenceLevel: E3
 
 coverage:
-  proven: []
-  notProven: ['AC-P3-DEP-001']
+  proven:
+    - scenarioId: AC-P3-DEP-001
+      assertion: AssetSearchDao ORDER BY demotes DEPRECATED after ACTIVE; unit test AssetSearchDaoTest
+  notProven: []
 
 artifacts:
   reports: []

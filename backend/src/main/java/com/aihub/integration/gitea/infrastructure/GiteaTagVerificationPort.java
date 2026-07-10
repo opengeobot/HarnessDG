@@ -23,6 +23,16 @@ public interface GiteaTagVerificationPort {
      */
     TagVerifyResult verifyTag(String namespace, String name, String tag, String expectedCommitSha);
 
+    /**
+     * 从 Gitea 指定 Tag 引用的 {@code aihub/manifest.json} 计算规范化摘要。
+     *
+     * @param namespace 命名空间
+     * @param name      仓库名
+     * @param tag       Git Tag
+     * @return 摘要结果；{@link ManifestDigestResult#digest()} 非空时由调用方与 PG 比对
+     */
+    ManifestDigestResult fetchManifestDigest(String namespace, String name, String tag);
+
     /** Tag 校验结果。 */
     enum TagVerifyResult {
         /** Tag 存在且 Commit 匹配。 */
@@ -33,5 +43,25 @@ public interface GiteaTagVerificationPort {
         COMMIT_MISMATCH,
         /** Gitea 不可用或查询失败。 */
         UNAVAILABLE
+    }
+
+    /** Manifest 摘要拉取结果。 */
+    record ManifestDigestResult(Status status, String digest) {
+
+        enum Status {
+            COMPUTED, MISSING_FILE, UNAVAILABLE
+        }
+
+        static ManifestDigestResult computed(String digest) {
+            return new ManifestDigestResult(Status.COMPUTED, digest);
+        }
+
+        static ManifestDigestResult missingFile() {
+            return new ManifestDigestResult(Status.MISSING_FILE, null);
+        }
+
+        static ManifestDigestResult unavailable() {
+            return new ManifestDigestResult(Status.UNAVAILABLE, null);
+        }
     }
 }

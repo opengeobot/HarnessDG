@@ -4,6 +4,8 @@ import com.aihub.integration.gitea.domain.GiteaTagPublisher;
 import com.aihub.integration.gitea.domain.GiteaTagPublisher.TagPublishMode;
 import com.aihub.integration.gitea.domain.GiteaTagPublisher.TagPublishResult;
 import com.aihub.job.domain.JobContext;
+import com.aihub.shared.error.DependencyException;
+import com.aihub.shared.error.ErrorCode;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -187,6 +190,55 @@ class PublishJobHandlerTest {
         assertThatThrownBy(() -> handler.handle(context))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("tag conflict");
+    }
+
+    @Test
+    @DisplayName("Gitea 不可用时抛出可重试 DependencyException 且不标记 FAILED")
+    void shouldPropagateRetryableWhenGiteaDown() throws Exception {
+        Version version = pendingReviewVersion();
+
+        when(jdbcTemplate.queryForMap(anyString(), eq("req_1")))
+                .thenReturn(Map.of(
+                        "status", "APPROVED",
+                        "frozen_digest", "sha256:abc123",
+                        "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        when(versionRepository.findByVersionId("ver_1")).thenReturn(Optional.of(version));
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), eq("v1.0.0"), eq("ver_1"))).thenReturn(0L);
+        when(jdbcTemplate.queryForObject(anyString(), eq(String.class), eq("ast_1"))).thenReturn("org/model-a");
+        when(giteaTagPublisher.createProtectedTag(anyString(), anyString(), anyString()))
+                .thenThrow(new DependencyException(
+                        ErrorCode.GITEA_DEPENDENCY_UNAVAILABLE, "gitea down", Map.of(), null));
+
+        JobContext context = new JobContext("job_1", "VERSION_PUBLISH",
+                "{\"requestId\":\"req_1\",\"versionId\":\"ver_1\"}", 0, "principal_1", "trace_1", "ast_1");
+
+        assertThatThrownBy(() -> handler.handle(context))
+                .isInstanceOf(DependencyException.class)
+                .satisfies(ex -> assertThat(((DependencyException) ex).errorCode())
+                        .isEqualTo(ErrorCode.GITEA_DEPENDENCY_UNAVAILABLE));
+
+        verify(jdbcTemplate, never()).update(contains("FAILED"), any(Instant.class), eq("req_1"));
+        verify(versionRepository, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("source commit 漂移应标记 FAILED")
+    void shouldMarkFailedOnCommitDrift() throws Exception {
+        Version version = pendingReviewVersion();
+
+        when(jdbcTemplate.queryForMap(anyString(), eq("req_1")))
+                .thenReturn(Map.of(
+                        "status", "APPROVED",
+                        "frozen_digest", "sha256:abc123",
+                        "frozen_source_commit", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        when(versionRepository.findByVersionId("ver_1")).thenReturn(Optional.of(version));
+
+        JobContext context = new JobContext("job_1", "VERSION_PUBLISH",
+                "{\"requestId\":\"req_1\",\"versionId\":\"ver_1\"}", 0, "principal_1", "trace_1", "ast_1");
+
+        assertThatThrownBy(() -> handler.handle(context))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("commit drift");
     }
 
     private static Version pendingReviewVersion() {

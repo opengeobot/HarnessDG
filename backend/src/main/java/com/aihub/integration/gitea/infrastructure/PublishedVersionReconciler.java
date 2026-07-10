@@ -3,12 +3,14 @@ package com.aihub.integration.gitea.infrastructure;
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
 import com.aihub.platform.observability.application.PlatformMetrics;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -36,13 +38,16 @@ public class PublishedVersionReconciler implements JobHandler {
     private final JdbcTemplate jdbcTemplate;
     private final PlatformMetrics platformMetrics;
     private final ObjectProvider<GiteaTagVerificationPort> giteaTagVerificationProvider;
+    private final Environment environment;
 
     public PublishedVersionReconciler(JdbcTemplate jdbcTemplate,
                                       PlatformMetrics platformMetrics,
-                                      ObjectProvider<GiteaTagVerificationPort> giteaTagVerificationProvider) {
+                                      ObjectProvider<GiteaTagVerificationPort> giteaTagVerificationProvider,
+                                      Environment environment) {
         this.jdbcTemplate = jdbcTemplate;
         this.platformMetrics = platformMetrics;
         this.giteaTagVerificationProvider = giteaTagVerificationProvider;
+        this.environment = environment;
     }
 
     @Override
@@ -146,8 +151,8 @@ public class PublishedVersionReconciler implements JobHandler {
             if (namespace != null && name != null) {
                 GiteaTagVerificationPort.TagVerifyResult tagResult =
                         gitea.verifyTag(namespace, name, gitTag, sourceCommit);
-                return switch (tagResult) {
-                    case MATCHES -> ReconcileResult.CONSISTENT;
+                ReconcileResult tagReconcile = switch (tagResult) {
+                    case MATCHES -> null;
                     case MISSING_TAG -> {
                         LOG.warn("PUBLISHED version gitea tag missing versionId={} tag={}", versionId, gitTag);
                         platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "GITEA_TAG_MISSING");
@@ -158,12 +163,50 @@ public class PublishedVersionReconciler implements JobHandler {
                         platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "GITEA_COMMIT_MISMATCH");
                         yield ReconcileResult.SECURITY_INCIDENT;
                     }
-                    case UNAVAILABLE -> ReconcileResult.CONSISTENT;
+                    case UNAVAILABLE -> classifyGiteaUnavailable(versionId);
+                };
+                if (tagReconcile != null) {
+                    return tagReconcile;
+                }
+
+                GiteaTagVerificationPort.ManifestDigestResult digestResult =
+                        gitea.fetchManifestDigest(namespace, name, gitTag);
+                return switch (digestResult.status()) {
+                    case COMPUTED -> {
+                        String giteaDigest = digestResult.digest();
+                        if (giteaDigest != null && giteaDigest.equalsIgnoreCase(manifestDigest)) {
+                            yield ReconcileResult.CONSISTENT;
+                        }
+                        LOG.warn("PUBLISHED version manifest digest mismatch versionId={} pg={} gitea={}",
+                                versionId, manifestDigest, giteaDigest);
+                        platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "GITEA_DIGEST_MISMATCH");
+                        yield ReconcileResult.SECURITY_INCIDENT;
+                    }
+                    case MISSING_FILE -> {
+                        LOG.warn("PUBLISHED version gitea manifest missing versionId={} tag={}", versionId, gitTag);
+                        platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "GITEA_MANIFEST_MISSING");
+                        yield ReconcileResult.MANUAL_REVIEW;
+                    }
+                    case UNAVAILABLE -> classifyGiteaUnavailable(versionId);
                 };
             }
         }
 
         return ReconcileResult.CONSISTENT;
+    }
+
+    private ReconcileResult classifyGiteaUnavailable(String versionId) {
+        if (isStrictGiteaReconciliationProfile()) {
+            LOG.warn("PUBLISHED version gitea unavailable in strict profile versionId={}", versionId);
+            platformMetrics.recordReconciliationDiscrepancy("PublishedVersion", "GITEA_UNAVAILABLE");
+            return ReconcileResult.MANUAL_REVIEW;
+        }
+        return ReconcileResult.CONSISTENT;
+    }
+
+    private boolean isStrictGiteaReconciliationProfile() {
+        String[] profiles = environment.getActiveProfiles();
+        return Arrays.stream(profiles).anyMatch(p -> "compose".equals(p) || "production".equals(p));
     }
 
     private void recordDiscrepancy(String versionId, ReconcileResult result) {

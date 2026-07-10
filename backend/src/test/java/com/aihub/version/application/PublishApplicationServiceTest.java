@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.aihub.audit.application.AuditService;
@@ -213,12 +215,66 @@ class PublishApplicationServiceTest {
         given(idGenerator.generate(IdPrefix.REVIEW_DECISION)).willReturn("rvw_002");
         given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
         given(jdbcTemplate.update(anyString(), any(), eq("pub_01"))).willReturn(1);
+        given(jdbcTemplate.queryForObject(contains("sensitivity_code"), eq(String.class), eq("ast_01")))
+                .willReturn("INTERNAL");
+        given(jdbcTemplate.queryForObject(contains("COUNT(DISTINCT reviewer_id)"), eq(Long.class), eq("pub_01")))
+                .willReturn(1L);
 
         Version v = createPendingReviewVersion("ver_01", "digest",
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         service.submitDecision("pub_01", "APPROVE", "LGTM");
+
+        verify(jobApplicationService).enqueue(eq("VERSION_PUBLISH"), anyString(),
+                eq("usr_reviewer"), any(), eq("ver_01"), eq(3));
+    }
+
+    @Test
+    void submitDecisionApproveHighSensitivityRequiresTwoApprovals() throws Exception {
+        Map<String, Object> request = Map.of(
+                "request_id", "pub_01", "version_id", "ver_01",
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "digest",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
+        given(idGenerator.generate(IdPrefix.REVIEW_DECISION)).willReturn("rvw_004");
+        given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
+        given(jdbcTemplate.queryForObject(contains("sensitivity_code"), eq(String.class), eq("ast_01")))
+                .willReturn("SECRET");
+        given(jdbcTemplate.queryForObject(contains("COUNT(DISTINCT reviewer_id)"), eq(Long.class), eq("pub_01")))
+                .willReturn(1L);
+
+        Version v = createPendingReviewVersion("ver_01", "digest",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
+
+        service.submitDecision("pub_01", "APPROVE", "first approval");
+
+        verify(jobApplicationService, never()).enqueue(anyString(), anyString(), anyString(), any(), anyString(), anyInt());
+    }
+
+    @Test
+    void submitDecisionApproveHighSensitivityEnqueuesAfterSecondApproval() throws Exception {
+        Map<String, Object> request = Map.of(
+                "request_id", "pub_01", "version_id", "ver_01",
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "digest",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
+        given(idGenerator.generate(IdPrefix.REVIEW_DECISION)).willReturn("rvw_005");
+        given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
+        given(jdbcTemplate.update(anyString(), any(), eq("pub_01"))).willReturn(1);
+        given(jdbcTemplate.queryForObject(contains("sensitivity_code"), eq(String.class), eq("ast_01")))
+                .willReturn("CONFIDENTIAL");
+        given(jdbcTemplate.queryForObject(contains("COUNT(DISTINCT reviewer_id)"), eq(Long.class), eq("pub_01")))
+                .willReturn(2L);
+
+        Version v = createPendingReviewVersion("ver_01", "digest",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
+
+        service.submitDecision("pub_01", "APPROVE", "second approval");
 
         verify(jobApplicationService).enqueue(eq("VERSION_PUBLISH"), anyString(),
                 eq("usr_reviewer"), any(), eq("ver_01"), eq(3));
