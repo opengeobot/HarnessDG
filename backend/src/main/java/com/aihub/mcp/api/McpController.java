@@ -1,10 +1,21 @@
 package com.aihub.mcp.api;
 
+import com.aihub.audit.application.AuditEvent;
+import com.aihub.audit.application.AuditService;
+import com.aihub.audit.domain.AuditResult;
+import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.authorization.domain.Permissions;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
-import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.mcp.application.McpToolCatalog.ToolDefinition;
 import com.aihub.platform.observability.application.PlatformMetrics;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.shared.identity.PrincipalType;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,16 +45,22 @@ public class McpController {
     private final McpToolCatalog toolCatalog;
     private final McpResourceHandler resourceHandler;
     private final AuthorizationService authorizationService;
+    private final AuditService auditService;
     private final PlatformMetrics platformMetrics;
+    private final ObjectMapper objectMapper;
 
     public McpController(McpToolCatalog toolCatalog,
                          McpResourceHandler resourceHandler,
                          AuthorizationService authorizationService,
-                         PlatformMetrics platformMetrics) {
+                         AuditService auditService,
+                         PlatformMetrics platformMetrics,
+                         ObjectMapper objectMapper) {
         this.toolCatalog = toolCatalog;
         this.resourceHandler = resourceHandler;
         this.authorizationService = authorizationService;
+        this.auditService = auditService;
         this.platformMetrics = platformMetrics;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
@@ -85,14 +102,15 @@ public class McpController {
     }
 
     private Map<String, Object> handleToolsList() {
-        List<Map<String, Object>> tools = toolCatalog.listTools().stream()
-                .map(tool -> {
-                    Map<String, Object> toolDef = new LinkedHashMap<>();
-                    toolDef.put("name", tool.name());
-                    toolDef.put("description", tool.description());
-                    toolDef.put("inputSchema", tool.inputSchema());
-                    return toolDef;
-                })
+        PrincipalContext context = requireAuthenticatedPrincipal();
+        try {
+            authorizationService.requirePermission(context, Permissions.MCP_INVOKE);
+        } catch (AuthorizationException e) {
+            return toolError("Missing required scope: mcp:invoke");
+        }
+
+        List<Map<String, Object>> tools = toolCatalog.listVisibleTools().stream()
+                .map(this::toToolListEntry)
                 .toList();
         return Map.of("tools", tools);
     }
@@ -100,23 +118,31 @@ public class McpController {
     private Map<String, Object> handleToolsCall(Map<String, Object> params) {
         String toolName = (String) params.get("name");
         if (toolName == null) {
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Missing tool name")));
+            return toolError("Missing tool name");
         }
 
-        // 授权检查（fail-closed：principalId 为 null 时拒绝）
-        String principalId = PrincipalContextHolder.current()
-                .map(c -> c.principalId())
-                .orElse(null);
-        if (principalId == null) {
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Unauthenticated")));
+        PrincipalContext context = PrincipalContextHolder.current().orElse(null);
+        if (context == null || context.principalId() == null) {
+            auditToolDenied(null, null, toolName, ErrorCode.AUTH_UNAUTHENTICATED.name());
+            return toolError("Unauthenticated");
         }
+
+        ToolDefinition toolDef = toolCatalog.findTool(toolName).orElse(null);
+        if (toolDef == null) {
+            auditToolDenied(context.principalId(), context.principalType(), toolName,
+                    ErrorCode.MCP_TOOL_NOT_ALLOWED.name());
+            return toolError("Unknown tool: " + toolName);
+        }
+
         try {
-            authorizationService.requireToolAllowed(principalId, toolName);
-        } catch (Exception e) {
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Tool not allowed: " + toolName)));
+            authorizationService.requirePermission(context, Permissions.MCP_INVOKE);
+            authorizationService.requirePermission(context, toolDef.requiredPermission());
+            if (context.principalType() == PrincipalType.AGENT) {
+                authorizationService.requireToolAllowed(context.principalId(), toolName);
+            }
+        } catch (AuthorizationException e) {
+            auditToolDenied(context.principalId(), context.principalType(), toolName, e.errorCode().name());
+            return toolError("Tool not allowed: " + toolName);
         }
 
         @SuppressWarnings("unchecked")
@@ -126,12 +152,50 @@ public class McpController {
             Object result = toolCatalog.callTool(toolName, arguments);
             platformMetrics.recordToolCall(toolName, "success");
             return Map.of("isError", false, "content",
-                    List.of(Map.of("type", "text", "text", String.valueOf(result))));
+                    List.of(Map.of("type", "text", "text", serializeResult(result))));
         } catch (Exception e) {
             LOG.warn("MCP tool call failed tool={} error={}", toolName, e.getMessage());
             platformMetrics.recordToolCall(toolName, "error");
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+            return toolError("Error: " + e.getMessage());
+        }
+    }
+
+    private PrincipalContext requireAuthenticatedPrincipal() {
+        return PrincipalContextHolder.current()
+                .filter(ctx -> ctx.principalId() != null)
+                .orElseThrow(() -> new AuthorizationException(
+                        ErrorCode.AUTH_UNAUTHENTICATED, "no authenticated principal", Map.of()));
+    }
+
+    private void auditToolDenied(String principalId, PrincipalType principalType,
+                                 String toolName, String errorCode) {
+        auditService.record(new AuditEvent(
+                "AGENT_ACCESS_DENIED",
+                "mcp:tool:call",
+                principalId,
+                principalType == null ? null : principalType.name(),
+                "MCP_TOOL",
+                toolName,
+                null,
+                null,
+                AuditResult.DENIED,
+                errorCode,
+                Map.of("tool", toolName)));
+    }
+
+    private Map<String, Object> toToolListEntry(ToolDefinition tool) {
+        Map<String, Object> toolDef = new LinkedHashMap<>();
+        toolDef.put("name", tool.name());
+        toolDef.put("description", tool.description());
+        toolDef.put("inputSchema", tool.inputSchema());
+        return toolDef;
+    }
+
+    private String serializeResult(Object result) {
+        try {
+            return objectMapper.writeValueAsString(result);
+        } catch (JsonProcessingException e) {
+            return String.valueOf(result);
         }
     }
 
@@ -153,6 +217,11 @@ public class McpController {
                     "uri", uri, "mimeType", "application/json",
                     "text", "{\"error\": \"" + e.getMessage() + "\"}")));
         }
+    }
+
+    private static Map<String, Object> toolError(String message) {
+        return Map.of("isError", true, "content",
+                List.of(Map.of("type", "text", "text", message)));
     }
 
     @SuppressWarnings("unchecked")

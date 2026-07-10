@@ -32,7 +32,8 @@ paths:
   /agent/assets/search:
     get:
       operationId: agentSearchAssets
-      x-implementation-status: implemented
+      x-implementation-status: planned
+      x-mcp-equivalent: asset_search
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       tags: [read-only]
       summary: Search assets (read-only profile)
@@ -77,7 +78,8 @@ paths:
   /agent/assets/{assetId}:
     get:
       operationId: agentGetAsset
-      x-implementation-status: implemented
+      x-implementation-status: planned
+      x-mcp-equivalent: asset_get
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND]
       tags: [read-only]
       summary: Get asset details (read-only profile)
@@ -99,7 +101,8 @@ paths:
   /agent/assets/{assetId}/versions:
     get:
       operationId: agentListVersions
-      x-implementation-status: implemented
+      x-implementation-status: planned
+      x-mcp-equivalent: asset_list_versions
       x-error-codes: [AUTH_UNAUTHENTICATED, ASSET_NOT_FOUND]
       tags: [read-only]
       summary: List versions for an asset (read-only profile)
@@ -132,7 +135,8 @@ paths:
   /agent/versions/{versionId}/download:
     post:
       operationId: agentRequestDownload
-      x-implementation-status: implemented
+      x-implementation-status: planned
+      x-mcp-equivalent: asset_request_download
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
       tags: [read-only]
       summary: Request download ticket (returns handle, not URL)
@@ -160,7 +164,8 @@ paths:
   /agent/assets/{assetId}/versions/draft:
     post:
       operationId: agentCreateDraftVersion
-      x-implementation-status: implemented
+      x-implementation-status: planned
+      x-mcp-equivalent: asset_create_draft
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT]
       tags: [contribution]
       summary: Create a draft version (contribution profile)
@@ -205,6 +210,7 @@ components:
       type: object
       properties:
         assetId: { type: string }
+        coordinate: { type: string, description: Stable aih:// URI }
         type: { type: string, enum: [MODEL, DATASET] }
         namespace: { type: string }
         name: { type: string }
@@ -213,6 +219,13 @@ components:
         visibility: { type: string }
         status: { type: string }
         license: { type: string }
+        matchedFields:
+          type: array
+          items: { type: string }
+          description: Keyword search hit fields (empty when no keyword)
+        latestPublished:
+          type: [string, 'null']
+          description: Server-computed latest PUBLISHED version label
 
     AssetDetail:
       allOf:
@@ -239,12 +252,18 @@ components:
 
     DownloadTicket:
       type: object
+      description: Download handle; MCP returns this shape without presignedUrl.
       properties:
+        versionId: { type: string }
+        artifactId: { type: [string, 'null'] }
         method: { type: string, enum: [PRESIGNED_URL, GIT_DVC] }
-        presignedUrl: { type: [string, 'null'] }
         expiresAt: { type: [string, 'null'], format: date-time }
         fileName: { type: [string, 'null'] }
         fileSize: { type: [integer, 'null'], format: int64 }
+        gitCloneUrl: { type: [string, 'null'] }
+        revision: { type: [string, 'null'] }
+        dvcCredentialsUrl: { type: [string, 'null'] }
+        assetId: { type: string }
 
     ErrorResponse:
       type: object

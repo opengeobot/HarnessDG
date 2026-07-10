@@ -1,0 +1,51 @@
+# OpenClaw / QwenPaw compatibility manifest for AIHub MCP integration.
+# No secrets — credentials live in the host Secret Store only.
+schemaVersion: 1
+package: aihub-asset-manager
+description: HarnessDG asset catalog MCP client skill
+
+clients:
+  openclaw:
+    minimumVersion: "0.3.0"
+    transport: streamable-http
+    mcpEndpoint: POST /mcp
+  qwenpaw:
+    minimumVersion: "1.2.0"
+    transport: streamable-http
+    mcpEndpoint: POST /mcp
+
+authentication:
+  scheme: bearer-jwt
+  tokenEndpoint: /api/v1/auth/token
+  grantType: client_credentials
+  note: Exchange Agent clientId/clientSecret for short-lived access JWT; never embed secrets in Skill files.
+
+tools:
+  readOnly:
+    - asset_search
+    - asset_get
+    - asset_list_versions
+    - asset_get_version
+    - asset_request_download
+  write:
+    enabledByDefault: false
+    configKey: mcp.writeTools.enabled
+    names:
+      - asset_create_draft
+      - asset_create_upload_session
+      - asset_complete_upload
+      - asset_get_upload_status
+  deniedForAgents:
+    - asset_publish_version
+    - asset_delete
+
+resources:
+  - aih://asset/{assetId}
+  - aih://asset/{assetId}/version/{versionId}
+  - aih://asset/{assetId}/card
+  - aih://asset/{assetId}/manifest/{versionId}
+
+policy:
+  searchBeforeDownload: true
+  noVersionGuessing: true
+  downloadReturnsHandleOnly: true

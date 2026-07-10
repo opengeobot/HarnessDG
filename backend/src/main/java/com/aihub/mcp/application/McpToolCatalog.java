@@ -5,17 +5,24 @@ import com.aihub.asset.application.AssetSearchQuery;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.domain.AssetType;
+import com.aihub.authorization.domain.Permissions;
 import com.aihub.shared.api.CursorPage;
+import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.shared.identity.PrincipalType;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.transfer.application.UploadApplicationService;
 import com.aihub.version.application.PublishApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
+import com.aihub.version.domain.Version;
+import com.aihub.version.domain.VersionRepository;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,11 +36,15 @@ import org.springframework.stereotype.Service;
  * 调用时复用与 REST 相同的 Application Service，不绕过权限。
  *
  * <p>写工具受 {@code mcp.writeTools.enabled} 开关控制，默认关闭。
+ * {@link #listVisibleTools()} 默认隐藏写工具；高风险 publish/delete 永不暴露给 Agent。
  */
 @Service
 public class McpToolCatalog {
 
     private static final Logger LOG = LoggerFactory.getLogger(McpToolCatalog.class);
+
+    /** 高风险工具：永不出现在 tools/list，Agent 调用一律拒绝。 */
+    static final Set<String> AGENT_DENIED_TOOLS = Set.of("asset_publish_version", "asset_delete");
 
     private final Map<String, ToolDefinition> tools = new ConcurrentHashMap<>();
     private final Map<String, ToolHandler> handlers = new ConcurrentHashMap<>();
@@ -42,12 +53,13 @@ public class McpToolCatalog {
     public McpToolCatalog(
             AssetApplicationService assetService,
             VersionApplicationService versionService,
+            VersionRepository versionRepository,
             DownloadApplicationService downloadService,
             UploadApplicationService uploadService,
             PublishApplicationService publishService,
             @Value("${mcp.writeTools.enabled:false}") boolean writeToolsEnabled) {
         this.writeToolsEnabled = writeToolsEnabled;
-        registerReadOnlyTools(assetService, versionService, downloadService);
+        registerReadOnlyTools(assetService, versionService, versionRepository, downloadService);
         registerWriteTools(assetService, versionService, uploadService, publishService);
         LOG.info("MCP Tool Catalog initialized: {} tools registered (writeTools={})",
                 tools.size(), writeToolsEnabled);
@@ -68,9 +80,21 @@ public class McpToolCatalog {
         Object call(Map<String, Object> arguments);
     }
 
-    /** 列出所有已注册 Tool 定义。 */
+    /** 列出全部已注册 Tool 定义（含默认关闭的写工具）。 */
     public List<ToolDefinition> listTools() {
         return Collections.unmodifiableList(tools.values().stream().toList());
+    }
+
+    /** 列出对当前调用方可发现的 Tool（写工具默认隐藏，高风险工具永不列出）。 */
+    public List<ToolDefinition> listVisibleTools() {
+        return tools.values().stream()
+                .filter(this::isDiscoverable)
+                .toList();
+    }
+
+    /** 查找 Tool 定义。 */
+    public Optional<ToolDefinition> findTool(String name) {
+        return Optional.ofNullable(tools.get(name));
     }
 
     /** 调用指定 Tool。 */
@@ -79,6 +103,7 @@ public class McpToolCatalog {
         if (def == null) {
             throw new IllegalArgumentException("Unknown tool: " + name);
         }
+        enforceAgentPolicy(name);
         if (def.write() && !writeToolsEnabled) {
             throw new IllegalStateException("Write tools are disabled: " + name);
         }
@@ -89,10 +114,35 @@ public class McpToolCatalog {
         return handler.call(arguments);
     }
 
+    private void enforceAgentPolicy(String toolName) {
+        PrincipalContext context = PrincipalContextHolder.current().orElse(null);
+        if (context == null || context.principalType() != PrincipalType.AGENT) {
+            return;
+        }
+        if (AGENT_DENIED_TOOLS.contains(toolName)) {
+            throw new IllegalStateException("Tool denied for agents: " + toolName);
+        }
+        ToolDefinition def = tools.get(toolName);
+        if (def != null && Permissions.HIGH_RISK_ACTIONS.contains(def.requiredPermission())) {
+            throw new IllegalStateException("High-risk tool denied for agents: " + toolName);
+        }
+    }
+
+    private boolean isDiscoverable(ToolDefinition tool) {
+        if (AGENT_DENIED_TOOLS.contains(tool.name())) {
+            return false;
+        }
+        if (tool.write() && !writeToolsEnabled) {
+            return false;
+        }
+        return true;
+    }
+
     // ---- 只读工具注册 ----
 
     private void registerReadOnlyTools(AssetApplicationService assetService,
                                        VersionApplicationService versionService,
+                                       VersionRepository versionRepository,
                                        DownloadApplicationService downloadService) {
         // asset_search
         register("asset_search",
@@ -104,7 +154,7 @@ public class McpToolCatalog {
                         "tagId", Map.of("type", "string"),
                         "cursor", Map.of("type", "string"),
                         "limit", Map.of("type", "integer", "minimum", 1, "maximum", 100, "default", 20))),
-                false, "asset:read",
+                false, Permissions.ASSET_READ,
                 args -> {
                     String principalId = currentPrincipalId();
                     String keyword = str(args, "keyword");
@@ -118,7 +168,10 @@ public class McpToolCatalog {
                             null, null, null, null, tagId, null, null, null,
                             null, null, null, false, null, limit, principalId);
                     CursorPage<AssetSummaryView> page = assetService.searchAssets(query);
-                    return Map.of("items", page.items(), "nextCursor", nullSafe(page.nextCursor()),
+                    List<Map<String, Object>> items = page.items().stream()
+                            .map(summary -> toSearchItem(summary, versionRepository))
+                            .toList();
+                    return Map.of("items", items, "nextCursor", nullSafe(page.nextCursor()),
                             "hasMore", page.hasMore());
                 });
 
@@ -126,11 +179,25 @@ public class McpToolCatalog {
         register("asset_get",
                 "Get a single asset by ID.",
                 schema(Map.of("assetId", Map.of("type", "string"))),
-                false, "asset:read",
+                false, Permissions.ASSET_READ,
                 args -> {
                     String principalId = currentPrincipalId();
                     AssetView view = assetService.getAsset(str(args, "assetId"), principalId);
-                    return view;
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    result.put("assetId", view.assetId());
+                    result.put("coordinate", view.coordinate());
+                    result.put("type", view.type());
+                    result.put("namespace", view.namespace());
+                    result.put("name", view.name());
+                    result.put("displayName", view.displayName());
+                    result.put("description", view.description());
+                    result.put("visibility", view.visibility());
+                    result.put("status", view.status());
+                    result.put("license", view.license());
+                    result.put("tagIds", view.tagIds());
+                    versionRepository.findLatestPublishedByAssetId(view.assetId())
+                            .ifPresent(v -> result.put("latestPublished", v.version()));
+                    return result;
                 });
 
         // asset_list_versions
@@ -140,7 +207,7 @@ public class McpToolCatalog {
                         "assetId", Map.of("type", "string"),
                         "cursor", Map.of("type", "string"),
                         "limit", Map.of("type", "integer", "minimum", 1, "maximum", 100, "default", 20))),
-                false, "asset:read",
+                false, Permissions.ASSET_READ,
                 args -> {
                     String assetId = str(args, "assetId");
                     String cursor = str(args, "cursor");
@@ -154,7 +221,7 @@ public class McpToolCatalog {
         register("asset_get_version",
                 "Get version details by version ID.",
                 schema(Map.of("versionId", Map.of("type", "string"))),
-                false, "asset:read",
+                false, Permissions.ASSET_READ,
                 args -> versionService.getVersion(str(args, "versionId")));
 
         // asset_request_download
@@ -164,11 +231,12 @@ public class McpToolCatalog {
                         "versionId", Map.of("type", "string"),
                         "artifactId", Map.of("type", "string",
                                 "description", "Optional artifact ID; omit for whole version (GIT_DVC)."))),
-                false, "asset:read",
+                false, Permissions.ASSET_READ,
                 args -> {
                     String versionId = str(args, "versionId");
                     String artifactId = str(args, "artifactId");
-                    return downloadService.issueTicket(versionId, artifactId);
+                    var ticket = downloadService.issueTicket(versionId, artifactId);
+                    return McpDownloadHandle.fromTicket(versionId, artifactId, ticket);
                 });
     }
 
@@ -184,7 +252,7 @@ public class McpToolCatalog {
                 schema(Map.of(
                         "assetId", Map.of("type", "string"),
                         "version", Map.of("type", "string"))),
-                true, "asset:manage",
+                true, Permissions.ASSET_MANAGE,
                 args -> {
                     String principalId = currentPrincipalId();
                     return versionService.createDraftVersion(
@@ -199,7 +267,7 @@ public class McpToolCatalog {
                         "versionId", Map.of("type", "string"),
                         "totalBytes", Map.of("type", "integer"),
                         "fileCount", Map.of("type", "integer"))),
-                true, "asset:manage",
+                true, Permissions.ASSET_MANAGE,
                 args -> {
                     String principalId = currentPrincipalId();
                     return uploadService.createSession(
@@ -213,7 +281,7 @@ public class McpToolCatalog {
                 "Complete an upload session. Write tool, disabled by default.",
                 schema(Map.of(
                         "sessionId", Map.of("type", "string"))),
-                true, "asset:manage",
+                true, Permissions.ASSET_MANAGE,
                 args -> {
                     String principalId = currentPrincipalId();
                     return uploadService.completeSession(
@@ -225,28 +293,48 @@ public class McpToolCatalog {
                 "Get upload session status. Write tool, disabled by default.",
                 schema(Map.of(
                         "sessionId", Map.of("type", "string"))),
-                true, "asset:read",
+                true, Permissions.ASSET_READ,
                 args -> uploadService.getSession(str(args, "sessionId")));
 
-        // asset_publish_version (high-risk, disabled)
+        // asset_publish_version (high-risk, never for agents)
         register("asset_publish_version",
                 "Publish an asset version. High-risk write tool, disabled by default.",
                 schema(Map.of(
                         "versionId", Map.of("type", "string"))),
-                true, "asset:publish",
+                true, Permissions.ASSET_PUBLISH,
                 args -> publishService.submitPublishRequest(str(args, "versionId")));
 
-        // asset_delete (high-risk, disabled)
+        // asset_delete (high-risk, never for agents)
         register("asset_delete",
                 "Delete an asset. High-risk write tool, disabled by default.",
                 schema(Map.of(
                         "assetId", Map.of("type", "string"))),
-                true, "asset:delete",
+                true, Permissions.ASSET_DELETE,
                 args -> {
                     String principalId = currentPrincipalId();
                     assetService.deleteAsset(str(args, "assetId"), principalId);
                     return Map.of("deleted", true);
                 });
+    }
+
+    private static Map<String, Object> toSearchItem(AssetSummaryView summary,
+                                                    VersionRepository versionRepository) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("assetId", summary.assetId());
+        item.put("coordinate", summary.coordinate());
+        item.put("type", summary.type());
+        item.put("namespace", summary.namespace());
+        item.put("name", summary.name());
+        item.put("displayName", summary.displayName());
+        item.put("description", summary.description());
+        item.put("visibility", summary.visibility());
+        item.put("status", summary.status());
+        item.put("license", summary.license());
+        item.put("matchedFields", summary.matchedFields());
+        item.put("updatedAt", summary.updatedAt());
+        Optional<Version> latest = versionRepository.findLatestPublishedByAssetId(summary.assetId());
+        latest.ifPresent(v -> item.put("latestPublished", v.version()));
+        return item;
     }
 
     // ---- 辅助方法 ----

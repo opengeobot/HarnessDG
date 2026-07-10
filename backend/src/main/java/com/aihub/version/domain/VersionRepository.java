@@ -22,6 +22,9 @@ public interface VersionRepository {
     /** 统计资产下处于指定状态的版本数量（用于归档前活跃版本守卫）。 */
     long countByAssetIdAndStatus(String assetId, VersionStatus status);
 
+    /** 查询资产最新已发布版本（按 published_at 降序取首条）。 */
+    Optional<Version> findLatestPublishedByAssetId(String assetId);
+
     // ---- 工件操作 ----
 
     void insertArtifact(Artifact artifact);

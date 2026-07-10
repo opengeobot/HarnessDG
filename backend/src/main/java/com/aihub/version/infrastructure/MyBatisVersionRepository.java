@@ -91,6 +91,17 @@ public class MyBatisVersionRepository implements VersionRepository {
     }
 
     @Override
+    public Optional<Version> findLatestPublishedByAssetId(String assetId) {
+        VersionEntity entity = versionMapper.selectOne(
+                Wrappers.<VersionEntity>lambdaQuery()
+                        .eq(VersionEntity::getAssetId, assetId)
+                        .eq(VersionEntity::getStatus, VersionStatus.PUBLISHED.name())
+                        .orderByDesc(VersionEntity::getPublishedAt)
+                        .last("LIMIT 1"));
+        return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
     public void insertArtifact(Artifact artifact) {
         ArtifactEntity entity = new ArtifactEntity();
         entity.setArtifactId(artifact.artifactId());

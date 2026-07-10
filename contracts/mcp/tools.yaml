@@ -106,7 +106,7 @@ tools:
   - name: asset_request_download
     enabled: true
     write: false
-    summary: 请求已发布版本的下载票据（返回 handle 或预签名 URL）。
+    summary: 请求已发布版本的下载 handle（不含预签名 URL；REST 票据端点另行签发 URL）。
     requiredScopes: [asset:read]
     requiredPermissions: [asset:read]
     reusesApplicationService: DownloadApplicationService

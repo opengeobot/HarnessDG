@@ -6,15 +6,19 @@
  */
 package com.aihub.mcp.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.aihub.audit.application.AuditEvent;
+import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.AgentToolRepository;
 import com.aihub.authorization.domain.ResourceAclRepository;
@@ -35,11 +39,13 @@ import com.aihub.shared.security.IssuedToken;
 import com.aihub.shared.security.TokenIssueRequest;
 import com.aihub.shared.security.TokenSigner;
 import com.aihub.shared.security.TokenType;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Configuration;
@@ -58,7 +64,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import({McpController.class,
         PrincipalContextFilter.class, SharedKernelConfiguration.class, GlobalExceptionHandler.class,
         SecurityConfiguration.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
-        RefreshCookieFactory.class, AuthorizationService.class})
+        RefreshCookieFactory.class, AuthorizationService.class, ObjectMapper.class})
 class McpControllerTest {
 
     @Configuration
@@ -83,11 +89,12 @@ class McpControllerTest {
     private AgentToolRepository agentToolRepository;
     @MockitoBean
     private PlatformMetrics platformMetrics;
+    @MockitoBean
+    private AuditService auditService;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
-        // 默认：所有工具允许
         given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(true);
     }
 
@@ -118,12 +125,12 @@ class McpControllerTest {
     }
 
     @Test
-    void toolsListReturnsRegisteredTools() throws Exception {
-        given(toolCatalog.listTools()).willReturn(List.of(
+    void toolsListReturnsVisibleToolsOnly() throws Exception {
+        given(toolCatalog.listVisibleTools()).willReturn(List.of(
                 new McpToolCatalog.ToolDefinition("asset_search", "Search assets",
                         Map.of("type", "object"), false, "asset:read")));
         mockMvc.perform(post("/mcp")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke")))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:read")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonRpc("tools/list")))
                 .andExpect(status().isOk())
@@ -131,8 +138,19 @@ class McpControllerTest {
     }
 
     @Test
+    void toolsListFailsClosedWithoutMcpInvokeScope() throws Exception {
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("asset:read")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpc("tools/list")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(true))
+                .andExpect(jsonPath("$.result.content[0].text").value("Missing required scope: mcp:invoke"));
+    }
+
+    @Test
     void toolsCallReturnsErrorWhenToolNotAllowed() throws Exception {
-        // 拒绝所有工具调用
+        given(toolCatalog.findTool("dangerous_tool")).willReturn(java.util.Optional.empty());
         given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(false);
         mockMvc.perform(post("/mcp")
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke")))
@@ -141,19 +159,54 @@ class McpControllerTest {
                                 "{\"name\":\"dangerous_tool\",\"arguments\":{}}")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.isError").value(true));
+
+        ArgumentCaptor<AuditEvent> captor = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(auditService).record(captor.capture());
+        assertThat(captor.getValue().eventType()).isEqualTo("AGENT_ACCESS_DENIED");
+    }
+
+    @Test
+    void toolsCallReturnsErrorWhenAgentToolNotInAllowlist() throws Exception {
+        given(toolCatalog.findTool("asset_search")).willReturn(java.util.Optional.of(
+                new McpToolCatalog.ToolDefinition("asset_search", "Search assets",
+                        Map.of("type", "object"), false, "asset:read")));
+        given(agentToolRepository.isToolAllowed("prn_agent", "asset_search")).willReturn(false);
+
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:read")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_search\",\"arguments\":{\"keyword\":\"test\"}}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(true))
+                .andExpect(jsonPath("$.result.content[0].text").value("Tool not allowed: asset_search"));
+
+        verify(auditService).record(any(AuditEvent.class));
     }
 
     @Test
     void toolsCallSucceedsWhenAuthorized() throws Exception {
+        given(toolCatalog.findTool("asset_search")).willReturn(java.util.Optional.of(
+                new McpToolCatalog.ToolDefinition("asset_search", "Search assets",
+                        Map.of("type", "object"), false, "asset:read")));
         given(toolCatalog.callTool(eq("asset_search"), anyMap()))
-                .willReturn("search results");
+                .willReturn(Map.of("items", List.of()));
         mockMvc.perform(post("/mcp")
-                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke")))
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:read")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonRpcWithParams("tools/call",
                                 "{\"name\":\"asset_search\",\"arguments\":{\"keyword\":\"test\"}}")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.isError").value(false));
+    }
+
+    @Test
+    void toolsCallFailsClosedWhenUnauthenticated() throws Exception {
+        mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_search\",\"arguments\":{}}")))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
