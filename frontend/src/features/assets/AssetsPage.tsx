@@ -5,9 +5,10 @@
  * 作者: AxeXie
  */
 import { useMemo, useState } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
+  Card,
   App,
   Button,
   Empty,
@@ -26,9 +27,9 @@ import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
 import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
-import { deleteAsset, searchAssets } from './api';
+import { deleteAsset, getAssetFacets, searchAssets } from './api';
 import { CreateAssetModal } from './CreateAssetModal';
-import type { AssetStatus, AssetSummary, AssetType, Visibility } from './types';
+import type { AssetFacetView, AssetStatus, AssetSummary, AssetType, Visibility } from './types';
 
 type TypeFilter = 'ALL' | AssetType;
 
@@ -83,6 +84,34 @@ export function AssetsPage() {
 
   const queryType = typeFilter === 'ALL' ? undefined : typeFilter;
 
+  const facetsQuery = useQuery<AssetFacetView>({
+    queryKey: ['asset-facets', { type: queryType, keyword }],
+    queryFn: () => getAssetFacets(keyword || undefined, queryType),
+  });
+
+  const facetSections = useMemo(() => {
+    const facets = facetsQuery.data;
+    if (!facets) return [];
+    const sections: Array<{ key: string; label: string; counts: Record<string, number> }> = [];
+    if (queryType === 'MODEL' || !queryType) {
+      sections.push(
+        { key: 'frameworks', label: t('assets.facets.frameworks'), counts: facets.frameworks },
+        { key: 'tasks', label: t('assets.facets.tasks'), counts: facets.tasks },
+      );
+    }
+    if (queryType === 'DATASET' || !queryType) {
+      sections.push(
+        { key: 'formats', label: t('assets.facets.formats'), counts: facets.formats },
+        { key: 'modalities', label: t('assets.facets.modalities'), counts: facets.modalities },
+      );
+    }
+    sections.push(
+      { key: 'licenses', label: t('assets.facets.licenses'), counts: facets.licenses },
+      { key: 'sensitivities', label: t('assets.facets.sensitivities'), counts: facets.sensitivities },
+    );
+    return sections.filter((s) => Object.keys(s.counts).length > 0);
+  }, [facetsQuery.data, queryType, t]);
+
   const query = useInfiniteQuery({
     queryKey: ['assets', { type: queryType, keyword, language, sensitivity, visibility, status, teamId, organizationId }],
     initialPageParam: undefined as string | undefined,
@@ -131,6 +160,15 @@ export function AssetsPage() {
           <Typography.Text type="secondary" code>
             {record.namespace}/{record.name}
           </Typography.Text>
+          {record.matchedFields && record.matchedFields.length > 0 ? (
+            <Space size={[4, 4]} wrap>
+              {record.matchedFields.map((field) => (
+                <Tag key={field} color="cyan">
+                  {t(`assets.facets.matchedField.${field}`, field)}
+                </Tag>
+              ))}
+            </Space>
+          ) : null}
         </Space>
       ),
     },
@@ -329,6 +367,39 @@ export function AssetsPage() {
           />
         )}
       </Flex>
+      <Flex gap={16} align="flex-start" wrap="wrap">
+        <Card
+          title={t('assets.facets.title')}
+          size="small"
+          style={{ width: 240, flexShrink: 0 }}
+          loading={facetsQuery.isLoading}
+        >
+          <Typography.Text type="secondary">
+            {t('assets.facets.total', { count: facetsQuery.data?.totalCount ?? 0 })}
+          </Typography.Text>
+          <Flex vertical gap={12} style={{ marginTop: 12 }}>
+            {facetSections.map((section) => (
+              <div key={section.key}>
+                <Typography.Text strong>{section.label}</Typography.Text>
+                <Flex vertical gap={4} style={{ marginTop: 4 }}>
+                  {Object.entries(section.counts)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 8)
+                    .map(([value, count]) => (
+                      <Flex key={value} justify="space-between">
+                        <Typography.Text>{value}</Typography.Text>
+                        <Tag>{count}</Tag>
+                      </Flex>
+                    ))}
+                </Flex>
+              </div>
+            ))}
+            {facetSections.length === 0 ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('assets.facets.empty')} />
+            ) : null}
+          </Flex>
+        </Card>
+        <Flex vertical gap={8} style={{ flex: 1, minWidth: 480 }}>
       <Table<AssetSummary>
         rowKey="assetId"
         columns={columns}
@@ -345,6 +416,8 @@ export function AssetsPage() {
           </Button>
         </Flex>
       ) : null}
+        </Flex>
+      </Flex>
 
       <CreateAssetModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </Flex>

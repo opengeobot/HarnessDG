@@ -179,9 +179,14 @@ export function AssetSettingsPage() {
     <Flex vertical gap={24} style={{ maxWidth: 800 }}>
       <Flex justify="space-between" align="center">
         <Title level={3}>{t('assets.settings.title')}</Title>
-        <Button onClick={() => navigate(`/assets/${assetId}`)}>
-          {t('common.back')}
-        </Button>
+        <Space>
+          <Button onClick={() => navigate(`/assets/${assetId}/access`)}>
+            {t('assets.access.title')}
+          </Button>
+          <Button onClick={() => navigate(`/assets/${assetId}`)}>
+            {t('common.back')}
+          </Button>
+        </Space>
       </Flex>
 
       <Card title={t('assets.settings.basicInfo')}>

@@ -120,7 +120,7 @@ class AssetControllerTest {
         String body = """
                 {"type":"MODEL","namespace":"nlp","name":"qwen-domain-7b",
                  "displayName":"领域问答模型","visibility":"INTERNAL",
-                 "owners":["team-nlp"],"tags":["text-generation"],"tagIds":["tag_001"],
+                 "ownerTeamId":"team_nlp","tags":["text-generation"],"tagIds":["tag_001"],
                  "license":"Apache-2.0","model":{"framework":"pytorch","task":"text-generation"}}
                 """;
 

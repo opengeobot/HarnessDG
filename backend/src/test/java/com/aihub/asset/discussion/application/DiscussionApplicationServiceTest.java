@@ -9,7 +9,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,6 +24,8 @@ import com.aihub.asset.discussion.domain.ThreadStatus;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.shared.identity.PrincipalContext;
+import com.aihub.shared.identity.PrincipalType;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ValidationException;
@@ -50,6 +54,7 @@ class DiscussionApplicationServiceTest {
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
     @Mock private com.aihub.notification.application.NotificationService notificationService;
+    @Mock private com.aihub.identity.application.PrincipalQueryApplicationService principalQuery;
 
     private DiscussionApplicationService service;
 
@@ -57,7 +62,7 @@ class DiscussionApplicationServiceTest {
     void setUp() {
         service = new DiscussionApplicationService(
                 discussionRepository, authorizationService, auditService, idGenerator,
-                notificationService);
+                notificationService, principalQuery);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("gen_id");
     }
 
@@ -198,6 +203,28 @@ class DiscussionApplicationServiceTest {
         service.listThreads("ast_01", null, 20);
 
         verify(authorizationService).requirePermission(Permissions.ASSET_READ);
+    }
+
+    @Test
+    void createCommentNotifiesMentionedPrincipalWithAssetRead() {
+        DiscussionThread thread = openThread();
+        when(discussionRepository.findThread("thr_01")).thenReturn(Optional.of(thread));
+        when(principalQuery.existsByPrincipalId("prn_mentioned")).thenReturn(true);
+        when(authorizationService.isResourcePermitted(
+                org.mockito.ArgumentMatchers.any(PrincipalContext.class),
+                eq(Permissions.ASSET_READ), eq("ASSET"), eq("ast_01"))).thenReturn(true);
+
+        service.createComment("thr_01", null, "Hello @prn_mentioned please review", "usr_01");
+
+        verify(notificationService).sendInAppNotification(
+                eq("prn_mentioned"), eq("COMMENT_MENTION"), eq("notification.comment.mention"),
+                any(), anyMap());
+    }
+
+    @Test
+    void parseMentionsExtractsPrincipalIds() {
+        assertThat(DiscussionApplicationService.parseMentions("Hi @prn_a and @usr_b"))
+                .containsExactlyInAnyOrder("prn_a", "usr_b");
     }
 
     @Test

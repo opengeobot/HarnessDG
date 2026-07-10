@@ -9,6 +9,21 @@ import { renderWithProviders } from '@/test/test-utils';
 // Mock API 模块
 vi.mock('./api', () => ({
   searchAssets: vi.fn().mockResolvedValue({ items: [], hasMore: false, nextCursor: null }),
+  getAssetFacets: vi.fn().mockResolvedValue({
+    types: { MODEL: 2 },
+    frameworks: { pytorch: 1 },
+    tasks: {},
+    formats: {},
+    modalities: {},
+    licenses: { 'Apache-2.0': 2 },
+    sensitivities: {},
+    sizeBuckets: {},
+    taskCodes: {},
+    modalityCodes: {},
+    formatCodes: {},
+    languageCodes: {},
+    totalCount: 2,
+  }),
   deleteAsset: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -80,5 +95,11 @@ describe('AssetsPage', () => {
     renderWithProviders(<AssetsPage />);
     expect(screen.getByText('语言')).toBeInTheDocument();
     expect(screen.getByText('敏感等级')).toBeInTheDocument();
+  });
+
+  it('渲染 Facet 侧栏', async () => {
+    renderWithProviders(<AssetsPage />);
+    expect(await screen.findByText('分类统计')).toBeInTheDocument();
+    expect(await screen.findByText('pytorch')).toBeInTheDocument();
   });
 });

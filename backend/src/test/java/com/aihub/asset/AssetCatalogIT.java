@@ -21,9 +21,12 @@ import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.NotFoundException;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -33,16 +36,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * 资产目录集成测试。
- *
- * <p>使用真实 PostgreSQL 验证 Flyway 迁移、MyBatis-Plus CRUD、jsonb 类型处理与显式 SQL 检索协同工作。
- * 无 Docker 时整体跳过，不阻断 {@code ./mvnw verify}。默认 Noop 仓库开通器使流程无需 Gitea。
- *
- * <p>注意：本 IT 依赖授权/字典/标签治理 Bean 的完整上下文；无 Docker 时跳过。
  */
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest
 @ActiveProfiles("test")
 class AssetCatalogIT {
+
+    private static final String TEST_TEAM_ID = "team_catalog_it";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES =
@@ -60,11 +60,33 @@ class AssetCatalogIT {
 
     @Autowired
     private AssetApplicationService assetService;
+    @Autowired
+    private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void seedOwnerTeam() {
+        jdbcTemplate.update(
+                "INSERT INTO organization (organization_id, name, status, created_by, created_at, updated_at, row_version) "
+                        + "VALUES (:orgId, :name, 'ACTIVE', 'usr_01', NOW(), NOW(), 1) "
+                        + "ON CONFLICT (organization_id) DO NOTHING",
+                new MapSqlParameterSource()
+                        .addValue("orgId", "org_catalog_it")
+                        .addValue("name", "Catalog IT Org"));
+        jdbcTemplate.update(
+                "INSERT INTO team (team_id, organization_id, name, description, status, created_by, "
+                        + "created_at, updated_at, row_version) "
+                        + "VALUES (:teamId, :orgId, :name, NULL, 'ACTIVE', 'usr_01', NOW(), NOW(), 1) "
+                        + "ON CONFLICT (team_id) DO NOTHING",
+                new MapSqlParameterSource()
+                        .addValue("teamId", TEST_TEAM_ID)
+                        .addValue("orgId", "org_catalog_it")
+                        .addValue("name", "Catalog IT Team"));
+    }
 
     private CreateAssetCommand modelCommand(String name) {
         return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", name, name + " 展示名",
-                "领域问答模型，关键词 qwendomain", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation", "llm"), null, "Apache-2.0", null,
+                "领域问答模型，关键词 qwendomain", Visibility.INTERNAL, null,
+                List.of("text-generation", "llm"), null, "Apache-2.0", TEST_TEAM_ID,
                 new ModelProfile("pytorch", "text-generation", "decoder-only"), null, "usr_01");
     }
 
@@ -78,18 +100,16 @@ class AssetCatalogIT {
         assertThat(fetched.model().framework()).isEqualTo("pytorch");
         assertThat(fetched.tags()).contains("llm");
 
-        // 关键词 + 框架 + owner 过滤命中。
         CursorPage<?> hit = assetService.searchAssets(new AssetSearchQuery("qwendomain", AssetType.MODEL,
-                "nlp", null, null, null, null, null, "pytorch", null, null, null, null, "team-nlp", null, null, null, null, null, false, null, 10, "usr_01"));
+                "nlp", null, null, null, null, TEST_TEAM_ID, "pytorch", null, null, null, null, null, null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(hit.items()).hasSize(1);
 
-        // 不匹配的框架过滤为空。
         CursorPage<?> miss = assetService.searchAssets(new AssetSearchQuery(null, AssetType.MODEL,
                 null, null, null, null, null, null, "tensorflow", null, null, null, null, null, null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(miss.items()).isEmpty();
 
         assetService.updateAsset(created.assetId(), new UpdateAssetCommand(0L, null, null, "改名后", "新描述",
-                Visibility.PUBLIC, List.of("team-platform"), List.of("chat"), null, "MIT",
+                Visibility.PUBLIC, null, List.of("chat"), null, "MIT",
                 null,
                 new ModelProfile("vllm", "chat", null), null, "usr_02"));
         AssetView updated = assetService.getAsset(created.assetId(), "usr_02");
@@ -110,7 +130,7 @@ class AssetCatalogIT {
 
         AssetView dataset = assetService.createAsset(new CreateAssetCommand(AssetType.DATASET, null, null,
                 "vision", "defect-images", "缺陷图像", "图像数据集", Visibility.PRIVATE,
-                List.of("team-cv"), List.of("vision"), null, "CC-BY-4.0", null, null,
+                null, List.of("vision"), null, "CC-BY-4.0", TEST_TEAM_ID, null,
                 new DatasetProfile("parquet", "image"), "usr_01"));
         assertThat(dataset.dataset().format()).isEqualTo("parquet");
 

@@ -63,6 +63,21 @@ public class ResourceAclApplicationService {
     }
 
     /**
+     * 查询指定资源上的全部 ACL。
+     */
+    @Transactional(readOnly = true)
+    public List<ResourceAclView> listAclsByResource(String resourceType, String resourceId) {
+        if (resourceType == null || resourceType.isBlank()) {
+            throw new ValidationException("resourceType is required");
+        }
+        if (resourceId == null || resourceId.isBlank()) {
+            throw new ValidationException("resourceId is required");
+        }
+        return resourceAclRepository.findByResource(resourceType.trim(), resourceId.trim()).stream()
+                .map(ResourceAclView::from).toList();
+    }
+
+    /**
      * 创建资源 ACL：为同一资源+主体授予一个或多个权限编码，共享同一 aclId 成组。
      */
     @Transactional

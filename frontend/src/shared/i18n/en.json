@@ -217,6 +217,39 @@
       "status": "Status",
       "team": "Team"
     },
+    "facets": {
+      "title": "Facets",
+      "total": "{{count}} total",
+      "empty": "No facet data",
+      "frameworks": "Frameworks",
+      "tasks": "Tasks",
+      "formats": "Formats",
+      "modalities": "Modalities",
+      "licenses": "Licenses",
+      "sensitivities": "Sensitivity",
+      "matchedField": {
+        "name": "Name",
+        "displayName": "Display name",
+        "description": "Description",
+        "tags": "Tags"
+      }
+    },
+    "access": {
+      "title": "Access Control",
+      "grant": "Grant Access",
+      "list": "Granted Principals",
+      "principal": "Principal",
+      "permissions": "Permissions",
+      "grantButton": "Grant",
+      "created": "Access granted",
+      "deleted": "Access revoked",
+      "empty": "No explicit grants",
+      "confirmDelete": "Delete this grant?",
+      "principalRequired": "Principal ID is required",
+      "principalPlaceholder": "prn_xxx",
+      "permissionsRequired": "Select permissions",
+      "permissionsPlaceholder": "Select permission codes"
+    },
     "deprecation": {
       "reason": "Deprecation Reason",
       "reasonPlaceholder": "Select deprecation reason",

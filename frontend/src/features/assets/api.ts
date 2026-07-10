@@ -12,6 +12,8 @@ import type {
   AssetView,
   CommentView,
   CreateAssetRequest,
+  CreateAssetAccessRequest,
+  ResourceAclView,
   ThreadView,
   UpdateAssetRequest,
 } from './types';
@@ -54,6 +56,24 @@ export function getAssetFacets(
   return apiClient.get<AssetFacetView>('/assets/facets', {
     params: { keyword, type },
   });
+}
+
+/** 列出资产 ACL */
+export function listAssetAccess(assetId: string): Promise<ResourceAclView[]> {
+  return apiClient.get<ResourceAclView[]>(`/assets/${assetId}/access`);
+}
+
+/** 创建资产 ACL */
+export function createAssetAccess(
+  assetId: string,
+  payload: CreateAssetAccessRequest,
+): Promise<ResourceAclView> {
+  return apiClient.post<ResourceAclView>(`/assets/${assetId}/access`, payload);
+}
+
+/** 删除资产 ACL */
+export function deleteAssetAccess(assetId: string, aclId: string): Promise<void> {
+  return apiClient.delete<void>(`/assets/${assetId}/access/${aclId}`);
 }
 
 /** 弃用资产：支持弃用原因与替代资产 */

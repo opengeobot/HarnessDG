@@ -217,6 +217,39 @@
       "status": "状态",
       "team": "团队"
     },
+    "facets": {
+      "title": "分类统计",
+      "total": "共 {{count}} 项",
+      "empty": "暂无统计数据",
+      "frameworks": "框架",
+      "tasks": "任务",
+      "formats": "格式",
+      "modalities": "模态",
+      "licenses": "许可证",
+      "sensitivities": "敏感等级",
+      "matchedField": {
+        "name": "名称",
+        "displayName": "展示名",
+        "description": "描述",
+        "tags": "标签"
+      }
+    },
+    "access": {
+      "title": "访问授权",
+      "grant": "授予权限",
+      "list": "已授权主体",
+      "principal": "主体",
+      "permissions": "权限",
+      "grantButton": "授予",
+      "created": "已创建授权",
+      "deleted": "已删除授权",
+      "empty": "暂无显式授权",
+      "confirmDelete": "确认删除该授权？",
+      "principalRequired": "请输入主体 ID",
+      "principalPlaceholder": "prn_xxx",
+      "permissionsRequired": "请选择权限",
+      "permissionsPlaceholder": "选择权限编码"
+    },
     "deprecation": {
       "reason": "弃用原因",
       "reasonPlaceholder": "请选择弃用原因",

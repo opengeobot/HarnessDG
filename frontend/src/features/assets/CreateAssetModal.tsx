@@ -29,7 +29,7 @@ interface FormValues {
   tags?: string[];
   tagIds?: string[];
   license?: string;
-  ownerTeamId?: string;
+  ownerTeamId: string;
   framework?: string;
   task?: string;
   architecture?: string;
@@ -86,11 +86,9 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           displayName: values.displayName,
           description: values.description,
           visibility: values.visibility,
-          owners: values.owners,
-          tags: values.tags,
           tagIds: values.tagIds,
           license: values.license,
-          ownerTeamId: values.ownerTeamId || undefined,
+          ownerTeamId: values.ownerTeamId,
           model:
             values.type === 'MODEL'
               ? {
@@ -220,9 +218,12 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
             ]}
           />
         </Form.Item>
-        <Form.Item name="owners" label={t('assets.create.ownerLabel')}>
+        <Form.Item
+          name="ownerTeamId"
+          label={t('assets.create.ownerLabel')}
+          rules={[{ required: true, message: t('assets.create.ownerPlaceholder') }]}
+        >
           <ControlledSelect
-            mode="multiple"
             apiUrl={`/system/organizations/${orgId ?? ''}/teams`}
             queryKey={['teams', orgId ?? '']}
             enabled={!!orgId}

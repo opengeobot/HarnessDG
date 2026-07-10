@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +40,8 @@ import com.aihub.taxonomy.tag.application.TagDtos.TagScopeContext;
 import com.aihub.taxonomy.tag.application.TagDtos.TagView;
 import com.aihub.taxonomy.tag.application.TagValidationService;
 import com.aihub.taxonomy.tag.domain.TagScopeType;
+import com.aihub.organization.domain.Team;
+import com.aihub.organization.domain.TeamRepository;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
@@ -73,37 +76,44 @@ class AssetApplicationServiceTest {
     @Mock private ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
     @Mock private com.aihub.notification.application.NotificationService notificationService;
     @Mock private VersionRepository versionRepository;
+    @Mock private TeamRepository teamRepository;
 
     private AssetApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new AssetApplicationService(assetRepository,
-                new AssetAccessPolicy(authorizationService), idGenerator, authorizationService,
+                new AssetAccessPolicy(authorizationService, teamRepository), idGenerator, authorizationService,
                 dictionaryValidationPort, tagValidationService, auditService, jobRepository,
-                cardProjectionPortProvider, notificationService, versionRepository);
+                cardProjectionPortProvider, notificationService, versionRepository, teamRepository);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
         doNothing().when(assetRepository).insert(any(Asset.class));
-        // AssetAccessPolicy 需要授权 mock：isPermitted + computeAccessScope
         when(authorizationService.isPermitted(any())).thenReturn(true);
+        when(authorizationService.isPermitted(any(String.class))).thenReturn(true);
         when(authorizationService.computeAccessScope(any(), any()))
                 .thenReturn(new AccessScope("usr_01", false, Set.of(), Set.of(), Set.of()));
         when(versionRepository.countByAssetIdAndStatus(any(), eq(VersionStatus.PUBLISHED))).thenReturn(0L);
+        stubActiveTeam("team_nlp");
+    }
+
+    private void stubActiveTeam(String teamId) {
+        when(teamRepository.findByTeamId(teamId)).thenReturn(Optional.of(
+                new Team(teamId, "org_01", "NLP", null, "ACTIVE", "usr_01",
+                        Instant.now(), Instant.now(), 1)));
     }
 
     private CreateAssetCommand modelCommand() {
         return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
-                "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation"), null, "Apache-2.0", null,
+                "领域问答模型", "描述", Visibility.INTERNAL, null,
+                List.of("text-generation"), null, "Apache-2.0", "team_nlp",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
     private Asset storedModel() {
         return Asset.create("ast_stored", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
-                "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation"), null, "Apache-2.0",
-                null,
+                "领域问答模型", "描述", Visibility.INTERNAL, List.of(),
+                List.of("text-generation"), null, "Apache-2.0", "team_nlp",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
@@ -135,7 +145,7 @@ class AssetApplicationServiceTest {
         doNothing().when(assetRepository).update(any(Asset.class));
 
         UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, "新名", "新描述",
-                Visibility.PUBLIC, List.of("team-platform"), List.of("llm"), null, "MIT",
+                Visibility.PUBLIC, null, List.of("llm"), null, "MIT",
                 null,
                 new ModelProfile("vllm", "chat", null), null, "usr_02");
         AssetView view = service.updateAsset("ast_stored", command);
@@ -211,8 +221,8 @@ class AssetApplicationServiceTest {
                 .when(dictionaryValidationPort).validateItemCode("license_catalog", "Bad-License");
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
-                "bad-model", "Bad Model", null, Visibility.INTERNAL, List.of("team-nlp"), null, null,
-                "Bad-License", null, new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+                "bad-model", "Bad Model", null, Visibility.INTERNAL, null, null, null,
+                "Bad-License", "team_nlp", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
 
         assertThatThrownBy(() -> service.createAsset(command))
                 .isInstanceOf(ValidationException.class);
@@ -226,8 +236,8 @@ class AssetApplicationServiceTest {
                         "nlp", "NLP", null, null, TaxonomyStatus.ACTIVE, 1L)));
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
-                "tagged-model", "Tagged Model", null, Visibility.INTERNAL, List.of("team-nlp"),
-                null, List.of("tag_001"), "Apache-2.0", null,
+                "tagged-model", "Tagged Model", null, Visibility.INTERNAL, null,
+                null, List.of("tag_001"), "Apache-2.0", "team_nlp",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
         AssetView view = service.createAsset(command);
 
@@ -241,8 +251,8 @@ class AssetApplicationServiceTest {
                 .thenThrow(new ValidationException("tag not found: tag_unknown"));
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
-                "bad-tag-model", "Bad Tag Model", null, Visibility.INTERNAL, List.of("team-nlp"),
-                null, List.of("tag_unknown"), "Apache-2.0", null,
+                "bad-tag-model", "Bad Tag Model", null, Visibility.INTERNAL, null,
+                null, List.of("tag_unknown"), "Apache-2.0", "team_nlp",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
 
         assertThatThrownBy(() -> service.createAsset(command))
@@ -297,6 +307,58 @@ class AssetApplicationServiceTest {
         assertThat(view.status()).isEqualTo(AssetStatus.ACTIVE);
         verify(assetRepository).update(any(Asset.class));
         verify(auditService).record(any());
+    }
+
+    @Test
+    void createAssetRequiresOwnerTeamId() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "no-team", "No Team", null, Visibility.INTERNAL, null, null, null,
+                "Apache-2.0", null, new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetRejectsFreeFormOwners() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "legacy-owners", "Legacy", null, Visibility.INTERNAL, List.of("prn_legacy"),
+                null, null, "Apache-2.0", "team_nlp",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void updateAssetRenamePreservesAliasAndEnqueuesCardSyncJob() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+        doNothing().when(assetRepository).update(any(Asset.class));
+        when(cardProjectionPortProvider.getIfAvailable()).thenReturn(mock(AssetCardProjectionPort.class));
+
+        UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, "新展示名", null,
+                null, null, null, null, null, null, null, null, "usr_02");
+        service.updateAsset("ast_stored", command);
+
+        verify(assetRepository).insertAlias(eq("ast_stored"), eq("nlp"), eq("领域问答模型"));
+        verify(jobRepository).insert(any());
+        assertThat(asset.displayName()).isEqualTo("新展示名");
+    }
+
+    @Test
+    void updateAssetRejectsRowVersionConflict() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        UpdateAssetCommand command = new UpdateAssetCommand(99L, null, null, "新名", null,
+                null, null, null, null, null, null, null, null, "usr_02");
+
+        assertThatThrownBy(() -> service.updateAsset("ast_stored", command))
+                .isInstanceOf(ConflictException.class);
+        verify(assetRepository, never()).update(any(Asset.class));
     }
 
     @Test

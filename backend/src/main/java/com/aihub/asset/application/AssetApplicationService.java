@@ -25,6 +25,8 @@ import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobStatus;
 import com.aihub.notification.application.NotificationService;
+import com.aihub.organization.domain.Team;
+import com.aihub.organization.domain.TeamRepository;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -87,6 +89,7 @@ public class AssetApplicationService {
     private final ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
     private final NotificationService notificationService;
     private final VersionRepository versionRepository;
+    private final TeamRepository teamRepository;
 
     public AssetApplicationService(AssetRepository assetRepository,
                                    AssetAccessPolicy accessPolicy,
@@ -98,7 +101,8 @@ public class AssetApplicationService {
                                    JobRepository jobRepository,
                                    ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider,
                                    NotificationService notificationService,
-                                   VersionRepository versionRepository) {
+                                   VersionRepository versionRepository,
+                                   TeamRepository teamRepository) {
         this.assetRepository = assetRepository;
         this.accessPolicy = accessPolicy;
         this.idGenerator = idGenerator;
@@ -110,6 +114,7 @@ public class AssetApplicationService {
         this.cardProjectionPortProvider = cardProjectionPortProvider;
         this.notificationService = notificationService;
         this.versionRepository = versionRepository;
+        this.teamRepository = teamRepository;
     }
 
     /**
@@ -127,6 +132,8 @@ public class AssetApplicationService {
             throw new ValidationException("asset visibility is required");
         }
         authorizationService.requirePermission(Permissions.ASSET_CREATE);
+        rejectFreeFormOwners(command.owners(), true);
+        validateOwnerTeamId(command.ownerTeamId());
         validateGovernanceFields(command.type(), command.license(),
                 modelFramework(command), modelTask(command),
                 datasetFormat(command), datasetModality(command));
@@ -175,15 +182,26 @@ public class AssetApplicationService {
                 datasetFormat(command), datasetModality(command));
         List<String> validatedTagIds = resolveValidatedTagIds(command.tagIds(),
                 command.organizationId() != null ? command.organizationId() : asset.organizationId());
-        // 保存旧 displayName，用于 displayName 变更时记录永久别名
+        rejectFreeFormOwners(command.owners(), false);
+        if (command.ownerTeamId() != null) {
+            validateOwnerTeamId(command.ownerTeamId());
+        }
         String oldDisplayName = asset.displayName();
+        boolean renameRequested = command.displayName() != null
+                && !command.displayName().equals(oldDisplayName);
+        if (renameRequested) {
+            asset.rename(asset.namespace(), command.displayName(), command.principalId());
+            assetRepository.insertAlias(asset.assetId(), asset.namespace(),
+                    oldDisplayName != null ? oldDisplayName : asset.name());
+            createCardSyncJob(asset, command.principalId());
+        }
         asset.updateMetadata(
                 command.organizationId(),
                 command.projectId(),
                 command.displayName(),
                 command.description(),
                 command.visibility(),
-                command.owners(),
+                null,
                 command.tags(),
                 validatedTagIds,
                 command.license(),
@@ -191,10 +209,6 @@ public class AssetApplicationService {
                 command.dataset(),
                 command.ownerTeamId(),
                 command.principalId());
-        // displayName 变更时记录旧名称到 asset_alias 永久别名表
-        if (command.displayName() != null && !command.displayName().equals(oldDisplayName)) {
-            assetRepository.insertAlias(asset.assetId(), asset.namespace(), oldDisplayName != null ? oldDisplayName : asset.name());
-        }
         assetRepository.update(asset);
         auditAsset("ASSET_UPDATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
@@ -518,6 +532,40 @@ public class AssetApplicationService {
                 JobStatus.PENDING, 5, 0, now, null, null, null, principalId,
                 asset.assetId(), null, now, now, 0);
         jobRepository.insert(job);
+    }
+
+    private void createCardSyncJob(Asset asset, String principalId) {
+        if (cardProjectionPortProvider.getIfAvailable() == null) {
+            return;
+        }
+        String jobId = idGenerator.generate(IdPrefix.JOB);
+        Instant now = Instant.now();
+        String payload = "{\"assetId\":\"" + asset.assetId() + "\"}";
+        Job job = new Job(null, jobId, "ASSET_CARD_SYNC", payload,
+                JobStatus.PENDING, 5, 0, now, null, null, null, principalId,
+                asset.assetId(), null, now, now, 0);
+        jobRepository.insert(job);
+    }
+
+    private void rejectFreeFormOwners(List<String> owners, boolean onCreate) {
+        if (owners == null || owners.isEmpty()) {
+            return;
+        }
+        throw new ValidationException(onCreate
+                ? "free-form owners are deprecated; use ownerTeamId instead"
+                : "free-form owners cannot be updated; use ownerTeamId instead");
+    }
+
+    private void validateOwnerTeamId(String ownerTeamId) {
+        if (!StringUtils.hasText(ownerTeamId)) {
+            throw new ValidationException("ownerTeamId is required");
+        }
+        Team team = teamRepository.findByTeamId(ownerTeamId.trim())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.TEAM_NOT_FOUND,
+                        "team not found", Map.of("teamId", ownerTeamId)));
+        if (!"ACTIVE".equals(team.status())) {
+            throw new ValidationException("owner team must be ACTIVE: " + ownerTeamId);
+        }
     }
 
     private static String modelFramework(CreateAssetCommand command) {

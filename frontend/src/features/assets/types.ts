@@ -65,6 +65,22 @@ export interface AssetFacetView {
   totalCount: number;
 }
 
+/** 资源 ACL 视图 */
+export interface ResourceAclView {
+  aclId: string;
+  principalId: string;
+  resourceType: string;
+  resourceId: string;
+  permissionCodes: string[];
+  createdAt: string;
+}
+
+/** 创建资产 ACL 请求 */
+export interface CreateAssetAccessRequest {
+  principalId: string;
+  permissionCodes: string[];
+}
+
 /** 资产检索摘要 */
 export interface AssetSummary {
   assetId: string;
@@ -120,7 +136,7 @@ export interface CreateAssetRequest {
   tags?: string[];
   tagIds?: string[];
   license?: string;
-  ownerTeamId?: string;
+  ownerTeamId: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
 }
