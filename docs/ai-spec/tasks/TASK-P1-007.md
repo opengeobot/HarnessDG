@@ -96,7 +96,7 @@ decisions: ['DEC-010', 'DEC-011']
 ## 6. 契约与数据先行
 
 - 行为变更先更新 OpenAPI/事件/Migration（如适用）
-- V27+ 为 P1-002 回填下限；其他任务按需使用 V27+ 新 Migration
+- V29+ 为 P1-002 回填下限（V27 已用于 P3 frozen commit）；其他任务按需使用 V29+ 新 Migration
 
 ## 7. 实施步骤
 

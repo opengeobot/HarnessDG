@@ -58,7 +58,7 @@ public class VersionApplicationService {
     /** 创建草稿版本。 */
     @Transactional
     public VersionView createDraftVersion(String assetId, String version, String principalId) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        authorizationService.requirePermission(Permissions.ASSET_UPDATE);
         // 坐标唯一性校验
         versionRepository.findByCoordinate(assetId, version).ifPresent(existing -> {
             throw new ConflictException(ErrorCode.ASSET_VERSION_CONFLICT,

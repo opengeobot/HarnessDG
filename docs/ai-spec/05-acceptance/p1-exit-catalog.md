@@ -15,7 +15,7 @@ P1 只有在以下条件全部成立时才能退出：
 4. E3 场景使用真实 PostgreSQL/协议依赖，不以 Mock 替代；
 5. E4 场景从 Nginx/Browser/Client 入口执行到真实 Compose 服务；
 6. 正常、失败、拒绝和恢复证据均存在；
-7. OpenAPI、V27+ 迁移、事件、UI、Runbook 和追踪矩阵与被测 Commit 一致；
+7. OpenAPI、V29+ 迁移（P1 回填；V27 为 P3 frozen commit）、事件、UI、Runbook 和追踪矩阵与被测 Commit 一致；
 8. `AC-DST-TAX-*`、`AC-DST-DETAIL-*`、`AC-DST-DISC-*` 在 TASK-P1-010..012 中 PASS。
 
 ## 2. 坐标、类型与责任模型

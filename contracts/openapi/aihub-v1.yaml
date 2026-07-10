@@ -1476,6 +1476,34 @@ paths:
                       data: { $ref: '#/components/schemas/MetricsSummary' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
+  /system/metrics/downloads:
+    get:
+      operationId: getDownloadLeaderboard
+      summary: 平台下载热度排行（基于 audit_log 下载授权事件聚合）
+      tags: [system]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
+      x-required-permissions: [system:observe]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 下载排行
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/DownloadLeaderboardEntry' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /system/dependencies:
     get:
       operationId: getSystemDependencies
@@ -1683,6 +1711,33 @@ paths:
                         $ref: '#/components/schemas/AssetFacetView'
         '401':
           $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/stats:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAssetDownloadStats
+      summary: 查询资产下载统计（基于 DOWNLOAD_TICKET_ISSUED 审计聚合）
+      tags: [assets]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 下载统计
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AssetDownloadStats' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /assets/{assetId}/deprecate:
     parameters:
@@ -3700,6 +3755,24 @@ components:
         dependencies:
           type: object
           additionalProperties: true
+
+    DownloadLeaderboardEntry:
+      type: object
+      required: [id, downloads]
+      properties:
+        id: { type: string, description: 资产 ID 或版本 ID }
+        label: { type: [string, 'null'], description: 展示标签（如版本号） }
+        downloads: { type: integer, format: int64, description: 下载授权次数 }
+
+    AssetDownloadStats:
+      type: object
+      required: [assetId, totalDownloads, byVersion]
+      properties:
+        assetId: { type: string }
+        totalDownloads: { type: integer, format: int64 }
+        byVersion:
+          type: array
+          items: { $ref: '#/components/schemas/DownloadLeaderboardEntry' }
 
     SystemDependencySummary:
       type: object

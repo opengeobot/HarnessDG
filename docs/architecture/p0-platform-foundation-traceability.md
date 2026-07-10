@@ -53,7 +53,7 @@
 | 公共管理端 | 前端（不直接访问 DB） | 前端 `pnpm lint/typecheck/build`（见 `frontend/`） | 手动 UI；Verify 走 API 层 | 已实现 |
 | 资产目录（P1 整改） | `V12__asset_governance.sql`：`asset_tag`、治理引用列；`V14__asset_remediation.sql`：资产 Schema 整改、治理字段扩展、pg_trgm 全文索引 | `asset/**/*Test`、`asset/AssetCatalogIT` | V06（下推过滤） | 已实现（P1 基础整改完成） |
 | Team 与 Owner | `V19__team.sql`：`team`、`team_member` | `organization/api/TeamControllerTest` | V04（表存在） | 已实现（DEC-011） |
-| Discussion | `V15__discussion.sql`：`discussion_thread`、`discussion_comment`、`discussion_subscription` | `asset/**/*Test` | V04（表存在） | 已实现 |
+| Discussion | `V15__discussion.sql`：`asset_discussion`、`asset_comment`（及修订/订阅相关列） | `asset/**/*Test`、`DiscussionPanel` | V04（表存在） | PARTIAL / IMPLEMENTED_UNVERIFIED（@mention 通知未闭环） |
 | 版本与传输 | `V16__version_transfer.sql`：`asset_version`、`version_artifact`、`upload_session`、`upload_file`、`upload_part`、`asset_preview` | `version/**/*Test`、`transfer/**/*Test` | V04（表存在） | 已实现 |
 | 发布治理 | `V17__release_governance.sql`：`validation_report`、`publish_request`、`review_decision` | `version/**/*Test` | V04（表存在） | 已实现 |
 | Webhook Inbox | `V18__webhook_inbox.sql`：`webhook_inbox` | `notification/**/*Test` | V04（表存在） | 已实现 |
@@ -66,7 +66,7 @@
 | V01 | `docker compose config --quiet` | 始终执行 |
 | V02 | postgres/minio/gitea/backend 健康 | 容器未起时 SKIP |
 | V03 | 四个 Bucket 存在且非匿名 | minio 未起时 SKIP |
-| V04 | Flyway V1-V20 成功迁移、关键表存在 | postgres 未起时 SKIP |
+| V04 | Flyway V1–V28 成功迁移（阈值 ≥28）、关键表存在（含 `asset_discussion`/`asset_comment`/`reconciliation_checkpoint`） | postgres 未起时 SKIP |
 | V05 | 登录签发 JWT、`/me` 200、无 Token→401（fail-closed） | backend 未起时 SKIP |
 | V06 | `/system/audit-logs`、`/metrics/summary` 无 Token→401、越权→403 | backend 未起时 SKIP |
 | V07 | `/system/dictionaries`、`/tags` 无 Token→401、越权→403 | backend 未起时 SKIP |
@@ -74,7 +74,21 @@
 | V09 | `/system/jobs` 默认拒绝 | backend 未起时 SKIP |
 | V10 | `/system/notifications` 默认拒绝 | backend 未起时 SKIP |
 | V11 | `/actuator/health` 200、`/system/dependencies` 默认拒绝 | backend 未起时 SKIP |
-| V12 | `/system/alerts` 告警列表、DEAD 任务/积压告警 | backend 未起时 SKIP |
+| V12 | 资产创建与 Gitea 仓库一致性（`AIHUB_GITEA_ENABLED=true` 时断言真实 provision 路径） | postgres/gitea 未起时 SKIP |
+
+## 实现状态（2026-07-10）— P1–P5 部分落地
+
+> 详见 `docs/architecture/implementation-status-2026-07-10.md`。下列为追踪矩阵摘要；不得将 PARTIAL 表述为 VERIFIED。
+
+| 能力 | 迁移/关键表 | 状态 |
+| --- | --- | --- |
+| P1 资产目录 | V12–V15、V19、V22–V25；坐标/matchedFields/归档守卫 | PARTIAL / IMPLEMENTED_UNVERIFIED |
+| P2 版本与传输 | V16；Upload→MATERIALIZE 接线；Preview generate | PARTIAL / IMPLEMENTED_UNVERIFIED |
+| P3 发布治理 | V17、V26–V27（`frozen_source_commit`） | PARTIAL / IMPLEMENTED_UNVERIFIED |
+| P4 Agent/MCP | tools.yaml 同步；McpController | PARTIAL / IMPLEMENTED_UNVERIFIED |
+| P5 对账与统计 | V18、V21、V28（`reconciliation_checkpoint`）；下载统计 API | PARTIAL / IMPLEMENTED_UNVERIFIED |
+
+> V27 语义：`publish_request.frozen_source_commit`（P3）。P1 Owner/tag 回填下限为 **V29+**。
 
 > 说明：Bootstrap 管理员默认仅持 `ADMIN_SCOPES`（user/authorization/agent）且首登强制改密，
 > 因此 V06-V11 以“无 Token→401、越权 Token→403”验证 fail-closed 默认拒绝语义，

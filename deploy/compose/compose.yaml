@@ -122,6 +122,7 @@ services:
       AIHUB_BOOTSTRAP_ADMIN_PASSWORD: ${AIHUB_BOOTSTRAP_ADMIN_PASSWORD}
       # 本地 http 场景关闭刷新 Cookie 的 Secure 标志，便于 verify 脚本走 http 验证 JWT 生命周期。
       AIHUB_REFRESH_COOKIE_SECURE: "false"
+      AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
       AIHUB_MINIO_ENDPOINT: http://minio:9000
@@ -148,6 +149,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
       AIHUB_MINIO_ENDPOINT: http://minio:9000

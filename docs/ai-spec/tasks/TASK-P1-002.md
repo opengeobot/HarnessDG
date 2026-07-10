@@ -19,14 +19,14 @@ decisions:
   - DEC-010
   - DEC-011
 scenarioEvidencePlan:
-  - AC-P1-AST-001|E3|Flyway V27+ backfill maps legacy coordinates and governed fields to Team Owner model
+  - AC-P1-AST-001|E3|Flyway V29+ backfill maps legacy coordinates and governed fields to Team Owner model
   - AC-P1-AST-010|E3|Backfill string Owner to Team ID and seed ACL rows with UNMAPPED remediation markers
 crossCuttingPlan:
   - AUTHN|N/A - migration and backfill only
   - AUTHZ|Backfill preserves ACL semantics; admin remediation page requires asset:manage
   - DB_FILTER|Backfill SQL scoped by organization; no cross-tenant leakage
   - STATE|UNMAPPED assets flagged for admin review without breaking ACTIVE assets
-  - IDEMPOTENCY|V27 migration rerunnable on empty DB and upgrade path
+  - IDEMPOTENCY|V29 migration rerunnable on empty DB and upgrade path
   - CONSISTENCY|Backfill in single Flyway transaction per batch with audit trail
   - ERRORS|DICTIONARY_VALUE_INVALID and TAG_VALUE_INVALID for unmapped legacy values
   - AUDIT|ASSET_BACKFILL_COMPLETED events for each remediated row batch
@@ -36,7 +36,7 @@ crossCuttingPlan:
   - OBSERVABILITY|Migration metrics logged for backfill row counts
   - SECRETS|N/A - no secrets in migration scripts
 allowedPaths:
-  - backend/src/main/resources/db/migration/V27__asset_backfill.sql
+  - backend/src/main/resources/db/migration/V29__asset_backfill.sql
   - backend/src/main/java/com/aihub/asset/infrastructure
   - backend/src/test/java/com/aihub/asset
   - frontend/src/features/admin
@@ -61,13 +61,15 @@ requiredValidationCommands:
 approvedBy: User (plan execution authorization 2026-07-10)
 approvedAt: 2026-07-10T00:00:00Z
 ---
-# TASK-P1-002：V27+ 资产数据回填与 UNMAPPED 整改
+# TASK-P1-002：V29+ 资产数据回填与 UNMAPPED 整改
 
 > 状态：`READY`
 
 ## 1. 目标
 
-通过 V27+ Flyway 将自由标签和字符串 Owner 回填为受控 tagId/Team ID，并提供 UNMAPPED 管理端整改页。
+通过 V29+ Flyway 将自由标签和字符串 Owner 回填为受控 tagId/Team ID，并提供 UNMAPPED 管理端整改页。
+
+> 编号说明：V27 已被 P3 `V27__publish_request_frozen_commit.sql` 占用；本任务回填下限为 **V29**。
 
 ## 2. 关联规格
 
@@ -81,7 +83,7 @@ decisions: ['DEC-010', 'DEC-011']
 
 ### 允许修改
 
-- V27__asset_backfill.sql、asset infrastructure 查询、admin 整改 UI；禁止修改 V1/V2。
+- V29__asset_backfill.sql、asset infrastructure 查询、admin 整改 UI；禁止修改 V1/V2。
 
 ### 明确不在范围
 
@@ -95,7 +97,7 @@ decisions: ['DEC-010', 'DEC-011']
 
 | 场景 ID | Actor | Given | When | Then | 最低证据 |
 | --- | --- | --- | --- | --- | --- |
-| `AC-P1-AST-001` | Maintainer | Flyway V27+ backfill maps legacy coordinates and governed fields to Team Owner model | Execute | PASS | `E3` |
+| `AC-P1-AST-001` | Maintainer | Flyway V29+ backfill maps legacy coordinates and governed fields to Team Owner model | Execute | PASS | `E3` |
 | `AC-P1-AST-010` | Maintainer | Backfill string Owner to Team ID and seed ACL rows with UNMAPPED remediation markers | Execute | PASS | `E3` |
 
 ## 5. 横切要求
@@ -105,11 +107,11 @@ decisions: ['DEC-010', 'DEC-011']
 ## 6. 契约与数据先行
 
 - 行为变更先更新 OpenAPI/事件/Migration（如适用）
-- V27+ 为 P1-002 回填下限；其他任务按需使用 V27+ 新 Migration
+- V29+ 为 P1-002 回填下限（V27 已用于 P3 frozen commit）；其他任务按需使用 V29+ 新 Migration
 
 ## 7. 实施步骤
 
-- [ ] 编写 V27 回填脚本；实现 UNMAPPED 标记查询；admin 页展示并引导整改。
+- [ ] 编写 V29 回填脚本；实现 UNMAPPED 标记查询；admin 页展示并引导整改。
 - [ ] 编写/更新测试覆盖全部 AC
 - [ ] 更新 Evidence Manifest
 

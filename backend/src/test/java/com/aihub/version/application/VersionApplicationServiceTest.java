@@ -61,7 +61,7 @@ class VersionApplicationServiceTest {
 
         assertThat(view.versionId()).isEqualTo("ver_generated");
         assertThat(view.status()).isEqualTo(VersionStatus.DRAFT);
-        verify(authorizationService).requirePermission(Permissions.ASSET_MANAGE);
+        verify(authorizationService).requirePermission(Permissions.ASSET_UPDATE);
         verify(versionRepository).insert(any(Version.class));
         verify(auditService).record(any());
     }

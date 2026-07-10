@@ -144,8 +144,8 @@ check_buckets() {
 check_migrations() {
   local count ok=0
   count="$(psql_q 'select count(*) from flyway_schema_history where success = true')"
-  if [ -z "${count}" ] || [ "${count}" -lt 26 ]; then echo "  成功迁移数 ${count} < 26"; return 1; fi
-  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert; do
+  if [ -z "${count}" ] || [ "${count}" -lt 28 ]; then echo "  成功迁移数 ${count} < 28"; return 1; fi
+  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert reconciliation_checkpoint; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"; ok=1
     fi
@@ -225,9 +225,29 @@ check_asset_gitea_consistency() {
   local col_exists
   col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='asset' and column_name='provisioning_status'")"
   if [ "${col_exists}" != "1" ]; then echo "  asset.provisioning_status 列缺失"; return 1; fi
-  # 检查 job_task 表中 ASSET_PROVISION 任务存在
-  job_cnt="$(psql_q "select count(*) from job_task where type = 'ASSET_PROVISION'")"
+  # 检查 job_task 表中 ASSET_PROVISION / REPOSITORY_PROVISION 任务类型可用
+  job_cnt="$(psql_q "select count(*) from job_task where type in ('ASSET_PROVISION','REPOSITORY_PROVISION')")"
   if [ -z "${job_cnt}" ]; then echo "  job_task 查询失败"; return 1; fi
+  # Compose 启用 Gitea 时：断言已完成 provision 的资产具备仓库引用，且 Gitea API 可达
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    local gitea_code
+    gitea_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:3000/api/v1/version 2>/dev/null || echo 000)"
+    if [ "${gitea_code}" = "200" ]; then
+      local completed
+      completed="$(psql_q "select count(*) from asset where deleted = 0 and provisioning_status = 'COMPLETED' and repo_full_name is not null")"
+      # 允许空库（0）；若有 COMPLETED 资产则必须带仓库名
+      if [ -n "${completed}" ] && [ "${completed}" -gt 0 ]; then
+        local missing_repo
+        missing_repo="$(psql_q "select count(*) from asset where deleted = 0 and provisioning_status = 'COMPLETED' and (repo_full_name is null or repo_full_name = '')")"
+        if [ "${missing_repo}" != "0" ]; then
+          echo "  ${missing_repo} 个 COMPLETED 资产缺少 repo_full_name（Gitea 已启用）"
+          return 1
+        fi
+      fi
+    else
+      echo "  警告: Gitea API 不可达 (HTTP ${gitea_code})；跳过真实仓库断言"
+    fi
+  fi
   return 0
 }
 
