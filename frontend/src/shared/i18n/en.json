@@ -337,6 +337,8 @@
     "validationReport": "Validation Report",
     "policyVersion": "Policy Version",
     "findings": "Findings",
+    "noValidationReport": "No validation report yet",
+    "frozenDigestHint": "Review frozen digest and commit before approving; content drift invalidates prior approval.",
     "deprecate": "Deprecate",
     "archive": "Archive"
   },
@@ -354,6 +356,7 @@
     "decisionPanel": "Review Decision",
     "requestId": "Request ID",
     "frozenDigest": "Frozen Digest",
+    "driftWarning": "Compare frozen commit/digest with current branch before approving. Drift requires re-validation.",
     "decision": "Decision",
     "approve": "Approve",
     "reject": "Reject",

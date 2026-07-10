@@ -84,6 +84,7 @@ class ValidationJobHandlerTest {
         Version version = Version.createDraft("ver_1", "ast_1", "v1.0.0", "user_1");
         version.transitionTo(VersionStatus.VALIDATING);
         version.bindManifestDigest("sha256:abc123");
+        version.bindSourceCommit("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
         Artifact artifact = new Artifact("art_1", "ver_1", "model.bin",
                 "model.dvc", "dvc:xyz", "sha256:hash", 1024, "application/octet-stream");

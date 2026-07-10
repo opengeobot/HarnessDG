@@ -13,6 +13,7 @@ interface PublishRequest {
   requestId: string;
   versionId: string;
   frozenDigest: string;
+  frozenSourceCommit: string;
   status: string;
   submittedBy: string;
   submittedAt: string;
@@ -47,6 +48,7 @@ export function ReviewPage() {
         requestId: String(r.request_id),
         versionId: String(r.version_id),
         frozenDigest: String(r.frozen_digest ?? ''),
+        frozenSourceCommit: String(r.frozen_source_commit ?? ''),
         status: String(r.status),
         submittedBy: String(r.submitted_by),
         submittedAt: String(r.created_at),
@@ -167,6 +169,15 @@ export function ReviewPage() {
                   <span className="text-gray-500">{t('review.frozenDigest')}</span>
                   <span className="font-mono text-xs">{selectedRequest.frozenDigest}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{t('version.commit')}</span>
+                  <span className="font-mono text-xs">{selectedRequest.frozenSourceCommit || '-'}</span>
+                </div>
+                {selectedRequest.frozenDigest && (
+                  <p className="text-xs text-amber-700 bg-amber-50 rounded p-2">
+                    {t('review.driftWarning')}
+                  </p>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-500">{t('common.status')}</span>
                   <span className={STATUS_COLORS[selectedRequest.status] ?? ''}>

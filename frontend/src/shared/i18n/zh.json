@@ -337,6 +337,8 @@
     "validationReport": "校验报告",
     "policyVersion": "策略版本",
     "findings": "校验结果",
+    "noValidationReport": "暂无校验报告",
+    "frozenDigestHint": "审批前请核对冻结摘要与 Commit；内容漂移将使旧审批失效。",
     "deprecate": "弃用",
     "archive": "归档"
   },
@@ -354,6 +356,7 @@
     "decisionPanel": "审批决策",
     "requestId": "请求 ID",
     "frozenDigest": "冻结摘要",
+    "driftWarning": "批准前请比对冻结 Commit/摘要与当前分支；发生漂移需重新校验。",
     "decision": "决策",
     "approve": "批准",
     "reject": "拒绝",

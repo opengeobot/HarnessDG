@@ -81,7 +81,7 @@ class PublishApplicationServiceTest {
 
     @Test
     void submitPublishRequestWhenManifestDigestMissingThrows() {
-        Version v = createPendingReviewVersion("ver_01", null);
+        Version v = createPendingReviewVersion("ver_01", null, null);
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         assertThatThrownBy(() -> service.submitPublishRequest("ver_01"))
@@ -91,13 +91,16 @@ class PublishApplicationServiceTest {
 
     @Test
     void submitPublishRequestCreatesIdempotentRequest() {
-        Version v = createPendingReviewVersion("ver_01", "sha256abc");
+        Version v = createPendingReviewVersion("ver_01", "sha256abc",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
         given(idGenerator.generate(IdPrefix.PUBLISH_REQUEST)).willReturn("pub_001");
         given(jdbcTemplate.queryForObject(
                 eq("SELECT COUNT(*) FROM publish_request WHERE version_id = ?"),
                 eq(Long.class), eq("ver_01"))).willReturn(0L);
-        given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
+        given(jdbcTemplate.queryForList(anyString(), eq("ver_01")))
+                .willReturn(List.of(Map.of("status", "PASSED", "policy_version", "v1")));
+        given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any())).willReturn(1);
 
         String requestId = service.submitPublishRequest("ver_01");
 
@@ -107,7 +110,8 @@ class PublishApplicationServiceTest {
 
     @Test
     void submitPublishRequestReturnsExistingWhenIdempotent() {
-        Version v = createPendingReviewVersion("ver_01", "sha256abc");
+        Version v = createPendingReviewVersion("ver_01", "sha256abc",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
         given(jdbcTemplate.queryForObject(
                 eq("SELECT COUNT(*) FROM publish_request WHERE version_id = ?"),
@@ -130,16 +134,52 @@ class PublishApplicationServiceTest {
     }
 
     @Test
+    void submitPublishRequestWithoutValidationReportThrows() {
+        Version v = createPendingReviewVersion("ver_01", "sha256abc",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
+        given(jdbcTemplate.queryForObject(
+                eq("SELECT COUNT(*) FROM publish_request WHERE version_id = ?"),
+                eq(Long.class), eq("ver_01"))).willReturn(0L);
+        given(jdbcTemplate.queryForList(anyString(), eq("ver_01"))).willReturn(List.of());
+
+        assertThatThrownBy(() -> service.submitPublishRequest("ver_01"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("validation report");
+    }
+
+    @Test
+    void submitDecisionApproveRejectsContentDrift() {
+        Map<String, Object> request = Map.of(
+                "request_id", "pub_01", "version_id", "ver_01",
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "sha256:frozen",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
+
+        Version v = createPendingReviewVersion("ver_01", "sha256:drifted",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
+
+        assertThatThrownBy(() -> service.submitDecision("pub_01", "APPROVE", "ok"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("drifted");
+    }
+
+    @Test
     void submitDecisionRejectReturnsVersionToDraft() {
         Map<String, Object> request = Map.of(
                 "request_id", "pub_01", "version_id", "ver_01",
-                "submitted_by", "usr_submitter", "status", "SUBMITTED");
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "digest",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
         given(idGenerator.generate(IdPrefix.REVIEW_DECISION)).willReturn("rvw_001");
         given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
         given(jdbcTemplate.update(anyString(), any(), eq("pub_01"))).willReturn(1);
 
-        Version v = createPendingReviewVersion("ver_01", "digest");
+        Version v = createPendingReviewVersion("ver_01", "digest",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         service.submitDecision("pub_01", "REJECT", "needs work");
@@ -152,7 +192,9 @@ class PublishApplicationServiceTest {
     void submitDecisionSelfApprovalThrows() {
         Map<String, Object> request = Map.of(
                 "request_id", "pub_01", "version_id", "ver_01",
-                "submitted_by", "usr_reviewer", "status", "SUBMITTED");
+                "submitted_by", "usr_reviewer", "status", "SUBMITTED",
+                "frozen_digest", "digest",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
 
         assertThatThrownBy(() -> service.submitDecision("pub_01", "APPROVE", "ok"))
@@ -164,11 +206,17 @@ class PublishApplicationServiceTest {
     void submitDecisionApproveEnqueuesPublishJob() throws Exception {
         Map<String, Object> request = Map.of(
                 "request_id", "pub_01", "version_id", "ver_01",
-                "submitted_by", "usr_submitter", "status", "SUBMITTED");
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "digest",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
         given(idGenerator.generate(IdPrefix.REVIEW_DECISION)).willReturn("rvw_002");
         given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
         given(jdbcTemplate.update(anyString(), any(), eq("pub_01"))).willReturn(1);
+
+        Version v = createPendingReviewVersion("ver_01", "digest",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         service.submitDecision("pub_01", "APPROVE", "LGTM");
 
@@ -180,13 +228,16 @@ class PublishApplicationServiceTest {
     void submitDecisionRequestChangesReturnsVersionToDraft() {
         Map<String, Object> request = Map.of(
                 "request_id", "pub_01", "version_id", "ver_01",
-                "submitted_by", "usr_submitter", "status", "SUBMITTED");
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "digest",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
         given(idGenerator.generate(IdPrefix.REVIEW_DECISION)).willReturn("rvw_003");
         given(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).willReturn(1);
         given(jdbcTemplate.update(anyString(), any(), eq("pub_01"))).willReturn(1);
 
-        Version v = createPendingReviewVersion("ver_01", "digest");
+        Version v = createPendingReviewVersion("ver_01", "digest",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         service.submitDecision("pub_01", "REQUEST_CHANGES", "please fix X");
@@ -195,10 +246,11 @@ class PublishApplicationServiceTest {
         verify(versionRepository).update(v);
     }
 
-    private Version createPendingReviewVersion(String versionId, String digest) {
+    private Version createPendingReviewVersion(String versionId, String digest, String sourceCommit) {
         Version v = Version.createDraft(versionId, "ast_01", "v1.0.0", "usr_01");
         v.transitionTo(VersionStatus.VALIDATING);
         if (digest != null) v.bindManifestDigest(digest);
+        if (sourceCommit != null) v.bindSourceCommit(sourceCommit);
         v.transitionTo(VersionStatus.PENDING_REVIEW);
         return v;
     }

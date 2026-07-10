@@ -81,17 +81,7 @@ public class PublishApplicationService {
             throw new IllegalStateException("only PENDING_REVIEW versions can be submitted for publish");
         }
 
-        String digest = version.manifestDigest();
-        if (digest == null || digest.isBlank()) {
-            throw new IllegalStateException("version must have a manifest digest before publishing");
-        }
-
-        String requestId = idGenerator.generate(IdPrefix.PUBLISH_REQUEST);
-        String principalId = PrincipalContextHolder.current()
-                .map(c -> c.principalId())
-                .orElseThrow(() -> new IllegalStateException("no authenticated principal"));
-
-        // 幂等：检查是否已存在请求
+        // 幂等：检查是否已存在请求（先于校验报告检查，支持重放）
         Long existing = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM publish_request WHERE version_id = ?",
                 Long.class, versionId);
@@ -103,10 +93,35 @@ public class PublishApplicationService {
             return existingId;
         }
 
+        String digest = version.manifestDigest();
+        if (digest == null || digest.isBlank()) {
+            throw new IllegalStateException("version must have a manifest digest before publishing");
+        }
+
+        // 要求最新校验报告通过
+        Map<String, Object> latestReport = jdbcTemplate.queryForList("""
+                SELECT status, policy_version FROM validation_report
+                WHERE version_id = ? ORDER BY created_at DESC LIMIT 1
+                """, versionId).stream().findFirst().orElse(null);
+        if (latestReport == null || !"PASSED".equals(String.valueOf(latestReport.get("status")))) {
+            throw new IllegalStateException("version must have a PASSED validation report before submit");
+        }
+
+        String sourceCommit = version.sourceCommit();
+        if (sourceCommit == null || sourceCommit.isBlank()) {
+            throw new IllegalStateException("version must have a source commit before publishing");
+        }
+
+        String requestId = idGenerator.generate(IdPrefix.PUBLISH_REQUEST);
+        String principalId = PrincipalContextHolder.current()
+                .map(c -> c.principalId())
+                .orElseThrow(() -> new IllegalStateException("no authenticated principal"));
+
         jdbcTemplate.update("""
-                INSERT INTO publish_request (request_id, version_id, frozen_digest, policy_version, status, submitted_by)
-                VALUES (?, ?, ?, ?, 'SUBMITTED', ?)
-                """, requestId, versionId, digest, "v1", principalId);
+                INSERT INTO publish_request (request_id, version_id, frozen_digest, frozen_source_commit, policy_version, status, submitted_by)
+                VALUES (?, ?, ?, ?, ?, 'SUBMITTED', ?)
+                """, requestId, versionId, digest, sourceCommit,
+                String.valueOf(latestReport.get("policy_version")), principalId);
 
         auditService.record(new AuditEvent(
                 "PUBLISH_REQUEST_SUBMITTED", "publish:submit",
@@ -137,11 +152,12 @@ public class PublishApplicationService {
 
         // 查询请求
         Map<String, Object> request = jdbcTemplate.queryForMap(
-                "SELECT request_id, version_id, submitted_by, status FROM publish_request WHERE request_id = ?",
+                "SELECT request_id, version_id, submitted_by, status, frozen_digest, frozen_source_commit FROM publish_request WHERE request_id = ?",
                 requestId);
 
         String submittedBy = String.valueOf(request.get("submitted_by"));
         String status = String.valueOf(request.get("status"));
+        String versionId = String.valueOf(request.get("version_id"));
 
         // 提交人不能审批自己
         if (submittedBy.equals(reviewerId)) {
@@ -150,6 +166,22 @@ public class PublishApplicationService {
 
         if (!"SUBMITTED".equals(status)) {
             throw new IllegalStateException("only SUBMITTED requests can receive decisions, current: " + status);
+        }
+
+        // 内容漂移检测：审批前重新校验冻结 revision
+        Version version = versionRepository.findByVersionId(versionId).orElse(null);
+        if (version == null) {
+            throw new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
+                    "version not found", Map.of("versionId", versionId));
+        }
+        String frozenDigest = String.valueOf(request.get("frozen_digest"));
+        Object frozenCommitObj = request.get("frozen_source_commit");
+        if (version.manifestDigest() == null || !version.manifestDigest().equals(frozenDigest)) {
+            throw new IllegalStateException("manifest digest drifted since submit; re-validate required");
+        }
+        if (frozenCommitObj != null && version.sourceCommit() != null
+                && !version.sourceCommit().equalsIgnoreCase(String.valueOf(frozenCommitObj))) {
+            throw new IllegalStateException("source commit drifted since submit; re-validate required");
         }
 
         String reviewId = idGenerator.generate(IdPrefix.REVIEW_DECISION);
@@ -171,15 +203,15 @@ public class PublishApplicationService {
                     Instant.now(), requestId);
 
             // 版本回到 DRAFT
-            String versionId = String.valueOf(request.get("version_id"));
-            Version version = versionRepository.findByVersionId(versionId).orElse(null);
-            if (version != null && version.status() == VersionStatus.PENDING_REVIEW) {
-                version.transitionTo(VersionStatus.DRAFT);
-                versionRepository.update(version);
+            String versionIdForReject = String.valueOf(request.get("version_id"));
+            Version versionForReject = versionRepository.findByVersionId(versionIdForReject).orElse(null);
+            if (versionForReject != null && versionForReject.status() == VersionStatus.PENDING_REVIEW) {
+                versionForReject.transitionTo(VersionStatus.DRAFT);
+                versionRepository.update(versionForReject);
             }
-            LOG.info("publish request rejected requestId={} versionId={}", requestId, versionId);
+            LOG.info("publish request rejected requestId={} versionId={}", requestId, versionIdForReject);
             publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED",
-                    Map.of("requestId", requestId, "versionId", versionId, "decision", "REJECT"));
+                    Map.of("requestId", requestId, "versionId", versionIdForReject, "decision", "REJECT"));
             return;
         }
 
@@ -187,15 +219,15 @@ public class PublishApplicationService {
         if ("REQUEST_CHANGES".equals(decision)) {
             jdbcTemplate.update("UPDATE publish_request SET status = 'CHANGES_REQUESTED', decided_at = ? WHERE request_id = ?",
                     Instant.now(), requestId);
-            String versionId = String.valueOf(request.get("version_id"));
-            Version version = versionRepository.findByVersionId(versionId).orElse(null);
-            if (version != null && version.status() == VersionStatus.PENDING_REVIEW) {
-                version.transitionTo(VersionStatus.DRAFT);
-                versionRepository.update(version);
+            String versionIdForChanges = String.valueOf(request.get("version_id"));
+            Version versionForChanges = versionRepository.findByVersionId(versionIdForChanges).orElse(null);
+            if (versionForChanges != null && versionForChanges.status() == VersionStatus.PENDING_REVIEW) {
+                versionForChanges.transitionTo(VersionStatus.DRAFT);
+                versionRepository.update(versionForChanges);
             }
-            LOG.info("publish request changes-requested requestId={} versionId={}", requestId, versionId);
+            LOG.info("publish request changes-requested requestId={} versionId={}", requestId, versionIdForChanges);
             publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED",
-                    Map.of("requestId", requestId, "versionId", versionId, "decision", "REQUEST_CHANGES"));
+                    Map.of("requestId", requestId, "versionId", versionIdForChanges, "decision", "REQUEST_CHANGES"));
             return;
         }
 
@@ -206,18 +238,18 @@ public class PublishApplicationService {
                     Instant.now(), requestId);
 
             // 创建发布 Job
-            String versionId = String.valueOf(request.get("version_id"));
+            String versionIdForPublish = String.valueOf(request.get("version_id"));
             try {
                 String payload = objectMapper.writeValueAsString(
-                        Map.of("requestId", requestId, "versionId", versionId));
-                jobApplicationService.enqueue("VERSION_PUBLISH", payload, reviewerId, null, versionId, 3);
+                        Map.of("requestId", requestId, "versionId", versionIdForPublish));
+                jobApplicationService.enqueue("VERSION_PUBLISH", payload, reviewerId, null, versionIdForPublish, 3);
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
                 throw new IllegalStateException("failed to serialize publish payload", e);
             }
 
-            LOG.info("publish request approved, publish job submitted requestId={} versionId={}", requestId, versionId);
+            LOG.info("publish request approved, publish job submitted requestId={} versionId={}", requestId, versionIdForPublish);
             publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_APPROVED",
-                    Map.of("requestId", requestId, "versionId", versionId));
+                    Map.of("requestId", requestId, "versionId", versionIdForPublish));
         }
     }
 
@@ -264,8 +296,8 @@ public class PublishApplicationService {
     public List<Map<String, Object>> listPublishRequests(String assetId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
         return jdbcTemplate.queryForList("""
-                SELECT pr.request_id, pr.version_id, pr.frozen_digest, pr.policy_version,
-                       pr.status, pr.submitted_by, pr.decided_at, pr.created_at
+                SELECT pr.request_id, pr.version_id, pr.frozen_digest, pr.frozen_source_commit,
+                       pr.policy_version, pr.status, pr.submitted_by, pr.decided_at, pr.created_at
                 FROM publish_request pr
                 JOIN asset_version av ON pr.version_id = av.version_id
                 WHERE av.asset_id = ?
