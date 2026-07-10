@@ -1,7 +1,9 @@
 package com.aihub.version.domain;
 
 import com.aihub.shared.api.CursorPage;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -24,6 +26,9 @@ public interface VersionRepository {
 
     /** 查询资产最新已发布版本（按 published_at 降序取首条）。 */
     Optional<Version> findLatestPublishedByAssetId(String assetId);
+
+    /** 批量查询各资产最新已发布版本（消除 N+1）。 */
+    Map<String, Version> findLatestPublishedByAssetIds(Collection<String> assetIds);
 
     // ---- 工件操作 ----
 

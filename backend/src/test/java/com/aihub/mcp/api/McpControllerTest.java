@@ -31,6 +31,7 @@ import com.aihub.bootstrap.security.RestAuthenticationEntryPoint;
 import com.aihub.bootstrap.security.SecurityConfiguration;
 import com.aihub.identity.api.RefreshCookieFactory;
 import com.aihub.identity.api.RefreshCookieProperties;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
 import com.aihub.platform.observability.application.PlatformMetrics;
@@ -91,11 +92,17 @@ class McpControllerTest {
     private PlatformMetrics platformMetrics;
     @MockitoBean
     private AuditService auditService;
+    @MockitoBean
+    private IdempotencyService idempotencyService;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
         given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(true);
+        given(idempotencyService.execute(any(), any(), any())).willAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
     }
 
     private String bearer(Set<String> scopes) {
@@ -245,6 +252,59 @@ class McpControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.error.code").value(-32601))
                 .andExpect(jsonPath("$.error.message").value("Method not found: unknown/method"));
+    }
+
+    @Test
+    void toolsCallWriteToolRejectsMissingIdempotencyKey() throws Exception {
+        given(toolCatalog.findTool("asset_create_draft")).willReturn(java.util.Optional.of(
+                new McpToolCatalog.ToolDefinition("asset_create_draft", "Create draft",
+                        Map.of("type", "object"), true, "asset:manage")));
+
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_create_draft\",\"arguments\":{\"assetId\":\"ast_1\",\"version\":\"v1\"}}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(true))
+                .andExpect(jsonPath("$.result.content[0].text")
+                        .value("Idempotency key required for write tools"));
+    }
+
+    @Test
+    void toolsCallWriteToolAcceptsIdempotencyKeyFromHeader() throws Exception {
+        given(toolCatalog.findTool("asset_create_draft")).willReturn(java.util.Optional.of(
+                new McpToolCatalog.ToolDefinition("asset_create_draft", "Create draft",
+                        Map.of("type", "object"), true, "asset:manage")));
+        given(toolCatalog.callTool(eq("asset_create_draft"), anyMap()))
+                .willReturn(Map.of("versionId", "ver_1"));
+
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .header("Idempotency-Key", "idem-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_create_draft\",\"arguments\":{\"assetId\":\"ast_1\",\"version\":\"v1\"}}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(false));
+    }
+
+    @Test
+    void toolsCallWriteToolAcceptsIdempotencyKeyFromParams() throws Exception {
+        given(toolCatalog.findTool("asset_create_draft")).willReturn(java.util.Optional.of(
+                new McpToolCatalog.ToolDefinition("asset_create_draft", "Create draft",
+                        Map.of("type", "object"), true, "asset:manage")));
+        given(toolCatalog.callTool(eq("asset_create_draft"), anyMap()))
+                .willReturn(Map.of("versionId", "ver_1"));
+
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_create_draft\",\"_idempotencyKey\":\"idem-002\","
+                                        + "\"arguments\":{\"assetId\":\"ast_1\",\"version\":\"v1\"}}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(false));
     }
 
     @Test

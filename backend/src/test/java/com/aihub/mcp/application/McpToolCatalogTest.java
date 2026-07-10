@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.asset.application.AssetApplicationService;
@@ -100,8 +101,8 @@ class McpToolCatalogTest {
                 Instant.now(), List.of("name"));
         when(assetService.searchAssets(any())).thenReturn(
                 new CursorPage<>(List.of(summary), null, false));
-        when(versionRepository.findLatestPublishedByAssetId("ast_1"))
-                .thenReturn(Optional.of(new Version(
+        when(versionRepository.findLatestPublishedByAssetIds(any()))
+                .thenReturn(Map.of("ast_1", new Version(
                         "ver_1", "ast_1", "1.0.0", VersionStatus.PUBLISHED,
                         null, null, null, Instant.now(), "usr", null,
                         0L, "usr", Instant.now(), Instant.now())));
@@ -116,6 +117,7 @@ class McpToolCatalogTest {
         assertThat(items.get(0)).containsEntry("coordinate", "aih://nlp/model/test");
         assertThat(items.get(0)).containsEntry("matchedFields", List.of("name"));
         assertThat(items.get(0)).containsEntry("latestPublished", "1.0.0");
+        verify(versionRepository).findLatestPublishedByAssetIds(any());
     }
 
     @Test

@@ -126,6 +126,36 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
+  /auth/agent/token:
+    post:
+      operationId: exchangeAgentCredentialAlias
+      summary: Agent 凭据换取 JWT（/auth/token 别名）
+      tags: [auth]
+      security: []
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
+      x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
+      description: |
+        Agent 客户端凭据交换别名端点，行为与 POST /auth/token 完全相同。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientCredentialTokenRequest' }
+      responses:
+        '200':
+          description: 凭据有效，签发访问 JWT
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /auth/logout:
     post:
       operationId: logout

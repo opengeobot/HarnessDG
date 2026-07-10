@@ -5,12 +5,15 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
 import com.aihub.mcp.application.McpToolCatalog.ToolDefinition;
 import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.error.AuthorizationException;
 import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
 import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.shared.identity.PrincipalType;
@@ -24,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -47,6 +51,8 @@ public class McpController {
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final PlatformMetrics platformMetrics;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotencySupport;
     private final ObjectMapper objectMapper;
 
     public McpController(McpToolCatalog toolCatalog,
@@ -54,17 +60,22 @@ public class McpController {
                          AuthorizationService authorizationService,
                          AuditService auditService,
                          PlatformMetrics platformMetrics,
+                         IdempotencyService idempotencyService,
                          ObjectMapper objectMapper) {
         this.toolCatalog = toolCatalog;
         this.resourceHandler = resourceHandler;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.platformMetrics = platformMetrics;
+        this.idempotencyService = idempotencyService;
+        this.idempotencySupport = new IdempotencySupport(objectMapper);
         this.objectMapper = objectMapper;
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> handleJsonRpc(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> handleJsonRpc(
+            @RequestBody Map<String, Object> request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyHeader) {
         String method = (String) request.get("method");
         Object id = request.get("id");
 
@@ -80,7 +91,7 @@ public class McpController {
             case "tools/list" -> ResponseEntity.ok(successResponse(id, handleToolsList()));
             case "tools/call" -> {
                 Map<String, Object> params = getParams(request);
-                yield ResponseEntity.ok(successResponse(id, handleToolsCall(params)));
+                yield ResponseEntity.ok(successResponse(id, handleToolsCall(params, idempotencyHeader)));
             }
             case "resources/list" -> ResponseEntity.ok(successResponse(id, handleResourcesList()));
             case "resources/read" -> {
@@ -115,7 +126,7 @@ public class McpController {
         return Map.of("tools", tools);
     }
 
-    private Map<String, Object> handleToolsCall(Map<String, Object> params) {
+    private Map<String, Object> handleToolsCall(Map<String, Object> params, String idempotencyHeader) {
         String toolName = (String) params.get("name");
         if (toolName == null) {
             return toolError("Missing tool name");
@@ -149,6 +160,23 @@ public class McpController {
         Map<String, Object> arguments = params.get("arguments") instanceof Map m ? m : Map.of();
 
         try {
+            if (toolDef.write()) {
+                String idempotencyKeyValue = resolveIdempotencyKey(params, idempotencyHeader);
+                if (idempotencyKeyValue == null || idempotencyKeyValue.isBlank()) {
+                    return toolError("Idempotency key required for write tools");
+                }
+                IdempotencyKey key = idempotencySupport.buildKey(
+                        idempotencyKeyValue, context.principalId(), "POST", "/mcp/tools/call/" + toolName);
+                String fingerprint = idempotencySupport.sha256Digest(arguments);
+                var idempotent = idempotencyService.execute(key, fingerprint, () -> {
+                    Object toolResult = toolCatalog.callTool(toolName, arguments);
+                    return new IdempotencyService.IdempotencyResponse(200, serializeResult(toolResult));
+                });
+                platformMetrics.recordToolCall(toolName, "success");
+                return Map.of("isError", false, "content",
+                        List.of(Map.of("type", "text", "text", idempotent.response().body())));
+            }
+
             Object result = toolCatalog.callTool(toolName, arguments);
             platformMetrics.recordToolCall(toolName, "success");
             return Map.of("isError", false, "content",
@@ -158,6 +186,14 @@ public class McpController {
             platformMetrics.recordToolCall(toolName, "error");
             return toolError("Error: " + e.getMessage());
         }
+    }
+
+    private static String resolveIdempotencyKey(Map<String, Object> params, String headerValue) {
+        Object fromParams = params.get("_idempotencyKey");
+        if (fromParams != null && !fromParams.toString().isBlank()) {
+            return fromParams.toString();
+        }
+        return headerValue;
     }
 
     private PrincipalContext requireAuthenticatedPrincipal() {

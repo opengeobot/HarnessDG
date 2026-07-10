@@ -32,7 +32,7 @@ paths:
   /agent/assets/search:
     get:
       operationId: agentSearchAssets
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-mcp-equivalent: asset_search
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       tags: [read-only]
@@ -78,7 +78,7 @@ paths:
   /agent/assets/{assetId}:
     get:
       operationId: agentGetAsset
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-mcp-equivalent: asset_get
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND]
       tags: [read-only]
@@ -101,7 +101,7 @@ paths:
   /agent/assets/{assetId}/versions:
     get:
       operationId: agentListVersions
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-mcp-equivalent: asset_list_versions
       x-error-codes: [AUTH_UNAUTHENTICATED, ASSET_NOT_FOUND]
       tags: [read-only]
@@ -132,10 +132,33 @@ paths:
                   hasMore: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /agent/versions/{versionId}:
+    get:
+      operationId: agentGetVersion
+      x-implementation-status: implemented
+      x-mcp-equivalent: asset_get_version
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
+      tags: [read-only]
+      summary: Get version details (read-only profile)
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Version details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /agent/versions/{versionId}/download:
     post:
       operationId: agentRequestDownload
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-mcp-equivalent: asset_request_download
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
       tags: [read-only]

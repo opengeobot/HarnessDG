@@ -7,7 +7,10 @@ import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
@@ -99,6 +102,30 @@ public class MyBatisVersionRepository implements VersionRepository {
                         .orderByDesc(VersionEntity::getPublishedAt)
                         .last("LIMIT 1"));
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public Map<String, Version> findLatestPublishedByAssetIds(Collection<String> assetIds) {
+        if (assetIds == null || assetIds.isEmpty()) {
+            return Map.of();
+        }
+        List<String> ids = assetIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<VersionEntity> entities = versionMapper.selectList(
+                Wrappers.<VersionEntity>lambdaQuery()
+                        .in(VersionEntity::getAssetId, ids)
+                        .eq(VersionEntity::getStatus, VersionStatus.PUBLISHED.name())
+                        .orderByDesc(VersionEntity::getPublishedAt));
+        Map<String, Version> result = new LinkedHashMap<>();
+        for (VersionEntity entity : entities) {
+            result.putIfAbsent(entity.getAssetId(), toDomain(entity));
+        }
+        return result;
     }
 
     @Override

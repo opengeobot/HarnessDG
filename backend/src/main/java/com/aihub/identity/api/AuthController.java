@@ -88,6 +88,14 @@ public class AuthController {
     }
 
     /**
+     * Agent 凭据交换别名端点，行为与 {@link #exchangeToken} 相同。
+     */
+    @PostMapping("/auth/agent/token")
+    public ApiResponse<TokenPairPayload> exchangeAgentToken(@RequestBody ClientCredentialTokenRequest request) {
+        return exchangeToken(request);
+    }
+
+    /**
      * 登出：吊销当前刷新令牌族并清除 Cookie。
      */
     @PostMapping("/auth/logout")

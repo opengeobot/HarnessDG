@@ -168,8 +168,10 @@ public class McpToolCatalog {
                             null, null, null, null, tagId, null, null, null,
                             null, null, null, false, null, limit, principalId);
                     CursorPage<AssetSummaryView> page = assetService.searchAssets(query);
+                    Map<String, Version> latestByAsset = versionRepository.findLatestPublishedByAssetIds(
+                            page.items().stream().map(AssetSummaryView::assetId).toList());
                     List<Map<String, Object>> items = page.items().stream()
-                            .map(summary -> toSearchItem(summary, versionRepository))
+                            .map(summary -> toSearchItem(summary, latestByAsset.get(summary.assetId())))
                             .toList();
                     return Map.of("items", items, "nextCursor", nullSafe(page.nextCursor()),
                             "hasMore", page.hasMore());
@@ -317,8 +319,7 @@ public class McpToolCatalog {
                 });
     }
 
-    private static Map<String, Object> toSearchItem(AssetSummaryView summary,
-                                                    VersionRepository versionRepository) {
+    private static Map<String, Object> toSearchItem(AssetSummaryView summary, Version latestPublished) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("assetId", summary.assetId());
         item.put("coordinate", summary.coordinate());
@@ -332,8 +333,9 @@ public class McpToolCatalog {
         item.put("license", summary.license());
         item.put("matchedFields", summary.matchedFields());
         item.put("updatedAt", summary.updatedAt());
-        Optional<Version> latest = versionRepository.findLatestPublishedByAssetId(summary.assetId());
-        latest.ifPresent(v -> item.put("latestPublished", v.version()));
+        if (latestPublished != null) {
+            item.put("latestPublished", latestPublished.version());
+        }
         return item;
     }
 
