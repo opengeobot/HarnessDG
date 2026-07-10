@@ -103,10 +103,21 @@ EOF
 }
 
 # ---- HTTP 请求封装 ----
+API_PREFIX="/api/v1"
+
 http_request() {
     local method="$1"
     local path="$2"
     local body="${3:-}"
+
+    # 确保所有 API 路径以 /api/v1 为前缀
+    if [[ "$path" != /api/v1/* ]]; then
+        if [[ "$path" == /* ]]; then
+            path="${API_PREFIX}${path}"
+        else
+            path="${API_PREFIX}/${path}"
+        fi
+    fi
 
     local -a curl_args=(
         --silent
@@ -212,7 +223,7 @@ cmd_dataset_pull() {
 
     [[ -z "$version_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --version"
 
-    local path="/api/v1/versions/${version_id}/download"
+    local path="/versions/${version_id}/download"
     [[ -n "$artifact_id" ]] && path+="?artifactId=${artifact_id}"
 
     http_request GET "$path"

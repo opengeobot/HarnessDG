@@ -79,8 +79,9 @@ public class PreviewJobHandler implements JobHandler {
             previewJson = parseCsv(content);
         } else if ("application/x-ndjson".equals(contentType) || "application/jsonl".equals(contentType)) {
             previewJson = parseJsonl(content);
-        } else if ("application/x-parquet".equals(contentType) || "parquet".equals(contentType)) {
-            throw new UnsupportedOperationException("PREVIEW_UNSUPPORTED_FORMAT: Parquet preview requires native library");
+        } else if ("application/x-parquet".equals(contentType) || "parquet".equals(contentType)
+                || "application/vnd.apache.parquet".equals(contentType)) {
+            previewJson = parseParquet(content, payload.path("contentEncoding").asText(null));
         } else {
             // 其他类型：原样截取
             previewJson = objectMapper.writeValueAsString(Map.of("raw", truncate(content, MAX_ROWS * 100)));
@@ -100,6 +101,25 @@ public class PreviewJobHandler implements JobHandler {
                 """, previewId, assetId, versionId, "application/json", previewJson, Instant.now());
 
         LOG.info("preview generated previewId={} assetId={}", previewId, assetId);
+    }
+
+    /**
+     * 解析 Parquet 二进制（可选 base64 编码）为 JSON 表格。
+     */
+    private String parseParquet(String content, String contentEncoding) throws Exception {
+        byte[] bytes = ParquetPreviewReader.decodeContent(content, contentEncoding);
+        if (bytes.length > MAX_CONTENT_BYTES) {
+            throw new UnsupportedOperationException("PREVIEW_UNSUPPORTED_FORMAT: parquet exceeds size limit");
+        }
+        try {
+            List<Map<String, Object>> rows = ParquetPreviewReader.readRows(bytes, MAX_ROWS, MAX_COLS);
+            return objectMapper.writeValueAsString(Map.of("rows", rows, "truncated", rows.size() >= MAX_ROWS));
+        } catch (UnsupportedOperationException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            LOG.warn("parquet preview failed, returning unsupported format", ex);
+            throw new UnsupportedOperationException("PREVIEW_UNSUPPORTED_FORMAT: " + ex.getMessage(), ex);
+        }
     }
 
     /**

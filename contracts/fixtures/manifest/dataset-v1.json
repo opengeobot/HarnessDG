@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "aihub/manifest-v1",
+  "assetId": "ast_fixture_01",
+  "versionId": "ver_fixture_01",
+  "artifacts": [
+    {
+      "path": "data/train.csv",
+      "sha256": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "size": 1024,
+      "mediaType": "text/csv"
+    },
+    {
+      "path": "model.bin",
+      "sha256": "1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff",
+      "size": 2048
+    }
+  ]
+}

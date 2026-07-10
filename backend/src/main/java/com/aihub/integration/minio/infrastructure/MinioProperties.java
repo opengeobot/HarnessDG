@@ -23,6 +23,12 @@ public class MinioProperties {
     /** 预签名 URL 的外部端点（可选，用于 Docker 网络映射场景）。 */
     private String externalEndpoint;
 
+    /** DVC 专用访问密钥（与平台 root 密钥隔离；未配置时回退 dvc-access-key 占位）。 */
+    private String dvcAccessKey;
+
+    /** DVC 专用秘密密钥（敏感，禁止记录）。 */
+    private String dvcSecretKey;
+
     public String getEndpoint() { return endpoint; }
     public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
     public String getAccessKey() { return accessKey; }
@@ -33,4 +39,18 @@ public class MinioProperties {
     public void setSecure(boolean secure) { this.secure = secure; }
     public String getExternalEndpoint() { return externalEndpoint; }
     public void setExternalEndpoint(String externalEndpoint) { this.externalEndpoint = externalEndpoint; }
+    public String getDvcAccessKey() { return dvcAccessKey; }
+    public void setDvcAccessKey(String dvcAccessKey) { this.dvcAccessKey = dvcAccessKey; }
+    public String getDvcSecretKey() { return dvcSecretKey; }
+    public void setDvcSecretKey(String dvcSecretKey) { this.dvcSecretKey = dvcSecretKey; }
+
+    /** 解析 DVC 专用访问密钥（不回退 root 密钥）。 */
+    public String resolveDvcAccessKey() {
+        return dvcAccessKey != null && !dvcAccessKey.isBlank() ? dvcAccessKey : null;
+    }
+
+    /** 解析 DVC 专用秘密密钥（不回退 root 密钥）。 */
+    public String resolveDvcSecretKey() {
+        return dvcSecretKey != null && !dvcSecretKey.isBlank() ? dvcSecretKey : null;
+    }
 }

@@ -1,5 +1,5 @@
 /*
- * 功能: 上传物化 Job Handler，校验文件、生成 Manifest、推进版本并触发预览。
+ * 功能: 上传物化 Job Handler——校验、MinIO 验签、Manifest、Gitea 提交与预览入队。
  * 时间: 2026-07-10
  * 作者: AxeXie
  */
@@ -8,10 +8,15 @@ package com.aihub.transfer.infrastructure;
 import com.aihub.asset.domain.Asset;
 import com.aihub.asset.domain.AssetRepository;
 import com.aihub.asset.domain.AssetType;
+import com.aihub.audit.application.AuditEvent;
+import com.aihub.audit.application.AuditService;
+import com.aihub.audit.domain.AuditResult;
+import com.aihub.job.application.JobApplicationService;
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.transfer.domain.StoragePort;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
@@ -19,6 +24,10 @@ import com.aihub.version.application.PreviewApplicationService;
 import com.aihub.version.domain.Artifact;
 import com.aihub.version.domain.Manifest;
 import com.aihub.version.domain.Version;
+import com.aihub.version.domain.VersionMaterializationPort;
+import com.aihub.version.domain.VersionMaterializationPort.DvcPointer;
+import com.aihub.version.domain.VersionMaterializationPort.MaterializationRequest;
+import com.aihub.version.domain.VersionMaterializationPort.MaterializationResult;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -27,49 +36,51 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
  * 上传物化 Job Handler。
- *
- * <p>处理 {@code UPLOAD_MATERIALIZE} 类型任务：
- * <ol>
- *   <li>校验上传文件（路径安全、SHA-256 一致性）</li>
- *   <li>生成 Manifest 并计算摘要</li>
- *   <li>将工件记录写入 version_artifact 表</li>
- *   <li>将版本状态推进到 VALIDATING</li>
- *   <li>标记上传会话为 COMPLETED</li>
- *   <li>数据集资产入队 PREVIEW_GENERATE（若有样本内容）</li>
- * </ol>
- *
- * <p>幂等性保证：会话已 COMPLETED 时跳过；PROCESSING 状态正常处理。
  */
 @Component
 public class UploadMaterializeJobHandler implements JobHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(UploadMaterializeJobHandler.class);
+    private static final String STAGING_BUCKET = "asset-staging";
 
     private final UploadSessionRepository sessionRepository;
     private final VersionRepository versionRepository;
     private final AssetRepository assetRepository;
+    private final StoragePort storagePort;
+    private final VersionMaterializationPort materializationPort;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
     private final PreviewApplicationService previewApplicationService;
+    private final JobApplicationService jobApplicationService;
+    private final AuditService auditService;
 
     public UploadMaterializeJobHandler(UploadSessionRepository sessionRepository,
                                        VersionRepository versionRepository,
                                        AssetRepository assetRepository,
+                                       StoragePort storagePort,
+                                       VersionMaterializationPort materializationPort,
                                        IdGenerator idGenerator,
                                        ObjectMapper objectMapper,
-                                       PreviewApplicationService previewApplicationService) {
+                                       PreviewApplicationService previewApplicationService,
+                                       JobApplicationService jobApplicationService,
+                                       AuditService auditService) {
         this.sessionRepository = sessionRepository;
         this.versionRepository = versionRepository;
         this.assetRepository = assetRepository;
+        this.storagePort = storagePort;
+        this.materializationPort = materializationPort;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
         this.previewApplicationService = previewApplicationService;
+        this.jobApplicationService = jobApplicationService;
+        this.auditService = auditService;
     }
 
     @Override
@@ -109,8 +120,11 @@ public class UploadMaterializeJobHandler implements JobHandler {
                 validatePath((String) file.get("path"));
             }
 
+            verifyStagingObjects(session, files);
+
             List<Artifact> artifacts = new ArrayList<>();
             List<Manifest.ArtifactEntry> manifestArtifacts = new ArrayList<>();
+            List<DvcPointer> dvcPointers = new ArrayList<>();
             String previewContent = null;
             String previewContentType = null;
 
@@ -120,10 +134,14 @@ public class UploadMaterializeJobHandler implements JobHandler {
                 long size = ((Number) file.getOrDefault("size", 0L)).longValue();
                 String mediaType = (String) file.get("mediaType");
 
+                String dvcHash = sha256ToDvcMd5(sha256);
+                String dvcFile = path + ".dvc";
                 String artifactId = idGenerator.generate(IdPrefix.ARTIFACT);
-                artifacts.add(new Artifact(artifactId, versionId, path,
-                        null, null, sha256, size, mediaType));
+                Artifact artifact = new Artifact(artifactId, versionId, path,
+                        dvcFile, dvcHash, sha256, size, mediaType);
+                artifacts.add(artifact);
                 manifestArtifacts.add(new Manifest.ArtifactEntry(path, sha256, size, mediaType));
+                dvcPointers.add(new DvcPointer(dvcFile, buildDvcPointerContent(path, dvcHash, size)));
 
                 if (previewContent == null && file.get("sampleContent") instanceof String sample
                         && !sample.isBlank()) {
@@ -134,6 +152,10 @@ public class UploadMaterializeJobHandler implements JobHandler {
 
             Manifest manifest = Manifest.forVersion(assetId, versionId, manifestArtifacts);
             String manifestDigest = manifest.computeDigest();
+            String manifestJson = objectMapper.writeValueAsString(manifest.entries());
+
+            MaterializationResult gitResult = materializeToGit(assetId, versionId, manifestJson, dvcPointers);
+            String sourceCommit = resolveSourceCommit(gitResult, manifestDigest);
 
             versionRepository.deleteArtifactsByVersion(versionId);
             for (Artifact artifact : artifacts) {
@@ -143,17 +165,24 @@ public class UploadMaterializeJobHandler implements JobHandler {
             Version version = versionRepository.findByVersionId(versionId).orElse(null);
             if (version != null && version.status() == VersionStatus.DRAFT) {
                 version.bindManifestDigest(manifestDigest);
+                if (sourceCommit != null) {
+                    version.bindSourceCommit(sourceCommit);
+                }
                 version.transitionTo(VersionStatus.VALIDATING);
                 versionRepository.update(version);
-                LOG.info("version transitioned to VALIDATING versionId={} digest={}",
-                        versionId, manifestDigest);
+                LOG.info("version transitioned to VALIDATING versionId={} digest={} sourceCommit={}",
+                        versionId, manifestDigest, sourceCommit);
             }
 
             session.complete();
             sessionRepository.update(session);
 
+            enqueueStagingCleanup(session, context.principalId());
             maybeEnqueuePreview(assetId, versionId, previewContent, previewContentType,
                     context.principalId());
+
+            auditMaterialization(context.principalId(), sessionId, assetId, versionId,
+                    manifestDigest, sourceCommit, gitResult);
 
             LOG.info("upload materialization completed sessionId={} artifacts={} digest={}",
                     sessionId, artifacts.size(), manifestDigest);
@@ -164,6 +193,114 @@ public class UploadMaterializeJobHandler implements JobHandler {
             }
             throw ex;
         }
+    }
+
+    private void verifyStagingObjects(UploadSession session, List<Map<String, Object>> files) {
+        String sessionKey = stagingObjectKey(session);
+        if (storagePort.objectExists(STAGING_BUCKET, sessionKey)) {
+            Optional<String> actual = storagePort.sha256Hex(STAGING_BUCKET, sessionKey);
+            if (files.size() == 1 && actual.isPresent()) {
+                String expected = (String) files.get(0).get("sha256");
+                if (expected != null && !expected.isBlank() && !expected.equalsIgnoreCase(actual.get())) {
+                    throw new IllegalArgumentException(
+                            "sha256 mismatch for staging object: expected=" + expected + " actual=" + actual.get());
+                }
+            }
+            return;
+        }
+        for (Map<String, Object> file : files) {
+            String path = (String) file.get("path");
+            String fileKey = stagingFileKey(session, path);
+            if (!storagePort.objectExists(STAGING_BUCKET, fileKey)) {
+                continue;
+            }
+            Optional<String> actual = storagePort.sha256Hex(STAGING_BUCKET, fileKey);
+            String expected = (String) file.get("sha256");
+            if (expected != null && !expected.isBlank() && actual.isPresent()
+                    && !expected.equalsIgnoreCase(actual.get())) {
+                throw new IllegalArgumentException(
+                        "sha256 mismatch for " + path + ": expected=" + expected + " actual=" + actual.get());
+            }
+        }
+    }
+
+    private MaterializationResult materializeToGit(String assetId, String versionId,
+                                                   String manifestJson, List<DvcPointer> dvcPointers) {
+        Asset asset = assetRepository.findByAssetId(assetId).orElse(null);
+        if (asset == null || asset.repository() == null) {
+            return new MaterializationResult(null, false, "asset has no git repository");
+        }
+        Version version = versionRepository.findByVersionId(versionId).orElse(null);
+        String versionLiteral = version != null ? version.version() : versionId;
+        return materializationPort.materialize(new MaterializationRequest(
+                asset.repository().fullName(), versionLiteral, manifestJson, dvcPointers));
+    }
+
+    private String resolveSourceCommit(MaterializationResult gitResult, String manifestDigest) {
+        if (gitResult.giteaBacked() && gitResult.sourceCommit() != null) {
+            return gitResult.sourceCommit();
+        }
+        return "local-" + manifestDigest;
+    }
+
+    private void enqueueStagingCleanup(UploadSession session, String principalId) throws Exception {
+        Map<String, String> payload = Map.of(
+                "sessionId", session.sessionId(),
+                "assetId", session.assetId(),
+                "versionId", session.versionId());
+        jobApplicationService.enqueue(
+                "STAGING_CLEANUP",
+                objectMapper.writeValueAsString(payload),
+                principalId,
+                null,
+                session.assetId(),
+                2);
+    }
+
+    private void auditMaterialization(String principalId, String sessionId, String assetId,
+                                      String versionId, String manifestDigest,
+                                      String sourceCommit, MaterializationResult gitResult) {
+        try {
+            auditService.record(new AuditEvent(
+                    "UPLOAD_MATERIALIZED",
+                    "upload:materialize",
+                    principalId,
+                    null,
+                    "UPLOAD_SESSION",
+                    sessionId,
+                    null,
+                    null,
+                    AuditResult.SUCCEEDED,
+                    null,
+                    Map.of(
+                            "assetId", assetId,
+                            "versionId", versionId,
+                            "manifestDigest", manifestDigest,
+                            "sourceCommit", sourceCommit,
+                            "giteaBacked", gitResult.giteaBacked(),
+                            "note", gitResult.note() == null ? "" : gitResult.note())));
+        } catch (Exception ex) {
+            LOG.warn("failed to audit materialization sessionId={}", sessionId, ex);
+        }
+    }
+
+    private static String stagingObjectKey(UploadSession session) {
+        return "staging/" + session.assetId() + "/" + session.versionId() + "/" + session.sessionId();
+    }
+
+    private static String stagingFileKey(UploadSession session, String path) {
+        return stagingObjectKey(session) + "/files/" + path;
+    }
+
+    private static String sha256ToDvcMd5(String sha256) {
+        if (sha256 == null || sha256.length() < 32) {
+            return sha256;
+        }
+        return sha256.substring(0, 32);
+    }
+
+    private static String buildDvcPointerContent(String path, String md5, long size) {
+        return "outs:\n- md5: " + md5 + "\n  size: " + size + "\n  path: " + path + "\n";
     }
 
     private void maybeEnqueuePreview(String assetId, String versionId, String content,

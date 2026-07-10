@@ -23,6 +23,9 @@ import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.aihub.transfer.domain.StoragePort;
 import com.aihub.transfer.domain.UploadSession;
+import com.aihub.transfer.domain.UploadFile;
+import com.aihub.transfer.domain.UploadFileRepository;
+import com.aihub.transfer.domain.UploadPartRepository;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +47,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class UploadApplicationServiceTest {
 
     @Mock private UploadSessionRepository sessionRepository;
+    @Mock private UploadFileRepository uploadFileRepository;
+    @Mock private UploadPartRepository uploadPartRepository;
     @Mock private StoragePort storagePort;
     @Mock private AuthorizationService authorizationService;
     @Mock private AuditService auditService;
@@ -57,16 +62,19 @@ class UploadApplicationServiceTest {
     @BeforeEach
     void setUp() {
         service = new UploadApplicationService(
-                sessionRepository, storagePort, authorizationService, auditService, idGenerator,
+                sessionRepository, uploadFileRepository, uploadPartRepository,
+                storagePort, authorizationService, auditService, idGenerator,
                 notificationService, jobApplicationService, objectMapper);
     }
 
     @Test
     void createSessionReturnsOpenSession() {
         when(idGenerator.generate(IdPrefix.UPLOAD_SESSION)).thenReturn("upl_gen");
+        when(idGenerator.generate(IdPrefix.UPLOAD_FILE)).thenReturn("upf_bundle");
         when(storagePort.createMultipartUpload(anyString(), anyString(), anyString()))
                 .thenReturn("minio-upload-id");
         doNothing().when(sessionRepository).insert(any(UploadSession.class));
+        doNothing().when(uploadFileRepository).insert(any(UploadFile.class));
 
         UploadSessionView view = service.createSession(
                 "ast_01", "ver_01", 1024, 2, "usr_01");
@@ -109,6 +117,11 @@ class UploadApplicationServiceTest {
         UploadSession session = createOpenSession();
         session.bindMinioUploadId("minio-id");
         when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+        when(uploadFileRepository.findSessionBundleFile("upl_01"))
+                .thenReturn(Optional.of(new UploadFile(
+                        "upf_1", "upl_01", "_session_bundle", 1024L,
+                        null, "application/octet-stream", 1,
+                        UploadFile.UploadFileStatus.UPLOADING)));
         URL mockUrl = new URL("https://minio.example.com/staging/part1");
         when(storagePort.presignPartUpload(anyString(), anyString(), anyString(),
                 eq(1), any(Duration.class))).thenReturn(mockUrl);
@@ -136,6 +149,12 @@ class UploadApplicationServiceTest {
         UploadSession session = createOpenSession();
         session.bindMinioUploadId("minio-id");
         when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+        when(uploadFileRepository.findSessionBundleFile("upl_01"))
+                .thenReturn(Optional.of(new UploadFile(
+                        "upf_1", "upl_01", "_session_bundle", 1024L,
+                        null, "application/octet-stream", 1,
+                        UploadFile.UploadFileStatus.UPLOADING)));
+        when(idGenerator.generate(IdPrefix.UPLOAD_FILE)).thenReturn("upf_file_1");
         Job job = mock(Job.class);
         when(job.jobId()).thenReturn("job_mat_01");
         when(jobApplicationService.enqueue(eq("UPLOAD_MATERIALIZE"), anyString(), any(), any(),

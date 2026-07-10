@@ -101,11 +101,13 @@ public class SessionStagingReconciler implements JobHandler {
             return ReconcileResult.MANUAL_REVIEW;
         }
 
-        // CANCELLED/EXPIRED Session 不应有活跃 Part
+        // CANCELLED/EXPIRED Session 不应有未上传 Part
         if ("CANCELLED".equals(status) || "EXPIRED".equals(status)) {
-            Integer pendingParts = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM upload_part WHERE session_id = ? AND status = 'PENDING'",
-                    Integer.class, sessionId);
+            Integer pendingParts = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM upload_part up
+                    JOIN upload_file uf ON up.file_id = uf.file_id
+                    WHERE uf.session_id = ? AND up.uploaded_at IS NULL
+                    """, Integer.class, sessionId);
             if (pendingParts != null && pendingParts > 0) {
                 LOG.warn("{} session {} has {} pending parts (should be cleaned)",
                         status, sessionId, pendingParts);

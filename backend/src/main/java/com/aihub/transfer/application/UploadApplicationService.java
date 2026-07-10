@@ -1,3 +1,8 @@
+/*
+ * 功能: 上传应用服务——编排会话、Part 签名、完成与 upload_file/part 持久化。
+ * 时间: 2026-07-10
+ * 作者: AxeXie
+ */
 package com.aihub.transfer.application;
 
 import com.aihub.audit.application.AuditEvent;
@@ -16,6 +21,11 @@ import com.aihub.shared.error.ValidationException;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.aihub.transfer.domain.StoragePort;
+import com.aihub.transfer.domain.UploadFile;
+import com.aihub.transfer.domain.UploadFile.UploadFileStatus;
+import com.aihub.transfer.domain.UploadFileRepository;
+import com.aihub.transfer.domain.UploadPart;
+import com.aihub.transfer.domain.UploadPartRepository;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
@@ -35,8 +45,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 上传应用服务。
- *
- * <p>编排上传会话的创建、Part 签名、完成、取消，同时接入授权、审计、存储与物化 Job 入队。
  */
 @Service
 public class UploadApplicationService {
@@ -44,8 +52,12 @@ public class UploadApplicationService {
     private static final Logger LOG = LoggerFactory.getLogger(UploadApplicationService.class);
     private static final Duration DEFAULT_SESSION_TTL = Duration.ofHours(2);
     private static final Duration PRESIGN_EXPIRY = Duration.ofMinutes(30);
+    private static final String STAGING_BUCKET = "asset-staging";
+    private static final String SESSION_BUNDLE_PATH = "_session_bundle";
 
     private final UploadSessionRepository sessionRepository;
+    private final UploadFileRepository uploadFileRepository;
+    private final UploadPartRepository uploadPartRepository;
     private final StoragePort storagePort;
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
@@ -55,6 +67,8 @@ public class UploadApplicationService {
     private final ObjectMapper objectMapper;
 
     public UploadApplicationService(UploadSessionRepository sessionRepository,
+                                    UploadFileRepository uploadFileRepository,
+                                    UploadPartRepository uploadPartRepository,
                                     StoragePort storagePort,
                                     AuthorizationService authorizationService,
                                     AuditService auditService,
@@ -63,6 +77,8 @@ public class UploadApplicationService {
                                     JobApplicationService jobApplicationService,
                                     ObjectMapper objectMapper) {
         this.sessionRepository = sessionRepository;
+        this.uploadFileRepository = uploadFileRepository;
+        this.uploadPartRepository = uploadPartRepository;
         this.storagePort = storagePort;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
@@ -87,15 +103,20 @@ public class UploadApplicationService {
         UploadSession session = UploadSession.create(
                 sessionId, assetId, versionId, principalId, totalBytes, fileCount, expiresAt);
 
-        // 在 MinIO 创建 Multipart Upload
-        String objectKey = "staging/" + assetId + "/" + versionId + "/" + sessionId;
-        String uploadId = storagePort.createMultipartUpload(
-                "asset-staging", objectKey, "application/octet-stream");
+        String objectKey = stagingObjectKey(assetId, versionId, sessionId);
+        String uploadId = storagePort.createMultipartUpload(STAGING_BUCKET, objectKey, "application/octet-stream");
         session.bindMinioUploadId(uploadId);
 
         sessionRepository.insert(session);
+
+        String bundleFileId = idGenerator.generate(IdPrefix.UPLOAD_FILE);
+        uploadFileRepository.insert(new UploadFile(
+                bundleFileId, sessionId, SESSION_BUNDLE_PATH, totalBytes,
+                null, "application/octet-stream", Math.max(1, fileCount),
+                UploadFileStatus.UPLOADING));
+
         auditUpload("UPLOAD_SESSION_CREATED", principalId, sessionId, assetId,
-                Map.of("versionId", versionId, "totalBytes", totalBytes));
+                Map.of("versionId", versionId, "totalBytes", totalBytes, "bundleFileId", bundleFileId));
         return UploadSessionView.from(session);
     }
 
@@ -112,21 +133,19 @@ public class UploadApplicationService {
     public URL presignPartUpload(String sessionId, int partNumber, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         UploadSession session = loadSession(sessionId);
-        if (session.status() != UploadSessionStatus.OPEN) {
-            throw new ConflictException(ErrorCode.UPLOAD_SESSION_EXPIRED,
-                    "session is not open: " + session.status(),
-                    Map.of("sessionId", sessionId));
-        }
-        if (session.isExpired()) {
-            session.cancel();
-            sessionRepository.update(session);
-            throw new ConflictException(ErrorCode.UPLOAD_SESSION_EXPIRED,
-                    "session has expired", Map.of("sessionId", sessionId));
-        }
-        String objectKey = "staging/" + session.assetId() + "/" + session.versionId()
-                + "/" + sessionId;
-        return storagePort.presignPartUpload(
-                "asset-staging", objectKey, session.minioUploadId(), partNumber, PRESIGN_EXPIRY);
+        ensureSessionOpen(session, sessionId);
+
+        UploadFile bundleFile = uploadFileRepository.findSessionBundleFile(sessionId)
+                .orElseThrow(() -> new IllegalStateException("session bundle file missing: " + sessionId));
+
+        String objectKey = stagingObjectKey(session.assetId(), session.versionId(), sessionId);
+        URL url = storagePort.presignPartUpload(
+                STAGING_BUCKET, objectKey, session.minioUploadId(), partNumber, PRESIGN_EXPIRY);
+
+        uploadPartRepository.upsert(new UploadPart(
+                bundleFile.fileId(), partNumber, 0L, null, url.toString(), null));
+
+        return url;
     }
 
     /** 完成上传会话并入队物化 Job。 */
@@ -143,17 +162,31 @@ public class UploadApplicationService {
             throw new ConflictException(ErrorCode.UPLOAD_SESSION_EXPIRED, ex.getMessage(),
                     Map.of("sessionId", sessionId));
         }
-        String objectKey = "staging/" + session.assetId() + "/" + session.versionId()
-                + "/" + sessionId;
+
+        UploadFile bundleFile = uploadFileRepository.findSessionBundleFile(sessionId).orElse(null);
+        String objectKey = stagingObjectKey(session.assetId(), session.versionId(), sessionId);
         try {
             storagePort.completeMultipartUpload(
-                    "asset-staging", objectKey, session.minioUploadId(), parts);
+                    STAGING_BUCKET, objectKey, session.minioUploadId(), parts);
         } catch (Exception ex) {
             publishOutbox("UPLOAD_SESSION", sessionId, "UPLOAD_FAILED",
                     Map.of("sessionId", sessionId, "assetId", session.assetId(),
                             "versionId", session.versionId(), "reason", ex.getMessage()));
             throw ex;
         }
+
+        if (bundleFile != null) {
+            for (StoragePort.PartInfo part : parts) {
+                uploadPartRepository.markUploaded(bundleFile.fileId(), part.partNumber(), part.etag(), 0L);
+            }
+            uploadFileRepository.update(new UploadFile(
+                    bundleFile.fileId(), bundleFile.sessionId(), bundleFile.path(),
+                    bundleFile.size(), bundleFile.sha256(), bundleFile.mediaType(),
+                    parts.size(), UploadFileStatus.COMPLETED));
+        }
+
+        persistCompletedFiles(sessionId, files, session.fileCount());
+
         session.markProcessing();
         sessionRepository.update(session);
 
@@ -179,9 +212,8 @@ public class UploadApplicationService {
                     Map.of("sessionId", sessionId));
         }
         if (session.minioUploadId() != null) {
-            String objectKey = "staging/" + session.assetId() + "/" + session.versionId()
-                    + "/" + sessionId;
-            storagePort.abortMultipartUpload("asset-staging", objectKey, session.minioUploadId());
+            String objectKey = stagingObjectKey(session.assetId(), session.versionId(), sessionId);
+            storagePort.abortMultipartUpload(STAGING_BUCKET, objectKey, session.minioUploadId());
         }
         sessionRepository.update(session);
         return UploadSessionView.from(session);
@@ -199,6 +231,47 @@ public class UploadApplicationService {
     }
 
     // ---- 私有辅助 ----
+
+    private void persistCompletedFiles(String sessionId, List<FileMetadata> files, int fileCount) {
+        List<FileMetadata> effective = files == null || files.isEmpty()
+                ? placeholderFiles(fileCount) : files;
+        for (FileMetadata file : effective) {
+            String fileId = idGenerator.generate(IdPrefix.UPLOAD_FILE);
+            uploadFileRepository.insert(new UploadFile(
+                    fileId, sessionId, file.path(),
+                    file.size(), file.sha256(), file.mediaType(),
+                    1, UploadFileStatus.COMPLETED));
+        }
+    }
+
+    private List<FileMetadata> placeholderFiles(int fileCount) {
+        if (fileCount <= 0) {
+            return List.of();
+        }
+        List<FileMetadata> placeholders = new ArrayList<>();
+        for (int i = 0; i < fileCount; i++) {
+            placeholders.add(new FileMetadata("upload-" + (i + 1) + ".bin", "", 0L, null, null));
+        }
+        return placeholders;
+    }
+
+    private void ensureSessionOpen(UploadSession session, String sessionId) {
+        if (session.status() != UploadSessionStatus.OPEN) {
+            throw new ConflictException(ErrorCode.UPLOAD_SESSION_EXPIRED,
+                    "session is not open: " + session.status(),
+                    Map.of("sessionId", sessionId));
+        }
+        if (session.isExpired()) {
+            session.cancel();
+            sessionRepository.update(session);
+            throw new ConflictException(ErrorCode.UPLOAD_SESSION_EXPIRED,
+                    "session has expired", Map.of("sessionId", sessionId));
+        }
+    }
+
+    private static String stagingObjectKey(String assetId, String versionId, String sessionId) {
+        return "staging/" + assetId + "/" + versionId + "/" + sessionId;
+    }
 
     private String enqueueMaterializeJob(UploadSession session, List<FileMetadata> files,
                                          String principalId) {

@@ -1,8 +1,10 @@
 package com.aihub.transfer.domain;
 
+import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 对象存储端口。
@@ -40,6 +42,15 @@ public interface StoragePort {
 
     /** 删除对象。 */
     void deleteObject(String bucketName, String objectKey);
+
+    /** 读取对象内容流（调用方负责关闭）。 */
+    InputStream readObject(String bucketName, String objectKey);
+
+    /** 计算对象 SHA-256 十六进制摘要（对象不存在时返回 empty）。 */
+    Optional<String> sha256Hex(String bucketName, String objectKey);
+
+    /** 检查对象是否存在。 */
+    boolean objectExists(String bucketName, String objectKey);
 
     /** Multipart Part 信息。 */
     record PartInfo(int partNumber, String etag) {}

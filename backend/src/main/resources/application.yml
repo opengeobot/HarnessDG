@@ -110,6 +110,8 @@ aihub:
     secret-key: ${AIHUB_MINIO_SECRET_KEY:minioadmin}
     secure: ${AIHUB_MINIO_SECURE:false}
     external-endpoint: ${AIHUB_MINIO_EXTERNAL_ENDPOINT:}
+    dvc-access-key: ${AIHUB_MINIO_DVC_ACCESS_KEY:}
+    dvc-secret-key: ${AIHUB_MINIO_DVC_SECRET_KEY:}
 
 ---
 #

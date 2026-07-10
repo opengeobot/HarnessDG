@@ -10,7 +10,12 @@ import com.aihub.shared.id.IdPrefix;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
+import com.aihub.audit.application.AuditService;
+import com.aihub.job.application.JobApplicationService;
+import com.aihub.transfer.domain.StoragePort;
 import com.aihub.version.application.PreviewApplicationService;
+import com.aihub.version.domain.VersionMaterializationPort;
+import com.aihub.version.domain.VersionMaterializationPort.MaterializationResult;
 import com.aihub.version.domain.Artifact;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
@@ -50,6 +55,14 @@ class UploadMaterializeJobHandlerTest {
     private IdGenerator idGenerator;
     @Mock
     private PreviewApplicationService previewApplicationService;
+    @Mock
+    private StoragePort storagePort;
+    @Mock
+    private VersionMaterializationPort materializationPort;
+    @Mock
+    private JobApplicationService jobApplicationService;
+    @Mock
+    private AuditService auditService;
 
     private UploadMaterializeJobHandler handler;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -57,7 +70,11 @@ class UploadMaterializeJobHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new UploadMaterializeJobHandler(sessionRepository, versionRepository,
-                assetRepository, idGenerator, objectMapper, previewApplicationService);
+                assetRepository, storagePort, materializationPort, idGenerator, objectMapper,
+                previewApplicationService, jobApplicationService, auditService);
+        lenient().when(materializationPort.materialize(any()))
+                .thenReturn(new MaterializationResult(null, false, "test noop"));
+        lenient().when(storagePort.objectExists(anyString(), anyString())).thenReturn(false);
     }
 
     @Test

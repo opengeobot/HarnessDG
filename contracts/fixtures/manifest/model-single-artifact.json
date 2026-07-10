@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "aihub/manifest-v1",
+  "assetId": "ast_fixture_02",
+  "versionId": "ver_fixture_02",
+  "artifacts": [
+    {
+      "path": "weights.pt",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 4096,
+      "mediaType": "application/octet-stream"
+    }
+  ]
+}
