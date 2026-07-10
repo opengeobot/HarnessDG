@@ -4,8 +4,8 @@ status: DRAFT
 
 task:
   taskId: TASK-P5-002
-  requirements: 
-  scenarios: 
+  requirements: [REQ-PRE-001]
+  scenarios: [AC-P5-PRE-001]
 
 governance:
   specValidation:
@@ -23,7 +23,7 @@ governance:
 
 source:
   branch: ai
-  commitSha: 59f40d28dab5a9fb5fdeb5cb29080219b10ee4a6
+  commitSha: 9e08b3a
   dirtyWorktree: false
   dirtyPaths: []
 
@@ -40,23 +40,33 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
+  command: |
+    cd backend && ./mvnw -o test -Dtest='PreviewJobHandlerTest,PlatformMetricsTest#shouldIncrementPreviewFailureCounter'
+    # E5 压力/隔离演练（隔离 Worker 环境）：
+    # 1. 调低 aihub.preview.max-bytes 验证 PREVIEW_LIMIT_EXCEEDED
+    # 2. 观察 aihub_preview_failures_total{reason="limit_exceeded"}
+    # 3. Worker cgroup：deploy/compose/docker-compose.yml worker mem_limit
+    # 4. PII canary: ./deploy/security/run-redaction-canary.sh
   startedAt: null
   finishedAt: null
   exitCode: null
-  result: null
-  evidenceLevel: 
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: AC-P5-PRE-001-partial
+      assertion: Configurable aihub.preview.max-bytes/max-rows; PREVIEW_LIMIT_EXCEEDED stable error; preview failure metric
+  notProven: [AC-P5-PRE-001-E5-pressure]
 
 artifacts:
-  reports: []
+  reports:
+    - docs/runbooks/ops.md#预览-worker-资源隔离
   logs: []
   screenshots: []
   traces: []
-  metrics: []
+  metrics:
+    - aihub_preview_failures_total
   databaseQueries: []
 
 secrets:
@@ -65,7 +75,8 @@ secrets:
 
 limitations:
   skippedTests: []
-  assumptions: []
+  assumptions:
+    - Full E5 pressure script deferred; config + unit tests prove limit enforcement path
   environmentDifferences: []
 
 review:

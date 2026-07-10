@@ -1,6 +1,7 @@
 package com.aihub.version.infrastructure;
 
 import com.aihub.job.domain.JobContext;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,9 +13,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -28,13 +31,20 @@ class PreviewJobHandlerTest {
     private IdGenerator idGenerator;
     @Mock
     private JdbcTemplate jdbcTemplate;
+    @Mock
+    private PlatformMetrics platformMetrics;
+    @Mock
+    private ObjectProvider<PlatformMetrics> platformMetricsProvider;
 
     private PreviewJobHandler handler;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final PreviewProperties previewProperties = new PreviewProperties(100, 50, 1024L * 1024);
 
     @BeforeEach
     void setUp() {
-        handler = new PreviewJobHandler(idGenerator, jdbcTemplate, objectMapper);
+        lenient().when(platformMetricsProvider.getIfAvailable()).thenReturn(platformMetrics);
+        handler = new PreviewJobHandler(idGenerator, jdbcTemplate, objectMapper, previewProperties,
+                platformMetricsProvider);
     }
 
     @Test
@@ -71,9 +81,8 @@ class PreviewJobHandlerTest {
     }
 
     @Test
-    @DisplayName("超大内容应被拒绝")
+    @DisplayName("超大内容应抛出 PREVIEW_LIMIT_EXCEEDED")
     void oversizedContentShouldBeRejected() throws Exception {
-        // 生成 2MiB 内容
         StringBuilder huge = new StringBuilder();
         for (int i = 0; i < 2 * 1024 * 1024; i++) {
             huge.append('x');
@@ -86,9 +95,11 @@ class PreviewJobHandlerTest {
         JobContext context = new JobContext("job_1", "PREVIEW_GENERATE",
                 objectMapper.writeValueAsString(payload), 0, "principal_1", "trace_1", "ast_1");
 
-        handler.handle(context);
+        assertThatThrownBy(() -> handler.handle(context))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("PREVIEW_LIMIT_EXCEEDED");
 
-        // 不应写入预览
+        verify(platformMetrics).recordPreviewFailure("limit_exceeded");
         verify(jdbcTemplate, never()).update(anyString(), any(), any(), any(), any(), any(), any());
     }
 

@@ -36,6 +36,7 @@ public class PlatformMetrics {
     private static final String UPLOAD_SESSIONS_ACTIVE_GAUGE = "aihub_upload_sessions_active";
     private static final String ASSET_COUNT_BY_STATUS_GAUGE = "aihub_asset_count_by_status";
     private static final String JOB_PROCESSING_DURATION_TIMER = "aihub_job_processing_duration_seconds";
+    private static final String PREVIEW_FAILURES_COUNTER = "aihub_preview_failures_total";
 
     private final MeterRegistry meterRegistry;
     private final AtomicLong jobQueueDepth = new AtomicLong();
@@ -190,6 +191,38 @@ public class PlatformMetrics {
             return val;
         });
         gauge.set(count);
+    }
+
+    /**
+     * 记录预览生成失败（资源超限或格式不支持）。
+     *
+     * @param reason 失败原因（limit_exceeded / unsupported_format）
+     */
+    public void recordPreviewFailure(String reason) {
+        if (meterRegistry == null) return;
+        Counter.builder(PREVIEW_FAILURES_COUNTER)
+                .tag("reason", reason != null ? reason : "unknown")
+                .description("Preview generation failures")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    /**
+     * 读取预览失败计数（用于测试断言）。
+     *
+     * @param reason 失败原因标签
+     * @return 累计计数，无注册表时返回 0
+     */
+    public long previewFailureCount(String reason) {
+        if (meterRegistry == null) {
+            return 0;
+        }
+        AtomicLong holder = new AtomicLong();
+        meterRegistry.find(PREVIEW_FAILURES_COUNTER)
+                .tag("reason", reason)
+                .counters()
+                .forEach(counter -> holder.addAndGet((long) counter.count()));
+        return holder.get();
     }
 
     /**

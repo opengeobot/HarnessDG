@@ -40,6 +40,7 @@ Grafana 告警规则: `deploy/observability/alerting-rules.yaml`（与 Compose G
 | 告警 | 来源 | 严重度 | 响应步骤 |
 | --- | --- | --- | --- |
 | **JobDead** | Prometheus `aihub_job_dead_count > 0` | critical | 查 `/system/jobs?status=DEAD`；分析 `error_code`；人工重试或修复根因 |
+| **DEAD_JOB** | `AlertService` job_task DEAD 计数 | critical | 同上；确认 `system_alert` FIRING→RESOLVED 随 DEAD 清零 |
 | **DEAD_DELIVERY** | `AlertService` Webhook 投递 | warning | 查 `webhook_delivery` DEAD 记录；检查目标 URL 与签名 |
 | **OUTBOX_BACKLOG** | `AlertService` Outbox 积压 | warning | 查 pending outbox；确认 Worker 运行 |
 | **WebhookInboxBacklog** | Prometheus inbox pending | warning | 确认 `WEBHOOK_PROCESS` Job 运行；查 `webhook_inbox` PENDING |
@@ -81,3 +82,14 @@ Grafana 告警规则: `deploy/observability/alerting-rules.yaml`（与 Compose G
 日志/审计脱敏验证: `deploy/security/run-redaction-canary.sh`
 
 详见 [security.md](./security.md)。
+
+## 预览 Worker 资源隔离
+
+| 层级 | 机制 | 配置 |
+| --- | --- | --- |
+| 内容上限 | `PreviewJobHandler` 解析前检查 | `aihub.preview.max-bytes` / `max-rows` / `max-cols` |
+| 失败指标 | Micrometer Counter | `aihub_preview_failures_total{reason=...}` |
+| 进程隔离 | Compose Worker 容器 cgroup / JVM 堆 | `deploy/compose/docker-compose.yml` worker 服务 `mem_limit`（生产建议 512Mi–1Gi） |
+
+超限失败稳定错误码：`PREVIEW_LIMIT_EXCEEDED`（Job attempt `error_code` 为 `INTERNAL_ERROR`，message 含前缀）。
+格式不支持：`PREVIEW_UNSUPPORTED_FORMAT`。

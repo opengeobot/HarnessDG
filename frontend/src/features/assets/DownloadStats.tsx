@@ -6,6 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Badge, Tooltip } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/shared/api';
 
 interface AssetDownloadStats {
@@ -18,6 +19,7 @@ interface DownloadStatsProps {
 }
 
 export function DownloadStats({ assetId }: DownloadStatsProps) {
+  const { t } = useTranslation();
   const query = useQuery({
     queryKey: ['assetDownloadStats', assetId],
     queryFn: () => apiClient.get<AssetDownloadStats>(`/assets/${assetId}/stats`),
@@ -29,12 +31,14 @@ export function DownloadStats({ assetId }: DownloadStatsProps) {
     return null;
   }
 
+  const tooltip = t('assets.downloadStats.tooltip', { count: query.data.totalDownloads });
+
   return (
-    <Tooltip title={`${query.data.totalDownloads} authorized downloads`}>
+    <Tooltip title={tooltip}>
       <Badge
         count={
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <DownloadOutlined />
+            <DownloadOutlined aria-label={t('assets.downloadStats.badgeLabel')} />
             {query.data.totalDownloads}
           </span>
         }

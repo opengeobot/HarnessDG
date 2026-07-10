@@ -120,6 +120,10 @@
     "searchPlaceholder": "Search name, description or tags",
     "emptyText": "No assets yet, click 'Register Asset' to start",
     "loadMore": "Load More",
+    "downloadStats": {
+      "tooltip": "{{count}} authorized downloads",
+      "badgeLabel": "Download count"
+    },
     "columns": {
       "name": "Name",
       "type": "Type",

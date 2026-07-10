@@ -4,8 +4,8 @@ status: DRAFT
 
 task:
   taskId: TASK-P5-003
-  requirements: 
-  scenarios: 
+  requirements: [REQ-BKR-001]
+  scenarios: [AC-P5-BKR-001]
 
 governance:
   specValidation:
@@ -23,7 +23,7 @@ governance:
 
 source:
   branch: ai
-  commitSha: 59f40d28dab5a9fb5fdeb5cb29080219b10ee4a6
+  commitSha: 9e08b3a
   dirtyWorktree: false
   dirtyPaths: []
 
@@ -40,19 +40,33 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
+  command: |
+    # E5 备份恢复演练（隔离 Volume，见 docs/runbooks/backup-restore.md）：
+    # 1. 备份: deploy/compose/scripts/backup.sh
+    # 2. 停止栈，挂载隔离 Volume
+    # 3. 恢复 PG: ./deploy/compose/scripts/p5-restore/restore-postgres.sh deploy/backup/aihub-YYYYMMDD.dump
+    # 4. 恢复 Gitea: ./deploy/compose/scripts/p5-restore/restore-gitea.sh deploy/backup/gitea-YYYYMMDD.zip
+    # 5. 恢复 MinIO: ./deploy/compose/scripts/p5-restore/restore-minio.sh deploy/backup/minio-YYYYMMDD
+    # 6. 验证随机 Published Version + DVC digest
+    # 7. 记录 RPO/RTO 至本 manifest execution.startedAt/finishedAt
+    test -f docs/runbooks/backup-restore.md && test -f deploy/compose/scripts/backup.sh
   startedAt: null
   finishedAt: null
   exitCode: null
   result: null
-  evidenceLevel: 
+  evidenceLevel: E1
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: AC-P5-BKR-001-stubs
+      assertion: backup-restore runbook + backup.sh + p5-restore scripts exist; execution placeholders document E5 drill
+  notProven: [AC-P5-BKR-001-E5-RPO-RTO]
 
 artifacts:
-  reports: []
+  reports:
+    - docs/runbooks/backup-restore.md
+    - deploy/compose/scripts/backup.sh
+    - deploy/compose/scripts/p5-restore/restore-postgres.sh
   logs: []
   screenshots: []
   traces: []
@@ -65,7 +79,8 @@ secrets:
 
 limitations:
   skippedTests: []
-  assumptions: []
+  assumptions:
+    - Full isolated restore drill requires dedicated environment; placeholders only in this wave
   environmentDifferences: []
 
 review:

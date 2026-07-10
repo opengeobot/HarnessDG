@@ -4,8 +4,8 @@ status: DRAFT
 
 task:
   taskId: TASK-P5-005
-  requirements: 
-  scenarios: 
+  requirements: [REQ-SEC-001]
+  scenarios: [AC-P5-SEC-001]
 
 governance:
   specValidation:
@@ -23,7 +23,7 @@ governance:
 
 source:
   branch: ai
-  commitSha: 59f40d28dab5a9fb5fdeb5cb29080219b10ee4a6
+  commitSha: 9e08b3a
   dirtyWorktree: false
   dirtyPaths: []
 
@@ -40,32 +40,38 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: null
+  command: ./deploy/security/run-redaction-canary.sh
   startedAt: null
   finishedAt: null
-  exitCode: null
-  result: null
-  evidenceLevel: 
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: AC-P5-SEC-001-partial
+      assertion: SensitiveDataMaskerTest + SecurityVerificationTest + AuditServiceTest mask canary PASS
+  notProven: [AC-P5-SEC-001-E5-SAST-dependency-image]
 
 artifacts:
-  reports: []
-  logs: []
+  reports:
+    - deploy/security/run-redaction-canary.sh
+    - docs/runbooks/security.md
+  logs:
+    - redaction-canary: SensitiveDataMasker canary tests PASS
   screenshots: []
   traces: []
   metrics: []
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:
   skippedTests: []
-  assumptions: []
+  assumptions:
+    - Full SAST/dependency/image scan E5 deferred to TASK-P5-005 allowedPaths under deploy/security
   environmentDifferences: []
 
 review:

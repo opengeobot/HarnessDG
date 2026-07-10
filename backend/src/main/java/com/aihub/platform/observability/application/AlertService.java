@@ -28,7 +28,7 @@ import org.springframework.stereotype.Service;
  * 系统告警应用服务。
  *
  * <p>定时检查平台指标并生成告警记录（FIRING / RESOLVED）。
- * 检查项：DEAD 投递数、Outbox 积压数、认证失败率。
+ * 检查项：DEAD Job 数、DEAD 投递数、Outbox 积压数。
  */
 @Service
 public class AlertService {
@@ -36,6 +36,8 @@ public class AlertService {
     private static final Logger LOG = LoggerFactory.getLogger(AlertService.class);
     private static final int DEFAULT_LIMIT = 100;
 
+    /** DEAD Job 告警阈值（与 Prometheus JobDead 规则对齐：&gt; 0 即告警） */
+    private static final long DEAD_JOB_THRESHOLD = 1;
     /** DEAD 投递告警阈值 */
     private static final long DEAD_DELIVERY_THRESHOLD = 5;
     /** Outbox 积压告警阈值 */
@@ -77,10 +79,28 @@ public class AlertService {
     @Scheduled(fixedDelayString = "${aihub.alert.check-interval:300000}")
     public void checkAlerts() {
         try {
+            checkDeadJobs();
             checkDeadDeliveries();
             checkOutboxBacklog();
         } catch (Exception e) {
             LOG.warn("alert check failed", e);
+        }
+    }
+
+    /** 检查 job_task 中 DEAD 状态任务并 upsert {@code DEAD_JOB} 应用内告警。 */
+    void checkDeadJobs() {
+        Long deadCountObj = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM job_task WHERE status = 'DEAD'", Long.class);
+        long deadCount = deadCountObj != null ? deadCountObj : 0L;
+        boolean hasFiringAlert = hasFiringAlert("DEAD_JOB");
+
+        if (deadCount >= DEAD_JOB_THRESHOLD && !hasFiringAlert) {
+            fireAlert("DEAD_JOB", "CRITICAL",
+                    "Dead jobs detected",
+                    String.format("DEAD job count: %d (threshold: %d)", deadCount, DEAD_JOB_THRESHOLD),
+                    "aihub_job_dead_count", (double) DEAD_JOB_THRESHOLD, (double) deadCount);
+        } else if (deadCount < DEAD_JOB_THRESHOLD && hasFiringAlert) {
+            resolveAlert("DEAD_JOB", deadCount);
         }
     }
 

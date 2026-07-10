@@ -2,12 +2,14 @@ package com.aihub.version.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -24,32 +27,30 @@ import org.springframework.stereotype.Component;
  * <p>处理 {@code PREVIEW_GENERATE} 类型任务：解析工件内容（CSV/JSONL），
  * 脱敏后写入 {@code asset_preview} 表。
  *
- * <p>限制：100 行 / 50 列 / 1MiB 内容。
+ * <p>资源上限由 {@link PreviewProperties}（{@code aihub.preview.*}）配置；
+ * Worker 进程级内存/CPU 隔离见运维 Runbook cgroup 说明。
  */
 @Component
 public class PreviewJobHandler implements JobHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(PreviewJobHandler.class);
 
-    /** 预览最大行数。 */
-    private static final int MAX_ROWS = 100;
-
-    /** 预览最大列数。 */
-    private static final int MAX_COLS = 50;
-
-    /** 预览内容最大字节数：1MiB。 */
-    private static final long MAX_CONTENT_BYTES = 1024L * 1024;
-
     private final IdGenerator idGenerator;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final PreviewProperties previewProperties;
+    private final PlatformMetrics platformMetrics;
 
     public PreviewJobHandler(IdGenerator idGenerator,
                              JdbcTemplate jdbcTemplate,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             PreviewProperties previewProperties,
+                             ObjectProvider<PlatformMetrics> platformMetricsProvider) {
         this.idGenerator = idGenerator;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.previewProperties = previewProperties;
+        this.platformMetrics = platformMetricsProvider.getIfAvailable();
     }
 
     @Override
@@ -67,13 +68,14 @@ public class PreviewJobHandler implements JobHandler {
 
         LOG.info("generating preview assetId={} versionId={} contentType={}", assetId, versionId, contentType);
 
-        // 内容大小检查
-        if (content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_CONTENT_BYTES) {
-            LOG.warn("preview content exceeds 1MiB limit assetId={}", assetId);
-            return;
+        int contentBytes = content.getBytes(StandardCharsets.UTF_8).length;
+        if (contentBytes > previewProperties.maxBytes()) {
+            recordPreviewFailure("limit_exceeded");
+            throw new UnsupportedOperationException(
+                    "PREVIEW_LIMIT_EXCEEDED: content bytes " + contentBytes
+                            + " exceed maxBytes " + previewProperties.maxBytes());
         }
 
-        // 解析内容
         String previewJson;
         if ("text/csv".equals(contentType)) {
             previewJson = parseCsv(content);
@@ -83,11 +85,10 @@ public class PreviewJobHandler implements JobHandler {
                 || "application/vnd.apache.parquet".equals(contentType)) {
             previewJson = parseParquet(content, payload.path("contentEncoding").asText(null));
         } else {
-            // 其他类型：原样截取
-            previewJson = objectMapper.writeValueAsString(Map.of("raw", truncate(content, MAX_ROWS * 100)));
+            previewJson = objectMapper.writeValueAsString(Map.of(
+                    "raw", truncate(content, previewProperties.maxRows() * 100)));
         }
 
-        // 幂等写入预览（先删除再插入）
         String previewId = idGenerator.generate(IdPrefix.PREVIEW);
         if (versionId != null) {
             jdbcTemplate.update("DELETE FROM asset_preview WHERE asset_id = ? AND version_id = ?", assetId, versionId);
@@ -103,28 +104,27 @@ public class PreviewJobHandler implements JobHandler {
         LOG.info("preview generated previewId={} assetId={}", previewId, assetId);
     }
 
-    /**
-     * 解析 Parquet 二进制（可选 base64 编码）为 JSON 表格。
-     */
     private String parseParquet(String content, String contentEncoding) throws Exception {
         byte[] bytes = ParquetPreviewReader.decodeContent(content, contentEncoding);
-        if (bytes.length > MAX_CONTENT_BYTES) {
-            throw new UnsupportedOperationException("PREVIEW_UNSUPPORTED_FORMAT: parquet exceeds size limit");
+        if (bytes.length > previewProperties.maxBytes()) {
+            recordPreviewFailure("limit_exceeded");
+            throw new UnsupportedOperationException("PREVIEW_LIMIT_EXCEEDED: parquet exceeds maxBytes limit");
         }
         try {
-            List<Map<String, Object>> rows = ParquetPreviewReader.readRows(bytes, MAX_ROWS, MAX_COLS);
-            return objectMapper.writeValueAsString(Map.of("rows", rows, "truncated", rows.size() >= MAX_ROWS));
+            List<Map<String, Object>> rows = ParquetPreviewReader.readRows(
+                    bytes, previewProperties.maxRows(), previewProperties.maxCols());
+            return objectMapper.writeValueAsString(Map.of(
+                    "rows", rows, "truncated", rows.size() >= previewProperties.maxRows()));
         } catch (UnsupportedOperationException ex) {
+            recordPreviewFailure("unsupported_format");
             throw ex;
         } catch (Exception ex) {
             LOG.warn("parquet preview failed, returning unsupported format", ex);
+            recordPreviewFailure("unsupported_format");
             throw new UnsupportedOperationException("PREVIEW_UNSUPPORTED_FORMAT: " + ex.getMessage(), ex);
         }
     }
 
-    /**
-     * 解析 CSV 内容为 JSON 表格。
-     */
     private String parseCsv(String csvContent) throws Exception {
         List<Map<String, String>> rows = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new StringReader(csvContent))) {
@@ -133,13 +133,13 @@ public class PreviewJobHandler implements JobHandler {
                 return objectMapper.writeValueAsString(Map.of("rows", List.of()));
             }
             String[] headers = headerLine.split(",");
-            if (headers.length > MAX_COLS) {
-                headers = java.util.Arrays.copyOf(headers, MAX_COLS);
+            if (headers.length > previewProperties.maxCols()) {
+                headers = java.util.Arrays.copyOf(headers, previewProperties.maxCols());
             }
 
             String line;
             int rowCount = 0;
-            while ((line = reader.readLine()) != null && rowCount < MAX_ROWS) {
+            while ((line = reader.readLine()) != null && rowCount < previewProperties.maxRows()) {
                 String[] values = line.split(",", -1);
                 Map<String, String> row = new LinkedHashMap<>();
                 for (int i = 0; i < headers.length && i < values.length; i++) {
@@ -149,18 +149,16 @@ public class PreviewJobHandler implements JobHandler {
                 rowCount++;
             }
         }
-        return objectMapper.writeValueAsString(Map.of("rows", rows, "truncated", rows.size() >= MAX_ROWS));
+        return objectMapper.writeValueAsString(Map.of(
+                "rows", rows, "truncated", rows.size() >= previewProperties.maxRows()));
     }
 
-    /**
-     * 解析 JSONL（每行一个 JSON 对象）。
-     */
     private String parseJsonl(String jsonlContent) throws Exception {
         List<Object> rows = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new StringReader(jsonlContent))) {
             String line;
             int rowCount = 0;
-            while ((line = reader.readLine()) != null && rowCount < MAX_ROWS) {
+            while ((line = reader.readLine()) != null && rowCount < previewProperties.maxRows()) {
                 if (line.isBlank()) continue;
                 try {
                     Object parsed = objectMapper.readValue(line, Object.class);
@@ -171,15 +169,18 @@ public class PreviewJobHandler implements JobHandler {
                 rowCount++;
             }
         }
-        return objectMapper.writeValueAsString(Map.of("rows", rows, "truncated", rows.size() >= MAX_ROWS));
+        return objectMapper.writeValueAsString(Map.of(
+                "rows", rows, "truncated", rows.size() >= previewProperties.maxRows()));
     }
 
-    /**
-     * 脱敏处理：移除潜在的危险字符。
-     */
+    private void recordPreviewFailure(String reason) {
+        if (platformMetrics != null) {
+            platformMetrics.recordPreviewFailure(reason);
+        }
+    }
+
     private String sanitize(String value) {
         if (value == null) return "";
-        // 移除控制字符（保留换行和制表符）
         return value.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
     }
 

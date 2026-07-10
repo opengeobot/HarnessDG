@@ -120,6 +120,10 @@
     "searchPlaceholder": "搜索名称、描述或标签",
     "emptyText": "暂无资产，点击'登记资产'开始",
     "loadMore": "加载更多",
+    "downloadStats": {
+      "tooltip": "已授权下载 {{count}} 次",
+      "badgeLabel": "下载次数"
+    },
     "columns": {
       "name": "名称",
       "type": "类型",

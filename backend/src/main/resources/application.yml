@@ -112,6 +112,14 @@ aihub:
     external-endpoint: ${AIHUB_MINIO_EXTERNAL_ENDPOINT:}
     dvc-access-key: ${AIHUB_MINIO_DVC_ACCESS_KEY:}
     dvc-secret-key: ${AIHUB_MINIO_DVC_SECRET_KEY:}
+  # 预览 Worker 内容解析上限（进程级内存/CPU 由容器 cgroup 约束，见 docs/runbooks/ops.md）
+  preview:
+    max-rows: ${AIHUB_PREVIEW_MAX_ROWS:100}
+    max-cols: ${AIHUB_PREVIEW_MAX_COLS:50}
+    max-bytes: ${AIHUB_PREVIEW_MAX_BYTES:1048576}
+  # 应用内告警定时检查间隔（毫秒）
+  alert:
+    check-interval: ${AIHUB_ALERT_CHECK_INTERVAL:300000}
 
 ---
 #
