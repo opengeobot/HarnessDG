@@ -5,6 +5,7 @@ import com.aihub.job.domain.JobHandler;
 import com.aihub.platform.observability.application.PlatformMetrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,11 +19,13 @@ import org.springframework.stereotype.Component;
  * 正式 Tag 删除/改指向触发 CRITICAL 审计事件。
  *
  * <p>幂等：已处理事件按 delivery_id 跳过。
+ * 周期任务 payload 为空时自动扫描 PENDING 队列（每批最多 50 条）。
  */
 @Component
 public class WebhookInboxHandler implements JobHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(WebhookInboxHandler.class);
+    private static final int SWEEP_BATCH_SIZE = 50;
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -43,8 +46,8 @@ public class WebhookInboxHandler implements JobHandler {
     @Override
     public void handle(JobContext context) {
         String payload = context.payload();
-        if (payload == null || payload.isEmpty()) {
-            LOG.warn("webhook process job has empty payload jobId={}", context.jobId());
+        if (payload == null || payload.isEmpty() || "{}".equals(payload.trim())) {
+            sweepPendingInbox(context.jobId());
             return;
         }
 
@@ -52,44 +55,61 @@ public class WebhookInboxHandler implements JobHandler {
             JsonNode jobPayload = objectMapper.readTree(payload);
             String deliveryId = jobPayload.path("deliveryId").asText(null);
             if (deliveryId == null) {
-                LOG.warn("webhook process job missing deliveryId jobId={}", context.jobId());
+                sweepPendingInbox(context.jobId());
                 return;
             }
-
-            // 查询 inbox 记录
-            Map<String, Object> row = jdbcTemplate.queryForMap(
-                    "SELECT id, event_type, payload, status FROM webhook_inbox WHERE delivery_id = ?",
-                    deliveryId);
-
-            String status = (String) row.get("status");
-            if ("COMPLETED".equals(status)) {
-                LOG.debug("webhook already processed deliveryId={}", deliveryId);
-                return;
-            }
-
-            // 标记处理中
-            jdbcTemplate.update(
-                    "UPDATE webhook_inbox SET status = 'PROCESSING' WHERE delivery_id = ? AND status = 'PENDING'",
-                    deliveryId);
-
-            String eventType = (String) row.get("event_type");
-            String eventPayload = row.get("payload").toString();
-            JsonNode event = objectMapper.readTree(eventPayload);
-
-            // 按事件类型分发处理
-            processEvent(eventType, event, deliveryId);
-
-            // 标记完成
-            jdbcTemplate.update(
-                    "UPDATE webhook_inbox SET status = 'COMPLETED', processed_at = NOW() WHERE delivery_id = ?",
-                    deliveryId);
-
-            LOG.info("webhook processed deliveryId={} eventType={}", deliveryId, eventType);
-
+            processDelivery(deliveryId);
         } catch (Exception e) {
             LOG.error("webhook processing failed jobId={}", context.jobId(), e);
             throw new RuntimeException("webhook processing failed: " + e.getMessage(), e);
         }
+    }
+
+    private void sweepPendingInbox(String jobId) {
+        List<String> pending = jdbcTemplate.queryForList(
+                "SELECT delivery_id FROM webhook_inbox WHERE status = 'PENDING' "
+                        + "ORDER BY received_at LIMIT ?",
+                String.class, SWEEP_BATCH_SIZE);
+        if (pending.isEmpty()) {
+            LOG.debug("webhook inbox sweep found no pending items jobId={}", jobId);
+            return;
+        }
+        LOG.info("webhook inbox sweep processing {} pending items jobId={}", pending.size(), jobId);
+        for (String deliveryId : pending) {
+            try {
+                processDelivery(deliveryId);
+            } catch (Exception e) {
+                LOG.error("webhook sweep failed for deliveryId={} jobId={}", deliveryId, jobId, e);
+            }
+        }
+    }
+
+    private void processDelivery(String deliveryId) throws Exception {
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT id, event_type, payload, status FROM webhook_inbox WHERE delivery_id = ?",
+                deliveryId);
+
+        String status = (String) row.get("status");
+        if ("COMPLETED".equals(status)) {
+            LOG.debug("webhook already processed deliveryId={}", deliveryId);
+            return;
+        }
+
+        jdbcTemplate.update(
+                "UPDATE webhook_inbox SET status = 'PROCESSING' WHERE delivery_id = ? AND status = 'PENDING'",
+                deliveryId);
+
+        String eventType = (String) row.get("event_type");
+        String eventPayload = row.get("payload").toString();
+        JsonNode event = objectMapper.readTree(eventPayload);
+
+        processEvent(eventType, event, deliveryId);
+
+        jdbcTemplate.update(
+                "UPDATE webhook_inbox SET status = 'COMPLETED', processed_at = NOW() WHERE delivery_id = ?",
+                deliveryId);
+
+        LOG.info("webhook processed deliveryId={} eventType={}", deliveryId, eventType);
     }
 
     private void processEvent(String eventType, JsonNode event, String deliveryId) {
@@ -107,7 +127,6 @@ public class WebhookInboxHandler implements JobHandler {
         String ref = event.path("ref").asText("");
         LOG.info("push event repo={} ref={} deliveryId={}", repoFullName, ref, deliveryId);
 
-        // 检测 force push（潜在安全问题）
         boolean forced = event.path("forced").asBoolean(false);
         if (forced) {
             LOG.warn("FORCE PUSH detected repo={} ref={} deliveryId={}", repoFullName, ref, deliveryId);

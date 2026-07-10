@@ -32,6 +32,7 @@ import {
   restoreAsset,
 } from './api';
 import { DiscussionPanel } from './DiscussionPanel';
+import { DownloadStats } from './DownloadStats';
 import { VersionListPanel } from '@/features/version/VersionListPanel';
 import type { AssetView, ProvisioningStatus } from './types';
 
@@ -132,6 +133,7 @@ export function AssetDetailPage() {
             status={PROVISIONING_STATUS_COLOR[provStatus] as 'default'}
             text={PROVISIONING_LABEL[provStatus]}
           />
+          {assetId && <DownloadStats assetId={assetId} />}
         </Space>
         <Space>
           {asset.status === 'ACTIVE' && (

@@ -25,6 +25,14 @@ class SensitiveDataMaskerTest {
     }
 
     @Test
+    void masksPasswordCanaryInFieldAndAuditPath() {
+        String canaryPassword = "CANARY-P5-SECRET-9xK!";
+        assertThat(masker.maskField("password", canaryPassword)).isEqualTo(SensitiveDataMasker.MASK);
+        assertThat(masker.maskField("passwd", canaryPassword)).isEqualTo(SensitiveDataMasker.MASK);
+        assertThat(masker.isSensitiveField("password")).isTrue();
+    }
+
+    @Test
     void masksBearerTokenWithinText() {
         String masked = masker.maskValue("Authorization: Bearer abc.def.ghi-token_value");
         assertThat(masked).contains("Bearer " + SensitiveDataMasker.MASK);

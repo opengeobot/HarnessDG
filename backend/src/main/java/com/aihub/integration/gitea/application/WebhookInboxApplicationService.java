@@ -4,11 +4,18 @@
  */
 package com.aihub.integration.gitea.application;
 
+import com.aihub.job.domain.Job;
+import com.aihub.job.domain.JobRepository;
+import com.aihub.job.domain.JobStatus;
 import com.aihub.platform.observability.application.PlatformMetrics;
+import com.aihub.shared.id.IdGenerator;
+import com.aihub.shared.id.IdPrefix;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
@@ -31,16 +38,22 @@ public class WebhookInboxApplicationService {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final PlatformMetrics platformMetrics;
+    private final JobRepository jobRepository;
+    private final IdGenerator idGenerator;
     private final String webhookSecret;
 
     public WebhookInboxApplicationService(
             JdbcTemplate jdbcTemplate,
             ObjectMapper objectMapper,
             PlatformMetrics platformMetrics,
+            JobRepository jobRepository,
+            IdGenerator idGenerator,
             @Value("${aihub.gitea.webhook-secret:}") String webhookSecret) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.platformMetrics = platformMetrics;
+        this.jobRepository = jobRepository;
+        this.idGenerator = idGenerator;
         this.webhookSecret = webhookSecret;
     }
 
@@ -91,7 +104,23 @@ public class WebhookInboxApplicationService {
             platformMetrics.recordCriticalEvent(deliveryId, eventType);
         }
 
+        enqueueProcessJob(deliveryId);
         return ReceiveResult.ACCEPTED;
+    }
+
+    private void enqueueProcessJob(String deliveryId) {
+        try {
+            String jobId = idGenerator.generate(IdPrefix.JOB);
+            Instant now = Instant.now();
+            String payload = objectMapper.writeValueAsString(Map.of("deliveryId", deliveryId));
+            Job job = new Job(null, jobId, "WEBHOOK_PROCESS", payload,
+                    JobStatus.PENDING, 5, 0, now, null, null, null, "system",
+                    null, null, now, now, 0);
+            jobRepository.insert(job);
+            LOG.debug("enqueued WEBHOOK_PROCESS deliveryId={} jobId={}", deliveryId, jobId);
+        } catch (Exception ex) {
+            LOG.warn("failed to enqueue WEBHOOK_PROCESS for deliveryId={}", deliveryId, ex);
+        }
     }
 
     private boolean verifySignature(byte[] body, String signature) {

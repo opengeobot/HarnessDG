@@ -90,6 +90,16 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 
 资产创建、DVC 往返、发布和 MCP 等后续业务用例分别由 P1-P4 在公共底座上补充。
 
+## P5 运维与质量（指针）
+
+P5 运维 Runbook、备份恢复与安全脱敏验证见:
+
+- [ops.md](../runbooks/ops.md) — Dashboard、DEAD Job/Webhook 告警与故障演练
+- [backup-restore.md](../runbooks/backup-restore.md) — PostgreSQL/Gitea/MinIO 备份恢复
+- [security.md](../runbooks/security.md) — 脱敏金丝雀 (`deploy/security/run-redaction-canary.sh`)
+
+P5 验收在 P0-B 脚本基础上补充对账 Worker 外部系统调用、下载统计 API（DEC-016）与 `reconciliation_checkpoint` 表（V28）。
+
 ## P0-B 验收范围（V04-V11）
 
 自 P0-B 起，`verify.ps1` / `verify.sh` 在 V01-V03 之外新增公共底座冒烟用例。脚本以网关基址

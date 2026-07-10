@@ -1,5 +1,8 @@
 package com.aihub.integration.gitea.application;
 
+import com.aihub.job.domain.JobRepository;
+import com.aihub.shared.id.IdGenerator;
+import com.aihub.shared.id.IdPrefix;
 import com.aihub.integration.gitea.application.WebhookInboxApplicationService.ReceiveResult;
 import com.aihub.platform.observability.application.PlatformMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +20,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("WebhookInboxApplicationService")
@@ -27,11 +33,16 @@ class WebhookInboxApplicationServiceTest {
     private JdbcTemplate jdbcTemplate;
     @Mock
     private PlatformMetrics platformMetrics;
+    @Mock
+    private JobRepository jobRepository;
+    @Mock
+    private IdGenerator idGenerator;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private WebhookInboxApplicationService buildService(String secret) {
-        return new WebhookInboxApplicationService(jdbcTemplate, objectMapper, platformMetrics, secret);
+        return new WebhookInboxApplicationService(jdbcTemplate, objectMapper, platformMetrics,
+                jobRepository, idGenerator, secret);
     }
 
     private String computeSignature(String secret, byte[] body) throws Exception {
@@ -81,19 +92,21 @@ class WebhookInboxApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("签名正确时应返回 ACCEPTED")
-        void correctSignatureShouldReturnAccepted() throws Exception {
+        @DisplayName("签名正确时应返回 ACCEPTED 并入队处理任务")
+        void correctSignatureShouldReturnAcceptedAndEnqueueJob() throws Exception {
             String secret = "my-secret";
             byte[] body = "{\"action\":\"completed\"}".getBytes(StandardCharsets.UTF_8);
             String sig = computeSignature(secret, body);
 
             WebhookInboxApplicationService service = buildService(secret);
             when(jdbcTemplate.update(anyString(), any(), any(), any(), any())).thenReturn(1);
+            when(idGenerator.generate(IdPrefix.JOB)).thenReturn("job_wh_1");
 
             ReceiveResult result = service.receive("d1", "push", sig, body);
 
             assertThat(result).isEqualTo(ReceiveResult.ACCEPTED);
             verify(jdbcTemplate).update(anyString(), eq("d1"), eq("push"), eq(true), any());
+            verify(jobRepository).insert(any());
         }
     }
 

@@ -6,6 +6,7 @@ package com.aihub.integration.gitea.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -18,6 +19,7 @@ import com.aihub.job.domain.JobContext;
 import com.aihub.platform.observability.application.PlatformMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,17 +46,24 @@ class WebhookInboxHandlerTest {
     }
 
     @Test
-    void handleWithEmptyPayloadDoesNotQueryDatabase() {
+    void handleWithEmptyPayloadSweepsPendingInbox() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), anyInt())).thenReturn(List.of());
+
         JobContext ctx = new JobContext("job-1", "WEBHOOK_PROCESS", "", 0, "usr_1", "trace-1", null);
         handler.handle(ctx);
+
+        verify(jdbcTemplate).queryForList(anyString(), eq(String.class), anyInt());
         verify(jdbcTemplate, never()).queryForMap(anyString());
     }
 
     @Test
-    void handleWithNullPayloadDoesNotQuery() {
+    void handleWithNullPayloadSweepsPendingInbox() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), anyInt())).thenReturn(List.of());
+
         JobContext ctx = new JobContext("job-1", "WEBHOOK_PROCESS", null, 0, "usr_1", "trace-1", null);
         handler.handle(ctx);
-        verify(jdbcTemplate, never()).queryForMap(anyString());
+
+        verify(jdbcTemplate).queryForList(anyString(), eq(String.class), anyInt());
     }
 
     @Test
@@ -120,6 +129,25 @@ class WebhookInboxHandlerTest {
         handler.handle(ctx);
 
         // Should mark as PROCESSING then COMPLETED
+        verify(jdbcTemplate, times(2)).update(anyString(), anyString());
+    }
+
+    @Test
+    void handleSweepsPendingInboxWhenPayloadEmpty() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), anyInt()))
+                .thenReturn(List.of("dlv-sweep-1"));
+        Map<String, Object> row = new HashMap<>();
+        row.put("id", 1);
+        row.put("event_type", "push");
+        row.put("payload", "{\"repository\":{\"full_name\":\"org/repo\"},\"ref\":\"refs/heads/main\"}");
+        row.put("status", "PENDING");
+        when(jdbcTemplate.queryForMap(anyString(), anyString())).thenReturn(row);
+        when(jdbcTemplate.update(anyString(), anyString())).thenReturn(1);
+
+        JobContext ctx = new JobContext("job-sweep", "WEBHOOK_PROCESS", "{}", 0, "usr_1", "trace-1", null);
+        handler.handle(ctx);
+
+        verify(jdbcTemplate).queryForList(anyString(), eq(String.class), anyInt());
         verify(jdbcTemplate, times(2)).update(anyString(), anyString());
     }
 
