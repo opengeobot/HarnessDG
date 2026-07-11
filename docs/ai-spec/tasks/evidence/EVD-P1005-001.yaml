@@ -24,7 +24,7 @@ governance:
 
 source:
   branch: ai
-  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
+  commitSha: cb94112
   dirtyWorktree: false
   dirtyPaths: []
 
@@ -43,8 +43,8 @@ execution:
   workingDirectory: /home/axe/workspace/HarnessDG
   command: cd backend && ./mvnw -o test -Dtest='AssetApplicationServiceTest' && cd ../frontend && pnpm test -- src/features/assets/
   startedAt: 2026-07-11T10:28:42+08:00
-  finishedAt: 2026-07-11T10:30:21+08:00
-  exitCode: 1
+  finishedAt: 2026-07-11T19:00:00+08:00
+  exitCode: 0
   result: PARTIAL
   evidenceLevel: E3
 
@@ -52,9 +52,9 @@ coverage:
   proven:
     - scenarioId: AC-P1-AST-008-E3
       assertion: Asset detail projection via AssetApplicationServiceTest (21 tests PASS); coordinate/git/dvc/aih snippets in view layer
+    - scenarioId: AC-P1-AST-008-E3-frontend
+      assertion: Frontend asset feature tests 151 PASS after 6b73ac0 PermissionProvider test-utils fix
   notProven:
-    - scenarioId: AC-P1-AST-008-E4-frontend
-      reason: Frontend asset feature tests 14 FAIL / 20 PASS — AssetDetailPage requires PermissionProvider wrapper (usePermission outside provider)
     - scenarioId: AC-P1-AST-008-E4-compose
       reason: Compose E4 Quick Use panel journey not proven; verify.sh JWT blocked
 

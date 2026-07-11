@@ -24,7 +24,7 @@
 | `CAP-TAX-001` | 字典与 i18n | PRD 5.6 | V6、dictionary API | 字典后端和页面 | 真实 zh-CN/en-US 渲染、停用历史回显 E4、前端 i18n | `PARTIAL` |
 | `CAP-TAX-002` | 受控标签 | PRD 5.6 | V7/V12、tag API | 标签后端和页面 | 组织作用域、资产历史回显、端到端自由标签拒绝 | `IMPLEMENTED_UNVERIFIED` |
 | `CAP-CONF-001` | 类型化配置 | PRD 5.7 | V8、configuration API | 配置后端和页面 | 热更新行为、Secret 拒绝、版本冲突和审计 E4 | `IMPLEMENTED_UNVERIFIED` |
-| `CAP-JOB-001` | 写接口幂等 | PRD 5.11 | V9、Idempotency header | Service/Store 存在，前端部分带 Header | Service 无业务调用方；请求摘要冲突和并发重放 E3/E4 | `PARTIAL` |
+| `CAP-JOB-001` | 写接口幂等 | PRD 5.11 | V9、Idempotency header | Service/Store 存在，McpController/AgentController 已接入 IdempotencyService | 请求摘要冲突和并发重放 E3/E4 | `IMPLEMENTED_UNVERIFIED` |
 | `CAP-JOB-002` | 可靠任务 | PRD 5.11 | V9、job API | Worker、租约/退避代码和单测 | 业务 Handler、崩溃恢复、Dead 通知、并发领取 E4 | `PARTIAL` |
 | `CAP-AUD-001` | 结构化日志与审计 | PRD 5.10 | V10、audit API | AuditService、Adapters、单测、登录审计 Verify | 必审计事件完整清单、拒绝/失败覆盖、JSON/MDC/脱敏 E4 | `PARTIAL` |
 | `CAP-NOT-001` | 站内通知与签名 Webhook | PRD 5.12 | V11、event schema | Notification/Outbox/Webhook 代码和单测 | 核心事务原子性、失败后恢复、SSRF 与签名 E4 | `IMPLEMENTED_UNVERIFIED` |
@@ -32,10 +32,13 @@
 | `CAP-UI-001` | 公共管理端 | PRD 5.14、15.7 | 页面路由/API | 多个管理页面可构建 | 无前端测试/浏览器 E2E；无运行时 i18n；受控值仍自由输入 | `PARTIAL` |
 | `CAP-ASSET-001` | 资产目录安全整改 | PRD 6/8、ADR-0002 | V12、asset OpenAPI | 资产 CRUD/搜索、单测/IT、页面 | Team Owner、Gitea 一致性、授权全矩阵、完整治理与 E4 | `PARTIAL` |
 | `CAP-DST-001` | DATASET 分类、Card 与 Facet | REQ-DST-TAX-001/DETAIL-001 | OpenAPI facets、字典、V14+ | `/assets/facets`、DatasetProfile、matchedFields API | Facet UX 侧栏与 E4 未闭环 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
-| `CAP-DST-002` | Asset Discussion | REQ-DST-DISC-001 | Discussion API、V15 `asset_discussion`/`asset_comment` | DiscussionController、DiscussionPanel、Moderation | @mention 定向通知与 E4 未闭环 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
+| `CAP-DST-002` | Asset Discussion | REQ-DST-DISC-001 | Discussion API、V15 `asset_discussion`/`asset_comment` | DiscussionController、DiscussionPanel、Moderation | PARTIAL（DISCUSSION_MENTIONED 已实现，subscription 已接入）；E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
 | `CAP-DST-003` | 精确版本安全 Preview | REQ-PRE-001 | Preview API/Job、asset-preview | PreviewController、PREVIEW_GENERATE、CSV/JSONL | Parquet 原生、资源隔离 E5 未闭环 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
 | `CAP-DST-004` | 最小 `aih` CLI | REQ-DST-CLI-001 | REST/CLI | `scripts/aih/aih` 薄 CLI（部分路径已对齐） | 全命令 `/api/v1` 对齐、push/resume E4 未闭环 | `PARTIAL` |
-| `CAP-DST-005` | AI 搜索下载与受限贡献 | REQ-DST-AI-001/AIW-001、P4 | MCP tools.yaml、Agent OpenAPI | McpController、11 tools、写工具门控 | REST `/agent/*`、写幂等、30 分钟接入 E4 未闭环 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
+| `CAP-DST-005` | AI 搜索下载与受限贡献 | REQ-DST-AI-001/AIW-001、P4 | MCP tools.yaml、Agent OpenAPI | McpController、11 tools、写工具门控、Agent REST 写端点 | IMPLEMENTED_UNVERIFIED（H 波次 REST 写贡献已落地）；30 分钟接入 E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
+| `CAP-LINEAGE` | 资产血缘 | REQ-AST-001 §5.2 | V29 `asset_relation` + lineage API/UI | AssetLineagePage、BFS 查询、`/assets/:id/lineage` | E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
+| `CAP-PAT` | PAT 令牌 | PRD §8.1 | V34 `iam_token` PAT + tokens API | `POST/GET/DELETE /tokens`、AccessPage | E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
+| `CAP-RATE-LIMIT` | Agent/MCP 速率限制 | PRD §11.2 | `RateLimiter` token bucket | `aihub.agent.rate-limit.*`、`McpController` + Agent 写端点 | E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
 | `CAP-AI-001` | AI 编程 IDE 实施门禁 | REQ-AI-IDE-001、DEC-009 | manifest/task schema/validator | 本地 preflight/scope/completion 校验已具备；受保护 CI 未接入 | AC-AI-IDE-001..008；本地正反例 + PR required check | `READY / CI_GAP` |
 
 ## 3. 后续补全规则

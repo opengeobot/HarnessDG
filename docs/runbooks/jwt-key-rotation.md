@@ -28,7 +28,7 @@
 
 ```bash
 # 单元测试覆盖：上一密钥签发的 token 在配置 previous-public-key-pem 后可通过校验
-./mvnw -pl backend -Dtest=JwtTokenServiceTest test
+cd backend && ./mvnw -Dtest=JwtTokenServiceTest test
 ```
 
 ## 禁止事项

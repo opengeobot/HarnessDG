@@ -45,7 +45,7 @@ aihub:
 ## 运维检查
 
 ```bash
-./mvnw -pl backend -Dtest=DvcConfigurationServiceTest test
+cd backend && ./mvnw -Dtest=DvcConfigurationServiceTest test
 ```
 
 确认审计表 `DVC_CREDENTIALS_ISSUED` 不含完整 secret，仅记录 `accessKeyId` 与 `expiresAt`。
