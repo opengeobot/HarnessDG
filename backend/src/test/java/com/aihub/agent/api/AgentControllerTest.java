@@ -22,6 +22,7 @@ import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
+import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.AgentToolRepository;
 import com.aihub.authorization.domain.ResourceAclRepository;
@@ -34,6 +35,8 @@ import com.aihub.bootstrap.security.RestAuthenticationEntryPoint;
 import com.aihub.bootstrap.security.SecurityConfiguration;
 import com.aihub.identity.api.RefreshCookieFactory;
 import com.aihub.identity.api.RefreshCookieProperties;
+import com.aihub.job.application.IdempotencyService;
+import com.aihub.platform.security.RateLimiter;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.shared.security.IssuedToken;
@@ -42,6 +45,9 @@ import com.aihub.shared.security.TokenSigner;
 import com.aihub.shared.security.TokenType;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.transfer.application.DownloadApplicationService.DownloadTicket;
+import com.aihub.transfer.application.UploadApplicationService;
+import com.aihub.transfer.application.UploadSessionView;
+import com.aihub.transfer.domain.UploadSessionStatus;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.Version;
@@ -59,10 +65,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AgentController.class)
+@TestPropertySource(properties = "mcp.writeTools.enabled=true")
 @Import({AgentController.class,
         PrincipalContextFilter.class, SharedKernelConfiguration.class, GlobalExceptionHandler.class,
         SecurityConfiguration.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class,
@@ -88,6 +96,14 @@ class AgentControllerTest {
     @MockitoBean
     private DownloadApplicationService downloadService;
     @MockitoBean
+    private UploadApplicationService uploadService;
+    @MockitoBean
+    private IdempotencyService idempotencyService;
+    @MockitoBean
+    private RateLimiter rateLimiter;
+    @MockitoBean
+    private AuditService auditService;
+    @MockitoBean
     private RoleBindingRepository roleBindingRepository;
     @MockitoBean
     private ResourceAclRepository resourceAclRepository;
@@ -98,6 +114,7 @@ class AgentControllerTest {
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
         given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(true);
+        given(rateLimiter.tryAcquire(anyString(), anyString())).willReturn(true);
     }
 
     private String bearer(Set<String> scopes) {
@@ -193,5 +210,95 @@ class AgentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.assetId").value("ast_1"))
                 .andExpect(jsonPath("$.data.coordinate").value("aih://nlp/model/test-model"));
+    }
+
+    @Test
+    void createDraftVersionRequiresIdempotencyKey() throws Exception {
+        mockMvc.perform(post("/api/v1/agent/assets/ast_1/versions/draft")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"0.1.0\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_INVALID_ARGUMENT"));
+    }
+
+    @Test
+    void createDraftVersionDelegatesToService() throws Exception {
+        VersionView view = VersionView.from(
+                Version.createDraft("ver_2", "ast_1", "0.1.0", "prn_agent"));
+        given(idempotencyService.execute(any(), anyString(), any())).willAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
+        given(versionService.createDraftVersion(eq("ast_1"), eq("0.1.0"), eq("prn_agent"))).willReturn(view);
+
+        mockMvc.perform(post("/api/v1/agent/assets/ast_1/versions/draft")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .header("Idempotency-Key", "draft-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"0.1.0\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.versionId").value("ver_2"));
+    }
+
+    @Test
+    void createUploadSessionDelegatesToService() throws Exception {
+        UploadSessionView session = new UploadSessionView(
+                "ses_1", "ast_1", "ver_1", "prn_agent", UploadSessionStatus.OPEN,
+                100L, 1, Instant.now().plusSeconds(3600), Instant.now(), null, List.of());
+        given(idempotencyService.execute(any(), anyString(), any())).willAnswer(invocation -> {
+            var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
+            return new IdempotencyService.IdempotencyResult(supplier.get(), false);
+        });
+        given(uploadService.createSession(eq("ast_1"), eq("ver_1"), eq(100L), eq(1), eq("prn_agent")))
+                .willReturn(session);
+
+        mockMvc.perform(post("/api/v1/agent/assets/ast_1/upload-sessions")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .header("Idempotency-Key", "upload-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"versionId\":\"ver_1\",\"totalBytes\":100,\"fileCount\":1}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.sessionId").value("ses_1"));
+    }
+
+    @Test
+    void completeUploadSessionRequiresWriteToolAllowlist() throws Exception {
+        given(agentToolRepository.isToolAllowed("prn_agent", "asset_complete_upload")).willReturn(false);
+
+        mockMvc.perform(post("/api/v1/agent/assets/ast_1/upload-sessions/ses_1/complete")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .header("Idempotency-Key", "complete-001")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("MCP_TOOL_NOT_ALLOWED"));
+    }
+
+    @Test
+    void getUploadSessionReturnsStatus() throws Exception {
+        UploadSessionView session = new UploadSessionView(
+                "ses_1", "ast_1", "ver_1", "prn_agent", UploadSessionStatus.PROCESSING,
+                100L, 1, Instant.now().plusSeconds(3600), Instant.now(), "job_1", List.of());
+        given(uploadService.getSessionForAsset("ast_1", "ses_1")).willReturn(session);
+
+        mockMvc.perform(get("/api/v1/agent/assets/ast_1/upload-sessions/ses_1")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:read"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.data.materializeJobId").value("job_1"));
+    }
+
+    @Test
+    void writeEndpointReturns429WhenRateLimited() throws Exception {
+        given(rateLimiter.tryAcquire(eq("prn_agent"), eq("asset_create_draft"))).willReturn(false);
+
+        mockMvc.perform(post("/api/v1/agent/assets/ast_1/versions/draft")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:manage")))
+                        .header("Idempotency-Key", "draft-002")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\":\"0.1.0\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("RATE_LIMIT_EXCEEDED"));
     }
 }

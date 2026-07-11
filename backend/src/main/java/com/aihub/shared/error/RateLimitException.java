@@ -13,7 +13,7 @@ import java.util.Map;
 public class RateLimitException extends PlatformException {
 
     public RateLimitException(String message) {
-        super(ErrorCode.COMMON_INVALID_ARGUMENT, message);
+        super(ErrorCode.RATE_LIMIT_EXCEEDED, message);
     }
 
     public RateLimitException(ErrorCode errorCode, String message, Map<String, Object> details) {

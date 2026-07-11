@@ -35,6 +35,7 @@ import com.aihub.job.application.IdempotencyService;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
 import com.aihub.platform.observability.application.PlatformMetrics;
+import com.aihub.platform.security.RateLimiter;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.shared.security.IssuedToken;
 import com.aihub.shared.security.TokenIssueRequest;
@@ -94,11 +95,14 @@ class McpControllerTest {
     private AuditService auditService;
     @MockitoBean
     private IdempotencyService idempotencyService;
+    @MockitoBean
+    private RateLimiter rateLimiter;
 
     @BeforeEach
     void stubAuthorizationRepositories() {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
         given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(true);
+        given(rateLimiter.tryAcquire(anyString(), anyString())).willReturn(true);
         given(idempotencyService.execute(any(), any(), any())).willAnswer(invocation -> {
             var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
             return new IdempotencyService.IdempotencyResult(supplier.get(), false);
@@ -305,6 +309,22 @@ class McpControllerTest {
                                         + "\"arguments\":{\"assetId\":\"ast_1\",\"version\":\"v1\"}}")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.isError").value(false));
+    }
+
+    @Test
+    void toolsCallReturns429WhenRateLimited() throws Exception {
+        given(toolCatalog.findTool("asset_search")).willReturn(java.util.Optional.of(
+                new McpToolCatalog.ToolDefinition("asset_search", "Search assets",
+                        Map.of("type", "object"), false, "asset:read")));
+        given(rateLimiter.tryAcquire(eq("prn_agent"), eq("asset_search"))).willReturn(false);
+
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:read")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_search\",\"arguments\":{\"keyword\":\"demo\"}}")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("RATE_LIMIT_EXCEEDED"));
     }
 
     @Test

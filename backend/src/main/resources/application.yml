@@ -124,6 +124,11 @@ aihub:
   # 应用内告警定时检查间隔（毫秒）
   alert:
     check-interval: ${AIHUB_ALERT_CHECK_INTERVAL:300000}
+  # Agent/MCP 主体级限流（令牌桶）
+  agent:
+    rate-limit:
+      requests-per-minute: ${AIHUB_AGENT_RATE_LIMIT_RPM:60}
+      burst: ${AIHUB_AGENT_RATE_LIMIT_BURST:10}
 
 ---
 #

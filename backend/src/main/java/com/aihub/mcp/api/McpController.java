@@ -10,8 +10,10 @@ import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
 import com.aihub.mcp.application.McpToolCatalog.ToolDefinition;
 import com.aihub.platform.observability.application.PlatformMetrics;
+import com.aihub.platform.security.RateLimiter;
 import com.aihub.shared.error.AuthorizationException;
 import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.RateLimitException;
 import com.aihub.shared.idempotency.IdempotencyKey;
 import com.aihub.shared.idempotency.IdempotencySupport;
 import com.aihub.shared.identity.PrincipalContext;
@@ -53,6 +55,7 @@ public class McpController {
     private final PlatformMetrics platformMetrics;
     private final IdempotencyService idempotencyService;
     private final IdempotencySupport idempotencySupport;
+    private final RateLimiter rateLimiter;
     private final ObjectMapper objectMapper;
 
     public McpController(McpToolCatalog toolCatalog,
@@ -61,6 +64,7 @@ public class McpController {
                          AuditService auditService,
                          PlatformMetrics platformMetrics,
                          IdempotencyService idempotencyService,
+                         RateLimiter rateLimiter,
                          ObjectMapper objectMapper) {
         this.toolCatalog = toolCatalog;
         this.resourceHandler = resourceHandler;
@@ -68,6 +72,7 @@ public class McpController {
         this.auditService = auditService;
         this.platformMetrics = platformMetrics;
         this.idempotencyService = idempotencyService;
+        this.rateLimiter = rateLimiter;
         this.idempotencySupport = new IdempotencySupport(objectMapper);
         this.objectMapper = objectMapper;
     }
@@ -156,6 +161,12 @@ public class McpController {
             return toolError("Tool not allowed: " + toolName);
         }
 
+        if (!rateLimiter.tryAcquire(context.principalId(), toolName)) {
+            auditRateLimitDenied(context, toolName);
+            throw new RateLimitException(ErrorCode.RATE_LIMIT_EXCEEDED, "rate limit exceeded",
+                    Map.of("tool", toolName));
+        }
+
         @SuppressWarnings("unchecked")
         Map<String, Object> arguments = params.get("arguments") instanceof Map m ? m : Map.of();
 
@@ -201,6 +212,21 @@ public class McpController {
                 .filter(ctx -> ctx.principalId() != null)
                 .orElseThrow(() -> new AuthorizationException(
                         ErrorCode.AUTH_UNAUTHENTICATED, "no authenticated principal", Map.of()));
+    }
+
+    private void auditRateLimitDenied(PrincipalContext context, String toolName) {
+        auditService.record(new AuditEvent(
+                "AGENT_RATE_LIMIT_DENIED",
+                "mcp:tool:call",
+                context.principalId(),
+                context.principalType() == null ? null : context.principalType().name(),
+                "MCP_TOOL",
+                toolName,
+                null,
+                null,
+                AuditResult.DENIED,
+                ErrorCode.RATE_LIMIT_EXCEEDED.name(),
+                Map.of("tool", toolName)));
     }
 
     private void auditToolDenied(String principalId, PrincipalType principalType,

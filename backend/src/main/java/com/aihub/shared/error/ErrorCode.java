@@ -216,6 +216,9 @@ public enum ErrorCode {
     /** 幂等键冲突（同键不同请求体）。 */
     IDEMPOTENCY_KEY_CONFLICT(HttpStatus.CONFLICT, "error.idempotency.keyConflict", false, AlertLevel.NONE),
 
+    /** Agent/MCP 主体级限流触发。 */
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "error.agent.rateLimitExceeded", true, AlertLevel.INFO),
+
     /** Webhook 投递目标地址不安全（内网/保留地址被 SSRF 防护拒绝）。 */
     WEBHOOK_TARGET_FORBIDDEN(HttpStatus.BAD_REQUEST, "error.webhook.targetForbidden", false, AlertLevel.WARN),
 

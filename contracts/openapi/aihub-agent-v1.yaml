@@ -187,17 +187,21 @@ paths:
   /agent/assets/{assetId}/versions/draft:
     post:
       operationId: agentCreateDraftVersion
-      x-implementation-status: planned
+      x-implementation-status: implemented
       x-mcp-equivalent: asset_create_draft
-      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT]
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT, RATE_LIMIT_EXCEEDED]
       tags: [contribution]
       summary: Create a draft version (contribution profile)
       description: |
         Requires mcp.writeTools.enabled=true and asset:manage permission.
-        Protected by confirmation token mechanism.
+        Requires Idempotency-Key header.
       parameters:
         - name: assetId
           in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
           required: true
           schema: { type: string }
       requestBody:
@@ -209,7 +213,6 @@ paths:
               required: [version]
               properties:
                 version: { type: string }
-                confirmationToken: { type: [string, 'null'] }
       responses:
         '201':
           description: Draft version created
@@ -219,6 +222,127 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /agent/assets/{assetId}/upload-sessions:
+    post:
+      operationId: agentCreateUploadSession
+      x-implementation-status: implemented
+      x-mcp-equivalent: asset_create_upload_session
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
+      tags: [contribution]
+      summary: Create an upload session (contribution profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [versionId, totalBytes, fileCount]
+              properties:
+                versionId: { type: string }
+                totalBytes: { type: integer, format: int64 }
+                fileCount: { type: integer }
+      responses:
+        '201':
+          description: Upload session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /agent/assets/{assetId}/upload-sessions/{sessionId}/complete:
+    post:
+      operationId: agentCompleteUploadSession
+      x-implementation-status: implemented
+      x-mcp-equivalent: asset_complete_upload
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, UPLOAD_SESSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
+      tags: [contribution]
+      summary: Complete an upload session (contribution profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                parts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      partNumber: { type: integer }
+                      etag: { type: string }
+                files:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      sha256: { type: string }
+                      size: { type: integer, format: int64 }
+                      mediaType: { type: string }
+                      sampleContent: { type: string }
+      responses:
+        '200':
+          description: Upload session completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /agent/assets/{assetId}/upload-sessions/{sessionId}:
+    get:
+      operationId: agentGetUploadSession
+      x-implementation-status: implemented
+      x-mcp-equivalent: asset_get_upload_status
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, UPLOAD_SESSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
+      tags: [contribution]
+      summary: Get upload session status (contribution profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Upload session status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
 components:
   securitySchemes:
@@ -288,6 +412,19 @@ components:
         dvcCredentialsUrl: { type: [string, 'null'] }
         assetId: { type: string }
 
+    UploadSessionSummary:
+      type: object
+      properties:
+        sessionId: { type: string }
+        assetId: { type: string }
+        versionId: { type: string }
+        status: { type: string }
+        totalBytes: { type: integer, format: int64 }
+        fileCount: { type: integer }
+        materializeJobId: { type: [string, 'null'] }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+
     ErrorResponse:
       type: object
       properties:
@@ -316,6 +453,11 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     Conflict:
       description: Resource state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateLimited:
+      description: Agent/MCP rate limit exceeded
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
