@@ -28,7 +28,7 @@ import com.aihub.version.application.PublishApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.Version;
-import com.aihub.version.domain.VersionRepository;
+import com.aihub.version.application.VersionQueryService;
 import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
 import java.util.List;
@@ -46,7 +46,7 @@ class McpToolCatalogTest {
 
     private AssetApplicationService assetService;
     private VersionApplicationService versionService;
-    private VersionRepository versionRepository;
+    private VersionQueryService versionQueryService;
     private DownloadApplicationService downloadService;
     private UploadApplicationService uploadService;
     private PublishApplicationService publishService;
@@ -56,11 +56,11 @@ class McpToolCatalogTest {
     void setUp() {
         assetService = mock(AssetApplicationService.class);
         versionService = mock(VersionApplicationService.class);
-        versionRepository = mock(VersionRepository.class);
+        versionQueryService = mock(VersionQueryService.class);
         downloadService = mock(DownloadApplicationService.class);
         uploadService = mock(UploadApplicationService.class);
         publishService = mock(PublishApplicationService.class);
-        catalog = new McpToolCatalog(assetService, versionService, versionRepository, downloadService,
+        catalog = new McpToolCatalog(assetService, versionService, versionQueryService, downloadService,
                 uploadService, publishService, true);
 
         PrincipalContextHolder.set(new PrincipalContext("usr_test", PrincipalType.USER,
@@ -101,7 +101,7 @@ class McpToolCatalogTest {
                 Instant.now(), List.of("name"));
         when(assetService.searchAssets(any())).thenReturn(
                 new CursorPage<>(List.of(summary), null, false));
-        when(versionRepository.findLatestPublishedByAssetIds(any()))
+        when(versionQueryService.findLatestPublishedByAssetIds(any()))
                 .thenReturn(Map.of("ast_1", new Version(
                         "ver_1", "ast_1", "1.0.0", VersionStatus.PUBLISHED,
                         null, null, null, Instant.now(), "usr", null,
@@ -117,7 +117,7 @@ class McpToolCatalogTest {
         assertThat(items.get(0)).containsEntry("coordinate", "aih://nlp/model/test");
         assertThat(items.get(0)).containsEntry("matchedFields", List.of("name"));
         assertThat(items.get(0)).containsEntry("latestPublished", "1.0.0");
-        verify(versionRepository).findLatestPublishedByAssetIds(any());
+        verify(versionQueryService).findLatestPublishedByAssetIds(any());
     }
 
     @Test
@@ -168,7 +168,7 @@ class McpToolCatalogTest {
     @Test
     void writeToolsDisabledShouldRejectWriteCalls() {
         McpToolCatalog disabledCatalog = new McpToolCatalog(
-                assetService, versionService, versionRepository, downloadService, uploadService,
+                assetService, versionService, versionQueryService, downloadService, uploadService,
                 publishService, false);
 
         assertThatThrownBy(() -> disabledCatalog.callTool("asset_create_draft",

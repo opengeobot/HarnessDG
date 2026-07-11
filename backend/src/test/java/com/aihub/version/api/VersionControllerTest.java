@@ -11,7 +11,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.job.application.IdempotencyService;
-import com.aihub.job.application.JobApplicationService;
 import com.aihub.version.application.PublishApplicationService;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
@@ -29,7 +28,6 @@ class VersionControllerTest {
 
     @Mock private VersionApplicationService versionService;
     @Mock private PublishApplicationService publishApplicationService;
-    @Mock private JobApplicationService jobApplicationService;
     @Mock private IdempotencyService idempotencyService;
 
     private VersionController controller;
@@ -38,8 +36,7 @@ class VersionControllerTest {
     @BeforeEach
     void setUp() {
         controller = new VersionController(
-                versionService, publishApplicationService, jobApplicationService,
-                idempotencyService, objectMapper);
+                versionService, publishApplicationService, idempotencyService, objectMapper);
     }
 
     @Test

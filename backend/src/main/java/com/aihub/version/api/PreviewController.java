@@ -10,7 +10,6 @@ import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.version.application.PreviewApplicationService;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,14 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/assets/{assetId}/previews")
 public class PreviewController {
 
-    private final JdbcTemplate jdbcTemplate;
     private final AuthorizationService authorizationService;
     private final PreviewApplicationService previewApplicationService;
 
-    public PreviewController(JdbcTemplate jdbcTemplate,
-                             AuthorizationService authorizationService,
+    public PreviewController(AuthorizationService authorizationService,
                              PreviewApplicationService previewApplicationService) {
-        this.jdbcTemplate = jdbcTemplate;
         this.authorizationService = authorizationService;
         this.previewApplicationService = previewApplicationService;
     }
@@ -48,21 +44,9 @@ public class PreviewController {
      * @return 预览视图
      */
     @GetMapping
-    public PreviewView getPreview(@PathVariable String assetId,
-                                  @RequestParam(required = false) String versionId) {
-        authorizationService.requirePermission("asset:read");
-
-        var row = jdbcTemplate.queryForMap(
-                "SELECT preview_id, content_type, content, generated_at FROM asset_preview " +
-                "WHERE asset_id = ? AND (? IS NULL OR version_id = ?) " +
-                "ORDER BY generated_at DESC LIMIT 1",
-                assetId, versionId, versionId);
-
-        return new PreviewView(
-                String.valueOf(row.get("preview_id")),
-                String.valueOf(row.get("content_type")),
-                String.valueOf(row.get("content")),
-                row.get("generated_at") != null ? row.get("generated_at").toString() : null);
+    public PreviewApplicationService.PreviewView getPreview(@PathVariable String assetId,
+                                                            @RequestParam(required = false) String versionId) {
+        return previewApplicationService.getPreview(assetId, versionId);
     }
 
     /**
@@ -82,10 +66,6 @@ public class PreviewController {
                 principalId);
         return Map.of("jobId", jobId);
     }
-
-    /** 预览视图。 */
-    public record PreviewView(String previewId, String contentType,
-                              String content, String generatedAt) {}
 
     /** 触发预览生成请求。 */
     public record GeneratePreviewRequest(String versionId, String content, String contentType) {}

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,8 +19,11 @@ import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.version.domain.VersionStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -43,15 +47,17 @@ class VersionApplicationServiceTest {
     @Mock private AuditService auditService;
     @Mock private IdGenerator idGenerator;
     @Mock private JdbcTemplate jdbcTemplate;
-    @Mock private com.aihub.notification.application.NotificationService notificationService;
+    @Mock private NotificationService notificationService;
+    @Mock private JobApplicationService jobApplicationService;
 
     private VersionApplicationService service;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
         service = new VersionApplicationService(
                 versionRepository, authorizationService, auditService, idGenerator, jdbcTemplate,
-                notificationService);
+                notificationService, jobApplicationService, objectMapper);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ver_generated");
     }
 
@@ -115,6 +121,18 @@ class VersionApplicationServiceTest {
         assertThatThrownBy(() ->
                 service.transitionVersion("ver_01", VersionStatus.PUBLISHED, "usr_01"))
                 .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void transitionVersionToValidatingEnqueuesValidationJob() {
+        Version v = Version.createDraft("ver_01", "ast_01", "v1.0.0", "usr_01");
+        when(versionRepository.findByVersionId("ver_01")).thenReturn(Optional.of(v));
+
+        service.transitionVersion("ver_01", VersionStatus.VALIDATING, "usr_01");
+
+        verify(jobApplicationService).enqueue(
+                eq("VERSION_VALIDATE"), eq("{\"versionId\":\"ver_01\"}"),
+                eq("usr_01"), eq(null), eq("ast_01"), eq(3));
     }
 
     @Test

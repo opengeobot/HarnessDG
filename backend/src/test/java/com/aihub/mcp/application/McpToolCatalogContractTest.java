@@ -70,7 +70,7 @@ class McpToolCatalogContractTest {
         return new McpToolCatalog(
                 org.mockito.Mockito.mock(com.aihub.asset.application.AssetApplicationService.class),
                 org.mockito.Mockito.mock(com.aihub.version.application.VersionApplicationService.class),
-                org.mockito.Mockito.mock(com.aihub.version.domain.VersionRepository.class),
+                org.mockito.Mockito.mock(com.aihub.version.application.VersionQueryService.class),
                 org.mockito.Mockito.mock(com.aihub.transfer.application.DownloadApplicationService.class),
                 org.mockito.Mockito.mock(com.aihub.transfer.application.UploadApplicationService.class),
                 org.mockito.Mockito.mock(com.aihub.version.application.PublishApplicationService.class),

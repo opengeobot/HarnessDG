@@ -5,6 +5,9 @@
  */
 package com.aihub.arch;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleName;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
@@ -66,6 +69,45 @@ class LayeredArchitectureTest {
                     .should(onlyBeAccessedFromSameModule())
                     .allowEmptyShould(true);
 
+    /** 规则四：domain 层不得依赖 Spring 或 MyBatis-Plus。 */
+    @ArchTest
+    static final ArchRule domain_must_not_depend_on_spring_or_mybatis =
+            noClasses().that().resideInAPackage("com.aihub..domain..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "org.springframework..", "com.baomidou..")
+                    .allowEmptyShould(true);
+
+    /** 规则五：application 层不得依赖 infrastructure 层。 */
+    @ArchTest
+    static final ArchRule application_must_not_depend_on_infrastructure =
+            noClasses().that().resideInAPackage("com.aihub..application..")
+                    .should().dependOnClassesThat().resideInAPackage("com.aihub..infrastructure..")
+                    .allowEmptyShould(true);
+
+    /**
+     * 规则六：api 适配层不得直接依赖 domain 仓储端口。
+     *
+     * <p>已知例外：identity 模块 {@code PasswordChangeRequiredInterceptor} 与
+     * {@code IdentityWebConfiguration} 在 P0 密码强制改密流程中直接读取
+     * {@code LocalUserRepository}；待 identity 应用服务封装后移除。
+     */
+    @ArchTest
+    static final ArchRule controllers_must_not_call_repositories =
+            noClasses().that().resideInAPackage("com.aihub..api..")
+                    .and(not(simpleName("PasswordChangeRequiredInterceptor")))
+                    .and(not(simpleName("IdentityWebConfiguration")))
+                    .should().dependOnClassesThat(
+                            resideInAPackage("com.aihub..domain..")
+                                    .and(JavaClass.Predicates.simpleNameEndingWith("Repository")))
+                    .allowEmptyShould(true);
+
+    /** 规则七：api 适配层方法不得返回持久化 Entity 类型。 */
+    @ArchTest
+    static final ArchRule controllers_must_not_return_entities =
+            noClasses().that().resideInAPackage("com.aihub..api..")
+                    .should(haveMethodReturningEntity())
+                    .allowEmptyShould(true);
+
     private static ArchCondition<JavaClass> onlyBeAccessedFromSameModule() {
         return new ArchCondition<>("only be accessed from classes within the same module") {
             @Override
@@ -76,6 +118,20 @@ class LayeredArchitectureTest {
                     boolean sameModule = mapperModule.equals(moduleOf(origin));
                     events.add(new SimpleConditionEvent(dependency, sameModule, dependency.getDescription()));
                 }
+            }
+        };
+    }
+
+    private static ArchCondition<JavaClass> haveMethodReturningEntity() {
+        return new ArchCondition<>("not have methods returning types ending with Entity") {
+            @Override
+            public void check(JavaClass javaClass, ConditionEvents events) {
+                javaClass.getMethods().forEach(method -> {
+                    String returnTypeName = method.getRawReturnType().getName();
+                    boolean violation = returnTypeName.endsWith("Entity");
+                    events.add(new SimpleConditionEvent(method, !violation,
+                            method.getFullName() + " returns " + returnTypeName));
+                });
             }
         };
     }

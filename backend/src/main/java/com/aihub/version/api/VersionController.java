@@ -1,7 +1,6 @@
 package com.aihub.version.api;
 
 import com.aihub.job.application.IdempotencyService;
-import com.aihub.job.application.JobApplicationService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.identity.PrincipalContext;
@@ -39,18 +38,15 @@ public class VersionController {
 
     private final VersionApplicationService versionService;
     private final PublishApplicationService publishApplicationService;
-    private final JobApplicationService jobApplicationService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
 
     public VersionController(VersionApplicationService versionService,
                              PublishApplicationService publishApplicationService,
-                             JobApplicationService jobApplicationService,
                              IdempotencyService idempotencyService,
                              ObjectMapper objectMapper) {
         this.versionService = versionService;
         this.publishApplicationService = publishApplicationService;
-        this.jobApplicationService = jobApplicationService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
     }
@@ -100,7 +96,7 @@ public class VersionController {
         return respond(versionService.listArtifacts(versionId));
     }
 
-    /** 推进版本状态（DRAFT→VALIDATING 时自动入队校验 Job）。 */
+    /** 推进版本状态（DRAFT→VALIDATING 时由应用服务入队校验 Job）。 */
     @PostMapping("/{versionId}/transition")
     public ApiResponse<VersionView> transitionVersion(
             @PathVariable String assetId,
@@ -110,15 +106,6 @@ public class VersionController {
                 .map(PrincipalContext::principalId).orElse(null);
         VersionStatus target = VersionStatus.valueOf(request.targetStatus());
         VersionView updated = versionService.transitionVersion(versionId, target, principalId);
-
-        if (target == VersionStatus.VALIDATING) {
-            try {
-                String payload = objectMapper.writeValueAsString(Map.of("versionId", versionId));
-                jobApplicationService.enqueue("VERSION_VALIDATE", payload, principalId, null, assetId, 3);
-            } catch (JsonProcessingException e) {
-                throw new IllegalStateException("failed to serialize validation payload", e);
-            }
-        }
         return respond(updated);
     }
 

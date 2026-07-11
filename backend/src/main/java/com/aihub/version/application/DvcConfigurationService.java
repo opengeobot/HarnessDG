@@ -9,7 +9,7 @@ import com.aihub.audit.application.AuditEvent;
 import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
-import com.aihub.integration.minio.infrastructure.MinioProperties;
+import com.aihub.version.domain.DvcStorageProperties;
 import com.aihub.shared.error.ValidationException;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import java.time.Duration;
@@ -29,14 +29,14 @@ public class DvcConfigurationService {
     private static final Duration CREDENTIAL_TTL = Duration.ofMinutes(15);
     private static final String DVC_CACHE_BUCKET = "dvc-cache";
 
-    private final MinioProperties minioProperties;
+    private final DvcStorageProperties dvcStorageProperties;
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
 
-    public DvcConfigurationService(MinioProperties minioProperties,
+    public DvcConfigurationService(DvcStorageProperties dvcStorageProperties,
                                    AuthorizationService authorizationService,
                                    AuditService auditService) {
-        this.minioProperties = minioProperties;
+        this.dvcStorageProperties = dvcStorageProperties;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
     }
@@ -45,9 +45,9 @@ public class DvcConfigurationService {
     public DvcRemoteConfig generateRemoteConfig(String assetId) {
         authorizationService.requirePermission("asset:read");
 
-        String endpoint = minioProperties.getExternalEndpoint() != null
-                ? minioProperties.getExternalEndpoint()
-                : minioProperties.getEndpoint();
+        String endpoint = dvcStorageProperties.getExternalEndpoint() != null
+                ? dvcStorageProperties.getExternalEndpoint()
+                : dvcStorageProperties.getEndpoint();
 
         DvcRemoteConfig config = new DvcRemoteConfig(
                 DVC_CACHE_BUCKET,
@@ -82,8 +82,8 @@ public class DvcConfigurationService {
     public DvcCredentials issueCredentials(String assetId) {
         authorizationService.requirePermission("asset:read");
 
-        String accessKey = minioProperties.resolveDvcAccessKey();
-        String secretKey = minioProperties.resolveDvcSecretKey();
+        String accessKey = dvcStorageProperties.resolveDvcAccessKey();
+        String secretKey = dvcStorageProperties.resolveDvcSecretKey();
         if (accessKey == null || secretKey == null) {
             throw new ValidationException(
                     "DVC scoped credentials not configured; set aihub.minio.dvc-access-key and dvc-secret-key");

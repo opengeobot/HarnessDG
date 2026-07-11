@@ -14,9 +14,9 @@ import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.transfer.application.UploadApplicationService;
 import com.aihub.version.application.PublishApplicationService;
 import com.aihub.version.application.VersionApplicationService;
+import com.aihub.version.application.VersionQueryService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.Version;
-import com.aihub.version.domain.VersionRepository;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,13 +53,13 @@ public class McpToolCatalog {
     public McpToolCatalog(
             AssetApplicationService assetService,
             VersionApplicationService versionService,
-            VersionRepository versionRepository,
+            VersionQueryService versionQueryService,
             DownloadApplicationService downloadService,
             UploadApplicationService uploadService,
             PublishApplicationService publishService,
             @Value("${mcp.writeTools.enabled:false}") boolean writeToolsEnabled) {
         this.writeToolsEnabled = writeToolsEnabled;
-        registerReadOnlyTools(assetService, versionService, versionRepository, downloadService);
+        registerReadOnlyTools(assetService, versionService, versionQueryService, downloadService);
         registerWriteTools(assetService, versionService, uploadService, publishService);
         LOG.info("MCP Tool Catalog initialized: {} tools registered (writeTools={})",
                 tools.size(), writeToolsEnabled);
@@ -142,7 +142,7 @@ public class McpToolCatalog {
 
     private void registerReadOnlyTools(AssetApplicationService assetService,
                                        VersionApplicationService versionService,
-                                       VersionRepository versionRepository,
+                                       VersionQueryService versionQueryService,
                                        DownloadApplicationService downloadService) {
         // asset_search
         register("asset_search",
@@ -168,8 +168,8 @@ public class McpToolCatalog {
                             null, null, null, null, tagId, null, null, null,
                             null, null, null, false, null, limit, principalId);
                     CursorPage<AssetSummaryView> page = assetService.searchAssets(query);
-                    Map<String, Version> latestByAsset = versionRepository.findLatestPublishedByAssetIds(
-                            page.items().stream().map(AssetSummaryView::assetId).toList());
+                    Map<String, Version> latestByAsset = versionQueryService.findLatestPublishedByAssetIds(
+                            Set.copyOf(page.items().stream().map(AssetSummaryView::assetId).toList()));
                     List<Map<String, Object>> items = page.items().stream()
                             .map(summary -> toSearchItem(summary, latestByAsset.get(summary.assetId())))
                             .toList();
@@ -197,7 +197,7 @@ public class McpToolCatalog {
                     result.put("status", view.status());
                     result.put("license", view.license());
                     result.put("tagIds", view.tagIds());
-                    versionRepository.findLatestPublishedByAssetId(view.assetId())
+                    versionQueryService.findLatestPublishedByAssetId(view.assetId())
                             .ifPresent(v -> result.put("latestPublished", v.version()));
                     return result;
                 });

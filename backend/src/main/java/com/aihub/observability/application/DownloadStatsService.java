@@ -9,8 +9,8 @@ import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
 import com.aihub.observability.domain.AssetDownloadStats;
 import com.aihub.observability.domain.DownloadLeaderboardEntry;
+import com.aihub.observability.domain.DownloadStatsPort;
 import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -21,13 +21,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class DownloadStatsService {
 
-    private static final String DOWNLOAD_EVENT = "DOWNLOAD_TICKET_ISSUED";
-
-    private final JdbcTemplate jdbcTemplate;
+    private final DownloadStatsPort downloadStatsPort;
     private final AuthorizationService authorizationService;
 
-    public DownloadStatsService(JdbcTemplate jdbcTemplate, AuthorizationService authorizationService) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DownloadStatsService(DownloadStatsPort downloadStatsPort,
+                                AuthorizationService authorizationService) {
+        this.downloadStatsPort = downloadStatsPort;
         this.authorizationService = authorizationService;
     }
 
@@ -35,24 +34,8 @@ public class DownloadStatsService {
     public AssetDownloadStats getAssetStats(String assetId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
 
-        Long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM audit_log al "
-                        + "JOIN asset_version av ON al.resource_id = av.version_id "
-                        + "WHERE al.event_type = ? AND al.result = 'SUCCEEDED' AND av.asset_id = ?",
-                Long.class, DOWNLOAD_EVENT, assetId);
-        long totalDownloads = total != null ? total : 0L;
-
-        List<DownloadLeaderboardEntry> byVersion = jdbcTemplate.query(
-                "SELECT av.version_id, av.version, COUNT(*) AS cnt "
-                        + "FROM audit_log al "
-                        + "JOIN asset_version av ON al.resource_id = av.version_id "
-                        + "WHERE al.event_type = ? AND al.result = 'SUCCEEDED' AND av.asset_id = ? "
-                        + "GROUP BY av.version_id, av.version ORDER BY cnt DESC LIMIT 20",
-                (rs, rowNum) -> new DownloadLeaderboardEntry(
-                        rs.getString("version_id"),
-                        rs.getString("version"),
-                        rs.getLong("cnt")),
-                DOWNLOAD_EVENT, assetId);
+        long totalDownloads = downloadStatsPort.countDownloadsByAsset(assetId);
+        List<DownloadLeaderboardEntry> byVersion = downloadStatsPort.topVersionsByAsset(assetId);
 
         return new AssetDownloadStats(assetId, totalDownloads, byVersion);
     }
@@ -61,16 +44,6 @@ public class DownloadStatsService {
     public List<DownloadLeaderboardEntry> getDownloadLeaderboard(int limit) {
         authorizationService.requirePermission(Permissions.SYSTEM_OBSERVE);
         int effective = Math.min(Math.max(limit, 1), 100);
-        return jdbcTemplate.query(
-                "SELECT av.asset_id, COUNT(*) AS cnt "
-                        + "FROM audit_log al "
-                        + "JOIN asset_version av ON al.resource_id = av.version_id "
-                        + "WHERE al.event_type = ? AND al.result = 'SUCCEEDED' "
-                        + "GROUP BY av.asset_id ORDER BY cnt DESC LIMIT ?",
-                (rs, rowNum) -> new DownloadLeaderboardEntry(
-                        rs.getString("asset_id"),
-                        null,
-                        rs.getLong("cnt")),
-                DOWNLOAD_EVENT, effective);
+        return downloadStatsPort.topAssets(effective);
     }
 }

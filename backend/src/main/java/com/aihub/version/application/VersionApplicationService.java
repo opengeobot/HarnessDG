@@ -5,6 +5,7 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.JobApplicationService;
 import com.aihub.notification.application.NotificationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
@@ -16,6 +17,8 @@ import com.aihub.version.domain.Artifact;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -40,19 +43,25 @@ public class VersionApplicationService {
     private final IdGenerator idGenerator;
     private final JdbcTemplate jdbcTemplate;
     private final NotificationService notificationService;
+    private final JobApplicationService jobApplicationService;
+    private final ObjectMapper objectMapper;
 
     public VersionApplicationService(VersionRepository versionRepository,
                                      AuthorizationService authorizationService,
                                      AuditService auditService,
                                      IdGenerator idGenerator,
                                      JdbcTemplate jdbcTemplate,
-                                     NotificationService notificationService) {
+                                     NotificationService notificationService,
+                                     JobApplicationService jobApplicationService,
+                                     ObjectMapper objectMapper) {
         this.versionRepository = versionRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.jdbcTemplate = jdbcTemplate;
         this.notificationService = notificationService;
+        this.jobApplicationService = jobApplicationService;
+        this.objectMapper = objectMapper;
     }
 
     /** 创建草稿版本。 */
@@ -107,6 +116,9 @@ public class VersionApplicationService {
         versionRepository.update(v);
         auditVersion("VERSION_STATUS_CHANGED", principalId, versionId, v.assetId(),
                 Map.of("from", v.status().name(), "to", target.name()));
+        if (target == VersionStatus.VALIDATING) {
+            enqueueValidationJob(versionId, v.assetId(), principalId);
+        }
         if (target == VersionStatus.DEPRECATED) {
             publishOutbox("ASSET_VERSION", versionId, "VERSION_DEPRECATED",
                     Map.of("versionId", versionId, "assetId", v.assetId(),
@@ -190,6 +202,15 @@ public class VersionApplicationService {
         } catch (Exception ex) {
             LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
                     eventType, aggregateId, ex);
+        }
+    }
+
+    private void enqueueValidationJob(String versionId, String assetId, String principalId) {
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of("versionId", versionId));
+            jobApplicationService.enqueue("VERSION_VALIDATE", payload, principalId, null, assetId, 3);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize validation payload", e);
         }
     }
 }

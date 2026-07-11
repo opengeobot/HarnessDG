@@ -29,18 +29,18 @@ class DvcConfigurationServiceTest {
     @Mock
     private AuditService auditService;
 
-    private MinioProperties minioProperties;
+    private MinioProperties dvcStorageProperties;
     private DvcConfigurationService service;
 
     @BeforeEach
     void setUp() {
-        minioProperties = new MinioProperties();
-        minioProperties.setEndpoint("http://localhost:9000");
-        minioProperties.setAccessKey("minioadmin");
-        minioProperties.setSecretKey("minioadmin");
-        minioProperties.setDvcAccessKey("dvc-scoped-key");
-        minioProperties.setDvcSecretKey("dvc-scoped-secret");
-        service = new DvcConfigurationService(minioProperties, authorizationService, auditService);
+        dvcStorageProperties = new MinioProperties();
+        dvcStorageProperties.setEndpoint("http://localhost:9000");
+        dvcStorageProperties.setAccessKey("minioadmin");
+        dvcStorageProperties.setSecretKey("minioadmin");
+        dvcStorageProperties.setDvcAccessKey("dvc-scoped-key");
+        dvcStorageProperties.setDvcSecretKey("dvc-scoped-secret");
+        service = new DvcConfigurationService(dvcStorageProperties, authorizationService, auditService);
     }
 
     @Test
@@ -61,7 +61,7 @@ class DvcConfigurationServiceTest {
     @Test
     @DisplayName("生成 DVC Remote 配置应优先使用外部端点")
     void generateRemoteConfigShouldPreferExternalEndpoint() {
-        minioProperties.setExternalEndpoint("http://minio.example.com:9000");
+        dvcStorageProperties.setExternalEndpoint("http://minio.example.com:9000");
 
         DvcConfigurationService.DvcRemoteConfig config = service.generateRemoteConfig("asset_1");
 
@@ -88,8 +88,8 @@ class DvcConfigurationServiceTest {
     @Test
     @DisplayName("未配置 scoped 密钥时应 fail-closed")
     void issueCredentialsShouldFailWhenScopedKeysMissing() {
-        minioProperties.setDvcAccessKey("");
-        minioProperties.setDvcSecretKey("");
+        dvcStorageProperties.setDvcAccessKey("");
+        dvcStorageProperties.setDvcSecretKey("");
 
         assertThatThrownBy(() -> service.issueCredentials("asset_1"))
                 .isInstanceOf(ValidationException.class);

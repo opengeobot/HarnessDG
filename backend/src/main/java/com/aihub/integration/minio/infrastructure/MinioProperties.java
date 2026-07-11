@@ -1,12 +1,13 @@
 package com.aihub.integration.minio.infrastructure;
 
+import com.aihub.version.domain.DvcStorageProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * MinIO 连接配置属性。
  */
 @ConfigurationProperties(prefix = "aihub.minio")
-public class MinioProperties {
+public class MinioProperties implements DvcStorageProperties {
 
     /** MinIO 端点 URL（如 http://localhost:9000）。 */
     private String endpoint = "http://localhost:9000";
@@ -37,6 +38,7 @@ public class MinioProperties {
     public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
     public boolean isSecure() { return secure; }
     public void setSecure(boolean secure) { this.secure = secure; }
+    @Override
     public String getExternalEndpoint() { return externalEndpoint; }
     public void setExternalEndpoint(String externalEndpoint) { this.externalEndpoint = externalEndpoint; }
     public String getDvcAccessKey() { return dvcAccessKey; }
@@ -45,11 +47,13 @@ public class MinioProperties {
     public void setDvcSecretKey(String dvcSecretKey) { this.dvcSecretKey = dvcSecretKey; }
 
     /** 解析 DVC 专用访问密钥（不回退 root 密钥）。 */
+    @Override
     public String resolveDvcAccessKey() {
         return dvcAccessKey != null && !dvcAccessKey.isBlank() ? dvcAccessKey : null;
     }
 
     /** 解析 DVC 专用秘密密钥（不回退 root 密钥）。 */
+    @Override
     public String resolveDvcSecretKey() {
         return dvcSecretKey != null && !dvcSecretKey.isBlank() ? dvcSecretKey : null;
     }

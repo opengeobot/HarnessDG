@@ -23,12 +23,13 @@ import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.version.application.VersionApplicationService;
+import com.aihub.version.application.VersionQueryService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.Version;
-import com.aihub.version.domain.VersionRepository;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,18 +49,18 @@ public class AgentController {
 
     private final AssetApplicationService assetService;
     private final VersionApplicationService versionService;
-    private final VersionRepository versionRepository;
+    private final VersionQueryService versionQueryService;
     private final DownloadApplicationService downloadService;
     private final AuthorizationService authorizationService;
 
     public AgentController(AssetApplicationService assetService,
                            VersionApplicationService versionService,
-                           VersionRepository versionRepository,
+                           VersionQueryService versionQueryService,
                            DownloadApplicationService downloadService,
                            AuthorizationService authorizationService) {
         this.assetService = assetService;
         this.versionService = versionService;
-        this.versionRepository = versionRepository;
+        this.versionQueryService = versionQueryService;
         this.downloadService = downloadService;
         this.authorizationService = authorizationService;
     }
@@ -80,8 +81,8 @@ public class AgentController {
                 null, null, null, null, tagId, null, null, null,
                 null, null, null, false, cursor, limit, principalId);
         CursorPage<AssetSummaryView> page = assetService.searchAssets(query);
-        Map<String, Version> latestByAsset = versionRepository.findLatestPublishedByAssetIds(
-                page.items().stream().map(AssetSummaryView::assetId).toList());
+        Map<String, Version> latestByAsset = versionQueryService.findLatestPublishedByAssetIds(
+                Set.copyOf(page.items().stream().map(AssetSummaryView::assetId).toList()));
         List<Map<String, Object>> items = page.items().stream()
                 .map(summary -> toSummaryMap(summary, latestByAsset.get(summary.assetId())))
                 .toList();
@@ -94,7 +95,7 @@ public class AgentController {
         requireAgentAccess("asset_get", Permissions.ASSET_READ);
         AssetView view = assetService.getAsset(assetId, AssetApiContext.principalId());
         Map<String, Object> result = toDetailMap(view);
-        versionRepository.findLatestPublishedByAssetId(assetId)
+        versionQueryService.findLatestPublishedByAssetId(assetId)
                 .ifPresent(v -> result.put("latestPublished", v.version()));
         return AssetApiContext.respond(result);
     }

@@ -45,7 +45,7 @@ import com.aihub.transfer.application.DownloadApplicationService.DownloadTicket;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
 import com.aihub.version.domain.Version;
-import com.aihub.version.domain.VersionRepository;
+import com.aihub.version.application.VersionQueryService;
 import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
 import java.util.List;
@@ -84,7 +84,7 @@ class AgentControllerTest {
     @MockitoBean
     private VersionApplicationService versionService;
     @MockitoBean
-    private VersionRepository versionRepository;
+    private VersionQueryService versionQueryService;
     @MockitoBean
     private DownloadApplicationService downloadService;
     @MockitoBean
@@ -133,7 +133,7 @@ class AgentControllerTest {
                 null, null, null, Instant.now(), "usr", null,
                 0L, "usr", Instant.now(), Instant.now());
         given(assetService.searchAssets(any())).willReturn(new CursorPage<>(List.of(summary), null, false));
-        given(versionRepository.findLatestPublishedByAssetIds(any())).willReturn(Map.of("ast_1", published));
+        given(versionQueryService.findLatestPublishedByAssetIds(any())).willReturn(Map.of("ast_1", published));
 
         mockMvc.perform(get("/api/v1/agent/assets/search?keyword=test")
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke", "asset:read"))))

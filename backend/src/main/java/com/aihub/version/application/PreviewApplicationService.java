@@ -5,13 +5,18 @@
  */
 package com.aihub.version.application;
 
+import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.job.application.JobApplicationService;
 import com.aihub.job.domain.Job;
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.NotFoundException;
+import com.aihub.version.domain.PreviewQueryPort;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 预览生成应用服务。
@@ -23,11 +28,41 @@ public class PreviewApplicationService {
 
     private final JobApplicationService jobApplicationService;
     private final ObjectMapper objectMapper;
+    private final PreviewQueryPort previewQueryPort;
+    private final AuthorizationService authorizationService;
 
     public PreviewApplicationService(JobApplicationService jobApplicationService,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     PreviewQueryPort previewQueryPort,
+                                     AuthorizationService authorizationService) {
         this.jobApplicationService = jobApplicationService;
         this.objectMapper = objectMapper;
+        this.previewQueryPort = previewQueryPort;
+        this.authorizationService = authorizationService;
+    }
+
+    /** 预览视图。 */
+    public record PreviewView(String previewId, String contentType,
+                              String content, String generatedAt) {}
+
+    /**
+     * 获取资产最新预览。
+     *
+     * @param assetId   资产 ID
+     * @param versionId 版本 ID（可空）
+     * @return 预览视图
+     */
+    @Transactional(readOnly = true)
+    public PreviewView getPreview(String assetId, String versionId) {
+        authorizationService.requirePermission("asset:read");
+        var record = previewQueryPort.findLatestPreview(assetId, versionId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
+                        "preview not found for asset: " + assetId, Map.of("assetId", assetId)));
+        return new PreviewView(
+                record.previewId(),
+                record.contentType(),
+                record.content(),
+                record.generatedAt());
     }
 
     /**
