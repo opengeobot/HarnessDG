@@ -4819,6 +4819,22 @@ components:
         parts:
           type: array
           items: { $ref: '#/components/schemas/UploadPartView' }
+        files:
+          type: array
+          items: { $ref: '#/components/schemas/UploadFileView' }
+
+    UploadFileView:
+      type: object
+      description: 上传文件状态
+      properties:
+        fileId: { type: string }
+        path: { type: string }
+        size: { type: integer, format: int64 }
+        sha256: { type: [string, 'null'] }
+        mediaType: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [PENDING, UPLOADING, COMPLETED, FAILED]
 
     UploadPartView:
       type: object

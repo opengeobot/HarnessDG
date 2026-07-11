@@ -245,7 +245,7 @@ class AgentControllerTest {
     void createUploadSessionDelegatesToService() throws Exception {
         UploadSessionView session = new UploadSessionView(
                 "ses_1", "ast_1", "ver_1", "prn_agent", UploadSessionStatus.OPEN,
-                100L, 1, Instant.now().plusSeconds(3600), Instant.now(), null, List.of());
+                100L, 1, Instant.now().plusSeconds(3600), Instant.now(), null, List.of(), List.of());
         given(idempotencyService.execute(any(), anyString(), any())).willAnswer(invocation -> {
             var supplier = (java.util.function.Supplier<IdempotencyService.IdempotencyResponse>) invocation.getArgument(2);
             return new IdempotencyService.IdempotencyResult(supplier.get(), false);
@@ -279,7 +279,7 @@ class AgentControllerTest {
     void getUploadSessionReturnsStatus() throws Exception {
         UploadSessionView session = new UploadSessionView(
                 "ses_1", "ast_1", "ver_1", "prn_agent", UploadSessionStatus.PROCESSING,
-                100L, 1, Instant.now().plusSeconds(3600), Instant.now(), "job_1", List.of());
+                100L, 1, Instant.now().plusSeconds(3600), Instant.now(), "job_1", List.of(), List.of());
         given(uploadService.getSessionForAsset("ast_1", "ses_1")).willReturn(session);
 
         mockMvc.perform(get("/api/v1/agent/assets/ast_1/upload-sessions/ses_1")

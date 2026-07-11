@@ -358,37 +358,111 @@ upload_parts() {
     local session_id="$1"
     local dir="$2"
     local total_bytes="$3"
+    local session_json="${4:-}"
+
+    if ! command -v python3 &>/dev/null; then
+        die "$EXIT_ERROR" "python3 is required for upload"
+    fi
+
+    python3 - "$dir" <<'PY' || die "$EXIT_VALIDATION" "One or more files missing locally"
+import os, sys
+root = sys.argv[1]
+found = False
+for dp, _, names in os.walk(root):
+    for name in sorted(names):
+        path = os.path.join(dp, name)
+        if not os.path.isfile(path):
+            print(f"File not found: {path}", file=sys.stderr)
+            sys.exit(1)
+        found = True
+if not found:
+    print(f"No files found in {root}", file=sys.stderr)
+    sys.exit(1)
+PY
+
     local total_parts=$(( (total_bytes + PART_SIZE - 1) / PART_SIZE ))
     [[ $total_parts -lt 1 ]] && total_parts=1
 
-    local part=1
-    while [[ $part -le $total_parts ]]; do
-        local presign_resp url
-        presign_resp=$(http_request GET "/upload-sessions/${session_id}/parts/${part}/presign")
-        url=$(echo "$presign_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url', d.get('data',{}).get('url','')))" 2>/dev/null || echo "")
-        if [[ -z "$url" ]]; then
-            url=$(echo "$presign_resp" | python3 -c "import sys,json; print(json.load(sys.stdin))" 2>/dev/null)
-        fi
-        # 模拟分片上传（开发环境 presign 后标记完成）
-        part=$((part + 1))
-    done
+    local bundle_file
+    bundle_file=$(mktemp)
+    python3 - "$dir" "$bundle_file" <<'PY'
+import os, sys
+root, out = sys.argv[1], sys.argv[2]
+with open(out, "wb") as dest:
+    for dp, _, names in os.walk(root):
+        for name in sorted(names):
+            with open(os.path.join(dp, name), "rb") as f:
+                dest.write(f.read())
+PY
 
     local parts_json="["
-    for ((i=1; i<=total_parts; i++)); do
-        [[ $i -gt 1 ]] && parts_json+=","
-        parts_json+="{\"partNumber\":${i},\"etag\":\"cli-etag-${i}\"}"
+    local first=1
+    local part=1
+    while [[ $part -le $total_parts ]]; do
+        local etag="" skip=0
+        if [[ -n "$session_json" ]]; then
+            skip=$(echo "$session_json" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print(0); sys.exit(0)
+parts = d.get('parts') or d.get('data', {}).get('parts') or []
+for p in parts:
+    if int(p.get('partNumber', 0)) == $part and p.get('status') == 'COMPLETED':
+        print(1); sys.exit(0)
+print(0)
+" 2>/dev/null || echo 0)
+        fi
+
+        if [[ "$skip" -eq 1 ]]; then
+            etag=$(echo "$session_json" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+parts = d.get('parts') or d.get('data', {}).get('parts') or []
+for p in parts:
+    if int(p.get('partNumber', 0)) == $part:
+        print(p.get('etag', '')); break
+" 2>/dev/null || echo "")
+            [[ -z "$etag" ]] && skip=0
+        fi
+
+        if [[ "$skip" -ne 1 ]]; then
+            local presign_resp url part_file headers
+            presign_resp=$(http_request GET "/upload-sessions/${session_id}/parts/${part}/presign")
+            url=$(echo "$presign_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url', d.get('data',{}).get('url','')))" 2>/dev/null || echo "")
+            [[ -z "$url" ]] && { rm -f "$bundle_file"; die "$EXIT_ERROR" "Failed to obtain presigned URL for part ${part}"; }
+
+            part_file=$(mktemp)
+            dd if="$bundle_file" of="$part_file" bs="$PART_SIZE" skip=$((part - 1)) count=1 status=none 2>/dev/null \
+                || { rm -f "$bundle_file" "$part_file"; die "$EXIT_ERROR" "Failed to extract part ${part}"; }
+
+            headers=$(curl -sS -T "$part_file" -D - -o /dev/null "$url") \
+                || { rm -f "$bundle_file" "$part_file"; die "$EXIT_ERROR" "Failed to upload part ${part}"; }
+            rm -f "$part_file"
+            etag=$(echo "$headers" | awk 'tolower($0) ~ /^etag:/ {gsub(/"/, "", $2); print $2; exit}')
+            [[ -z "$etag" ]] && { rm -f "$bundle_file"; die "$EXIT_ERROR" "Missing ETag for part ${part}"; }
+        fi
+
+        [[ $first -eq 0 ]] && parts_json+=","
+        first=0
+        parts_json+="{\"partNumber\":${part},\"etag\":\"${etag}\"}"
+        part=$((part + 1))
     done
     parts_json+="]"
+    rm -f "$bundle_file"
 
     local files_json="[]"
-    if command -v python3 &>/dev/null; then
-        files_json=$(python3 - "$dir" <<'PY'
+    files_json=$(python3 - "$dir" <<'PY'
 import json, os, sys, hashlib
 root = sys.argv[1]
 files = []
 for dp, _, names in os.walk(root):
     for name in sorted(names):
         path = os.path.join(dp, name)
+        if not os.path.isfile(path):
+            print(json.dumps({"error": f"File not found: {path}"}))
+            sys.exit(1)
         rel = os.path.relpath(path, root).replace("\\", "/")
         h = hashlib.sha256()
         with open(path, "rb") as f:
@@ -403,7 +477,6 @@ for dp, _, names in os.walk(root):
 print(json.dumps(files))
 PY
 )
-    fi
 
     http_request POST "/upload-sessions/${session_id}/complete" \
         "{\"parts\":${parts_json},\"files\":${files_json}}"
@@ -461,7 +534,7 @@ cmd_dataset_resume() {
     session_resp=$(http_request GET "$path")
     total_bytes=$(echo "$session_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalBytes',0))" 2>/dev/null)
 
-    upload_parts "$session_id" "$dir" "$total_bytes"
+    upload_parts "$session_id" "$dir" "$total_bytes" "$session_resp"
     poll_session_status "$session_id"
 }
 

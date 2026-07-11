@@ -146,7 +146,11 @@ public class UploadApplicationService {
                         .map(UploadPartView::from)
                         .toList())
                 .orElse(List.of());
-        return UploadSessionView.from(session, null, parts);
+        List<UploadFileView> files = uploadFileRepository.listBySessionId(session.sessionId()).stream()
+                .filter(file -> !SESSION_BUNDLE_PATH.equals(file.path()))
+                .map(UploadFileView::from)
+                .toList();
+        return UploadSessionView.from(session, null, parts, files);
     }
 
     /** 签发 Part 上传 URL。 */

@@ -379,7 +379,13 @@
     "completeUpload": "完成上传",
     "sessionRestored": "已恢复上传会话: {{id}}",
     "restoreFailed": "恢复上传会话失败",
-    "restoringSession": "正在恢复上传会话…"
+    "restoringSession": "正在恢复上传会话…",
+    "fileList": "文件列表",
+    "reselectFiles": "重新选择本地文件以继续上传",
+    "selectFilesToResume": "请先选择本地文件后再继续上传",
+    "retryPart": "重试",
+    "retryFailedPart": "重试 Part {{part}}",
+    "missingEtags": "部分分片缺少 ETag，请重新上传"
   },
   "version": {
     "title": "版本中心",

@@ -48,9 +48,11 @@ create_user_with_policy "${GITEA_MINIO_ACCESS_KEY}" "${GITEA_MINIO_SECRET_KEY}" 
 AIHUB_POLICY='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::asset-staging","arn:aws:s3:::asset-staging/*","arn:aws:s3:::asset-preview","arn:aws:s3:::asset-preview/*"]}]}'
 create_user_with_policy "${AIHUB_MINIO_ACCESS_KEY}" "${AIHUB_MINIO_SECRET_KEY}" "aihub-asset-rw" "${AIHUB_POLICY}"
 
-# DVC 账号：访问 dvc-cache
-DVC_POLICY='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::dvc-cache","arn:aws:s3:::dvc-cache/*"]}]}'
-create_user_with_policy "${DVC_ACCESS_KEY}" "${DVC_SECRET_KEY}" "dvc-cache-rw" "${DVC_POLICY}"
+# DVC 账号（dvc-user）：dvc-cache 最小权限 + STS AssumeRole 签发基础
+DVC_USER_KEY="${AIHUB_MINIO_DVC_ACCESS_KEY:-${DVC_ACCESS_KEY}}"
+DVC_USER_SECRET="${AIHUB_MINIO_DVC_SECRET_KEY:-${DVC_SECRET_KEY}}"
+DVC_SCOPED_POLICY='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:ListBucket"],"Resource":["arn:aws:s3:::dvc-cache","arn:aws:s3:::dvc-cache/*"]}]}'
+create_user_with_policy "${DVC_USER_KEY}" "${DVC_USER_SECRET}" "dvc-scoped" "${DVC_SCOPED_POLICY}"
 
 echo "[minio-init] 初始化完成。"
 mc ls "${MC_ALIAS}"

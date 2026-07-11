@@ -379,7 +379,13 @@
     "completeUpload": "Complete Upload",
     "sessionRestored": "Upload session restored: {{id}}",
     "restoreFailed": "Failed to restore upload session",
-    "restoringSession": "Restoring upload session…"
+    "restoringSession": "Restoring upload session…",
+    "fileList": "File List",
+    "reselectFiles": "Re-select local files to continue upload",
+    "selectFilesToResume": "Select local files before resuming upload",
+    "retryPart": "Retry",
+    "retryFailedPart": "Retry Part {{part}}",
+    "missingEtags": "Some parts are missing ETags; please re-upload"
   },
   "version": {
     "title": "Version Center",

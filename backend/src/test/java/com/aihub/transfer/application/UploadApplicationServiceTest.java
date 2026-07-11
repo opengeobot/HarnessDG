@@ -105,6 +105,28 @@ class UploadApplicationServiceTest {
     }
 
     @Test
+    void getSessionReturnsFiles() {
+        UploadSession session = createOpenSession();
+        when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+        UploadFile bundle = new UploadFile(
+                "upf_bundle", "upl_01", "_session_bundle", 1024,
+                null, "application/octet-stream", 1,
+                UploadFile.UploadFileStatus.UPLOADING);
+        when(uploadFileRepository.findSessionBundleFile("upl_01")).thenReturn(Optional.of(bundle));
+        when(uploadPartRepository.listByFileId("upf_bundle")).thenReturn(List.of());
+        when(uploadFileRepository.listBySessionId("upl_01")).thenReturn(List.of(
+                bundle,
+                new UploadFile("upf_1", "upl_01", "data.csv", 100L,
+                        "abc", "text/csv", 1, UploadFile.UploadFileStatus.COMPLETED)));
+
+        UploadSessionView view = service.getSession("upl_01");
+
+        assertThat(view.files()).hasSize(1);
+        assertThat(view.files().getFirst().path()).isEqualTo("data.csv");
+        assertThat(view.files().getFirst().status()).isEqualTo("COMPLETED");
+    }
+
+    @Test
     void getSessionReturnsParts() {
         UploadSession session = createOpenSession();
         when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
@@ -116,6 +138,7 @@ class UploadApplicationServiceTest {
         when(uploadPartRepository.listByFileId("upf_bundle")).thenReturn(List.of(
                 new com.aihub.transfer.domain.UploadPart(
                         "upf_bundle", 1, 512L, "etag1", null, Instant.now())));
+        when(uploadFileRepository.listBySessionId("upl_01")).thenReturn(List.of(bundle));
 
         UploadSessionView view = service.getSession("upl_01");
 

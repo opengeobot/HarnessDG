@@ -3,7 +3,7 @@
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
@@ -18,6 +18,7 @@ interface UploadSession {
   fileCount: number;
   expiresAt: string;
   parts?: UploadPartStatus[];
+  files?: UploadFileStatus[];
 }
 
 interface UploadPartStatus {
@@ -28,13 +29,53 @@ interface UploadPartStatus {
   uploadedAt?: string;
 }
 
+interface UploadFileStatus {
+  fileId: string;
+  path: string;
+  size: number;
+  sha256?: string;
+  mediaType?: string;
+  status: 'PENDING' | 'UPLOADING' | 'COMPLETED' | 'FAILED';
+}
+
 interface PartProgress {
   partNumber: number;
   status: 'pending' | 'uploading' | 'completed' | 'failed';
   progress: number;
+  etag?: string;
 }
 
 const PART_SIZE = 5 * 1024 * 1024; // 5MiB
+
+interface PresignResponse {
+  url: string;
+}
+
+function uploadPartWithProgress(
+  url: string,
+  body: Blob,
+  onProgress: (pct: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const raw = xhr.getResponseHeader('ETag');
+        resolve(raw?.replace(/"/g, '') ?? '');
+        return;
+      }
+      reject(new Error(`Upload failed with status ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(body);
+  });
+}
 
 export function UploadPage() {
   const { t } = useTranslation();
@@ -50,6 +91,8 @@ export function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [retryPart, setRetryPart] = useState<number | null>(null);
+  const uploadBlobRef = useRef<Blob | null>(null);
 
   const buildPartsFromSession = useCallback((sess: UploadSession): PartProgress[] => {
     const totalParts = Math.max(1, Math.ceil(sess.totalBytes / PART_SIZE));
@@ -64,6 +107,7 @@ export function UploadPage() {
         partNumber,
         status: completed ? 'completed' as const : 'pending' as const,
         progress: completed ? 100 : 0,
+        etag: server?.etag,
       };
     });
   }, []);
@@ -99,6 +143,7 @@ export function UploadPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files));
+      uploadBlobRef.current = null;
     }
   };
 
@@ -123,48 +168,87 @@ export function UploadPage() {
       );
       setSession(result);
       setParts(buildPartsFromSession(result));
+      uploadBlobRef.current = new Blob(files);
       setMessage(t('upload.sessionCreated', { id: result.sessionId }));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('upload.createSessionFailed'));
     }
   }, [assetId, versionId, files, t, buildPartsFromSession]);
 
-  const startUpload = async () => {
+  const presignAndUploadPart = async (
+    sessionId: string,
+    partNumber: number,
+    blob: Blob,
+  ): Promise<string> => {
+    const start = (partNumber - 1) * PART_SIZE;
+    const slice = blob.slice(start, Math.min(start + PART_SIZE, blob.size));
+
+    const presign = await apiClient.get<PresignResponse>(
+      `/upload-sessions/${sessionId}/parts/${partNumber}/presign`,
+    );
+
+    try {
+      return await uploadPartWithProgress(presign.url, slice, (pct) => {
+        setParts((prev) =>
+          prev.map((p) =>
+            p.partNumber === partNumber ? { ...p, progress: pct } : p,
+          ),
+        );
+      });
+    } catch (firstError) {
+      const retryPresign = await apiClient.get<PresignResponse>(
+        `/upload-sessions/${sessionId}/parts/${partNumber}/presign`,
+      );
+      try {
+        return await uploadPartWithProgress(retryPresign.url, slice, (pct) => {
+          setParts((prev) =>
+            prev.map((p) =>
+              p.partNumber === partNumber ? { ...p, progress: pct } : p,
+            ),
+          );
+        });
+      } catch {
+        throw firstError;
+      }
+    }
+  };
+
+  const startUpload = async (onlyPart?: number) => {
     if (!session) return;
+    if (files.length === 0 && !uploadBlobRef.current) {
+      setError(t('upload.selectFilesToResume'));
+      return;
+    }
+
+    const blob = uploadBlobRef.current ?? new Blob(files);
+    uploadBlobRef.current = blob;
+
     setUploading(true);
     setPaused(false);
     setError(null);
+    setRetryPart(null);
+
+    const indices = onlyPart != null
+      ? [onlyPart - 1]
+      : parts.map((_, i) => i);
 
     try {
-      for (let i = 0; i < parts.length; i++) {
+      for (const i of indices) {
         if (paused) break;
         if (parts[i].status === 'completed') continue;
 
         setParts((prev) =>
           prev.map((p) =>
-            p.partNumber === i + 1 ? { ...p, status: 'uploading' } : p,
+            p.partNumber === i + 1 ? { ...p, status: 'uploading', progress: 0 } : p,
           ),
         );
 
-        await apiClient.get<string>(
-          `/upload-sessions/${session.sessionId}/parts/${i + 1}/presign`,
-        );
-
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        for (let pct = 0; pct <= 100; pct += 20) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          setParts((prev) =>
-            prev.map((p) =>
-              p.partNumber === i + 1 ? { ...p, progress: pct } : p,
-            ),
-          );
-        }
+        const etag = await presignAndUploadPart(session.sessionId, i + 1, blob);
 
         setParts((prev) =>
           prev.map((p) =>
             p.partNumber === i + 1
-              ? { ...p, status: 'completed', progress: 100 }
+              ? { ...p, status: 'completed', progress: 100, etag }
               : p,
           ),
         );
@@ -172,6 +256,15 @@ export function UploadPage() {
 
       setMessage(t('upload.allPartsComplete'));
     } catch (e: unknown) {
+      const failedPart = parts.find((p) => p.status === 'uploading')?.partNumber ?? onlyPart;
+      if (failedPart != null) {
+        setParts((prev) =>
+          prev.map((p) =>
+            p.partNumber === failedPart ? { ...p, status: 'failed' } : p,
+          ),
+        );
+        setRetryPart(failedPart);
+      }
       setError(e instanceof Error ? e.message : t('upload.uploadFailed'));
     } finally {
       setUploading(false);
@@ -180,10 +273,19 @@ export function UploadPage() {
 
   const completeUpload = async () => {
     if (!session) return;
+    const missingEtag = parts.some((p) => p.status === 'completed' && !p.etag);
+    if (missingEtag) {
+      setError(t('upload.missingEtags'));
+      return;
+    }
     try {
       await apiClient.post(
         `/upload-sessions/${session.sessionId}/complete`,
-        { parts: parts.map((p) => ({ partNumber: p.partNumber, etag: 'mock' })) },
+        {
+          parts: parts
+            .filter((p) => p.status === 'completed')
+            .map((p) => ({ partNumber: p.partNumber, etag: p.etag })),
+        },
       );
       setMessage(t('upload.uploadCompleted'));
       setSession((prev) => prev ? { ...prev, status: 'COMPLETED' } : null);
@@ -199,6 +301,7 @@ export function UploadPage() {
       setMessage(t('upload.uploadCancelled'));
       setSession(null);
       setParts([]);
+      uploadBlobRef.current = null;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('upload.cancelFailed'));
     }
@@ -291,6 +394,42 @@ export function UploadPage() {
             </div>
           </div>
 
+          {(session.files?.length ?? 0) > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2">{t('upload.fileList')}</h3>
+              <div className="max-h-40 overflow-y-auto border rounded text-sm">
+                {session.files!.map((f) => (
+                  <div key={f.fileId} className="flex items-center gap-2 p-2 border-b last:border-b-0">
+                    <span className="flex-1 font-mono truncate">{f.path}</span>
+                    <span className="text-gray-500">{(f.size / 1024).toFixed(1)} KB</span>
+                    <span className={`text-xs ${
+                      f.status === 'COMPLETED'
+                        ? 'text-green-600'
+                        : f.status === 'FAILED'
+                          ? 'text-red-600'
+                          : 'text-gray-500'
+                    }`}
+                    >
+                      {f.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {session.status === 'OPEN' && (
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">{t('upload.reselectFiles')}</label>
+              <input
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+          )}
+
           <div>
             <div className="flex justify-between text-sm mb-1">
               <span>{t('upload.overallProgress')}</span>
@@ -341,16 +480,35 @@ export function UploadPage() {
                   >
                     {p.status}
                   </span>
+                  {p.status === 'failed' && !uploading && (
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={() => void startUpload(p.partNumber)}
+                    >
+                      {t('upload.retryPart')}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
           </div>
 
+          {retryPart != null && !uploading && (
+            <button
+              type="button"
+              className="px-3 py-1 text-sm bg-orange-100 text-orange-800 rounded hover:bg-orange-200"
+              onClick={() => void startUpload(retryPart)}
+            >
+              {t('upload.retryFailedPart', { part: retryPart })}
+            </button>
+          )}
+
           <div className="flex gap-2">
             {session.status === 'OPEN' && !uploading && (
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={startUpload}
+                onClick={() => void startUpload()}
               >
                 {t('upload.startUpload')}
               </button>
@@ -366,7 +524,7 @@ export function UploadPage() {
             {uploading && paused && (
               <button
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={startUpload}
+                onClick={() => void startUpload()}
               >
                 {t('upload.resume')}
               </button>
@@ -376,14 +534,14 @@ export function UploadPage() {
               parts.length > 0 && (
                 <button
                   className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  onClick={completeUpload}
+                  onClick={() => void completeUpload()}
                 >
                   {t('upload.completeUpload')}
                 </button>
               )}
             <button
               className="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
-              onClick={cancelUpload}
+              onClick={() => void cancelUpload()}
             >
               {t('common.cancel')}
             </button>

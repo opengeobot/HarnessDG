@@ -10,20 +10,27 @@ public record UploadSessionView(String sessionId, String assetId, String version
                                 long totalBytes, int fileCount,
                                 Instant expiresAt, Instant createdAt,
                                 String materializeJobId,
-                                java.util.List<UploadPartView> parts) {
+                                java.util.List<UploadPartView> parts,
+                                java.util.List<UploadFileView> files) {
 
     public static UploadSessionView from(UploadSession s) {
-        return from(s, null, java.util.List.of());
+        return from(s, null, java.util.List.of(), java.util.List.of());
     }
 
     public static UploadSessionView from(UploadSession s, String materializeJobId) {
-        return from(s, materializeJobId, java.util.List.of());
+        return from(s, materializeJobId, java.util.List.of(), java.util.List.of());
     }
 
     public static UploadSessionView from(UploadSession s, String materializeJobId,
                                          java.util.List<UploadPartView> parts) {
+        return from(s, materializeJobId, parts, java.util.List.of());
+    }
+
+    public static UploadSessionView from(UploadSession s, String materializeJobId,
+                                         java.util.List<UploadPartView> parts,
+                                         java.util.List<UploadFileView> files) {
         return new UploadSessionView(s.sessionId(), s.assetId(), s.versionId(),
                 s.principalId(), s.status(), s.totalBytes(), s.fileCount(),
-                s.expiresAt(), s.createdAt(), materializeJobId, parts);
+                s.expiresAt(), s.createdAt(), materializeJobId, parts, files);
     }
 }

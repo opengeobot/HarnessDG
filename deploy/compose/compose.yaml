@@ -60,6 +60,8 @@ services:
       AIHUB_MINIO_SECRET_KEY: ${AIHUB_MINIO_SECRET_KEY}
       DVC_ACCESS_KEY: ${DVC_ACCESS_KEY}
       DVC_SECRET_KEY: ${DVC_SECRET_KEY}
+      AIHUB_MINIO_DVC_ACCESS_KEY: ${AIHUB_MINIO_DVC_ACCESS_KEY}
+      AIHUB_MINIO_DVC_SECRET_KEY: ${AIHUB_MINIO_DVC_SECRET_KEY}
     volumes:
       - ./minio:/init:ro
     restart: "no"
@@ -129,6 +131,8 @@ services:
       AIHUB_MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_URL}
       AIHUB_MINIO_ACCESS_KEY: ${AIHUB_MINIO_ACCESS_KEY}
       AIHUB_MINIO_SECRET_KEY: ${AIHUB_MINIO_SECRET_KEY}
+      AIHUB_MINIO_DVC_ACCESS_KEY: ${AIHUB_MINIO_DVC_ACCESS_KEY}
+      AIHUB_MINIO_DVC_SECRET_KEY: ${AIHUB_MINIO_DVC_SECRET_KEY}
       AIHUB_DVC_BUCKET: dvc-cache
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health/readiness"]

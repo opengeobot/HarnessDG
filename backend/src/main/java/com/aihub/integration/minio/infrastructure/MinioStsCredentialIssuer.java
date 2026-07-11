@@ -44,10 +44,14 @@ public class MinioStsCredentialIssuer {
      */
     public Optional<StsCredentials> issue(String assetId, String bucket, Duration requestedTtl) {
         String endpoint = minioProperties.getEndpoint();
-        String adminAccessKey = minioProperties.getAccessKey();
-        String adminSecretKey = minioProperties.getSecretKey();
+        String stsAccessKey = minioProperties.resolveDvcAccessKey();
+        String stsSecretKey = minioProperties.resolveDvcSecretKey();
+        if (stsAccessKey == null || stsSecretKey == null) {
+            stsAccessKey = minioProperties.getAccessKey();
+            stsSecretKey = minioProperties.getSecretKey();
+        }
         if (endpoint == null || endpoint.isBlank()
-                || adminAccessKey == null || adminSecretKey == null) {
+                || stsAccessKey == null || stsSecretKey == null) {
             return Optional.empty();
         }
 
@@ -74,7 +78,7 @@ public class MinioStsCredentialIssuer {
                 .endpointOverride(URI.create(endpoint))
                 .region(Region.US_EAST_1)
                 .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(adminAccessKey, adminSecretKey)))
+                        AwsBasicCredentials.create(stsAccessKey, stsSecretKey)))
                 .build()) {
 
             AssumeRoleResponse response = stsClient.assumeRole(AssumeRoleRequest.builder()

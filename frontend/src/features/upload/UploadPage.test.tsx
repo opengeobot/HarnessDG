@@ -16,7 +16,7 @@ const mockPost = vi.fn().mockResolvedValue({
   fileCount: 1,
   expiresAt: '2026-07-11T00:00:00Z',
 });
-const mockGet = vi.fn().mockResolvedValue('https://presigned.example.com/part1');
+const mockGet = vi.fn().mockResolvedValue({ url: 'https://presigned.example.com/part1' });
 
 vi.mock('@/shared/api', () => ({
   apiClient: {

@@ -92,6 +92,16 @@
 | I | `4530361` | 验收 Wave I：Compose E4 尽力执行、EVD E2/E3 PASS 翻转、CheckCompletion 尝试、V25/outbox 验收修复 |
 | M | _this commit_ | 旅程 Wave M：`verify-journey.sh`/`.ps1` PRD §13.2 行为 E2E、CI `journey-e2e` 作业、runbook 对照扩展 |
 | N | _this commit_ | 产品 Wave N：血缘写 API、dataset 字典种子、告警确认、tags JSONB 停写、IntegrationsPage agent-bundle、ArchUnit 改密端口 |
+| O | _this commit_ | 数据面 Wave O：真实 multipart PUT（aih CLI + UploadPage）、会话 files 恢复、MinIO dvc-scoped STS、scoped DVC 凭据 |
+
+### Wave O 摘要（O29–O32）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| O29 aih CLI 真实 PUT | IMPLEMENTED_UNVERIFIED | `upload_parts`：`curl -T` 分片上传、捕获 ETag、complete 提交真实 ETag；resume 跳过已完成 part |
+| O30 上传会话 files 恢复 | IMPLEMENTED_UNVERIFIED | `UploadSessionView.files` + `GET .../upload-sessions/{id}`；UploadPage 展示文件列表与 part 恢复 |
+| O31 MinIO STS Compose | IMPLEMENTED_UNVERIFIED | `minio/init.sh` 创建 `dvc-scoped` 策略与 dvc-user；`AIHUB_MINIO_DVC_*` 注入 backend；STS 优先 dvc 凭据 |
+| O32 UploadPage 真实 multipart | IMPLEMENTED_UNVERIFIED | XHR PUT 预签名 URL、进度、ETag、403 重签重试、移除 mock etag |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
 
@@ -164,7 +174,7 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | D5 JWT key rotation | IMPLEMENTED_UNVERIFIED | `previous-public-key-pem` + runbook |
 | D6 jti digest | IMPLEMENTED_UNVERIFIED | V33 + 新 token 存 digest，jti 回退查询 |
 | D7 Swagger gating | IMPLEMENTED_UNVERIFIED | compose/prod 需认证 |
-| D8 DVC STS | PARTIAL | STS 尝试 + scoped 回退 + runbook；Compose MinIO IAM 未配 |
+| D8 DVC STS | IMPLEMENTED_UNVERIFIED | STS 尝试（dvc-user 凭据）+ scoped 回退 + runbook；Compose minio-init 配置 `dvc-scoped` |
 
 ## 7. Validation snapshot (I) — 2026-07-11
 

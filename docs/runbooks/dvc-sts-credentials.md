@@ -15,17 +15,18 @@ DVC 远程存储凭据通过 `DvcConfigurationService#issueCredentials` 签发�
 
 ## STS 路径（优先）
 
-- 服务端使用 `aihub.minio.access-key` / `secret-key` 调用 STS（仅服务端，不返回客户端）。
-- 会话策略限制到 `dvc-cache/{assetId}/` 前缀。
+- 服务端使用 **dvc-user** 凭据（`aihub.minio.dvc-access-key` / `dvc-secret-key`，仅服务端）调用 STS AssumeRole。
+- 会话 inline 策略限制到 `dvc-cache/{assetId}/` 前缀。
 - 返回 `credentialType=STS_ASSUME_ROLE` 与 `sessionToken`。
 
-### 当前限制
+### Compose 配置
 
-Compose 默认 MinIO **未配置 IAM AssumeRole 角色**时，STS 调用会失败并自动回退 scoped 配置密钥。生产启用 STS 需：
+`deploy/compose/minio/init.sh` 创建 **`dvc-scoped`** IAM 策略（`GetObject`/`PutObject`/`DeleteObject`/`ListBucket` on `dvc-cache/*`）并绑定 **dvc-user**。Backend 通过 `AIHUB_MINIO_DVC_ACCESS_KEY` / `AIHUB_MINIO_DVC_SECRET_KEY` 注入。
 
-1. 在 MinIO 配置 `dvc-scoped` 角色与信任策略；
-2. 确认 `arn:aws:iam::minio:role/dvc-scoped` 与平台 `MinioStsCredentialIssuer` 一致；
-3. 验证 `issueCredentials` 审计事件 `credentialType=STS_ASSUME_ROLE`。
+验证：
+
+1. `GET /api/v1/assets/{assetId}/dvc/credentials` 返回的 `accessKey` ≠ MinIO root；
+2. 审计事件 `credentialType` 为 `STS_ASSUME_ROLE` 或 `SCOPED_CONFIG_KEY`（均非 root）。
 
 ## Scoped 配置密钥回退
 
