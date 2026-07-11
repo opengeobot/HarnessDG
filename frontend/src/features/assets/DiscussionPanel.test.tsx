@@ -19,6 +19,18 @@ const mockListComments = vi.fn().mockResolvedValue([]);
 const mockCreateComment = vi.fn().mockResolvedValue({});
 const mockEditComment = vi.fn().mockResolvedValue({});
 const mockRetractComment = vi.fn().mockResolvedValue({});
+const mockHideComment = vi.fn().mockResolvedValue({});
+const mockUnhideComment = vi.fn().mockResolvedValue({});
+const mockLockThread = vi.fn().mockResolvedValue({});
+const mockUnlockThread = vi.fn().mockResolvedValue({});
+
+vi.mock('@/app/permission', () => ({
+  usePermission: () => ({
+    hasScope: (scope: string) => scope === 'asset:moderate',
+    hasAllScopes: () => true,
+    scopes: new Set(['asset:moderate']),
+  }),
+}));
 
 vi.mock('./api', () => ({
   listThreads: (...args: unknown[]) => mockListThreads(...args),
@@ -27,6 +39,10 @@ vi.mock('./api', () => ({
   createComment: (...args: unknown[]) => mockCreateComment(...args),
   editComment: (...args: unknown[]) => mockEditComment(...args),
   retractComment: (...args: unknown[]) => mockRetractComment(...args),
+  hideComment: (...args: unknown[]) => mockHideComment(...args),
+  unhideComment: (...args: unknown[]) => mockUnhideComment(...args),
+  lockThread: (...args: unknown[]) => mockLockThread(...args),
+  unlockThread: (...args: unknown[]) => mockUnlockThread(...args),
 }));
 
 describe('DiscussionPanel', () => {
@@ -46,6 +62,13 @@ describe('DiscussionPanel', () => {
     await waitFor(() => {
       expect(screen.getByText('讨论线程 1')).toBeInTheDocument();
       expect(screen.getByText('讨论线程 2')).toBeInTheDocument();
+    });
+  });
+
+  it('shows moderator lock action for OPEN threads', async () => {
+    renderWithProviders(<DiscussionPanel assetId="ast_001" />);
+    await waitFor(() => {
+      expect(screen.getAllByText(/锁定|lockThread/i).length).toBeGreaterThan(0);
     });
   });
 });

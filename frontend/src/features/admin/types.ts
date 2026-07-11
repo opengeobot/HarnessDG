@@ -405,3 +405,33 @@ export interface MetricsSummary {
   jobs: Record<string, unknown>;
   dependencies: Record<string, unknown>;
 }
+
+/* ---------------- 幂等记录（只读） ---------------- */
+export interface IdempotencyRecordView {
+  idempotencyKey: string;
+  principalId: string;
+  method: string;
+  path: string;
+  requestDigest?: string | null;
+  createdAt: string;
+}
+
+/* ---------------- 系统告警 ---------------- */
+export type AlertSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
+export type AlertStatus = 'FIRING' | 'RESOLVED';
+
+export interface SystemAlertView {
+  id: number;
+  alertId: string;
+  alertType: string;
+  severity: AlertSeverity | string;
+  title: string;
+  detail?: string | null;
+  status: AlertStatus | string;
+  sourceMetric?: string | null;
+  thresholdValue?: number | null;
+  currentValue?: number | null;
+  firedAt: string;
+  resolvedAt?: string | null;
+  traceId?: string | null;
+}

@@ -17,3 +17,7 @@ export { AuditLogsPage } from './AuditLogsPage';
 export { NotificationsPage } from './NotificationsPage';
 export { DependenciesPage } from './DependenciesPage';
 export { TeamsPage } from './TeamsPage';
+export { IdempotencyPage } from './IdempotencyPage';
+export { RoleBindingsPage } from './RoleBindingsPage';
+export { ResourceAclsPage } from './ResourceAclsPage';
+export { AlertsPage } from './AlertsPage';

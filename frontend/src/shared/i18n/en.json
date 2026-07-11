@@ -50,6 +50,10 @@
     "tagManagement": "Tag Management",
     "configManagement": "Configuration",
     "jobManagement": "Job Management",
+    "idempotency": "Idempotency Records",
+    "roleBindings": "Role Bindings",
+    "resourceAcls": "Resource ACLs",
+    "alerts": "System Alerts",
     "auditLogs": "Audit Logs",
     "notificationCenter": "Notifications",
     "systemDeps": "System Dependencies"
@@ -198,7 +202,12 @@
       "frameworkPlaceholder": "Select framework",
       "taskPlaceholder": "Select task",
       "formatPlaceholder": "Select data format",
-      "modalityPlaceholder": "Select modality"
+      "modalityPlaceholder": "Select modality",
+      "sensitivityPlaceholder": "Select sensitivity level",
+      "taskCodesPlaceholder": "Select task codes",
+      "modalityCodesPlaceholder": "Select modality codes",
+      "formatCodesPlaceholder": "Select format codes",
+      "languageCodesPlaceholder": "Select languages"
     },
     "provisioning": {
       "NONE": "Not Triggered",
@@ -211,6 +220,7 @@
       "title": "Asset Settings",
       "basicInfo": "Basic Info",
       "editMetadata": "Edit Metadata",
+      "editProfile": "Edit Type Profile",
       "lifecycle": "Lifecycle",
       "assetId": "Asset ID"
     },
@@ -306,7 +316,16 @@
     "tombstone": "[This comment has been deleted]",
     "replies": "replies",
     "showReplies": "Show {{count}} replies",
-    "hideReplies": "Hide replies"
+    "hideReplies": "Hide replies",
+    "hide": "Hide",
+    "unhide": "Unhide",
+    "unhidden": "Comment restored",
+    "confirmHide": "Hide this comment?",
+    "lockThread": "Lock",
+    "unlockThread": "Unlock",
+    "confirmLock": "Lock this thread?",
+    "threadLocked": "Thread locked",
+    "threadUnlocked": "Thread unlocked"
   },
   "upload": {
     "title": "Upload Center",
@@ -551,7 +570,8 @@
       "dictItems": "Dictionary Items",
       "dictItemsOf": "Dictionary Items · {{code}}",
       "createItem": "New Dictionary Item",
-      "selectDictType": "Please select a dictionary type on the left."
+      "selectDictType": "Please select a dictionary type on the left.",
+      "typesSeededNote": "Dictionary types are system-seeded (Flyway). Only item create/enable/disable is supported; type CRUD is not exposed."
     },
     "tags": {
       "title": "Tag Management",
@@ -642,6 +662,56 @@
       "generatedAt": "Generated At",
       "jobs": "Jobs",
       "dependencies": "Dependencies"
+    },
+    "idempotency": {
+      "title": "Idempotency Records",
+      "readonlyHint": "Read-only browse; no create or delete",
+      "key": "Idempotency Key",
+      "principalId": "Principal ID",
+      "methodPath": "Method / Path",
+      "digest": "Request Digest",
+      "createdAt": "Created At"
+    },
+    "roleBindings": {
+      "title": "Role Bindings",
+      "create": "Create Binding",
+      "created": "Binding created",
+      "deleted": "Binding deleted",
+      "confirmDelete": "Delete this role binding?",
+      "bindingId": "Binding ID",
+      "principalId": "Principal ID",
+      "roleId": "Role ID",
+      "role": "Role",
+      "selectRole": "Select role",
+      "scopeType": "Scope Type",
+      "scopeId": "Scope ID",
+      "scopeIdPlaceholder": "Leave empty for PLATFORM",
+      "createdAt": "Created At"
+    },
+    "resourceAcls": {
+      "title": "Resource ACLs",
+      "create": "Create ACL",
+      "created": "ACL created",
+      "deleted": "ACL deleted",
+      "confirmDelete": "Delete this ACL?",
+      "aclId": "ACL ID",
+      "principalId": "Principal ID",
+      "resourceType": "Resource Type",
+      "resourceId": "Resource ID",
+      "permissions": "Permissions",
+      "selectPermissions": "Select permission codes",
+      "createdAt": "Created At"
+    },
+    "alerts": {
+      "title": "System Alerts",
+      "readonlyHint": "Read-only browse (no acknowledge API on backend)",
+      "alertId": "Alert ID",
+      "alertType": "Type",
+      "severity": "Severity",
+      "titleCol": "Title",
+      "firedAt": "Fired At",
+      "resolvedAt": "Resolved At",
+      "noDetail": "No detail"
     }
   },
   "queryBoundary": {

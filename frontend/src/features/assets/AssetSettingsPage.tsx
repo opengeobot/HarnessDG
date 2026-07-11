@@ -32,6 +32,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
+import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
 import {
   archiveAsset,
   deleteAsset,
@@ -67,6 +68,7 @@ export function AssetSettingsPage() {
   });
 
   const [form] = Form.useForm();
+  const [profileForm] = Form.useForm();
   const [deprecateForm] = Form.useForm();
 
   const invalidate = useCallback(() => {
@@ -235,6 +237,225 @@ export function AssetSettingsPage() {
                 htmlType="submit"
                 loading={updateMutation.isPending}
               >
+                {t('common.save')}
+              </Button>
+            </Form.Item>
+          </Form>
+        </Card>
+      )}
+
+      {isEditable && (
+        <Card title={t('assets.settings.editProfile')}>
+          <Form
+            form={profileForm}
+            layout="vertical"
+            key={`${asset.assetId}-${asset.rowVersion}`}
+            initialValues={
+              asset.type === 'MODEL'
+                ? {
+                    framework: asset.model?.framework ?? undefined,
+                    task: asset.model?.task ?? undefined,
+                    architecture: asset.model?.architecture ?? undefined,
+                    parameterScale: asset.model?.parameterScale ?? undefined,
+                    precision: asset.model?.precision ?? undefined,
+                    weightFormat: asset.model?.weightFormat ?? undefined,
+                    runtime: asset.model?.runtime ?? undefined,
+                    sensitivityCode: asset.model?.sensitivityCode ?? undefined,
+                  }
+                : {
+                    format: asset.dataset?.format ?? undefined,
+                    modality: asset.dataset?.modality ?? undefined,
+                    taskCodes: asset.dataset?.taskCodes ?? undefined,
+                    modalityCodes: asset.dataset?.modalityCodes ?? undefined,
+                    formatCodes: asset.dataset?.formatCodes ?? undefined,
+                    languageCodes: asset.dataset?.languageCodes ?? undefined,
+                    sensitivityCode: asset.dataset?.sensitivityCode ?? undefined,
+                    sampleCount: asset.dataset?.sampleCount ?? undefined,
+                    totalBytes: asset.dataset?.totalBytes ?? undefined,
+                  }
+            }
+            onFinish={(values) =>
+              updateMutation.mutate({
+                expectedVersion: asset.rowVersion,
+                ...(asset.type === 'MODEL'
+                  ? {
+                      model: {
+                        framework: values.framework,
+                        task: values.task,
+                        architecture: values.architecture,
+                        parameterScale: values.parameterScale,
+                        precision: values.precision,
+                        weightFormat: values.weightFormat,
+                        runtime: values.runtime,
+                        sensitivityCode: values.sensitivityCode,
+                      },
+                    }
+                  : {
+                      dataset: {
+                        format: values.format,
+                        modality: values.modality,
+                        taskCodes: values.taskCodes,
+                        modalityCodes: values.modalityCodes,
+                        formatCodes: values.formatCodes,
+                        languageCodes: values.languageCodes,
+                        sensitivityCode: values.sensitivityCode,
+                        sampleCount: values.sampleCount,
+                        totalBytes: values.totalBytes,
+                      },
+                    }),
+              })
+            }
+          >
+            {asset.type === 'MODEL' ? (
+              <>
+                <Form.Item name="framework" label={t('assets.detail.framework')}>
+                  <ControlledSelect
+                    apiUrl="/system/dictionaries/model_framework/items"
+                    queryKey="dict-model-framework-settings"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                    allowClear
+                  />
+                </Form.Item>
+                <Form.Item name="task" label={t('assets.detail.task')}>
+                  <ControlledSelect
+                    apiUrl="/system/dictionaries/model_task/items"
+                    queryKey="dict-model-task-settings"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                    allowClear
+                  />
+                </Form.Item>
+                <Form.Item name="architecture" label={t('assets.detail.architecture')}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="parameterScale" label={t('assets.detail.parameterScale')}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="precision" label={t('assets.detail.precision')}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="weightFormat" label={t('assets.detail.weightFormat')}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="runtime" label={t('assets.detail.runtime')}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="sensitivityCode" label={t('assets.detail.sensitivity')}>
+                  <ControlledSelect
+                    apiUrl="/system/dictionaries/sensitivity_level/items"
+                    queryKey="dict-sensitivity-settings"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                    allowClear
+                  />
+                </Form.Item>
+              </>
+            ) : (
+              <>
+                <Form.Item name="format" label={t('assets.create.dataFormat')}>
+                  <ControlledSelect
+                    apiUrl="/system/dictionaries/dataset_format/items"
+                    queryKey="dict-dataset-format-settings"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                    allowClear
+                  />
+                </Form.Item>
+                <Form.Item name="modality" label={t('assets.detail.modality')}>
+                  <ControlledSelect
+                    apiUrl="/system/dictionaries/dataset_modality/items"
+                    queryKey="dict-dataset-modality-settings"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                    allowClear
+                  />
+                </Form.Item>
+                <Form.Item name="taskCodes" label={t('assets.detail.taskCodes')}>
+                  <ControlledSelect
+                    mode="multiple"
+                    apiUrl="/system/dictionaries/model_task/items"
+                    queryKey="dict-model-task-settings-multi"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                  />
+                </Form.Item>
+                <Form.Item name="modalityCodes" label={t('assets.detail.modalityCodes')}>
+                  <ControlledSelect
+                    mode="multiple"
+                    apiUrl="/system/dictionaries/dataset_modality/items"
+                    queryKey="dict-dataset-modality-settings-multi"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                  />
+                </Form.Item>
+                <Form.Item name="formatCodes" label={t('assets.detail.formatCodes')}>
+                  <ControlledSelect
+                    mode="multiple"
+                    apiUrl="/system/dictionaries/dataset_format/items"
+                    queryKey="dict-dataset-format-settings-multi"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                  />
+                </Form.Item>
+                <Form.Item name="languageCodes" label={t('assets.detail.languageCodes')}>
+                  <ControlledSelect
+                    mode="multiple"
+                    apiUrl="/system/dictionaries/language/items"
+                    queryKey="dict-language-settings-multi"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                  />
+                </Form.Item>
+                <Form.Item name="sampleCount" label={t('assets.detail.sampleCount')}>
+                  <Input type="number" />
+                </Form.Item>
+                <Form.Item name="totalBytes" label={t('assets.detail.totalBytes')}>
+                  <Input type="number" />
+                </Form.Item>
+                <Form.Item name="sensitivityCode" label={t('assets.detail.sensitivity')}>
+                  <ControlledSelect
+                    apiUrl="/system/dictionaries/sensitivity_level/items"
+                    queryKey="dict-sensitivity-dataset-settings"
+                    extractOptions={(data) =>
+                      (data as Array<{ itemCode: string }>).map(
+                        (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                      )
+                    }
+                    allowClear
+                  />
+                </Form.Item>
+              </>
+            )}
+            <Form.Item>
+              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>
                 {t('common.save')}
               </Button>
             </Form.Item>

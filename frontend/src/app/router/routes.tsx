@@ -29,6 +29,10 @@ import {
   TagsPage,
   TeamsPage,
   UsersPage,
+  IdempotencyPage,
+  RoleBindingsPage,
+  ResourceAclsPage,
+  AlertsPage,
 } from '@/features/admin';
 import type { Scope } from '@/shared/types';
 import { NotFoundPage } from './NotFoundPage';
@@ -74,6 +78,10 @@ export const router = createBrowserRouter([
           { path: 'tags', element: guarded(<TagsPage />, ['tag:read']) },
           { path: 'configurations', element: guarded(<ConfigurationsPage />, ['system:configure']) },
           { path: 'jobs', element: guarded(<JobsPage />, ['job:read']) },
+          { path: 'idempotency', element: guarded(<IdempotencyPage />, ['job:read']) },
+          { path: 'role-bindings', element: guarded(<RoleBindingsPage />, ['authorization:read']) },
+          { path: 'resource-acls', element: guarded(<ResourceAclsPage />, ['authorization:read']) },
+          { path: 'alerts', element: guarded(<AlertsPage />, ['system:observe']) },
           { path: 'audit-logs', element: guarded(<AuditLogsPage />, ['audit:read']) },
           { path: 'notifications', element: guarded(<NotificationsPage />, ['notification:read']) },
           { path: 'dependencies', element: guarded(<DependenciesPage />, ['system:observe']) },

@@ -76,5 +76,6 @@
 | W7 | `811390f` / `4642e33` | evidence 卫生：P0BR REQ 修复、verify.sh V23–V28、EVD PARTIAL 诚实更新、CheckCompletion 尝试 |
 | A | _pending_ | 授权断链修复：EffectiveScopeResolver 合并角色绑定 scopes 进 JWT，管理员登录后菜单可见 |
 | B | _pending_ | 架构分层 Wave B：Preview/VersionQuery/transition 入队/DvcStoragePort/DownloadStatsRepo/ArchUnit 强化 |
+| C | `9526632` | 前端 Wave C：4 个 admin 页面 + 幂等只读 API、资产表单受控字典字段、讨论 moderation、导航/路由 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。

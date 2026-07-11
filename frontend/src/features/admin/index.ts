@@ -18,4 +18,8 @@ export {
   NotificationsPage,
   DependenciesPage,
   TeamsPage,
+  IdempotencyPage,
+  RoleBindingsPage,
+  ResourceAclsPage,
+  AlertsPage,
 } from './pages';

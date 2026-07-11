@@ -79,6 +79,7 @@ describe('AssetSettingsPage', () => {
   it('渲染元数据编辑表单', async () => {
     renderWithProviders(<AssetSettingsPage />);
     expect(await screen.findByText('编辑元数据')).toBeInTheDocument();
-    expect(screen.getByText(/保\s*存/)).toBeInTheDocument();
+    expect(screen.getByText('编辑类型档案')).toBeInTheDocument();
+    expect(screen.getAllByText(/保\s*存/).length).toBe(2);
   });
 });

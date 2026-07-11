@@ -316,7 +316,17 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
               <Input placeholder="vllm" />
             </Form.Item>
             <Form.Item name="modelSensitivity" label={t('assets.detail.sensitivity')}>
-              <Input placeholder="L1" />
+              <ControlledSelect
+                apiUrl="/system/dictionaries/sensitivity_level/items"
+                queryKey="dict-sensitivity"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.sensitivityPlaceholder')}
+                allowClear
+              />
             </Form.Item>
           </>
         ) : (
@@ -347,6 +357,58 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
                 allowClear
               />
             </Form.Item>
+            <Form.Item name="taskCodes" label={t('assets.detail.taskCodes')}>
+              <ControlledSelect
+                mode="multiple"
+                apiUrl="/system/dictionaries/model_task/items"
+                queryKey="dict-model-task-multi"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.taskCodesPlaceholder')}
+              />
+            </Form.Item>
+            <Form.Item name="modalityCodes" label={t('assets.detail.modalityCodes')}>
+              <ControlledSelect
+                mode="multiple"
+                apiUrl="/system/dictionaries/dataset_modality/items"
+                queryKey="dict-dataset-modality-multi"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.modalityCodesPlaceholder')}
+              />
+            </Form.Item>
+            <Form.Item name="formatCodes" label={t('assets.detail.formatCodes')}>
+              <ControlledSelect
+                mode="multiple"
+                apiUrl="/system/dictionaries/dataset_format/items"
+                queryKey="dict-dataset-format-multi"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.formatCodesPlaceholder')}
+              />
+            </Form.Item>
+            <Form.Item name="languageCodes" label={t('assets.detail.languageCodes')}>
+              <ControlledSelect
+                mode="multiple"
+                apiUrl="/system/dictionaries/language/items"
+                queryKey="dict-language-multi"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.languageCodesPlaceholder')}
+              />
+            </Form.Item>
             <Form.Item name="sampleCount" label={t('assets.detail.sampleCount')}>
               <Input type="number" placeholder="10000" />
             </Form.Item>
@@ -354,7 +416,17 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
               <Input type="number" placeholder="1073741824" />
             </Form.Item>
             <Form.Item name="datasetSensitivity" label={t('assets.detail.sensitivity')}>
-              <Input placeholder="L1" />
+              <ControlledSelect
+                apiUrl="/system/dictionaries/sensitivity_level/items"
+                queryKey="dict-sensitivity-dataset"
+                extractOptions={(data) =>
+                  (data as Array<{ itemCode: string }>).map(
+                    (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                  )
+                }
+                placeholder={t('assets.create.sensitivityPlaceholder')}
+                allowClear
+              />
             </Form.Item>
           </>
         )}

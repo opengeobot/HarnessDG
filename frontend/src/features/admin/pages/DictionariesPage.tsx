@@ -108,6 +108,7 @@ export function DictionariesPage() {
       <Typography.Title level={4} style={{ margin: 0 }}>
         {t('admin.dictionaries.title')}
       </Typography.Title>
+      <Typography.Text type="secondary">{t('admin.dictionaries.typesSeededNote')}</Typography.Text>
 
       <Flex gap={16} align="stretch" wrap>
         <Card title={t('admin.dictionaries.dictType')} style={{ width: 280 }}>
