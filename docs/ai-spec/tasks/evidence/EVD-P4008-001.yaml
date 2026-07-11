@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P4008-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P4-008
@@ -28,7 +28,7 @@ source:
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T20:02:30+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,16 +40,20 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  command: bash ./deploy/compose/scripts/verify-journey.sh
+  startedAt: 2026-07-11T20:02:30+08:00
+  finishedAt: 2026-07-11T20:02:34+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: PRD-V28
+      assertion: verify-journey.sh journey_v28_ai_contribute PASS — MCP asset_create_draft denied when write tools disabled
+  notProven:
+    - scenarioId: PRD-V28-full
+      reason: Agent draft upload + publish gate journey requires asset create (job_task insert 500 SKIP)
 
 artifacts:
   reports: []

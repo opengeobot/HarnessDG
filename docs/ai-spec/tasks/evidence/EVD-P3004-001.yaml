@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P3004
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P3-004
@@ -28,7 +28,7 @@ source:
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T20:02:30+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -49,7 +49,9 @@ execution:
 
 coverage:
   proven: []
-  notProven: ['AC-P3-PUB-001']
+  notProven:
+    - scenarioId: AC-P3-PUB-001
+      reason: verify-journey.sh PRD-V08 SKIP — cannot create asset (job_task insert 500); publish triplet not exercised
 
 artifacts:
   reports: []

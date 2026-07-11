@@ -28,7 +28,7 @@ source:
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T20:02:30+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,14 +40,27 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
+  command: bash ./deploy/compose/scripts/verify-journey.sh
+  startedAt: 2026-07-11T20:02:30+08:00
+  finishedAt: 2026-07-11T20:02:34+08:00
+  exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
 
 coverage:
   proven:
     - dataset pull uses GET /api/v1/versions/{versionId}/download
-  notProven: [AC-DST-CLI-001, AC-DST-CLI-002, AC-DST-CLI-003, AC-DST-CLI-004, AC-DST-CLI-005, AC-DST-CLI-006]
+    - scenarioId: PRD-V26
+      assertion: verify-journey.sh journey_v26_cli_search PASS — aih dataset search JSON output on live Compose
+  notProven:
+    - AC-DST-CLI-001
+    - AC-DST-CLI-002
+    - AC-DST-CLI-003
+    - AC-DST-CLI-004
+    - AC-DST-CLI-005
+    - AC-DST-CLI-006
+    - scenarioId: PRD-V06
+      reason: verify-journey.sh journey_v06_dvc_roundtrip SKIP — DVC CLI unavailable / no provisioned repo
 
 artifacts:
   reports: []

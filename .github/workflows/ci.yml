@@ -212,6 +212,25 @@ jobs:
       - name: Run verify.sh
         run: ./scripts/verify.sh
 
+  journey-e2e:
+    name: Journey E2E (verify-journey.sh)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [compose-e2e]
+    # PR 上暂为可选；main push 为强制。见 docs/runbooks/verify-case-mapping.md Wave M
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        working-directory: deploy/compose
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare .env
+        run: cp .env.example .env
+      - name: Start stack and wait for health
+        run: docker compose up -d --build --wait
+      - name: Run verify-journey.sh
+        run: chmod +x ./scripts/verify-journey.sh && ./scripts/verify-journey.sh
+
   task-card-gate:
     name: Task Card Gate
     runs-on: ubuntu-latest

@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P5004-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P5-004
@@ -28,7 +28,7 @@ source:
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T20:02:30+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,16 +40,20 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  command: bash ./deploy/compose/scripts/verify-journey.sh
+  startedAt: 2026-07-11T20:02:30+08:00
+  finishedAt: 2026-07-11T20:02:34+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: PRD-V16
+      assertion: verify-journey.sh journey_v16_webhook_reconcile PASS — reconciliation_checkpoint table exists
+  notProven:
+    - scenarioId: PRD-V16-simulate
+      reason: Lost webhook simulation / reconciler rebuild not exercised in journey script
 
 artifacts:
   reports: []

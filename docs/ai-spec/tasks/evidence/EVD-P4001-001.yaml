@@ -28,7 +28,7 @@ source:
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T20:02:30+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,12 +40,12 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='McpToolCatalogTest,McpControllerTest' && bash ./deploy/compose/scripts/verify.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  command: bash ./deploy/compose/scripts/verify-journey.sh
+  startedAt: 2026-07-11T20:02:30+08:00
+  finishedAt: 2026-07-11T20:02:34+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
 
 coverage:
   proven:
@@ -53,7 +53,15 @@ coverage:
       assertion: McpToolCatalog.listTools syncs with tools.yaml schema, write flags, and enabledByDefault invariants; McpToolCatalogTest (9 PASS); verify.sh V19/V26 PASS
     - scenarioId: AC-P4-MCP-001
       assertion: verify.sh V19 MCP endpoint availability + V26 /mcp default-deny PASS
-  notProven: []
+    - scenarioId: PRD-V12
+      assertion: verify-journey.sh journey_v12_mcp_list_call PASS — /mcp initialize + tools/list + asset_search on live Compose
+    - scenarioId: PRD-V13
+      assertion: verify-journey.sh journey_v13_mcp_publish_deny PASS — asset_publish_version write tool denied by default
+    - scenarioId: PRD-V27
+      assertion: verify-journey.sh journey_v27_ai_consume PASS — MCP DATASET asset_search
+  notProven:
+    - scenarioId: AC-P4-MCP-002
+      reason: Full agent-bundle onboarding journey (p4-onboarding.sh) not executed this session
 
 artifacts:
   reports: []

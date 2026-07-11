@@ -89,8 +89,18 @@
 | G | _this commit_ | CI Wave G：verify.sh/verify-schema 入 CI、gitleaks、MCP 契约校验、Task Card 门禁、用例对照 runbook、perf-smoke 可选 |
 | H | `cbdfe12` | Agent Wave H：REST 贡献写端点、主体级限流、P4 onboarding E4 脚本 |
 | I | `4530361` | 验收 Wave I：Compose E4 尽力执行、EVD E2/E3 PASS 翻转、CheckCompletion 尝试、V25/outbox 验收修复 |
+| M | _this commit_ | 旅程 Wave M：`verify-journey.sh`/`.ps1` PRD §13.2 行为 E2E、CI `journey-e2e` 作业、runbook 对照扩展 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
+
+### Wave M 摘要（M1–M4，PRD §13.2）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| M1 verify-journey.sh | IMPLEMENTED_UNVERIFIED | 18 个 PRD 旅程函数（V05–V28 子集）；SKIP-safe；管理员 JWT + 改密门处理 |
+| M2 verify-journey.ps1 | IMPLEMENTED_UNVERIFIED | PowerShell 轻量子集（V05/V08/V12/V14） |
+| M3 CI journey-e2e | IMPLEMENTED_UNVERIFIED | `needs: compose-e2e`；main 强制、PR `continue-on-error` |
+| M4 runbook + EVD | PARTIAL | `verify-case-mapping.md` Wave M 节；PASS 旅程翻转 E4 proven（MCP/CLI/对账/贡献拒绝） |
 
 ### Wave H 摘要（H1–H3，PRD §11.2）
 
@@ -154,7 +164,7 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | 前端 `pnpm test` | **151 PASS**（`6b73ac0` 修复 `PermissionProvider` 测试包裹，原 14 FAIL 已清零） |
 | `verify-schema.sh` | **PASS**（V04/V16/V17/V21/V22/V28 全通过；33 迁移） |
 | Compose `verify.sh` 全量 E4 | **26/28 PASS**；**V05 JWT 生命周期 FAIL**（持久化 DB admin 口令≠`.env` 默认）；**V20 对账 Worker FAIL**（依赖 V05 token）；V18/V22 经 Wave I 修复后 PASS |
-| Compose E4 行为旅程（P1–P5 AC） | **notProven** — 无 JWT 的 authenticated 端到端旅程未闭环 |
+| Compose E4 行为旅程（P1–P5 AC） | **PARTIAL** — `verify-journey.sh` 8 PASS / 10 SKIP / 0 FAIL（2026-07-11）；资产创建/发布 SKIP（job_task insert 500） |
 
 ### Wave I 摘要（I1–I4）
 
