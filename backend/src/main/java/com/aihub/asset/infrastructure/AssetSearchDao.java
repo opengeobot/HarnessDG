@@ -14,6 +14,7 @@ import com.aihub.authorization.domain.AccessScope;
 import com.aihub.shared.api.CursorPage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -71,9 +72,12 @@ public class AssetSearchDao {
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final Cache<String, Map<String, Map<String, Long>>> facetCache;
 
-    public AssetSearchDao(NamedParameterJdbcTemplate jdbcTemplate) {
+    public AssetSearchDao(NamedParameterJdbcTemplate jdbcTemplate,
+                          Cache<String, Map<String, Map<String, Long>>> facetCache) {
         this.jdbcTemplate = jdbcTemplate;
+        this.facetCache = facetCache;
     }
 
     /**
@@ -103,6 +107,12 @@ public class AssetSearchDao {
      * @return 各维度计数映射
      */
     public Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria) {
+        String cacheKey = buildFacetCacheKey(criteria);
+        Map<String, Map<String, Long>> cached = facetCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         MapSqlParameterSource params = new MapSqlParameterSource();
         StringBuilder where = new StringBuilder();
         appendCommonFilters(where, params, criteria);
@@ -155,6 +165,7 @@ public class AssetSearchDao {
             }
         }
         result.put("_total", Map.of("count", total));
+        facetCache.put(cacheKey, result);
         return result;
     }
 
@@ -353,6 +364,31 @@ public class AssetSearchDao {
 
     private String typeName(AssetType type) {
         return type == null ? null : type.name();
+    }
+
+    private String buildFacetCacheKey(AssetSearchCriteria c) {
+        return new StringBuilder(256)
+                .append(typeName(c.type())).append('|')
+                .append(c.namespace()).append('|')
+                .append(c.organizationId()).append('|')
+                .append(c.projectId()).append('|')
+                .append(c.teamId()).append('|')
+                .append(c.keyword()).append('|')
+                .append(c.framework()).append('|')
+                .append(c.task()).append('|')
+                .append(c.format()).append('|')
+                .append(c.modality()).append('|')
+                .append(c.tagId()).append('|')
+                .append(c.tagIds()).append('|')
+                .append(c.owner()).append('|')
+                .append(c.taskCodes()).append('|')
+                .append(c.modalityCodes()).append('|')
+                .append(c.formatCodes()).append('|')
+                .append(c.languageCodes()).append('|')
+                .append(c.sensitivity()).append('|')
+                .append(c.statusNames()).append('|')
+                .append(c.visibilityNames())
+                .toString();
     }
 
     private String encodeCursor(Instant createdAt, long id) {

@@ -6,8 +6,9 @@
 package com.aihub.platform.security;
 
 import java.time.Clock;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -15,21 +16,26 @@ import org.springframework.stereotype.Component;
  * 内存令牌桶限流后端。
  *
  * <p>默认后端（{@code aihub.rate-limit.backend=memory}），适用于单进程与开发环境。
+ * 使用 Caffeine {@code expireAfterAccess(10min)} 自动淘汰不活跃桶，防止长期运行内存泄漏。
  */
 @Component
 @ConditionalOnProperty(name = "aihub.rate-limit.backend", havingValue = "memory", matchIfMissing = true)
 public class MemoryRateLimitBackend implements RateLimitBackend {
 
-    private final ConcurrentMap<String, TokenBucket> buckets = new ConcurrentHashMap<>();
+    private final Cache<String, TokenBucket> buckets;
     private final Clock clock;
 
     public MemoryRateLimitBackend(Clock clock) {
         this.clock = clock;
+        this.buckets = Caffeine.newBuilder()
+                .expireAfterAccess(10, TimeUnit.MINUTES)
+                .maximumSize(10_000)
+                .build();
     }
 
     @Override
     public boolean tryAcquire(String key, double refillPerSecond, int burst) {
-        TokenBucket bucket = buckets.computeIfAbsent(key, ignored -> new TokenBucket(burst, clock));
+        TokenBucket bucket = buckets.get(key, ignored -> new TokenBucket(burst, clock));
         return bucket.tryConsume(1, refillPerSecond);
     }
 

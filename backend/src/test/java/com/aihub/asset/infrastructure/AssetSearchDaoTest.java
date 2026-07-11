@@ -18,6 +18,7 @@ import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.authorization.domain.AccessScope;
 import com.aihub.shared.api.CursorPage;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -38,7 +39,7 @@ class AssetSearchDaoTest {
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(NamedParameterJdbcTemplate.class);
-        dao = new AssetSearchDao(jdbcTemplate);
+        dao = new AssetSearchDao(jdbcTemplate, Caffeine.newBuilder().maximumSize(10).build());
     }
 
     @Test
