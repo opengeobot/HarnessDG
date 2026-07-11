@@ -6,6 +6,10 @@
 spring:
   application:
     name: aihub-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   # 默认数据源占位；各 Profile 覆盖具体连接信息。
   datasource:
     url: ${AIHUB_DB_URL:jdbc:postgresql://localhost:5432/aihub}
@@ -129,6 +133,21 @@ aihub:
     rate-limit:
       requests-per-minute: ${AIHUB_AGENT_RATE_LIMIT_RPM:60}
       burst: ${AIHUB_AGENT_RATE_LIMIT_BURST:10}
+  # 限流存储后端：memory（默认，单进程）| redis（多实例；Compose 未部署 Redis 时保持 memory）
+  rate-limit:
+    backend: ${AIHUB_RATE_LIMIT_BACKEND:memory}
+    redis-host: ${AIHUB_RATE_LIMIT_REDIS_HOST:localhost}
+    redis-port: ${AIHUB_RATE_LIMIT_REDIS_PORT:6379}
+  # 邮件外发渠道（默认关闭；启用需配置 SMTP 凭据，见 docs/runbooks/notification-channels.md）
+  notification:
+    email:
+      enabled: ${AIHUB_NOTIFICATION_EMAIL_ENABLED:false}
+      from: ${AIHUB_NOTIFICATION_EMAIL_FROM:noreply@aihub.local}
+      host: ${AIHUB_NOTIFICATION_EMAIL_HOST:localhost}
+      port: ${AIHUB_NOTIFICATION_EMAIL_PORT:587}
+      username: ${AIHUB_NOTIFICATION_EMAIL_USERNAME:}
+      password: ${AIHUB_NOTIFICATION_EMAIL_PASSWORD:}
+      start-tls: ${AIHUB_NOTIFICATION_EMAIL_STARTTLS:true}
 
 ---
 #

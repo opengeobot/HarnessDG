@@ -6,6 +6,7 @@
 package com.aihub.bootstrap;
 
 import com.aihub.platform.security.AgentRateLimitProperties;
+import com.aihub.platform.security.RateLimitProperties;
 import com.aihub.platform.security.BCryptPasswordHasher;
 import com.aihub.platform.security.JwtProperties;
 import com.aihub.platform.security.JwtTokenService;
@@ -27,7 +28,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>shared-kernel 自身不依赖 Spring，由 bootstrap 负责把其无状态实现与 platform 实现注册为 Bean。
  */
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, AgentRateLimitProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, AgentRateLimitProperties.class, RateLimitProperties.class})
 public class SharedKernelConfiguration {
 
     /**

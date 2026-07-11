@@ -44,6 +44,21 @@ for i, tool in enumerate(tools):
     names.append(tool["name"])
 if len(names) != len(set(names)):
     raise SystemExit("FAIL: 工具名重复")
+transport = doc.get("transport")
+if not isinstance(transport, dict):
+    raise SystemExit("FAIL: transport 必须为 mapping")
+rate_limit = transport.get("rateLimit")
+if not isinstance(rate_limit, dict):
+    raise SystemExit("FAIL: transport.rateLimit 必须为 mapping")
+for req in ("requestsPerMinute", "burst", "enforced"):
+    if req not in rate_limit:
+        raise SystemExit(f"FAIL: transport.rateLimit 缺少字段 {req}")
+if not isinstance(rate_limit["requestsPerMinute"], int) or rate_limit["requestsPerMinute"] <= 0:
+    raise SystemExit("FAIL: transport.rateLimit.requestsPerMinute 必须为正整数")
+if not isinstance(rate_limit["burst"], int) or rate_limit["burst"] <= 0:
+    raise SystemExit("FAIL: transport.rateLimit.burst 必须为正整数")
+if not isinstance(rate_limit["enforced"], bool):
+    raise SystemExit("FAIL: transport.rateLimit.enforced 必须为布尔")
 print(f"OK: tools.yaml 结构有效，共 {len(names)} 个工具")
 PY
 

@@ -12,7 +12,7 @@
 | 渠道 | 类 | 状态 | 启用方式 |
 | --- | --- | --- | --- |
 | Webhook | `WebhookChannelAdapter` | 已实现（写 Outbox + `WebhookDeliveryService`） | 默认装配 |
-| Email | `EmailChannelAdapter` | 桩（结构化日志） | `aihub.notification.email.enabled=true` |
+| Email | `EmailChannelAdapter` | SMTP 外发（Jakarta Mail，`iam_user.email` 映射） | `aihub.notification.email.enabled=true` |
 | IM | `ImChannelAdapter` | 桩（结构化日志） | 默认装配 |
 
 ## Email 渠道
@@ -23,15 +23,17 @@ aihub:
     email:
       enabled: true
       from: noreply@example.com
-      smtp-host: smtp.example.com
-      smtp-port: 587
+      host: smtp.example.com
+      port: 587
+      username: ${AIHUB_NOTIFICATION_EMAIL_USERNAME}
+      password: ${AIHUB_NOTIFICATION_EMAIL_PASSWORD}
+      start-tls: true
 ```
 
-当前桩实现不实际连接 SMTP。生产对接需：
+收件人解析：`recipient` 可为邮箱地址，或 `principal_id`（查询 `iam_user.email`）。
+Agent/Service 等非用户主体无邮箱字段，渠道跳过投递并记录日志。
 
-- 注入 SMTP 凭据（环境变量/Secret，禁止入 Git）
-- 在 `EmailChannelAdapter` 中接入 Jakarta Mail 或 Spring Mail
-- 为每位用户维护邮箱映射（`principal_id → email`）
+SMTP 凭据通过环境变量/Secret 注入，禁止入 Git。
 
 ## IM 渠道
 
@@ -61,7 +63,7 @@ aihub:
 
 ## 剩余差距
 
-- Email/IM 真实外发与收件人地址簿
+- IM 真实外发与企业 IM 对接
 - 用户级渠道偏好（站内/邮件/IM 开关）
 - Outbox fan-out 到多渠道路由表（当前 Webhook 需 headers 显式 URL）
-- Compose E4 行为级验收
+- Compose E4 行为级验收（Email 需外部 SMTP；Redis 限流需独立 Redis 服务）

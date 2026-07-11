@@ -22,7 +22,7 @@ class RateLimiterTest {
         AgentRateLimitProperties properties = new AgentRateLimitProperties();
         properties.setRequestsPerMinute(60);
         properties.setBurst(2);
-        RateLimiter limiter = new RateLimiter(properties, clock);
+        RateLimiter limiter = new RateLimiter(properties, new MemoryRateLimitBackend(clock));
 
         assertThat(limiter.tryAcquire("prn_1", "asset_search")).isTrue();
         assertThat(limiter.tryAcquire("prn_1", "asset_search")).isTrue();
@@ -38,7 +38,7 @@ class RateLimiterTest {
         AgentRateLimitProperties properties = new AgentRateLimitProperties();
         properties.setRequestsPerMinute(60);
         properties.setBurst(1);
-        RateLimiter limiter = new RateLimiter(properties, clock);
+        RateLimiter limiter = new RateLimiter(properties, new MemoryRateLimitBackend(clock));
 
         assertThat(limiter.tryAcquire("prn_1", "asset_search")).isTrue();
         assertThat(limiter.tryAcquire("prn_2", "asset_search")).isTrue();

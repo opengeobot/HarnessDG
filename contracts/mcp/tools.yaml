@@ -10,6 +10,13 @@ contractStatus: implemented-p4-synced
 transport:
   protocol: streamable-http
   description: MCP 通过 Streamable HTTP 暴露；不使用 stdio 部署形态。
+  rateLimit:
+    requestsPerMinute: 60
+    burst: 10
+    enforced: true
+    description: |
+      运行时由平台 RateLimiter 在 MCP tools/call 与 REST /agent/* 端点强制执行。
+      默认单进程 memory 后端；多实例部署可切换 aihub.rate-limit.backend=redis。
   authentication:
     scheme: bearer-jwt
     description: |

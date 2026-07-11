@@ -1,5 +1,5 @@
 /*
- * 功能: 邮件通知渠道适配器（SMTP 桩实现，按配置启用）。
+ * 功能: 邮件通知渠道适配器——Jakarta Mail SMTP 外发。
  * 时间: 2026-07-11
  * 作者: AxeXie
  */
@@ -7,28 +7,39 @@ package com.aihub.notification.infrastructure;
 
 import com.aihub.notification.domain.Notification;
 import com.aihub.notification.domain.NotificationChannel;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
 /**
  * 邮件通知渠道适配器。
  *
- * <p>当前为最小 SMTP 桩：记录结构化日志，不实际外发。
- * 生产启用需配置 {@code aihub.notification.email.enabled=true} 并注入 SMTP 参数。
+ * <p>通过 Spring Mail / Jakarta Mail 发送 SMTP 邮件。{@code recipient} 可为邮箱地址或
+ * {@code principal_id}（经 {@link PrincipalEmailResolver} 查询 {@code iam_user.email}）。
+ * 非用户主体或缺失邮箱时跳过投递并记录结构化日志。
  */
 @Component
 @ConditionalOnProperty(name = "aihub.notification.email.enabled", havingValue = "true")
-@ConfigurationProperties(prefix = "aihub.notification.email")
 public class EmailChannelAdapter implements NotificationChannel {
 
     private static final Logger LOG = LoggerFactory.getLogger(EmailChannelAdapter.class);
 
-    private String from = "noreply@aihub.local";
-    private String smtpHost = "localhost";
-    private int smtpPort = 587;
+    private final JavaMailSender mailSender;
+    private final PrincipalEmailResolver emailResolver;
+    private final EmailChannelProperties properties;
+
+    public EmailChannelAdapter(JavaMailSender mailSender,
+                               PrincipalEmailResolver emailResolver,
+                               EmailChannelProperties properties) {
+        this.mailSender = mailSender;
+        this.emailResolver = emailResolver;
+        this.properties = properties;
+    }
 
     @Override
     public String channelId() {
@@ -37,14 +48,43 @@ public class EmailChannelAdapter implements NotificationChannel {
 
     @Override
     public void send(Notification notification, String recipient) {
-        LOG.info("email channel stub send notificationId={} eventType={} recipient={} smtpHost={}:{} from={}",
-                notification.notificationId(), notification.eventType(), recipient, smtpHost, smtpPort, from);
+        emailResolver.resolveEmail(recipient).ifPresentOrElse(
+                email -> deliver(notification, email),
+                () -> LOG.info("email channel skip notificationId={} recipient={} reason=no_email_mapping",
+                        notification.notificationId(), recipient));
     }
 
-    public String getFrom() { return from; }
-    public void setFrom(String from) { this.from = from; }
-    public String getSmtpHost() { return smtpHost; }
-    public void setSmtpHost(String smtpHost) { this.smtpHost = smtpHost; }
-    public int getSmtpPort() { return smtpPort; }
-    public void setSmtpPort(int smtpPort) { this.smtpPort = smtpPort; }
+    private void deliver(Notification notification, String email) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            helper.setFrom(properties.getFrom());
+            helper.setTo(email);
+            helper.setSubject(buildSubject(notification));
+            helper.setText(buildBody(notification), false);
+            mailSender.send(message);
+            LOG.info("email channel sent notificationId={} eventType={} recipient={}",
+                    notification.notificationId(), notification.eventType(), email);
+        } catch (MessagingException ex) {
+            LOG.error("email channel send failed notificationId={} recipient={}",
+                    notification.notificationId(), email, ex);
+            throw new IllegalStateException("email delivery failed", ex);
+        }
+    }
+
+    private static String buildSubject(Notification notification) {
+        return "AIHub: " + notification.eventType();
+    }
+
+    private static String buildBody(Notification notification) {
+        StringBuilder body = new StringBuilder();
+        body.append("Event: ").append(notification.eventType()).append('\n');
+        if (notification.i18nKey() != null && !notification.i18nKey().isBlank()) {
+            body.append("Message key: ").append(notification.i18nKey()).append('\n');
+        }
+        if (notification.parameters() != null && !notification.parameters().isBlank()) {
+            body.append("Parameters: ").append(notification.parameters()).append('\n');
+        }
+        return body.toString();
+    }
 }

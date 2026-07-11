@@ -107,6 +107,16 @@
             <artifactId>ulid-creator</artifactId>
             <version>${ulid-creator.version}</version>
         </dependency>
+        <!-- 邮件外发（通知 Email 渠道，按 aihub.notification.email.enabled 启用） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <!-- Redis 限流后端（按 aihub.rate-limit.backend=redis 启用） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <!-- Caffeine 本地缓存 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

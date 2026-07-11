@@ -93,6 +93,15 @@
 | M | _this commit_ | 旅程 Wave M：`verify-journey.sh`/`.ps1` PRD §13.2 行为 E2E、CI `journey-e2e` 作业、runbook 对照扩展 |
 | N | _this commit_ | 产品 Wave N：血缘写 API、dataset 字典种子、告警确认、tags JSONB 停写、IntegrationsPage agent-bundle、ArchUnit 改密端口 |
 | O | _this commit_ | 数据面 Wave O：真实 multipart PUT（aih CLI + UploadPage）、会话 files 恢复、MinIO dvc-scoped STS、scoped DVC 凭据 |
+| P | _this commit_ | Agent/通知 Wave P：Email SMTP 外发、Redis 分布式限流、MCP tools.yaml rateLimit 元数据 |
+
+### Wave P 摘要（P33–P35）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| P33 Email SMTP 外发 | IMPLEMENTED_UNVERIFIED | `spring-boot-starter-mail` + `EmailChannelAdapter`；`PrincipalEmailResolver` 查询 `iam_user.email`；`@ConditionalOnProperty` |
+| P34 Redis 分布式限流 | IMPLEMENTED_UNVERIFIED | `aihub.rate-limit.backend=memory\|redis`；`MemoryRateLimitBackend` + `RedisRateLimitBackend`（INCR+EXPIRE）；Compose 默认 memory |
+| P35 MCP rateLimit 元数据 | IMPLEMENTED_UNVERIFIED | `contracts/mcp/tools.yaml` `transport.rateLimit`；`validate-tools.sh` + `McpToolCatalogContractTest` |
 
 ### Wave O 摘要（O29–O32）
 
@@ -130,7 +139,7 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
 | H1 REST 贡献写适配器 | IMPLEMENTED_UNVERIFIED | `POST .../versions/draft`、`.../upload-sessions`、`.../complete`、`GET .../upload-sessions/{id}`；JWT + 工具白名单 + 写工具门控 + 幂等；OpenAPI `implemented` |
-| H2 Agent/MCP 限流 | IMPLEMENTED_UNVERIFIED | `RateLimiter` 令牌桶（`aihub.agent.rate-limit.*`）；`McpController` + Agent 写端点；429 `RATE_LIMIT_EXCEEDED` + 审计 |
+| H2 Agent/MCP 限流 | IMPLEMENTED_UNVERIFIED | `RateLimiter` 令牌桶（`aihub.agent.rate-limit.*`）；memory 默认 + Redis 后端（P34）；`McpController` + Agent 写端点；429 `RATE_LIMIT_EXCEEDED` + 审计 |
 | H3 Agent onboarding E4 | IMPLEMENTED_UNVERIFIED | `p4-onboarding.sh` 全链路断言 + 证据脱敏扫描；预期 ≤30 min |
 
 ### Wave G 摘要（G1–G6，PRD §15.10）
@@ -161,7 +170,7 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | E1 VERSION_* in-app fan-out | IMPLEMENTED_UNVERIFIED | 发布/版本服务同步创建 notification 行；评审人/提交人/Owner/订阅者 |
 | E2 DISCUSSION_REPLIED + subscription | IMPLEMENTED_UNVERIFIED | `asset_subscription` JDBC 仓储 + subscribe API + 订阅者 fan-out |
 | E3 STORAGE_QUOTA / DEPENDENCY_UNHEALTHY | IMPLEMENTED_UNVERIFIED | MinIO reconciler 配额检测 + SystemDependencyService 定时 DOWN 监测 |
-| E4 Email/IM/Webhook 渠道 | PARTIAL | `NotificationChannel` 接口 + Email/IM 桩 + Webhook 适配器 + runbook |
+| E4 Email/IM/Webhook 渠道 | PARTIAL | `NotificationChannel` 接口 + Email SMTP（P33）+ IM 桩 + Webhook 适配器 + runbook |
 
 ### Wave D 摘要（D1–D8）
 

@@ -26,6 +26,9 @@ class McpToolCatalogContractTest {
 
     private static final Pattern TOOL_NAME = Pattern.compile("^\\s+- name:\\s+(\\S+)\\s*$");
     private static final Pattern WRITE_FLAG = Pattern.compile("^\\s+write:\\s+(true|false)\\s*$");
+    private static final Pattern RATE_LIMIT_RPM = Pattern.compile("^\\s+requestsPerMinute:\\s+(\\d+)\\s*$");
+    private static final Pattern RATE_LIMIT_BURST = Pattern.compile("^\\s+burst:\\s+(\\d+)\\s*$");
+    private static final Pattern RATE_LIMIT_ENFORCED = Pattern.compile("^\\s+enforced:\\s+(true|false)\\s*$");
 
     @Test
     void catalogToolNamesShouldMatchToolsYaml() throws IOException {
@@ -46,6 +49,16 @@ class McpToolCatalogContractTest {
         catalog().listTools().forEach(tool -> catalogWriteFlags.put(tool.name(), tool.write()));
 
         assertThat(catalogWriteFlags).isEqualTo(yamlWriteFlags);
+    }
+
+    @Test
+    void transportRateLimitShouldBeDeclared() throws IOException {
+        Path yaml = resolveToolsYaml();
+        Map<String, String> rateLimit = parseTransportRateLimit(yaml);
+
+        assertThat(rateLimit).containsEntry("requestsPerMinute", "60");
+        assertThat(rateLimit).containsEntry("burst", "10");
+        assertThat(rateLimit).containsEntry("enforced", "true");
     }
 
     @Test
@@ -118,5 +131,40 @@ class McpToolCatalogContractTest {
             }
         }
         return flags;
+    }
+
+    private static Map<String, String> parseTransportRateLimit(Path yaml) throws IOException {
+        Map<String, String> values = new HashMap<>();
+        boolean inRateLimit = false;
+        for (String line : Files.readAllLines(yaml)) {
+            if (line.trim().equals("rateLimit:")) {
+                inRateLimit = true;
+                continue;
+            }
+            if (inRateLimit) {
+                Matcher rpm = RATE_LIMIT_RPM.matcher(line);
+                if (rpm.matches()) {
+                    values.put("requestsPerMinute", rpm.group(1));
+                    continue;
+                }
+                Matcher burst = RATE_LIMIT_BURST.matcher(line);
+                if (burst.matches()) {
+                    values.put("burst", burst.group(1));
+                    continue;
+                }
+                Matcher enforced = RATE_LIMIT_ENFORCED.matcher(line);
+                if (enforced.matches()) {
+                    values.put("enforced", enforced.group(1));
+                    continue;
+                }
+                if (!line.startsWith("    ") && !line.startsWith("  ")) {
+                    break;
+                }
+                if (line.matches("^\\s{2}\\S.*") && !line.startsWith("    ")) {
+                    break;
+                }
+            }
+        }
+        return values;
     }
 }
