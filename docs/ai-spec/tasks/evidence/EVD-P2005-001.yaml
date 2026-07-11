@@ -24,12 +24,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
+  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T10:40:00+08:00
+  observedAt: 2026-07-11T19:50:10+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,10 +40,10 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG/backend
-  command: ./mvnw -o test -Dtest='UploadMaterializeJobHandlerTest'
-  startedAt: 2026-07-11T10:29:23+08:00
-  finishedAt: 2026-07-11T10:29:35+08:00
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: cd backend && ./mvnw -o test -Dtest='UploadMaterializeJobHandlerTest' && bash ./deploy/compose/scripts/verify.sh
+  startedAt: 2026-07-11T19:25:10+08:00
+  finishedAt: 2026-07-11T19:50:10+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E3
@@ -54,7 +54,7 @@ coverage:
       assertion: UploadMaterializeJobHandler processes PROCESSING to COMPLETED with manifest-v1 digest; 12 tests PASS
   notProven:
     - scenarioId: AC-P2-UPL-003-E4
-      reason: Compose E4 live DVC/Git materialization and staging cleanup not executed this session
+      reason: Compose E4 full authenticated UI journey not executed; verify.sh schema/default-deny checks PASS
 
 artifacts:
   reports: []
@@ -65,7 +65,7 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:

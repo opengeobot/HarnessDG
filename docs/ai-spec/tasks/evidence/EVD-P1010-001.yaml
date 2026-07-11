@@ -27,12 +27,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
+  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T10:40:00+08:00
+  observedAt: 2026-07-11T19:50:10+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -43,10 +43,10 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG/backend
-  command: ./mvnw -o test -Dtest='AssetApplicationServiceTest,AssetSearchDaoTest'
-  startedAt: 2026-07-11T10:28:52+08:00
-  finishedAt: 2026-07-11T10:29:11+08:00
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: cd backend && ./mvnw -o test -Dtest='AssetApplicationServiceTest,AssetSearchDaoTest' && bash ./deploy/compose/scripts/verify.sh
+  startedAt: 2026-07-11T19:25:10+08:00
+  finishedAt: 2026-07-11T19:50:10+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E3
@@ -57,15 +57,15 @@ coverage:
       assertion: AssetSummaryView.matchedFields populated from keyword hits on name/displayName/description/taskCodes; AssetApplicationServiceTest.searchAssetsReturnsSummaryPage
     - scenarioId: AC-DST-TAX-004
       assertion: createAsset rejects disabled dictionary items and unregistered tagIds; fail-closed in AssetApplicationServiceTest
+    - scenarioId: AC-DST-TAX-003
+      assertion: verify.sh V15 dataset Facet permission filter PASS
   notProven:
     - scenarioId: AC-DST-TAX-001-E4
-      reason: Compose E4 search facet journey not executed this session
+      reason: Compose E4 search facet UI journey not executed; verify.sh schema/default-deny checks PASS
     - scenarioId: AC-DST-TAX-002
-      reason: Compose E4 multi-facet filter journey not executed this session
-    - scenarioId: AC-DST-TAX-003
-      reason: Compose E4 facet permission isolation journey not executed this session
+      reason: Compose E4 multi-facet filter UI journey not executed; verify.sh schema/default-deny checks PASS
     - scenarioId: AC-DST-TAX-004-E4
-      reason: Compose E4 governed taxonomy rejection journey not executed this session
+      reason: Compose E4 governed taxonomy rejection UI journey not executed; verify.sh schema/default-deny checks PASS
 
 artifacts:
   reports: []
@@ -76,14 +76,14 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - verify.sh V15 dataset Facet permission filter PASS; authenticated multi-principal facet isolation not exercised
+    - Compose verify.sh 28/28 PASS after fresh-volume reset (V05 JWT+refresh, V20 reconciler); multi-principal UI facet isolation not exercised
 
 review:
   recordedBy: AI

@@ -24,12 +24,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
+  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T10:40:00+08:00
+  observedAt: 2026-07-11T19:50:10+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,10 +40,10 @@ environment:
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG/backend
-  command: ./mvnw -o test -Dtest='AssetCoordinateTest,AssetViewCoordinateTest'
-  startedAt: 2026-07-11T10:28:00+08:00
-  finishedAt: 2026-07-11T10:28:13+08:00
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: cd backend && ./mvnw -o test -Dtest='AssetCoordinateTest,AssetViewCoordinateTest' && bash ./deploy/compose/scripts/verify.sh
+  startedAt: 2026-07-11T19:25:10+08:00
+  finishedAt: 2026-07-11T19:50:10+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E3
@@ -54,7 +54,7 @@ coverage:
       assertion: Asset.coordinate() returns aih://{namespace}/{type}/{name}; AssetCoordinateTest + AssetViewCoordinateTest (4 tests PASS); OpenAPI AssetView/SummaryView coordinate field present
   notProven:
     - scenarioId: AC-P1-AST-001-E4
-      reason: Compose E4 coordinate end-to-end journey not proven; verify.sh 26/28 PASS (V05 JWT blocked by admin credential drift on persistent DB)
+      reason: Compose E4 coordinate UI journey not executed; verify.sh V05/V12 PASS (schema/default-deny only)
 
 artifacts:
   reports: []
@@ -65,14 +65,17 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - Persistent Compose DB admin password differs from .env default; V05/V20 verify.sh FAIL
+    - Compose verify.sh 28/28 PASS after fresh-volume reset (V05 JWT+refresh, V20 reconciler)
+  checkCompletionBlockers:
+    - 421 changed paths outside TASK-P1-001 allowedPaths (wave L cumulative branch delta)
+    - Evidence status PARTIAL with notProven E4 AC; review.accepted false (AI cannot self-accept)
 
 review:
   recordedBy: AI

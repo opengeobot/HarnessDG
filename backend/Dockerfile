@@ -39,6 +39,10 @@ RUN apt-get update \
         git \
         python3 \
         python3-pip \
+        python3-dev \
+        build-essential \
+        libgit2-dev \
+        pkg-config \
     && rm -rf /var/lib/apt/lists/*
 # 使用清华 PyPI 镜像（HTTPS）安装锁定版本的 dvc[s3]
 RUN python3 -m pip install --no-cache-dir "dvc[s3]==3.55.2"

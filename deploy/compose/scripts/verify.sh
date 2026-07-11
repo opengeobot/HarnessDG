@@ -70,11 +70,22 @@ http_status() {
   curl "${args[@]}" 2>/dev/null || echo "000"
 }
 
-# 登录并回显响应体（用于取 accessToken）。
+# 登录并回显响应体（用于取 accessToken）；可选将 Set-Cookie 写入 cookie_jar。
 http_login_body() {
-  curl -s -m 15 -X POST -H 'Content-Type: application/json' \
-    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" \
-    "${BASE_URL}/api/v1/auth/login" 2>/dev/null
+  local cookie_jar="${1:-}"
+  local args=(-s -m 15 -X POST -H 'Content-Type: application/json'
+    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}"
+    "${BASE_URL}/api/v1/auth/login")
+  [ -n "${cookie_jar}" ] && args=(-c "${cookie_jar}" "${args[@]}")
+  curl "${args[@]}" 2>/dev/null
+}
+
+# 使用 refresh Cookie 轮换 access token（PRD V22 子集：刷新端点可达且签发新 token）。
+http_refresh_body() {
+  local cookie_jar="$1"
+  curl -s -m 15 -b "${cookie_jar}" -c "${cookie_jar}" -X POST \
+    -H 'Content-Type: application/json' \
+    "${BASE_URL}/api/v1/auth/refresh" 2>/dev/null
 }
 
 backend_reachable() {
@@ -157,17 +168,25 @@ check_migrations() {
   return ${ok}
 }
 
-# ---- V05: JWT 生命周期 ----
+# ---- V05: JWT 生命周期（登录/me/匿名 401 + refresh Cookie 轮换，PRD V22 子集）----
 check_jwt() {
-  local body token me anon
-  body="$(http_login_body)"
+  local cookie_jar body token me anon refresh_body refresh_token
+  cookie_jar="$(mktemp)"
+  body="$(http_login_body "${cookie_jar}")"
   token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
-  if [ -z "${token}" ]; then echo "  登录未取得 accessToken（凭据/改密状态？）"; return 1; fi
+  if [ -z "${token}" ]; then echo "  登录未取得 accessToken（凭据/改密状态？）"; rm -f "${cookie_jar}"; return 1; fi
   ACCESS_TOKEN="${token}"
   me="$(http_status GET /api/v1/me "${token}")"
-  if [ "${me}" != "200" ]; then echo "  /me 携带 token 返回 ${me}，期望 200"; return 1; fi
+  if [ "${me}" != "200" ]; then echo "  /me 携带 token 返回 ${me}，期望 200"; rm -f "${cookie_jar}"; return 1; fi
   anon="$(http_status GET /api/v1/system/users)"
-  if [ "${anon}" != "401" ]; then echo "  无 Token 访问 /system/users 返回 ${anon}，期望 401"; return 1; fi
+  if [ "${anon}" != "401" ]; then echo "  无 Token 访问 /system/users 返回 ${anon}，期望 401"; rm -f "${cookie_jar}"; return 1; fi
+  refresh_body="$(http_refresh_body "${cookie_jar}")"
+  refresh_token="$(echo "${refresh_body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+  if [ -z "${refresh_token}" ]; then echo "  refresh 未取得新 accessToken（Cookie/轮换？）"; rm -f "${cookie_jar}"; return 1; fi
+  me="$(http_status GET /api/v1/me "${refresh_token}")"
+  if [ "${me}" != "200" ]; then echo "  刷新后 /me 返回 ${me}，期望 200"; rm -f "${cookie_jar}"; return 1; fi
+  ACCESS_TOKEN="${refresh_token}"
+  rm -f "${cookie_jar}"
   return 0
 }
 

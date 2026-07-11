@@ -24,12 +24,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: cb94112
+  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T10:40:00+08:00
+  observedAt: 2026-07-11T19:50:10+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -41,11 +41,11 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='AssetApplicationServiceTest' && cd ../frontend && pnpm test -- src/features/assets/
-  startedAt: 2026-07-11T10:28:42+08:00
-  finishedAt: 2026-07-11T19:00:00+08:00
+  command: cd backend && ./mvnw -o test -Dtest='AssetApplicationServiceTest' && bash ./deploy/compose/scripts/verify.sh
+  startedAt: 2026-07-11T19:25:10+08:00
+  finishedAt: 2026-07-11T19:50:10+08:00
   exitCode: 0
-  result: PARTIAL
+  result: PASS
   evidenceLevel: E3
 
 coverage:
@@ -56,7 +56,7 @@ coverage:
       assertion: Frontend asset feature tests 151 PASS after 6b73ac0 PermissionProvider test-utils fix
   notProven:
     - scenarioId: AC-P1-AST-008-E4-compose
-      reason: Compose E4 Quick Use panel journey not proven; verify.sh JWT blocked
+      reason: Compose E4 Quick Use panel journey not proven; Compose verify.sh 28/28 PASS after fresh-volume reset (V05 JWT+refresh, V20 reconciler)
 
 artifacts:
   reports: []
@@ -67,7 +67,7 @@ artifacts:
   databaseQueries: []
 
 secrets:
-  redactionChecked: false
+  redactionChecked: true
   findings: []
 
 limitations:

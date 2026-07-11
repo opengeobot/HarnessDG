@@ -28,10 +28,10 @@ const defaultMockAuth: AuthContextValue = {
     subject: 'prn_test',
     displayName: 'Test User',
     organizationId: null,
-    projectIds: [],
+    roles: [],
     scopes: [],
     locale: 'zh-CN',
-    mustChangePassword: false,
+    forcePasswordChange: false,
   },
   scopes: new Set([
     'asset:read', 'asset:write', 'asset:manage', 'asset:create', 'asset:update',
