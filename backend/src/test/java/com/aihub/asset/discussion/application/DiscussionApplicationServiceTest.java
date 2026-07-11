@@ -34,6 +34,7 @@ import com.aihub.shared.id.IdPrefix;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +56,7 @@ class DiscussionApplicationServiceTest {
     @Mock private IdGenerator idGenerator;
     @Mock private com.aihub.notification.application.NotificationService notificationService;
     @Mock private com.aihub.identity.application.PrincipalQueryApplicationService principalQuery;
+    @Mock private com.aihub.asset.discussion.domain.DiscussionSubscriptionRepository subscriptionRepository;
 
     private DiscussionApplicationService service;
 
@@ -62,7 +64,7 @@ class DiscussionApplicationServiceTest {
     void setUp() {
         service = new DiscussionApplicationService(
                 discussionRepository, authorizationService, auditService, idGenerator,
-                notificationService, principalQuery);
+                notificationService, principalQuery, subscriptionRepository);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("gen_id");
     }
 
@@ -217,8 +219,28 @@ class DiscussionApplicationServiceTest {
         service.createComment("thr_01", null, "Hello @prn_mentioned please review", "usr_01");
 
         verify(notificationService).sendInAppNotification(
-                eq("prn_mentioned"), eq("COMMENT_MENTION"), eq("notification.comment.mention"),
+                eq("prn_mentioned"), eq("DISCUSSION_MENTIONED"), eq("notification.discussion.mentioned"),
                 any(), anyMap());
+    }
+
+    @Test
+    void createCommentNotifiesSubscribers() {
+        DiscussionThread thread = openThread();
+        when(discussionRepository.findThread("thr_01")).thenReturn(Optional.of(thread));
+        when(subscriptionRepository.findSubscribers("ast_01")).thenReturn(Set.of("usr_sub"));
+
+        service.createComment("thr_01", null, "New reply", "usr_02");
+
+        verify(notificationService).fanOutInAppNotifications(
+                eq(Set.of("usr_sub")), eq("usr_02"), eq("DISCUSSION_REPLIED"),
+                eq("notification.discussion.replied"), any(), anyMap());
+    }
+
+    @Test
+    void subscribeDelegatesToRepository() {
+        service.subscribe("ast_01", "usr_01");
+        verify(subscriptionRepository).subscribe("ast_01", "usr_01");
+        verify(authorizationService).requirePermission(Permissions.ASSET_READ);
     }
 
     @Test

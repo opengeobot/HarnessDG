@@ -83,8 +83,18 @@
 | B | _pending_ | 架构分层 Wave B：Preview/VersionQuery/transition 入队/DvcStoragePort/DownloadStatsRepo/ArchUnit 强化 |
 | C | `9526632` | 前端 Wave C：4 个 admin 页面 + 幂等只读 API、资产表单受控字典字段、讨论 moderation、导航/路由 |
 | D | _this commit_ | 数据模型与安全 Wave D：asset_relation 血缘、版本约束、owner_team NOT NULL、JWT 轮换、jti digest、Swagger 门控、DVC STS/scoped 凭据 |
+| E | _this commit_ | 通知 Wave E：VERSION_* fan-out、讨论订阅/DISCUSSION_REPLIED、配额/依赖告警、渠道接口桩 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
+
+### Wave E 摘要（E1–E4）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| E1 VERSION_* in-app fan-out | IMPLEMENTED_UNVERIFIED | 发布/版本服务同步创建 notification 行；评审人/提交人/Owner/订阅者 |
+| E2 DISCUSSION_REPLIED + subscription | IMPLEMENTED_UNVERIFIED | `asset_subscription` JDBC 仓储 + subscribe API + 订阅者 fan-out |
+| E3 STORAGE_QUOTA / DEPENDENCY_UNHEALTHY | IMPLEMENTED_UNVERIFIED | MinIO reconciler 配额检测 + SystemDependencyService 定时 DOWN 监测 |
+| E4 Email/IM/Webhook 渠道 | PARTIAL | `NotificationChannel` 接口 + Email/IM 桩 + Webhook 适配器 + runbook |
 
 ### Wave D 摘要（D1–D8）
 

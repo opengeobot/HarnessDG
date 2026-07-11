@@ -56,6 +56,8 @@ components:
         - ASSET_RESTORED
         - DISCUSSION_CREATED
         - COMMENT_CREATED
+        - DISCUSSION_REPLIED
+        - DISCUSSION_MENTIONED
         - VERSION_REVIEW_REQUESTED
         - VERSION_APPROVED
         - VERSION_REJECTED
@@ -134,6 +136,8 @@ components:
         - $ref: '#/components/schemas/AssetRestoredPayload'
         - $ref: '#/components/schemas/DiscussionCreatedPayload'
         - $ref: '#/components/schemas/CommentCreatedPayload'
+        - $ref: '#/components/schemas/DiscussionRepliedPayload'
+        - $ref: '#/components/schemas/DiscussionMentionedPayload'
         - $ref: '#/components/schemas/VersionReviewRequestedPayload'
         - $ref: '#/components/schemas/VersionApprovedPayload'
         - $ref: '#/components/schemas/VersionRejectedPayload'
@@ -277,6 +281,26 @@ components:
         commentId: { type: string }
         parentId: { type: [string, 'null'] }
         createdBy: { type: string, pattern: '^prn_' }
+
+    DiscussionRepliedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, threadId, commentId, authorId]
+      properties:
+        assetId: { type: string }
+        threadId: { type: string }
+        commentId: { type: string }
+        authorId: { type: string, pattern: '^prn_' }
+
+    DiscussionMentionedPayload:
+      type: object
+      additionalProperties: false
+      required: [assetId, threadId, commentId, authorId]
+      properties:
+        assetId: { type: string }
+        threadId: { type: string }
+        commentId: { type: string }
+        authorId: { type: string, pattern: '^prn_' }
 
     VersionReviewRequestedPayload:
       type: object

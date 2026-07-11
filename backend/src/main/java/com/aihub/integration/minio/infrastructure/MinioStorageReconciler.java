@@ -2,9 +2,15 @@ package com.aihub.integration.minio.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.notification.application.NotificationRecipientResolver;
+import com.aihub.notification.application.NotificationService;
+import com.aihub.notification.domain.NotificationSeverity;
+import com.aihub.platform.observability.application.AlertService;
 import com.aihub.platform.observability.application.PlatformMetrics;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,13 +35,25 @@ public class MinioStorageReconciler implements JobHandler {
     private final JdbcTemplate jdbcTemplate;
     private final PlatformMetrics platformMetrics;
     private final ObjectProvider<MinioObjectExistencePort> minioExistenceProvider;
+    private final MinioProperties minioProperties;
+    private final AlertService alertService;
+    private final NotificationService notificationService;
+    private final NotificationRecipientResolver recipientResolver;
 
     public MinioStorageReconciler(JdbcTemplate jdbcTemplate,
                                   PlatformMetrics platformMetrics,
-                                  ObjectProvider<MinioObjectExistencePort> minioExistenceProvider) {
+                                  ObjectProvider<MinioObjectExistencePort> minioExistenceProvider,
+                                  MinioProperties minioProperties,
+                                  AlertService alertService,
+                                  NotificationService notificationService,
+                                  NotificationRecipientResolver recipientResolver) {
         this.jdbcTemplate = jdbcTemplate;
         this.platformMetrics = platformMetrics;
         this.minioExistenceProvider = minioExistenceProvider;
+        this.minioProperties = minioProperties;
+        this.alertService = alertService;
+        this.notificationService = notificationService;
+        this.recipientResolver = recipientResolver;
     }
 
     @Override
@@ -97,8 +115,49 @@ public class MinioStorageReconciler implements JobHandler {
 
         } while (true);
 
+        checkStorageQuota();
+
         LOG.info("MinIO storage reconciliation completed jobId={} totalChecked={} discrepancies={}",
                 context.jobId(), totalChecked, discrepancies);
+    }
+
+    void checkStorageQuota() {
+        long quotaBytes = minioProperties.getQuotaBytes();
+        if (quotaBytes <= 0) {
+            return;
+        }
+        Long usedObj = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(size), 0) FROM version_artifact WHERE size IS NOT NULL AND size >= 0",
+                Long.class);
+        long usedBytes = usedObj == null ? 0L : usedObj;
+        double usageRatio = quotaBytes == 0 ? 0.0 : (double) usedBytes / quotaBytes;
+        int warningPercent = Math.max(1, Math.min(minioProperties.getQuotaWarningPercent(), 100));
+        double threshold = warningPercent / 100.0;
+        if (usageRatio < threshold) {
+            return;
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("scopeType", "PLATFORM");
+        payload.put("scopeId", null);
+        payload.put("usedBytes", usedBytes);
+        payload.put("quotaBytes", quotaBytes);
+        payload.put("usageRatio", usageRatio);
+
+        alertService.emitStorageQuotaWarning(usedBytes, quotaBytes, usageRatio);
+        try {
+            notificationService.publishOutboxEvent("STORAGE", "platform",
+                    "STORAGE_QUOTA_WARNING", payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish STORAGE_QUOTA_WARNING outbox", ex);
+        }
+        Set<String> observers = recipientResolver.resolveSystemObservers();
+        notificationService.fanOutInAppNotifications(observers, null,
+                "STORAGE_QUOTA_WARNING",
+                "notification.storage.quota.warning",
+                NotificationSeverity.WARN, payload);
+        LOG.warn("storage quota warning usedBytes={} quotaBytes={} usageRatio={}",
+                usedBytes, quotaBytes, usageRatio);
     }
 
     private int expireStaleSessions(String jobId) {

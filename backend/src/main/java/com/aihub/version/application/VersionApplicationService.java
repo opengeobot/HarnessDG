@@ -6,7 +6,9 @@ import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationRecipientResolver;
 import com.aihub.notification.application.NotificationService;
+import com.aihub.notification.domain.NotificationSeverity;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -19,8 +21,10 @@ import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,6 +47,7 @@ public class VersionApplicationService {
     private final IdGenerator idGenerator;
     private final JdbcTemplate jdbcTemplate;
     private final NotificationService notificationService;
+    private final NotificationRecipientResolver recipientResolver;
     private final JobApplicationService jobApplicationService;
     private final ObjectMapper objectMapper;
 
@@ -52,6 +57,7 @@ public class VersionApplicationService {
                                      IdGenerator idGenerator,
                                      JdbcTemplate jdbcTemplate,
                                      NotificationService notificationService,
+                                     NotificationRecipientResolver recipientResolver,
                                      JobApplicationService jobApplicationService,
                                      ObjectMapper objectMapper) {
         this.versionRepository = versionRepository;
@@ -60,6 +66,7 @@ public class VersionApplicationService {
         this.idGenerator = idGenerator;
         this.jdbcTemplate = jdbcTemplate;
         this.notificationService = notificationService;
+        this.recipientResolver = recipientResolver;
         this.jobApplicationService = jobApplicationService;
         this.objectMapper = objectMapper;
     }
@@ -120,9 +127,16 @@ public class VersionApplicationService {
             enqueueValidationJob(versionId, v.assetId(), principalId);
         }
         if (target == VersionStatus.DEPRECATED) {
-            publishOutbox("ASSET_VERSION", versionId, "VERSION_DEPRECATED",
-                    Map.of("versionId", versionId, "assetId", v.assetId(),
-                            "version", v.version()));
+            Map<String, Object> payload = Map.of("versionId", versionId, "assetId", v.assetId(),
+                    "version", v.version());
+            publishOutbox("ASSET_VERSION", versionId, "VERSION_DEPRECATED", payload);
+            notificationService.fanOutInAppNotifications(
+                    recipientResolver.resolveAssetOwners(v.assetId()),
+                    null,
+                    "VERSION_DEPRECATED",
+                    "notification.version.deprecated",
+                    NotificationSeverity.WARN,
+                    payload);
         }
         return VersionView.from(v);
     }
@@ -142,9 +156,18 @@ public class VersionApplicationService {
         versionRepository.update(v);
         auditVersion("VERSION_PUBLISHED", principalId, versionId, v.assetId(),
                 Map.of("version", v.version(), "gitTag", gitTag));
-        publishOutbox("ASSET_VERSION", versionId, "VERSION_PUBLISHED",
-                Map.of("versionId", versionId, "assetId", v.assetId(),
-                        "version", v.version(), "gitTag", gitTag));
+        Map<String, Object> payload = Map.of("versionId", versionId, "assetId", v.assetId(),
+                "version", v.version(), "gitTag", gitTag, "publishedBy", principalId);
+        publishOutbox("ASSET_VERSION", versionId, "VERSION_PUBLISHED", payload);
+        Set<String> recipients = new LinkedHashSet<>();
+        recipients.add(principalId);
+        recipients.addAll(recipientResolver.resolveAssetOwners(v.assetId()));
+        recipients.addAll(recipientResolver.resolveSubscribers(v.assetId()));
+        notificationService.fanOutInAppNotifications(recipients, null,
+                "VERSION_PUBLISHED",
+                "notification.version.published",
+                NotificationSeverity.INFO,
+                payload);
         return VersionView.from(v);
     }
 

@@ -20,6 +20,7 @@ import com.aihub.shared.id.IdPrefix;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationRecipientResolver;
 import com.aihub.notification.application.NotificationService;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -48,6 +49,7 @@ class VersionApplicationServiceTest {
     @Mock private IdGenerator idGenerator;
     @Mock private JdbcTemplate jdbcTemplate;
     @Mock private NotificationService notificationService;
+    @Mock private NotificationRecipientResolver recipientResolver;
     @Mock private JobApplicationService jobApplicationService;
 
     private VersionApplicationService service;
@@ -57,7 +59,7 @@ class VersionApplicationServiceTest {
     void setUp() {
         service = new VersionApplicationService(
                 versionRepository, authorizationService, auditService, idGenerator, jdbcTemplate,
-                notificationService, jobApplicationService, objectMapper);
+                notificationService, recipientResolver, jobApplicationService, objectMapper);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ver_generated");
     }
 

@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -90,6 +91,29 @@ public class NotificationService {
                 0);
         notificationRepository.insert(notification);
         LOG.info("in-app notification sent principalId={} eventType={}", principalId, eventType);
+    }
+
+    /**
+     * 向多个主体 fan-out 站内通知，跳过排除主体与空值；单条失败不中断其余投递。
+     */
+    public void fanOutInAppNotifications(Set<String> principalIds, String excludePrincipalId,
+                                         String eventType, String i18nKey,
+                                         NotificationSeverity severity, Map<String, Object> parameters) {
+        if (principalIds == null || principalIds.isEmpty()) {
+            return;
+        }
+        for (String principalId : principalIds) {
+            if (principalId == null || principalId.isBlank()
+                    || principalId.equals(excludePrincipalId)) {
+                continue;
+            }
+            try {
+                sendInAppNotification(principalId, eventType, i18nKey, severity, parameters);
+            } catch (Exception ex) {
+                LOG.warn("failed to fan-out in-app notification principalId={} eventType={}",
+                        principalId, eventType, ex);
+            }
+        }
     }
 
     /**

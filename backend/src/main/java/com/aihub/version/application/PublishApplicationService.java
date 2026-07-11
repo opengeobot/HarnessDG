@@ -6,7 +6,9 @@ import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationRecipientResolver;
 import com.aihub.notification.application.NotificationService;
+import com.aihub.notification.domain.NotificationSeverity;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.id.IdGenerator;
@@ -16,6 +18,7 @@ import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -44,6 +47,7 @@ public class PublishApplicationService {
     private final JobApplicationService jobApplicationService;
     private final ObjectMapper objectMapper;
     private final NotificationService notificationService;
+    private final NotificationRecipientResolver recipientResolver;
 
     public PublishApplicationService(VersionRepository versionRepository,
                                      JdbcTemplate jdbcTemplate,
@@ -52,7 +56,8 @@ public class PublishApplicationService {
                                      AuditService auditService,
                                      JobApplicationService jobApplicationService,
                                      ObjectMapper objectMapper,
-                                     NotificationService notificationService) {
+                                     NotificationService notificationService,
+                                     NotificationRecipientResolver recipientResolver) {
         this.versionRepository = versionRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.idGenerator = idGenerator;
@@ -61,6 +66,7 @@ public class PublishApplicationService {
         this.jobApplicationService = jobApplicationService;
         this.objectMapper = objectMapper;
         this.notificationService = notificationService;
+        this.recipientResolver = recipientResolver;
     }
 
     /**
@@ -130,8 +136,16 @@ public class PublishApplicationService {
                 Map.of("requestId", requestId)));
 
         LOG.info("publish request submitted versionId={} requestId={}", versionId, requestId);
-        publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REVIEW_REQUESTED",
-                Map.of("requestId", requestId, "versionId", versionId));
+        Map<String, Object> payload = Map.of("requestId", requestId, "versionId", versionId,
+                "assetId", version.assetId(), "version", version.version(), "requestedBy", principalId);
+        publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REVIEW_REQUESTED", payload);
+        notificationService.fanOutInAppNotifications(
+                recipientResolver.resolveReviewers(version.assetId()),
+                principalId,
+                "VERSION_REVIEW_REQUESTED",
+                "notification.version.review_requested",
+                NotificationSeverity.INFO,
+                payload);
         return requestId;
     }
 
@@ -210,8 +224,13 @@ public class PublishApplicationService {
                 versionRepository.update(versionForReject);
             }
             LOG.info("publish request rejected requestId={} versionId={}", requestId, versionIdForReject);
-            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED",
-                    Map.of("requestId", requestId, "versionId", versionIdForReject, "decision", "REJECT"));
+            Map<String, Object> rejectPayload = Map.of(
+                    "requestId", requestId, "versionId", versionIdForReject,
+                    "assetId", versionForReject == null ? "" : versionForReject.assetId(),
+                    "version", versionForReject == null ? "" : versionForReject.version(),
+                    "rejectedBy", reviewerId, "reasonCode", "REJECT");
+            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED", rejectPayload);
+            notifySubmitter(submittedBy, "VERSION_REJECTED", "notification.version.rejected", rejectPayload);
             return;
         }
 
@@ -226,8 +245,13 @@ public class PublishApplicationService {
                 versionRepository.update(versionForChanges);
             }
             LOG.info("publish request changes-requested requestId={} versionId={}", requestId, versionIdForChanges);
-            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED",
-                    Map.of("requestId", requestId, "versionId", versionIdForChanges, "decision", "REQUEST_CHANGES"));
+            Map<String, Object> changesPayload = Map.of(
+                    "requestId", requestId, "versionId", versionIdForChanges,
+                    "assetId", versionForChanges == null ? "" : versionForChanges.assetId(),
+                    "version", versionForChanges == null ? "" : versionForChanges.version(),
+                    "rejectedBy", reviewerId, "reasonCode", "REQUEST_CHANGES");
+            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_REJECTED", changesPayload);
+            notifySubmitter(submittedBy, "VERSION_REJECTED", "notification.version.rejected", changesPayload);
             return;
         }
 
@@ -263,8 +287,12 @@ public class PublishApplicationService {
 
             LOG.info("publish request approved, publish job submitted requestId={} versionId={} quorum={}/{}",
                     requestId, versionIdForPublish, approvals, required);
-            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_APPROVED",
-                    Map.of("requestId", requestId, "versionId", versionIdForPublish));
+            Map<String, Object> approvedPayload = Map.of(
+                    "requestId", requestId, "versionId", versionIdForPublish,
+                    "assetId", version.assetId(), "version", version.version(),
+                    "approvedBy", reviewerId);
+            publishOutbox("PUBLISH_REQUEST", requestId, "VERSION_APPROVED", approvedPayload);
+            notifySubmitter(submittedBy, "VERSION_APPROVED", "notification.version.approved", approvedPayload);
         }
     }
 
@@ -297,8 +325,16 @@ public class PublishApplicationService {
                 "VERSION_DEPRECATED", "version:deprecate",
                 null, null, "VERSION", versionId, null, null,
                 AuditResult.SUCCEEDED, null, Map.of()));
-        publishOutbox("VERSION", versionId, "VERSION_DEPRECATED",
-                Map.of("versionId", versionId));
+        Map<String, Object> payload = Map.of("versionId", versionId, "assetId", version.assetId(),
+                "version", version.version());
+        publishOutbox("VERSION", versionId, "VERSION_DEPRECATED", payload);
+        notificationService.fanOutInAppNotifications(
+                recipientResolver.resolveAssetOwners(version.assetId()),
+                null,
+                "VERSION_DEPRECATED",
+                "notification.version.deprecated",
+                NotificationSeverity.WARN,
+                payload);
         LOG.info("version deprecated versionId={}", versionId);
     }
 
@@ -342,6 +378,19 @@ public class PublishApplicationService {
                 SELECT review_id, reviewer_id, decision, comments, created_at
                 FROM review_decision WHERE request_id = ? ORDER BY created_at DESC
                 """, requestId);
+    }
+
+    private void notifySubmitter(String submitterId, String eventType, String i18nKey,
+                                 Map<String, Object> payload) {
+        if (submitterId == null || submitterId.isBlank()) {
+            return;
+        }
+        try {
+            notificationService.sendInAppNotification(submitterId, eventType, i18nKey,
+                    NotificationSeverity.INFO, payload);
+        } catch (Exception ex) {
+            LOG.warn("failed to notify submitter={} eventType={}", submitterId, eventType, ex);
+        }
     }
 
     private void publishOutbox(String aggregateType, String aggregateId, String eventType,

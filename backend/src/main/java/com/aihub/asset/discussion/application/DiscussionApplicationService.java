@@ -8,6 +8,7 @@ package com.aihub.asset.discussion.application;
 import com.aihub.asset.discussion.domain.Comment;
 import com.aihub.asset.discussion.domain.CommentStatus;
 import com.aihub.asset.discussion.domain.DiscussionRepository;
+import com.aihub.asset.discussion.domain.DiscussionSubscriptionRepository;
 import com.aihub.asset.discussion.domain.DiscussionThread;
 import com.aihub.asset.discussion.domain.ThreadStatus;
 import com.aihub.audit.application.AuditEvent;
@@ -58,19 +59,22 @@ public class DiscussionApplicationService {
     private final IdGenerator idGenerator;
     private final NotificationService notificationService;
     private final PrincipalQueryApplicationService principalQuery;
+    private final DiscussionSubscriptionRepository subscriptionRepository;
 
     public DiscussionApplicationService(DiscussionRepository discussionRepository,
                                         AuthorizationService authorizationService,
                                         AuditService auditService,
                                         IdGenerator idGenerator,
                                         NotificationService notificationService,
-                                        PrincipalQueryApplicationService principalQuery) {
+                                        PrincipalQueryApplicationService principalQuery,
+                                        DiscussionSubscriptionRepository subscriptionRepository) {
         this.discussionRepository = discussionRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
         this.notificationService = notificationService;
         this.principalQuery = principalQuery;
+        this.subscriptionRepository = subscriptionRepository;
     }
 
     /** 创建讨论线程。 */
@@ -132,9 +136,31 @@ public class DiscussionApplicationService {
                 Map.of("threadId", threadId));
         publishOutbox("ASSET", thread.assetId(), "COMMENT_CREATED",
                 Map.of("commentId", commentId, "threadId", threadId,
-                        "assetId", thread.assetId()));
-        notifyMentionedPrincipals(trimmedBody, thread.assetId(), commentId, principalId);
+                        "assetId", thread.assetId(), "createdBy", principalId));
+        notifyMentionedPrincipals(trimmedBody, thread.assetId(), threadId, commentId, principalId);
+        notifySubscribers(thread, commentId, principalId);
         return CommentView.from(comment);
+    }
+
+    /** 订阅资产讨论通知。 */
+    @Transactional
+    public void subscribe(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        subscriptionRepository.subscribe(assetId, principalId);
+    }
+
+    /** 取消订阅资产讨论通知。 */
+    @Transactional
+    public void unsubscribe(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        subscriptionRepository.unsubscribe(assetId, principalId);
+    }
+
+    /** 查询当前主体是否已订阅。 */
+    @Transactional(readOnly = true)
+    public boolean isSubscribed(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        return subscriptionRepository.isSubscribed(assetId, principalId);
     }
 
     /** 读取线程下的评论列表。 */
@@ -250,8 +276,8 @@ public class DiscussionApplicationService {
 
     // ---- 私有辅助 ----
 
-    private void notifyMentionedPrincipals(String body, String assetId, String commentId,
-                                           String authorId) {
+    private void notifyMentionedPrincipals(String body, String assetId, String threadId,
+                                           String commentId, String authorId) {
         Set<String> mentioned = parseMentions(body);
         for (String mentionedId : mentioned) {
             if (mentionedId.equals(authorId)) {
@@ -266,17 +292,36 @@ public class DiscussionApplicationService {
                     context, Permissions.ASSET_READ, "ASSET", assetId)) {
                 continue;
             }
+            Map<String, Object> params = Map.of(
+                    "assetId", assetId, "threadId", threadId,
+                    "commentId", commentId, "authorId", authorId);
             try {
                 notificationService.sendInAppNotification(
                         mentionedId,
-                        "COMMENT_MENTION",
-                        "notification.comment.mention",
+                        "DISCUSSION_MENTIONED",
+                        "notification.discussion.mentioned",
                         NotificationSeverity.INFO,
-                        Map.of("assetId", assetId, "commentId", commentId, "authorId", authorId));
+                        params);
+                publishOutbox("ASSET", assetId, "DISCUSSION_MENTIONED", params);
             } catch (Exception ex) {
                 LOG.warn("failed to notify mention target={} assetId={}", mentionedId, assetId, ex);
             }
         }
+    }
+
+    private void notifySubscribers(DiscussionThread thread, String commentId, String authorId) {
+        Set<String> subscribers = subscriptionRepository.findSubscribers(thread.assetId());
+        Map<String, Object> params = Map.of(
+                "assetId", thread.assetId(),
+                "threadId", thread.threadId(),
+                "commentId", commentId,
+                "authorId", authorId);
+        publishOutbox("ASSET", thread.assetId(), "DISCUSSION_REPLIED", params);
+        notificationService.fanOutInAppNotifications(subscribers, authorId,
+                "DISCUSSION_REPLIED",
+                "notification.discussion.replied",
+                NotificationSeverity.INFO,
+                params);
     }
 
     static Set<String> parseMentions(String body) {

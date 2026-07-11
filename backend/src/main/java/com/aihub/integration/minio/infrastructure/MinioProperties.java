@@ -1,3 +1,8 @@
+/*
+ * 功能: MinIO 连接与存储配额配置属性。
+ * 时间: 2026-07-11
+ * 作者: AxeXie
+ */
 package com.aihub.integration.minio.infrastructure;
 
 import com.aihub.version.domain.DvcStorageProperties;
@@ -30,6 +35,12 @@ public class MinioProperties implements DvcStorageProperties {
     /** DVC 专用秘密密钥（敏感，禁止记录）。 */
     private String dvcSecretKey;
 
+    /** 平台存储配额（字节）；0 表示不启用配额告警。 */
+    private long quotaBytes = 0L;
+
+    /** 配额告警阈值（使用率百分比，0–100）。 */
+    private int quotaWarningPercent = 80;
+
     public String getEndpoint() { return endpoint; }
     public void setEndpoint(String endpoint) { this.endpoint = endpoint; }
     public String getAccessKey() { return accessKey; }
@@ -57,4 +68,9 @@ public class MinioProperties implements DvcStorageProperties {
     public String resolveDvcSecretKey() {
         return dvcSecretKey != null && !dvcSecretKey.isBlank() ? dvcSecretKey : null;
     }
+
+    public long getQuotaBytes() { return quotaBytes; }
+    public void setQuotaBytes(long quotaBytes) { this.quotaBytes = quotaBytes; }
+    public int getQuotaWarningPercent() { return quotaWarningPercent; }
+    public void setQuotaWarningPercent(int quotaWarningPercent) { this.quotaWarningPercent = quotaWarningPercent; }
 }

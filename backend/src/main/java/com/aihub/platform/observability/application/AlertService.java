@@ -17,6 +17,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,6 +43,9 @@ public class AlertService {
     private static final long DEAD_DELIVERY_THRESHOLD = 5;
     /** Outbox 积压告警阈值 */
     private static final long OUTBOX_BACKLOG_THRESHOLD = 100;
+
+    private static final String ALERT_STORAGE_QUOTA = "STORAGE_QUOTA_WARNING";
+    private static final String ALERT_DEPENDENCY_UNHEALTHY = "SYSTEM_DEPENDENCY_UNHEALTHY";
 
     private final JdbcTemplate jdbcTemplate;
     private final OutboxRepository outboxRepository;
@@ -73,6 +77,42 @@ public class AlertService {
         return jdbcTemplate.query(
                 "SELECT * FROM system_alert WHERE status = 'FIRING' ORDER BY fired_at DESC",
                 ALERT_MAPPER);
+    }
+
+    /**
+     * 存储配额超阈值时触发告警（幂等：同类 FIRING 不重复插入）。
+     */
+    public void emitStorageQuotaWarning(long usedBytes, long quotaBytes, double usageRatio) {
+        if (hasFiringAlert(ALERT_STORAGE_QUOTA)) {
+            return;
+        }
+        fireAlert(ALERT_STORAGE_QUOTA, "WARNING",
+                "Storage quota warning",
+                String.format("Used %d bytes of %d bytes (%.1f%%)", usedBytes, quotaBytes, usageRatio * 100),
+                "storage_usage_ratio", (double) quotaWarningThresholdRatio(), usageRatio);
+    }
+
+    /**
+     * 依赖不可用时触发告警（幂等：按依赖名去重）。
+     */
+    public void emitDependencyUnhealthy(String dependency, String status, Long latencyMs) {
+        String alertType = ALERT_DEPENDENCY_UNHEALTHY + ":" + dependency;
+        if (hasFiringAlert(alertType)) {
+            return;
+        }
+        fireAlert(alertType, "CRITICAL",
+                "System dependency unhealthy: " + dependency,
+                String.format("dependency=%s status=%s latencyMs=%s", dependency, status, latencyMs),
+                "dependency_health", null, null);
+    }
+
+    /** 依赖恢复时解除对应告警。 */
+    public void resolveDependencyUnhealthy(String dependency) {
+        resolveAlert(ALERT_DEPENDENCY_UNHEALTHY + ":" + dependency, 0);
+    }
+
+    private double quotaWarningThresholdRatio() {
+        return 0.8;
     }
 
     /** 定时告警检查（每 5 分钟）。 */
