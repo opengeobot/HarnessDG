@@ -1,22 +1,47 @@
 /**
- * 功能: 资产血缘页面——展示上下游关系列表。
+ * 功能: 资产血缘页面——展示上下游关系列表，支持添加关系。
  * 时间: 2026-07-11
  * 作者: AxeXie
  */
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { Button, Card, Empty, Flex, Select, Skeleton, Space, Table, Tag, Typography } from 'antd';
+import {
+  Button,
+  Card,
+  Empty,
+  Flex,
+  Form,
+  Modal,
+  Select,
+  Skeleton,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
-import { getAssetLineage } from './api';
+import { createAssetRelation, getAssetLineage, searchAssets } from './api';
 import type { AssetLineageView, LineageDirection } from './types';
+
+const RELATION_TYPES = [
+  'DERIVED_FROM',
+  'TRAINED_ON',
+  'BASED_ON',
+  'FINE_TUNED_FROM',
+] as const;
 
 export function AssetLineagePage() {
   const { assetId } = useParams<{ assetId: string }>();
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [direction, setDirection] = useState<LineageDirection>('down');
   const [depth, setDepth] = useState(3);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [childSearch, setChildSearch] = useState('');
+  const [form] = Form.useForm<{ childAssetId: string; relationType: string }>();
 
   useDocumentTitle(t('assets.lineage.title'));
 
@@ -24,6 +49,37 @@ export function AssetLineagePage() {
     queryKey: ['asset-lineage', assetId, direction, depth],
     queryFn: () => getAssetLineage(assetId!, { direction, depth }),
     enabled: !!assetId,
+  });
+
+  const childAssetQuery = useQuery({
+    queryKey: ['asset-lineage-child-search', childSearch],
+    queryFn: () => searchAssets({ keyword: childSearch, limit: 20 }),
+    enabled: modalOpen && childSearch.length >= 1,
+  });
+
+  const childOptions = useMemo(
+    () =>
+      (childAssetQuery.data?.items ?? [])
+        .filter((item) => item.assetId !== assetId)
+        .map((item) => ({
+          value: item.assetId,
+          label: `${item.displayName ?? item.name} (${item.assetId})`,
+        })),
+    [childAssetQuery.data?.items, assetId],
+  );
+
+  const createMutation = useMutation({
+    mutationFn: (values: { childAssetId: string; relationType: string }) =>
+      createAssetRelation(assetId!, values),
+    onSuccess: () => {
+      message.success(t('assets.lineage.createSuccess'));
+      setModalOpen(false);
+      form.resetFields();
+      queryClient.invalidateQueries({ queryKey: ['asset-lineage', assetId] });
+    },
+    onError: () => {
+      message.error(t('assets.lineage.createFailed'));
+    },
   });
 
   if (query.isLoading) {
@@ -52,6 +108,9 @@ export function AssetLineagePage() {
           )}
         </Space>
         <Space>
+          <Button type="primary" onClick={() => setModalOpen(true)}>
+            {t('assets.lineage.addRelation')}
+          </Button>
           <Select
             value={direction}
             onChange={setDirection}
@@ -111,6 +170,49 @@ export function AssetLineagePage() {
           ]}
         />
       </Card>
+
+      <Modal
+        title={t('assets.lineage.addRelation')}
+        open={modalOpen}
+        onCancel={() => {
+          setModalOpen(false);
+          form.resetFields();
+        }}
+        onOk={() => form.submit()}
+        confirmLoading={createMutation.isPending}
+        destroyOnClose
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) => createMutation.mutate(values)}
+        >
+          <Form.Item
+            name="childAssetId"
+            label={t('assets.lineage.childAsset')}
+            rules={[{ required: true, message: t('assets.lineage.childAssetRequired') }]}
+          >
+            <Select
+              showSearch
+              filterOption={false}
+              onSearch={setChildSearch}
+              options={childOptions}
+              placeholder={t('assets.lineage.childAssetPlaceholder')}
+              loading={childAssetQuery.isFetching}
+            />
+          </Form.Item>
+          <Form.Item
+            name="relationType"
+            label={t('assets.lineage.relationType')}
+            rules={[{ required: true, message: t('assets.lineage.relationTypeRequired') }]}
+          >
+            <Select
+              options={RELATION_TYPES.map((type) => ({ value: type, label: type }))}
+              placeholder={t('assets.lineage.relationTypePlaceholder')}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Flex>
   );
 }

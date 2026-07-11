@@ -5,7 +5,7 @@
  */
 package com.aihub.identity.api;
 
-import com.aihub.identity.domain.LocalUserRepository;
+import com.aihub.identity.application.PasswordChangeQueryPort;
 import com.aihub.shared.error.AuthorizationException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.identity.PrincipalContext;
@@ -25,10 +25,10 @@ import org.springframework.web.servlet.HandlerInterceptor;
  */
 public class PasswordChangeRequiredInterceptor implements HandlerInterceptor {
 
-    private final LocalUserRepository userRepository;
+    private final PasswordChangeQueryPort passwordChangeQueryPort;
 
-    public PasswordChangeRequiredInterceptor(LocalUserRepository userRepository) {
-        this.userRepository = userRepository;
+    public PasswordChangeRequiredInterceptor(PasswordChangeQueryPort passwordChangeQueryPort) {
+        this.passwordChangeQueryPort = passwordChangeQueryPort;
     }
 
     @Override
@@ -40,9 +40,7 @@ public class PasswordChangeRequiredInterceptor implements HandlerInterceptor {
         if (isExempt(request)) {
             return true;
         }
-        boolean mustChange = userRepository.findByPrincipalId(context.principalId())
-                .map(user -> user.mustChangePassword())
-                .orElse(false);
+        boolean mustChange = passwordChangeQueryPort.isPasswordChangeRequired(context.principalId());
         if (mustChange) {
             throw new AuthorizationException(
                     ErrorCode.PASSWORD_CHANGE_REQUIRED, "password change required", Map.of());

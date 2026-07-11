@@ -237,7 +237,6 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .set(AssetEntity::getVisibility, asset.visibility().name())
                 .set(AssetEntity::getStatus, asset.status().name())
                 .set(AssetEntity::getOwners, asset.owners(), JSONB_LIST_HANDLER)
-                .set(AssetEntity::getTags, asset.tags(), JSONB_LIST_HANDLER)
                 .set(AssetEntity::getLicense, asset.license())
                 .set(AssetEntity::getOwnerTeamId, asset.ownerTeamId())
                 .set(AssetEntity::getAliases, asset.aliases(), JSONB_LIST_HANDLER)

@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.aihub.shared.error.NotFoundException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -77,6 +79,29 @@ public class AlertService {
         return jdbcTemplate.query(
                 "SELECT * FROM system_alert WHERE status = 'FIRING' ORDER BY fired_at DESC",
                 ALERT_MAPPER);
+    }
+
+    /**
+     * 人工确认告警：按 alertId 标记为 RESOLVED。
+     *
+     * @return 更新后的告警
+     */
+    public SystemAlert acknowledge(String alertId) {
+        Instant now = clock.instant();
+        int rows = jdbcTemplate.update(
+                "UPDATE system_alert SET status = 'RESOLVED', resolved_at = ? "
+                        + "WHERE alert_id = ? AND status = 'FIRING'",
+                Timestamp.from(now), alertId);
+        if (rows == 0) {
+            throw new NotFoundException("alert not found or already resolved: " + alertId);
+        }
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT * FROM system_alert WHERE alert_id = ?",
+                    ALERT_MAPPER, alertId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw new NotFoundException("alert not found: " + alertId);
+        }
     }
 
     /**

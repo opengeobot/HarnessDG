@@ -21,4 +21,9 @@ public interface AssetRelationRepository {
      * 按子资产 ID 查找直接关系（当前节点作为 child）。
      */
     List<AssetRelation> findByChildAssetId(String childAssetId);
+
+    /**
+     * 持久化新的血缘关系边。
+     */
+    void insert(AssetRelation relation);
 }

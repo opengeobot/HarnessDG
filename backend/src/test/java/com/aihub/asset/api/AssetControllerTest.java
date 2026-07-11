@@ -18,9 +18,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.aihub.asset.application.AssetApplicationService;
 import com.aihub.asset.application.AssetLineageQueryService;
+import com.aihub.asset.application.AssetLineageView;
+import com.aihub.asset.application.AssetRelationApplicationService;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.domain.Asset;
+import com.aihub.asset.domain.AssetRelationType;
 import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ModelProfile;
@@ -79,6 +82,7 @@ class AssetControllerTest {
     @Autowired private TokenSigner tokenSigner;
     @MockitoBean private AssetApplicationService assetService;
     @MockitoBean private AssetLineageQueryService lineageQueryService;
+    @MockitoBean private AssetRelationApplicationService relationApplicationService;
     @MockitoBean private RoleBindingRepository roleBindingRepository;
     @MockitoBean private ResourceAclRepository resourceAclRepository;
     @MockitoBean private AgentToolRepository agentToolRepository;
@@ -211,6 +215,28 @@ class AssetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.assetId").value("ast_demo"))
                 .andExpect(jsonPath("$.data.direction").value("down"));
+    }
+
+    @Test
+    void createAssetRelationReturns201() throws Exception {
+        var edge = new AssetLineageView.RelationEdge(
+                "rel_001", "ast_demo", "ast_child", AssetRelationType.TRAINED_ON,
+                1, "prn_admin", Instant.now());
+        given(relationApplicationService.createRelation(
+                eq("ast_demo"), eq("ast_child"), eq(AssetRelationType.TRAINED_ON), any()))
+                .willReturn(edge);
+
+        String body = """
+                {"childAssetId":"ast_child","relationType":"TRAINED_ON"}
+                """;
+
+        mockMvc.perform(post("/api/v1/assets/ast_demo/relations")
+                        .header(HttpHeaders.AUTHORIZATION, bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.relationId").value("rel_001"))
+                .andExpect(jsonPath("$.data.childAssetId").value("ast_child"));
     }
 
     @Test

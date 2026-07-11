@@ -49,6 +49,24 @@ public class JdbcAssetRelationRepository implements AssetRelationRepository {
                 this::mapRelation);
     }
 
+    @Override
+    public void insert(AssetRelation relation) {
+        jdbcTemplate.update(
+                "INSERT INTO asset_relation (relation_id, parent_asset_id, child_asset_id, "
+                        + "relation_type, created_by, created_at) "
+                        + "VALUES (:relationId, :parentAssetId, :childAssetId, :relationType, "
+                        + ":createdBy, :createdAt)",
+                new MapSqlParameterSource()
+                        .addValue("relationId", relation.relationId())
+                        .addValue("parentAssetId", relation.parentAssetId())
+                        .addValue("childAssetId", relation.childAssetId())
+                        .addValue("relationType", relation.relationType().name())
+                        .addValue("createdBy", relation.createdBy())
+                        .addValue("createdAt", relation.createdAt() == null
+                                ? null
+                                : relation.createdAt().atOffset(ZoneOffset.UTC)));
+    }
+
     private AssetRelation mapRelation(ResultSet rs, int rowNum) throws SQLException {
         OffsetDateTime createdAt = rs.getObject("created_at", OffsetDateTime.class);
         return new AssetRelation(

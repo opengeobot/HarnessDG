@@ -189,7 +189,15 @@
       "createdAt": "Created At",
       "directionUp": "Upstream",
       "directionDown": "Downstream",
-      "empty": "No lineage relations found"
+      "empty": "No lineage relations found",
+      "addRelation": "Add Relation",
+      "childAsset": "Child Asset",
+      "childAssetRequired": "Please select a child asset",
+      "childAssetPlaceholder": "Search and select child asset",
+      "relationTypeRequired": "Please select relation type",
+      "relationTypePlaceholder": "Select relation type",
+      "createSuccess": "Relation created",
+      "createFailed": "Failed to create relation"
     },
     "create": {
       "title": "Register Asset",
@@ -721,14 +729,17 @@
     },
     "alerts": {
       "title": "System Alerts",
-      "readonlyHint": "Read-only browse (no acknowledge API on backend)",
+      "readonlyHint": "Browse alerts (FIRING alerts can be acknowledged)",
       "alertId": "Alert ID",
       "alertType": "Type",
       "severity": "Severity",
       "titleCol": "Title",
       "firedAt": "Fired At",
       "resolvedAt": "Resolved At",
-      "noDetail": "No detail"
+      "noDetail": "No detail",
+      "acknowledge": "Acknowledge",
+      "acknowledgeSuccess": "Alert acknowledged",
+      "acknowledgeFailed": "Failed to acknowledge alert"
     }
   },
   "queryBoundary": {
@@ -743,6 +754,12 @@
     "mcpOverview": "MCP (Model Context Protocol) Integration Status",
     "mcpDescription": "Agents access platform capabilities via MCP. Read-only tools are available by default; write tools require explicit enablement and authorization.",
     "connectionInfo": "Connection Info",
+    "mcpEndpoint": "MCP Endpoint",
+    "openApiUrl": "OpenAPI URL",
+    "skillTemplates": "Skill Templates",
+    "exampleCommands": "Example Commands",
+    "noSkills": "No skill templates",
+    "noCommands": "No example commands",
     "protocol": "Protocol",
     "endpoint": "Endpoint",
     "writeTools": "Write Tools",

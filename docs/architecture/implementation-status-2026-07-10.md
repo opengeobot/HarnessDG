@@ -40,7 +40,8 @@
 | V32 | `owner_team_id` NOT NULL 回填 | **D** |
 | V33 | `iam_token.jti_digest` | **D** |
 | V34 | `iam_token` PAT 类型 + name | **F** |
-| V35+ | 预留给后续差距闭合 | 下一可用 |
+| V35 | `dataset_task` / `dataset_language` 字典种子 | **N** |
+| V36+ | 预留给后续差距闭合 | 下一可用 |
 
 > 历史 TASK-P1-002 曾预留 `V27__asset_backfill.sql`；该编号已被 P3 占用。Wave D 占用 V29–V33，Wave F 占用 V34。
 
@@ -90,8 +91,20 @@
 | H | `cbdfe12` | Agent Wave H：REST 贡献写端点、主体级限流、P4 onboarding E4 脚本 |
 | I | `4530361` | 验收 Wave I：Compose E4 尽力执行、EVD E2/E3 PASS 翻转、CheckCompletion 尝试、V25/outbox 验收修复 |
 | M | _this commit_ | 旅程 Wave M：`verify-journey.sh`/`.ps1` PRD §13.2 行为 E2E、CI `journey-e2e` 作业、runbook 对照扩展 |
+| N | _this commit_ | 产品 Wave N：血缘写 API、dataset 字典种子、告警确认、tags JSONB 停写、IntegrationsPage agent-bundle、ArchUnit 改密端口 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
+
+### Wave N 摘要（N23–N28）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| N23 血缘写 API | IMPLEMENTED_UNVERIFIED | `POST /assets/{id}/relations` + `AssetRelationApplicationService` + 审计 + `AssetLineagePage` 添加关系 |
+| N24 dataset 字典种子 | IMPLEMENTED_UNVERIFIED | `V35__dataset_dict_seed.sql`：`dataset_task` / `dataset_language` + i18n |
+| N25 告警确认 API | IMPLEMENTED_UNVERIFIED | `POST /system/alerts/{id}:acknowledge` + `AlertsPage` 确认按钮 |
+| N26 tags JSONB 停写 | IMPLEMENTED_UNVERIFIED | `MyBatisAssetRepository.update()` 不再写 `asset.tags`；新标签仅经 `asset_tag` |
+| N27 IntegrationsPage | IMPLEMENTED_UNVERIFIED | 消费 `GET /integrations/agent-bundle`（MCP/OpenAPI/Skill/示例命令） |
+| N28 ArchUnit 改密端口 | IMPLEMENTED_UNVERIFIED | `PasswordChangeQueryPort` + `JdbcPasswordChangeQueryPort`；移除 LayeredArchitecture 例外 |
 
 ### Wave M 摘要（M1–M4，PRD §13.2）
 

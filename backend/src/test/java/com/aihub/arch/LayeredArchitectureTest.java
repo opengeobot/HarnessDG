@@ -5,9 +5,7 @@
  */
 package com.aihub.arch;
 
-import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
-import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleName;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
@@ -84,18 +82,10 @@ class LayeredArchitectureTest {
                     .should().dependOnClassesThat().resideInAPackage("com.aihub..infrastructure..")
                     .allowEmptyShould(true);
 
-    /**
-     * 规则六：api 适配层不得直接依赖 domain 仓储端口。
-     *
-     * <p>已知例外：identity 模块 {@code PasswordChangeRequiredInterceptor} 与
-     * {@code IdentityWebConfiguration} 在 P0 密码强制改密流程中直接读取
-     * {@code LocalUserRepository}；待 identity 应用服务封装后移除。
-     */
+    /** 规则六：api 适配层不得直接依赖 domain 仓储端口。 */
     @ArchTest
     static final ArchRule controllers_must_not_call_repositories =
             noClasses().that().resideInAPackage("com.aihub..api..")
-                    .and(not(simpleName("PasswordChangeRequiredInterceptor")))
-                    .and(not(simpleName("IdentityWebConfiguration")))
                     .should().dependOnClassesThat(
                             resideInAPackage("com.aihub..domain..")
                                     .and(JavaClass.Predicates.simpleNameEndingWith("Repository")))

@@ -5,6 +5,8 @@
  */
 package com.aihub.platform.observability.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -15,6 +17,8 @@ import static org.mockito.Mockito.when;
 import com.aihub.notification.domain.OutboxRepository;
 import com.aihub.notification.domain.WebhookDeliveryRepository;
 import com.aihub.notification.domain.WebhookDeliveryStatus;
+import com.aihub.platform.observability.domain.SystemAlert;
+import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
 import java.time.Clock;
@@ -115,5 +119,41 @@ class AlertServiceTest {
                 eq(0.0),
                 eq("DEAD_JOB"));
         verify(idGenerator, never()).generate(IdPrefix.ALERT);
+    }
+
+    @Test
+    @DisplayName("人工确认告警应更新为 RESOLVED")
+    void acknowledgeShouldResolveFiringAlert() {
+        SystemAlert resolved = new SystemAlert(
+                1L, "alt_001", "DEAD_JOB", "CRITICAL", "Dead jobs", "detail",
+                "RESOLVED", null, null, null,
+                Instant.parse("2026-07-10T10:00:00Z"),
+                Instant.parse("2026-07-10T12:00:00Z"), null);
+        when(jdbcTemplate.update(
+                contains("UPDATE system_alert SET status = 'RESOLVED'"),
+                any(), eq("alt_001")))
+                .thenReturn(1);
+        when(jdbcTemplate.queryForObject(
+                eq("SELECT * FROM system_alert WHERE alert_id = ?"),
+                any(org.springframework.jdbc.core.RowMapper.class),
+                eq("alt_001")))
+                .thenReturn(resolved);
+
+        SystemAlert result = alertService.acknowledge("alt_001");
+
+        assertThat(result.status()).isEqualTo("RESOLVED");
+        assertThat(result.alertId()).isEqualTo("alt_001");
+    }
+
+    @Test
+    @DisplayName("确认不存在的告警应返回 404")
+    void acknowledgeShouldFailWhenAlertMissing() {
+        when(jdbcTemplate.update(
+                contains("UPDATE system_alert SET status = 'RESOLVED'"),
+                any(), eq("alt_missing")))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> alertService.acknowledge("alt_missing"))
+                .isInstanceOf(NotFoundException.class);
     }
 }

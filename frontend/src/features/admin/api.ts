@@ -337,6 +337,10 @@ export function listAlerts(limit = 50): Promise<SystemAlertView[]> {
   return apiClient.get<SystemAlertView[]>('/system/alerts', { params: { limit } });
 }
 
+export function acknowledgeAlert(alertId: string): Promise<SystemAlertView> {
+  return apiClient.post<SystemAlertView>(`/system/alerts/${alertId}:acknowledge`);
+}
+
 /* ---------------- Team ---------------- */
 export function listTeams(organizationId: string): Promise<TeamView[]> {
   return apiClient.get<TeamView[]>(`/system/organizations/${organizationId}/teams`);

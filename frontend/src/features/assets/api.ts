@@ -52,6 +52,14 @@ export function getAssetLineage(
   return apiClient.get(`/assets/${assetId}/lineage`, { params });
 }
 
+/** 创建资产血缘关系边 */
+export function createAssetRelation(
+  assetId: string,
+  payload: { childAssetId: string; relationType: string },
+): Promise<AssetLineageView['relations'][number]> {
+  return apiClient.post(`/assets/${assetId}/relations`, payload);
+}
+
 /** 逻辑删除资产 */
 export function deleteAsset(assetId: string): Promise<void> {
   return apiClient.delete<void>(`/assets/${assetId}`);

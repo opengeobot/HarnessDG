@@ -8,6 +8,7 @@ package com.aihub.asset.api;
 import com.aihub.asset.application.AssetApplicationService;
 import com.aihub.asset.application.AssetFacetView;
 import com.aihub.asset.application.AssetLineageQueryService;
+import com.aihub.asset.application.AssetRelationApplicationService;
 import com.aihub.asset.application.AssetLineageView;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
@@ -48,15 +49,18 @@ public class AssetController {
 
     private final AssetApplicationService assetService;
     private final AssetLineageQueryService lineageQueryService;
+    private final AssetRelationApplicationService relationApplicationService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
 
     public AssetController(AssetApplicationService assetService,
                            AssetLineageQueryService lineageQueryService,
+                           AssetRelationApplicationService relationApplicationService,
                            IdempotencyService idempotencyService,
                            ObjectMapper objectMapper) {
         this.assetService = assetService;
         this.lineageQueryService = lineageQueryService;
+        this.relationApplicationService = relationApplicationService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
     }
@@ -177,6 +181,21 @@ public class AssetController {
             @RequestParam(required = false, defaultValue = "down") String direction) {
         return AssetApiContext.respond(
                 lineageQueryService.queryLineage(assetId, depth, direction, AssetApiContext.principalId()));
+    }
+
+    /**
+     * 创建资产血缘关系边（当前资产为 parent）。
+     */
+    @PostMapping("/{assetId}/relations")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<AssetLineageView.RelationEdge> createAssetRelation(
+            @PathVariable String assetId,
+            @RequestBody CreateAssetRelationRequest request) {
+        return AssetApiContext.respond(relationApplicationService.createRelation(
+                assetId,
+                request.childAssetId(),
+                request.relationType(),
+                AssetApiContext.principalId()));
     }
 
     /**

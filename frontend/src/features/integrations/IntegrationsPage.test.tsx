@@ -1,46 +1,56 @@
 /**
- * IntegrationsPage 组件测试——MCP 连接信息、只读/写 Tool 列表。
+ * IntegrationsPage 组件测试——agent-bundle API 渲染。
  */
-import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
 import { IntegrationsPage } from './IntegrationsPage';
 import { renderWithProviders } from '@/test/test-utils';
 
+const mockGetAgentBundle = vi.fn().mockResolvedValue({
+  mcpEndpointUrl: 'http://localhost:8080/api/v1/mcp',
+  openApiUrl: 'http://localhost:8080/v3/api-docs',
+  skillTemplates: [
+    { name: 'asset-search', description: 'Search assets', path: 'docs/skills/asset-search.md' },
+  ],
+  exampleCommands: [
+    { label: 'Login', command: 'aih login --username user' },
+  ],
+});
+
+vi.mock('./api', () => ({
+  getAgentBundle: (...args: unknown[]) => mockGetAgentBundle(...args),
+}));
+
 describe('IntegrationsPage', () => {
-  it('渲染页面标题', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('渲染页面标题', async () => {
     renderWithProviders(<IntegrationsPage />);
     expect(screen.getByText('Agent 接入')).toBeInTheDocument();
   });
 
-  it('渲染 MCP 连接信息卡片', () => {
+  it('从 agent-bundle 渲染 MCP 端点', async () => {
     renderWithProviders(<IntegrationsPage />);
-    expect(screen.getByText('连接信息')).toBeInTheDocument();
-    expect(screen.getByText('/api/v1/mcp')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('http://localhost:8080/api/v1/mcp')).toBeInTheDocument();
+    });
   });
 
-  it('显示 MCP 协议 Tag', () => {
+  it('渲染 Skill 模板', async () => {
     renderWithProviders(<IntegrationsPage />);
-    // MCP 出现在 Tag 内
-    const tags = screen.getAllByText(/MCP/);
-    expect(tags.length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => {
+      expect(screen.getByText('asset-search')).toBeInTheDocument();
+      expect(screen.getByText('Search assets')).toBeInTheDocument();
+    });
   });
 
-  it('渲染只读 Tool 列表', () => {
+  it('渲染示例命令', async () => {
     renderWithProviders(<IntegrationsPage />);
-    expect(screen.getByText('asset_search')).toBeInTheDocument();
-    expect(screen.getByText('asset_get')).toBeInTheDocument();
-    expect(screen.getByText('asset_list_versions')).toBeInTheDocument();
-  });
-
-  it('渲染写 Tool 列表', () => {
-    renderWithProviders(<IntegrationsPage />);
-    expect(screen.getByText('asset_create_draft')).toBeInTheDocument();
-    expect(screen.getByText('asset_publish_version')).toBeInTheDocument();
-    expect(screen.getByText('asset_delete')).toBeInTheDocument();
-  });
-
-  it('写 Tool 默认关闭标签', () => {
-    renderWithProviders(<IntegrationsPage />);
-    expect(screen.getByText('默认关闭')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Login')).toBeInTheDocument();
+      expect(screen.getByText('aih login --username user')).toBeInTheDocument();
+    });
   });
 });

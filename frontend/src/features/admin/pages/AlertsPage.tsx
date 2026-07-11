@@ -1,15 +1,15 @@
 /**
- * 功能: 系统告警页面。展示 system_alert 记录（类型/严重度/状态）。
+ * 功能: 系统告警页面。展示 system_alert 记录，支持人工确认。
  * 时间: 2026-07-11
  * 作者: AxeXie
  */
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
-import { Button, Flex, Space, Table, Tag, Typography } from 'antd';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Flex, Space, Table, Tag, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { QueryBoundary } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
-import { listAlerts } from '../api';
+import { acknowledgeAlert, listAlerts } from '../api';
 import type { SystemAlertView } from '../types';
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -25,11 +25,23 @@ const STATUS_COLOR: Record<string, string> = {
 
 export function AlertsPage() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   useDocumentTitle(t('admin.alerts.title'));
 
   const query = useQuery({
     queryKey: ['admin', 'alerts'],
     queryFn: () => listAlerts(100),
+  });
+
+  const acknowledgeMutation = useMutation({
+    mutationFn: (alertId: string) => acknowledgeAlert(alertId),
+    onSuccess: () => {
+      message.success(t('admin.alerts.acknowledgeSuccess'));
+      queryClient.invalidateQueries({ queryKey: ['admin', 'alerts'] });
+    },
+    onError: () => {
+      message.error(t('admin.alerts.acknowledgeFailed'));
+    },
   });
 
   const columns: ColumnsType<SystemAlertView> = [
@@ -60,6 +72,21 @@ export function AlertsPage() {
       key: 'resolvedAt',
       render: (v: string) => (v ? new Date(v).toLocaleString() : '-'),
     },
+    {
+      title: t('common.action'),
+      key: 'actions',
+      render: (_: unknown, record: SystemAlertView) =>
+        record.status === 'FIRING' ? (
+          <Button
+            size="small"
+            aria-label={t('admin.alerts.acknowledge')}
+            loading={acknowledgeMutation.isPending && acknowledgeMutation.variables === record.alertId}
+            onClick={() => acknowledgeMutation.mutate(record.alertId)}
+          >
+            {t('admin.alerts.acknowledge')}
+          </Button>
+        ) : null,
+    },
   ];
 
   return (
@@ -69,7 +96,6 @@ export function AlertsPage() {
           {t('admin.alerts.title')}
         </Typography.Title>
         <Space>
-          <Typography.Text type="secondary">{t('admin.alerts.readonlyHint')}</Typography.Text>
           <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
         </Space>
       </Flex>

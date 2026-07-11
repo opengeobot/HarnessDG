@@ -5,7 +5,7 @@
  */
 package com.aihub.identity.api;
 
-import com.aihub.identity.domain.LocalUserRepository;
+import com.aihub.identity.application.PasswordChangeQueryPort;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -21,15 +21,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties(RefreshCookieProperties.class)
 public class IdentityWebConfiguration implements WebMvcConfigurer {
 
-    private final LocalUserRepository userRepository;
+    private final PasswordChangeQueryPort passwordChangeQueryPort;
 
-    public IdentityWebConfiguration(LocalUserRepository userRepository) {
-        this.userRepository = userRepository;
+    public IdentityWebConfiguration(PasswordChangeQueryPort passwordChangeQueryPort) {
+        this.passwordChangeQueryPort = passwordChangeQueryPort;
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new PasswordChangeRequiredInterceptor(userRepository))
+        registry.addInterceptor(new PasswordChangeRequiredInterceptor(passwordChangeQueryPort))
                 .addPathPatterns("/api/v1/**");
     }
 }

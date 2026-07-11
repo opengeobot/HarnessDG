@@ -189,7 +189,15 @@
       "createdAt": "创建时间",
       "directionUp": "上游",
       "directionDown": "下游",
-      "empty": "暂无血缘关系"
+      "empty": "暂无血缘关系",
+      "addRelation": "添加关系",
+      "childAsset": "子资产",
+      "childAssetRequired": "请选择子资产",
+      "childAssetPlaceholder": "搜索并选择子资产",
+      "relationTypeRequired": "请选择关系类型",
+      "relationTypePlaceholder": "选择关系类型",
+      "createSuccess": "关系已创建",
+      "createFailed": "创建关系失败"
     },
     "create": {
       "title": "登记资产",
@@ -721,14 +729,17 @@
     },
     "alerts": {
       "title": "系统告警",
-      "readonlyHint": "只读浏览（后端未提供确认/静默 API）",
+      "readonlyHint": "只读浏览（FIRING 告警可人工确认）",
       "alertId": "告警 ID",
       "alertType": "类型",
       "severity": "严重度",
       "titleCol": "标题",
       "firedAt": "触发时间",
       "resolvedAt": "恢复时间",
-      "noDetail": "无详情"
+      "noDetail": "无详情",
+      "acknowledge": "确认",
+      "acknowledgeSuccess": "告警已确认",
+      "acknowledgeFailed": "确认失败"
     }
   },
   "queryBoundary": {
@@ -743,6 +754,12 @@
     "mcpOverview": "MCP (Model Context Protocol) 接入状态总览",
     "mcpDescription": "Agent 通过 MCP 协议访问平台能力。只读 Tool 默认可用，写 Tool 需显式开启并授权。",
     "connectionInfo": "连接信息",
+    "mcpEndpoint": "MCP 端点",
+    "openApiUrl": "OpenAPI 文档",
+    "skillTemplates": "Skill 模板",
+    "exampleCommands": "示例命令",
+    "noSkills": "暂无 Skill 模板",
+    "noCommands": "暂无示例命令",
     "protocol": "协议",
     "endpoint": "端点",
     "writeTools": "写 Tool",

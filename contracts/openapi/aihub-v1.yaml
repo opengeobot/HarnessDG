@@ -1980,6 +1980,41 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/relations:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: createAssetRelation
+      summary: 创建资产血缘关系边（当前资产为 parent）
+      tags: [assets]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, ASSET_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      x-audit-event: ASSET_RELATION_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRelationRequest'
+      responses:
+        '201':
+          description: 关系已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AssetRelationEntry' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/deprecate:
     parameters:
       - name: assetId
@@ -2518,6 +2553,33 @@ paths:
                         type: array
                         items: { $ref: '#/components/schemas/SystemAlert' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/alerts/{alertId}:acknowledge:
+    parameters:
+      - name: alertId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: acknowledgeAlert
+      summary: 人工确认告警（FIRING → RESOLVED）
+      tags: [system]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [system:observe]
+      responses:
+        '200':
+          description: 告警已确认
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SystemAlert' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /system/idempotency:
     get:
@@ -4132,8 +4194,21 @@ components:
         childAssetId: { type: string }
         childName: { type: [string, 'null'] }
         relationType: { type: string, enum: [DERIVED_FROM, TRAINED_ON, BASED_ON, FINE_TUNED_FROM] }
+        hopDepth: { type: integer }
         createdBy: { type: [string, 'null'] }
         createdAt: { type: string, format: date-time }
+
+    CreateAssetRelationRequest:
+      type: object
+      required: [childAssetId, relationType]
+      additionalProperties: false
+      properties:
+        childAssetId:
+          type: string
+          description: 下游/子资产 ID
+        relationType:
+          type: string
+          enum: [DERIVED_FROM, TRAINED_ON, BASED_ON, FINE_TUNED_FROM]
 
     IdempotencyRecord:
       type: object
