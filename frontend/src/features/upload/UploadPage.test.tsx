@@ -25,11 +25,14 @@ vi.mock('@/shared/api', () => ({
   },
 }));
 
+const mockSearchParams = new URLSearchParams();
+const mockSetSearchParams = vi.fn();
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    useSearchParams: () => [mockSearchParams, mockSetSearchParams],
   };
 });
 
@@ -71,5 +74,26 @@ describe('UploadPage', () => {
 
     // 文件选择后显示文件数
     expect(screen.getByText(/1/i)).toBeInTheDocument();
+  });
+
+  it('URL 含 sessionId 参数时自动恢复会话', () => {
+    // 设置 sessionId 查询参数
+    mockSearchParams.set('sessionId', 'sess_restore_001');
+    mockSearchParams.set('assetId', 'ast_001');
+    mockGet.mockResolvedValueOnce({
+      sessionId: 'sess_restore_001',
+      assetId: 'ast_001',
+      versionId: 'ver_001',
+      status: 'OPEN',
+      totalBytes: 2048,
+      fileCount: 2,
+      files: [],
+      expiresAt: '2026-07-12T00:00:00Z',
+    });
+
+    renderWithProviders(<UploadPage />);
+
+    // restoreSession 应被调用（通过 searchParams 触发）
+    expect(mockGet).toHaveBeenCalled();
   });
 });
