@@ -44,24 +44,34 @@ json_field() {
   printf '%s' "${json}" | sed -nE "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\1/p" | head -n1
 }
 
-http_status() {
+# 单次 curl 同时获取 HTTP 状态码和响应体
+http_status_and_body() {
   local method="$1"; local path="$2"; local auth="${3:-}"; local body="${4:-}"
   local extra_header="${5:-}"
-  local args=(-s -o /dev/null -w '%{http_code}' -m 30 -X "${method}" "${BASE_URL}${path}")
+  local args=(-s -w '\n%{http_code}' -m 30 -X "${method}" "${BASE_URL}${path}")
   [ -n "${auth}" ] && args+=(-H "Authorization: Bearer ${auth}")
   [ -n "${body}" ] && args+=(-H 'Content-Type: application/json' -d "${body}")
   [ -n "${extra_header}" ] && args+=(-H "${extra_header}")
-  curl "${args[@]}" 2>/dev/null || echo "000"
+  local output
+  output="$(curl "${args[@]}" 2>/dev/null)" || { echo "000"; echo ""; return; }
+  local code
+  code="$(echo "${output}" | tail -n1)"
+  local resp_body
+  resp_body="$(echo "${output}" | sed '$d')"
+  echo "${code}"
+  echo "${resp_body}"
 }
 
+# 仅获取 HTTP 状态码
+http_status() {
+  http_status_and_body "$@" | head -n1
+}
+
+# 仅获取 HTTP 响应体
 http_body() {
-  local method="$1"; local path="$2"; local auth="${3:-}"; local body="${4:-}"
-  local extra_header="${5:-}"
-  local args=(-s -m 30 -X "${method}" "${BASE_URL}${path}")
-  [ -n "${auth}" ] && args+=(-H "Authorization: Bearer ${auth}")
-  [ -n "${body}" ] && args+=(-H 'Content-Type: application/json' -d "${body}")
-  [ -n "${extra_header}" ] && args+=(-H "${extra_header}")
-  curl "${args[@]}" 2>/dev/null
+  local output
+  output="$(http_status_and_body "$@")"
+  echo "${output}" | tail -n +2
 }
 
 http_login_body() {
@@ -167,11 +177,14 @@ ensure_admin_jwt() {
 
 create_model_asset() {
   local suffix="$1"
-  local body code asset_id prov
+  local body code asset_id prov resp
   body="{\"type\":\"MODEL\",\"namespace\":\"journey\",\"name\":\"mdl-${suffix}\",\"displayName\":\"Journey Model ${suffix}\",\"visibility\":\"INTERNAL\",\"ownerTeamId\":\"${OWNER_TEAM_ID}\",\"model\":{\"framework\":\"PYTORCH\",\"task\":\"TEXT_GENERATION\"}}"
-  code="$(http_status POST /api/v1/assets "${ACCESS_TOKEN}" "${body}")"
+  # 单次请求同时获取状态码和响应体，避免重复 POST 引发幂等竞争
+  resp="$(http_status_and_body POST /api/v1/assets "${ACCESS_TOKEN}" "${body}")"
+  code="$(echo "${resp}" | head -n1)"
+  body="$(echo "${resp}" | tail -n +2)"
   if [ "${code}" != "200" ] && [ "${code}" != "201" ]; then
-    if [ "${code}" = "403" ] && http_body POST /api/v1/assets "${ACCESS_TOKEN}" "${body}" | grep -q 'PASSWORD_CHANGE_REQUIRED'; then
+    if [ "${code}" = "403" ] && echo "${body}" | grep -q 'PASSWORD_CHANGE_REQUIRED'; then
       echo "PASSWORD_CHANGE_REQUIRED"
       return 2
     fi
@@ -182,7 +195,6 @@ create_model_asset() {
     echo "HTTP:${code}"
     return 1
   fi
-  body="$(http_body POST /api/v1/assets "${ACCESS_TOKEN}" "${body}")"
   asset_id="$(json_field "${body}" assetId)"
   prov="$(printf '%s' "${body}" | sed -nE 's/.*"provisioningStatus"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
   if [ -z "${asset_id}" ]; then
@@ -196,9 +208,11 @@ create_model_asset() {
 
 create_dataset_asset() {
   local suffix="$1"
-  local body code asset_id
+  local body code asset_id resp
   body="{\"type\":\"DATASET\",\"namespace\":\"journey\",\"name\":\"ds-${suffix}\",\"displayName\":\"Journey Dataset ${suffix}\",\"visibility\":\"INTERNAL\",\"ownerTeamId\":\"${OWNER_TEAM_ID}\",\"dataset\":{\"format\":\"PARQUET\",\"modality\":\"IMAGE\"}}"
-  code="$(http_status POST /api/v1/assets "${ACCESS_TOKEN}" "${body}")"
+  resp="$(http_status_and_body POST /api/v1/assets "${ACCESS_TOKEN}" "${body}")"
+  code="$(echo "${resp}" | head -n1)"
+  body="$(echo "${resp}" | tail -n +2)"
   if [ "${code}" != "200" ] && [ "${code}" != "201" ]; then
     if [ "${code}" = "500" ] || [ "${code}" = "000" ]; then
       echo "INFRA:${code}"
@@ -207,7 +221,6 @@ create_dataset_asset() {
     echo "HTTP:${code}"
     return 1
   fi
-  body="$(http_body POST /api/v1/assets "${ACCESS_TOKEN}" "${body}")"
   asset_id="$(json_field "${body}" assetId)"
   if [ -z "${asset_id}" ]; then
     echo "NO_ASSET_ID"

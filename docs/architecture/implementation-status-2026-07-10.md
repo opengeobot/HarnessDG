@@ -41,7 +41,7 @@
 | V33 | `iam_token.jti_digest` | **D** |
 | V34 | `iam_token` PAT 类型 + name | **F** |
 | V35 | `dataset_task` / `dataset_language` 字典种子 | **N** |
-| V36+ | 预留给后续差距闭合 | 下一可用 |
+| V36 | `mv_download_stats` 物化视图 | **R** |
 
 > 历史 TASK-P1-002 曾预留 `V27__asset_backfill.sql`；该编号已被 P3 占用。Wave D 占用 V29–V33，Wave F 占用 V34。
 
@@ -95,6 +95,7 @@
 | O | _this commit_ | 数据面 Wave O：真实 multipart PUT（aih CLI + UploadPage）、会话 files 恢复、MinIO dvc-scoped STS、scoped DVC 凭据 |
 | P | _this commit_ | Agent/通知 Wave P：Email SMTP 外发、Redis 分布式限流、MCP tools.yaml rateLimit 元数据 |
 | Q | _this commit_ | E5 验收 Wave Q：备份恢复/安全/性能 E5 演练、EVD commitSha 闭环、J–Q 状态快照 |
+| R | _this commit_ | PRD 差距闭合 Wave R：V05 JWT 修复、3 个 ApplicationService 测试、前端组件测试、Facet 缓存、RateLimit TTL、Nginx gzip、下载 MV、E2E 脚本增强 |
 
 ### Wave Q 摘要（Q36–Q39，E5 drills）
 
@@ -217,13 +218,36 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | I3 CheckCompletion | FAIL（预期） | spec PASS；task baseCommit 不匹配；completion 420 issues |
 | I4 状态快照 | DONE | 本文件 Wave H/I 行 + Validation snapshot (I) |
 
+## 9. Validation snapshot (R) — 2026-07-11
+
+| 检查 | 结果 |
+| --- | --- |
+| 全量 `./mvnw test` | **626 PASS / 0 FAIL** |
+| 前端 `pnpm exec vitest run` | **167 PASS / 0 FAIL**（41 test files） |
+| `verify.sh` V05 JWT 修复 | 双密码回退 + `must_change_password` 门处理；参照 `verify-journey.sh` `ensure_admin_jwt()` |
+| AC-P4-MCP-002 悬空引用 | 已移除 `EVD-P4001-001.yaml` 中不存在的 AC ID 引用 |
+| 性能优化 | Facet 缓存 60s TTL、MemoryRateLimitBackend Caffeine 10min TTL、Nginx gzip、V36 mv_download_stats |
+| `perf-smoke.sh` 增强 | 4 场景：asset-search(100并发)、MCP-search(20并发)、presigned-url(10并发)、multipart-upload(5并发) |
+| `verify-journey.sh` 修复 | 合并 `http_status`/`http_body` 为单次请求，消除重复 POST 幂等竞争 |
+
+### Wave R 摘要（R1–R8）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| R1 verify.sh V05 JWT | VERIFIED | 双密码回退 + `must_change_password` 自动改密；与 `verify-journey.sh` 对齐 |
+| R2 AC-P4-MCP-002 清理 | VERIFIED | 移除悬空引用，`validate-spec` 不再报 unknown ID |
+| R3 后端测试闭合 | VERIFIED | `ResourceAclApplicationService`/`UserManagementApplicationService`/`AgentManagementApplicationService` 共 33 测试 |
+| R4 前端测试闭合 | VERIFIED | `AssetLineagePage`/`PreviewPanel`/`CreateAssetPage`/`CreateAssetForm`/`UploadPage` 会话恢复 |
+| R5 Facet 查询缓存 | IMPLEMENTED | Caffeine 60s TTL + `buildFacetCacheKey` 参数 hash；`CaffeineCacheConfiguration` 拆分 per-cache |
+| R6 RateLimitBackend TTL | IMPLEMENTED | Caffeine `expireAfterAccess(10min)` + `maximumSize(10000)` 替代 `ConcurrentHashMap` |
+| R7 Nginx gzip | IMPLEMENTED | `gzip_types` JSON/CSS/JS/HTML/XML；`gzip_comp_level 6`；`gzip_min_length 256` |
+| R8 下载统计 MV | IMPLEMENTED | V36 `mv_download_stats` + `DownloadStatsRefresher` 定期刷新（5min） |
+
 ### 剩余 E4 差距（诚实）
 
-- P1–P5 全量 authenticated Compose 旅程（创建→上传→发布→Agent 调用）需重置 admin 凭据或刷新 DB 后重跑 V05
-- 前端 `AssetDetailPage` 测试 `PermissionProvider` 包裹已于 `6b73ac0` 修复（151 PASS）
-- `AuthenticationApplicationServiceTest.refreshReplayRecordsDeniedEvent` 后端回归 1 FAIL
-- P4 `p4-onboarding.sh` 全链路 E4 未在本会话执行（依赖有效 admin JWT）
-- E5 SAST/dependency/image 扫描：本地 gitleaks/semgrep 不可用；脱敏金丝雀替代 PASS；镜像扫描仍 `notProven`
+- P1–P5 全量 authenticated Compose 旅程需 `docker compose up` 后验证 V05/V08 端到端
+- `verify-journey.sh` 修复后 `create_model_asset` 单次请求，但资产创建仍依赖 `REPOSITORY_PROVISION` job 处理
+- E2E 测试（Playwright）需 Compose 环境支持，本地未执行
 
 ## 8. Validation snapshot (Q) — 2026-07-11
 
