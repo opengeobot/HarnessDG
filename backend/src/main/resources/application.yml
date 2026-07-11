@@ -72,6 +72,7 @@ server:
 
 # 平台业务配置（部署期注入）。Gitea 仓库开通默认关闭，便于无 Gitea 的开发/测试环境使用 Noop 开通器。
 aihub:
+  public-base-url: ${AIHUB_PUBLIC_BASE_URL:http://localhost:8080}
   gitea:
     enabled: ${AIHUB_GITEA_ENABLED:false}
     base-url: ${AIHUB_GITEA_BASE_URL:}
@@ -89,6 +90,7 @@ aihub:
       public-key-pem: ${AIHUB_JWT_PUBLIC_KEY_PEM:}
       access-token-ttl: ${AIHUB_JWT_ACCESS_TTL:PT15M}
       refresh-token-ttl: ${AIHUB_JWT_REFRESH_TTL:P7D}
+      pat-token-ttl: ${AIHUB_JWT_PAT_TTL:P90D}
     # 浏览器刷新 JWT Cookie 配置。生产默认 Secure；本地/测试 http 可置 false。
     cookie:
       name: ${AIHUB_REFRESH_COOKIE_NAME:aihub_refresh}

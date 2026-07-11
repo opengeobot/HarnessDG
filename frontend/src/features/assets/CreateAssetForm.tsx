@@ -1,0 +1,399 @@
+/**
+ * 功能: 创建资产表单字段——供弹窗与独立页面复用。
+ * 时间: 2026-07-11
+ * 作者: AxeXie
+ */
+import { Form, Input, Select } from 'antd';
+import type { FormInstance } from 'antd';
+import { useTranslation } from 'react-i18next';
+import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
+import type { AssetType, CreateAssetRequest, Visibility } from '../assets/types';
+
+export interface CreateAssetFormValues {
+  type: AssetType;
+  organizationId?: string;
+  projectId?: string;
+  namespace: string;
+  name: string;
+  displayName?: string;
+  description?: string;
+  visibility: Visibility;
+  owners?: string[];
+  tags?: string[];
+  tagIds?: string[];
+  license?: string;
+  ownerTeamId: string;
+  framework?: string;
+  task?: string;
+  architecture?: string;
+  parameterScale?: string;
+  precision?: string;
+  weightFormat?: string;
+  runtime?: string;
+  knownRisks?: string[];
+  usageRestrictions?: string[];
+  modelSensitivity?: string;
+  format?: string;
+  modality?: string;
+  taskCodes?: string[];
+  modalityCodes?: string[];
+  formatCodes?: string[];
+  languageCodes?: string[];
+  datasetSensitivity?: string;
+  sampleCount?: number;
+  totalBytes?: number;
+}
+
+export function buildCreateAssetPayload(values: CreateAssetFormValues): CreateAssetRequest {
+  return {
+    type: values.type,
+    organizationId: values.organizationId || undefined,
+    projectId: values.projectId || undefined,
+    namespace: values.namespace,
+    name: values.name,
+    displayName: values.displayName,
+    description: values.description,
+    visibility: values.visibility,
+    tagIds: values.tagIds,
+    license: values.license,
+    ownerTeamId: values.ownerTeamId,
+    model:
+      values.type === 'MODEL'
+        ? {
+            framework: values.framework,
+            task: values.task,
+            architecture: values.architecture,
+            parameterScale: values.parameterScale,
+            precision: values.precision,
+            weightFormat: values.weightFormat,
+            runtime: values.runtime,
+            knownRisks: values.knownRisks,
+            usageRestrictions: values.usageRestrictions,
+            sensitivityCode: values.modelSensitivity,
+          }
+        : undefined,
+    dataset:
+      values.type === 'DATASET'
+        ? {
+            format: values.format,
+            modality: values.modality,
+            taskCodes: values.taskCodes,
+            modalityCodes: values.modalityCodes,
+            formatCodes: values.formatCodes,
+            languageCodes: values.languageCodes,
+            sensitivityCode: values.datasetSensitivity,
+            sampleCount: values.sampleCount,
+            totalBytes: values.totalBytes,
+          }
+        : undefined,
+  };
+}
+
+interface CreateAssetFormFieldsProps {
+  form: FormInstance<CreateAssetFormValues>;
+}
+
+export function CreateAssetFormFields({ form }: CreateAssetFormFieldsProps) {
+  const { t } = useTranslation();
+  const assetType = Form.useWatch('type', form);
+  const orgId = Form.useWatch('organizationId', form);
+
+  return (
+    <Form
+      form={form}
+      layout="vertical"
+      initialValues={{ type: 'MODEL', visibility: 'INTERNAL' }}
+      preserve={false}
+    >
+      <Form.Item name="type" label={t('common.type')} rules={[{ required: true }]}>
+        <Select
+          options={[
+            { value: 'MODEL', label: t('assets.model') },
+            { value: 'DATASET', label: t('assets.dataset') },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item name="organizationId" label={t('assets.create.org')}>
+        <ControlledSelect
+          apiUrl="/system/organizations"
+          queryKey="organizations"
+          extractOptions={(data) =>
+            (data as Array<{ organizationId: string; name: string }>).map(
+              (o): SelectOption => ({ value: o.organizationId, label: `${o.name} (${o.organizationId})` }),
+            )
+          }
+          placeholder={t('assets.create.orgPlaceholder')}
+          allowClear
+        />
+      </Form.Item>
+      <Form.Item name="projectId" label={t('assets.create.project')}>
+        <ControlledSelect
+          apiUrl={`/system/organizations/${orgId ?? ''}/projects`}
+          queryKey={['projects', orgId ?? '']}
+          enabled={!!orgId}
+          extractOptions={(data) =>
+            (data as Array<{ projectId: string; name: string }>).map(
+              (p): SelectOption => ({ value: p.projectId, label: `${p.name} (${p.projectId})` }),
+            )
+          }
+          placeholder={t('assets.create.projectPlaceholder')}
+          allowClear
+          disabled={!orgId}
+        />
+      </Form.Item>
+      <Form.Item
+        name="namespace"
+        label={t('assets.create.namespace')}
+        rules={[
+          { required: true, message: t('assets.create.namespaceRequired') },
+          {
+            pattern: /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/,
+            message: t('assets.create.namespacePattern'),
+          },
+        ]}
+      >
+        <Input placeholder="nlp" />
+      </Form.Item>
+      <Form.Item
+        name="name"
+        label={t('common.name')}
+        rules={[
+          { required: true, message: t('assets.create.nameRequired') },
+          {
+            pattern: /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/,
+            message: t('assets.create.namespacePattern'),
+          },
+        ]}
+      >
+        <Input placeholder="qwen-domain-7b" />
+      </Form.Item>
+      <Form.Item name="displayName" label={t('assets.create.displayNameLabel')}>
+        <Input />
+      </Form.Item>
+      <Form.Item name="description" label={t('common.description')}>
+        <Input.TextArea rows={2} />
+      </Form.Item>
+      <Form.Item name="visibility" label={t('assets.create.visibility')} rules={[{ required: true }]}>
+        <Select
+          options={[
+            { value: 'PRIVATE', label: t('assets.create.private') },
+            { value: 'INTERNAL', label: t('assets.create.internal') },
+            { value: 'PUBLIC', label: t('assets.create.public') },
+          ]}
+        />
+      </Form.Item>
+      <Form.Item
+        name="ownerTeamId"
+        label={t('assets.create.ownerLabel')}
+        rules={[{ required: true, message: t('assets.create.ownerPlaceholder') }]}
+      >
+        <ControlledSelect
+          apiUrl={`/system/organizations/${orgId ?? ''}/teams`}
+          queryKey={['teams', orgId ?? '']}
+          enabled={!!orgId}
+          extractOptions={(data) =>
+            (data as Array<{ teamId: string; name: string }>).map(
+              (team): SelectOption => ({ value: team.teamId, label: `${team.name} (${team.teamId})` }),
+            )
+          }
+          placeholder={t('assets.create.ownerPlaceholder')}
+          disabled={!orgId}
+        />
+      </Form.Item>
+      <Form.Item name="tagIds" label={t('assets.create.controlledTagIds')}>
+        <ControlledSelect
+          mode="multiple"
+          apiUrl="/system/tags"
+          queryKey="tags"
+          extractOptions={(data) =>
+            (data as Array<{ tagId: string; displayName: string; tagCode: string }>).map(
+              (tag): SelectOption => ({ value: tag.tagId, label: `${tag.displayName} (${tag.tagCode})` }),
+            )
+          }
+          placeholder={t('assets.create.tagPlaceholder')}
+        />
+      </Form.Item>
+      <Form.Item name="license" label={t('assets.create.license')}>
+        <ControlledSelect
+          apiUrl="/system/dictionaries/license/items"
+          queryKey="dict-license"
+          extractOptions={(data) =>
+            (data as Array<{ itemCode: string; i18nKey: string }>).map(
+              (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+            )
+          }
+          placeholder={t('assets.create.licensePlaceholder')}
+          allowClear
+        />
+      </Form.Item>
+      {assetType === 'MODEL' ? (
+        <>
+          <Form.Item name="framework" label={t('assets.detail.framework')}>
+            <ControlledSelect
+              apiUrl="/system/dictionaries/framework/items"
+              queryKey="dict-framework"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.frameworkPlaceholder')}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="task" label={t('assets.detail.task')}>
+            <ControlledSelect
+              apiUrl="/system/dictionaries/task/items"
+              queryKey="dict-task"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.taskPlaceholder')}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="architecture" label={t('assets.detail.architecture')}>
+            <Input placeholder="decoder-only" />
+          </Form.Item>
+          <Form.Item name="parameterScale" label={t('assets.detail.parameterScale')}>
+            <Input placeholder="7B" />
+          </Form.Item>
+          <Form.Item name="precision" label={t('assets.detail.precision')}>
+            <Select
+              mode="tags"
+              placeholder="fp16, bf16, int8"
+              options={[
+                { value: 'fp16', label: 'fp16' },
+                { value: 'bf16', label: 'bf16' },
+                { value: 'int8', label: 'int8' },
+                { value: 'fp32', label: 'fp32' },
+              ]}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="weightFormat" label={t('assets.detail.weightFormat')}>
+            <Input placeholder="safetensors" />
+          </Form.Item>
+          <Form.Item name="runtime" label={t('assets.detail.runtime')}>
+            <Input placeholder="vllm" />
+          </Form.Item>
+          <Form.Item name="modelSensitivity" label={t('assets.detail.sensitivity')}>
+            <ControlledSelect
+              apiUrl="/system/dictionaries/sensitivity_level/items"
+              queryKey="dict-sensitivity"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.sensitivityPlaceholder')}
+              allowClear
+            />
+          </Form.Item>
+        </>
+      ) : (
+        <>
+          <Form.Item name="format" label={t('assets.create.dataFormat')}>
+            <ControlledSelect
+              apiUrl="/system/dictionaries/format/items"
+              queryKey="dict-format"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.formatPlaceholder')}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="modality" label={t('assets.detail.modality')}>
+            <ControlledSelect
+              apiUrl="/system/dictionaries/modality/items"
+              queryKey="dict-modality"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.modalityPlaceholder')}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="taskCodes" label={t('assets.detail.taskCodes')}>
+            <ControlledSelect
+              mode="multiple"
+              apiUrl="/system/dictionaries/model_task/items"
+              queryKey="dict-model-task-multi"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.taskCodesPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="modalityCodes" label={t('assets.detail.modalityCodes')}>
+            <ControlledSelect
+              mode="multiple"
+              apiUrl="/system/dictionaries/dataset_modality/items"
+              queryKey="dict-dataset-modality-multi"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.modalityCodesPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="formatCodes" label={t('assets.detail.formatCodes')}>
+            <ControlledSelect
+              mode="multiple"
+              apiUrl="/system/dictionaries/dataset_format/items"
+              queryKey="dict-dataset-format-multi"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.formatCodesPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="languageCodes" label={t('assets.detail.languageCodes')}>
+            <ControlledSelect
+              mode="multiple"
+              apiUrl="/system/dictionaries/language/items"
+              queryKey="dict-language-multi"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.languageCodesPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="sampleCount" label={t('assets.detail.sampleCount')}>
+            <Input type="number" placeholder="10000" />
+          </Form.Item>
+          <Form.Item name="totalBytes" label={t('assets.detail.totalBytes')}>
+            <Input type="number" placeholder="1073741824" />
+          </Form.Item>
+          <Form.Item name="datasetSensitivity" label={t('assets.detail.sensitivity')}>
+            <ControlledSelect
+              apiUrl="/system/dictionaries/sensitivity_level/items"
+              queryKey="dict-sensitivity-dataset"
+              extractOptions={(data) =>
+                (data as Array<{ itemCode: string }>).map(
+                  (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
+                )
+              }
+              placeholder={t('assets.create.sensitivityPlaceholder')}
+              allowClear
+            />
+          </Form.Item>
+        </>
+      )}
+    </Form>
+  );
+}

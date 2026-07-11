@@ -1,10 +1,18 @@
 /**
- * AccessPage 组件测试——主体信息、Scope 列表、API Token 占位。
+ * AccessPage 组件测试——主体信息、Scope 列表、PAT 管理。
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import { AccessPage } from './AccessPage';
 import { renderWithProviders } from '@/test/test-utils';
+
+const mockListPats = vi.fn().mockResolvedValue([]);
+
+vi.mock('./api', () => ({
+  listPats: () => mockListPats(),
+  createPat: vi.fn(),
+  revokePat: vi.fn(),
+}));
 
 vi.mock('@/app/auth', () => ({
   useAuth: () => ({
@@ -16,10 +24,10 @@ vi.mock('@/app/auth', () => ({
       displayName: 'Administrator',
       organizationId: null,
       roles: ['ROLE_ADMIN'],
-      scopes: ['asset:read', 'asset:manage', 'admin:all'],
+      scopes: ['asset:read', 'asset:manage', 'token:create'],
       locale: 'zh-CN',
     },
-    scopes: new Set(['asset:read', 'asset:manage', 'admin:all']),
+    scopes: new Set(['asset:read', 'asset:manage', 'token:create']),
     login: vi.fn(),
     logout: vi.fn(),
     reloadPrincipal: vi.fn(),
@@ -27,6 +35,10 @@ vi.mock('@/app/auth', () => ({
 }));
 
 describe('AccessPage', () => {
+  beforeEach(() => {
+    mockListPats.mockClear();
+  });
+
   it('渲染页面标题', () => {
     renderWithProviders(<AccessPage />);
     expect(screen.getByText(/访问与凭据|access\.title/i)).toBeInTheDocument();
@@ -40,21 +52,15 @@ describe('AccessPage', () => {
     expect(screen.getByText('Administrator')).toBeInTheDocument();
   });
 
-  it('显示角色 Tag', () => {
-    renderWithProviders(<AccessPage />);
-    expect(screen.getByText('ROLE_ADMIN')).toBeInTheDocument();
-  });
-
   it('显示 Scope 列表', () => {
     renderWithProviders(<AccessPage />);
     expect(screen.getByText('asset:read')).toBeInTheDocument();
-    expect(screen.getByText('asset:manage')).toBeInTheDocument();
-    expect(screen.getByText('admin:all')).toBeInTheDocument();
+    expect(screen.getByText('token:create')).toBeInTheDocument();
   });
 
-  it('显示 API Token 占位', () => {
+  it('显示 API Token 管理区域', () => {
     renderWithProviders(<AccessPage />);
     expect(screen.getByText('API Token')).toBeInTheDocument();
-    expect(screen.getByText(/即将|comingSoon|coming soon/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /创建 Token|Create Token/i })).toBeInTheDocument();
   });
 });

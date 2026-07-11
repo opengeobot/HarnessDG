@@ -20,6 +20,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: '/assets', label: i18n.t('nav.assetCatalog'), requiredScopes: ['asset:read'] },
+  { key: '/assets/new', label: i18n.t('nav.createAsset'), requiredScopes: ['asset:create'] },
   { key: '/version', label: i18n.t('nav.versionCenter'), requiredScopes: ['asset:read'] },
   { key: '/review', label: i18n.t('nav.reviewCenter'), requiredScopes: ['asset:review'] },
   { key: '/upload', label: i18n.t('nav.uploadCenter'), requiredScopes: ['asset:write'] },

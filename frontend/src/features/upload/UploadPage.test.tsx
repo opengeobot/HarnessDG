@@ -25,6 +25,14 @@ vi.mock('@/shared/api', () => ({
   },
 }));
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
+
 describe('UploadPage', () => {
   it('渲染上传页面标题', () => {
     renderWithProviders(<UploadPage />);

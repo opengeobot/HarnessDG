@@ -3,7 +3,8 @@
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
@@ -16,6 +17,15 @@ interface UploadSession {
   totalBytes: number;
   fileCount: number;
   expiresAt: string;
+  parts?: UploadPartStatus[];
+}
+
+interface UploadPartStatus {
+  partNumber: number;
+  size: number;
+  etag?: string;
+  status: 'PENDING' | 'COMPLETED';
+  uploadedAt?: string;
 }
 
 interface PartProgress {
@@ -28,6 +38,7 @@ const PART_SIZE = 5 * 1024 * 1024; // 5MiB
 
 export function UploadPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   useDocumentTitle(t('upload.title'));
   const [assetId, setAssetId] = useState('');
   const [versionId, setVersionId] = useState('');
@@ -38,6 +49,52 @@ export function UploadPage() {
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+
+  const buildPartsFromSession = useCallback((sess: UploadSession): PartProgress[] => {
+    const totalParts = Math.max(1, Math.ceil(sess.totalBytes / PART_SIZE));
+    const serverParts = new Map(
+      (sess.parts ?? []).map((p) => [p.partNumber, p]),
+    );
+    return Array.from({ length: totalParts }, (_, i) => {
+      const partNumber = i + 1;
+      const server = serverParts.get(partNumber);
+      const completed = server?.status === 'COMPLETED';
+      return {
+        partNumber,
+        status: completed ? 'completed' as const : 'pending' as const,
+        progress: completed ? 100 : 0,
+      };
+    });
+  }, []);
+
+  const restoreSession = useCallback(async (sessionId: string, asset?: string) => {
+    setRestoring(true);
+    setError(null);
+    try {
+      const path = asset
+        ? `/assets/${asset}/upload-sessions/${sessionId}`
+        : `/upload-sessions/${sessionId}`;
+      const result = await apiClient.get<UploadSession>(path);
+      setSession(result);
+      setAssetId(result.assetId);
+      setVersionId(result.versionId);
+      setParts(buildPartsFromSession(result));
+      setMessage(t('upload.sessionRestored', { id: result.sessionId }));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t('upload.restoreFailed'));
+    } finally {
+      setRestoring(false);
+    }
+  }, [buildPartsFromSession, t]);
+
+  useEffect(() => {
+    const sessionId = searchParams.get('sessionId');
+    const asset = searchParams.get('assetId') ?? undefined;
+    if (sessionId) {
+      void restoreSession(sessionId, asset);
+    }
+  }, [searchParams, restoreSession]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -65,20 +122,12 @@ export function UploadPage() {
         { totalBytes, fileCount: files.length, ttlSeconds: 7200 },
       );
       setSession(result);
+      setParts(buildPartsFromSession(result));
       setMessage(t('upload.sessionCreated', { id: result.sessionId }));
-
-      const totalParts = Math.ceil(totalBytes / PART_SIZE);
-      setParts(
-        Array.from({ length: totalParts }, (_, i) => ({
-          partNumber: i + 1,
-          status: 'pending',
-          progress: 0,
-        })),
-      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('upload.createSessionFailed'));
     }
-  }, [assetId, versionId, files, t]);
+  }, [assetId, versionId, files, t, buildPartsFromSession]);
 
   const startUpload = async () => {
     if (!session) return;
@@ -89,6 +138,7 @@ export function UploadPage() {
     try {
       for (let i = 0; i < parts.length; i++) {
         if (paused) break;
+        if (parts[i].status === 'completed') continue;
 
         setParts((prev) =>
           prev.map((p) =>
@@ -157,6 +207,15 @@ export function UploadPage() {
   const completedParts = parts.filter((p) => p.status === 'completed').length;
   const overallProgress =
     parts.length > 0 ? Math.round((completedParts / parts.length) * 100) : 0;
+
+  if (restoring) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <h1 className="text-2xl font-bold mb-4">{t('upload.title')}</h1>
+        <p className="text-gray-600">{t('upload.restoringSession')}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">

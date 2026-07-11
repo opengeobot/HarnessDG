@@ -120,12 +120,33 @@ public class UploadApplicationService {
         return UploadSessionView.from(session);
     }
 
-    /** 查询会话详情。 */
+    /** 查询会话详情（含已上传分片状态）。 */
     @Transactional(readOnly = true)
     public UploadSessionView getSession(String sessionId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
         UploadSession session = loadSession(sessionId);
-        return UploadSessionView.from(session);
+        return toViewWithParts(session);
+    }
+
+    /** 按资产查询会话详情（含已上传分片状态）。 */
+    @Transactional(readOnly = true)
+    public UploadSessionView getSessionForAsset(String assetId, String sessionId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        UploadSession session = loadSession(sessionId);
+        if (!session.assetId().equals(assetId)) {
+            throw new NotFoundException(ErrorCode.UPLOAD_SESSION_NOT_FOUND,
+                    "upload session not found for asset", Map.of("assetId", assetId, "sessionId", sessionId));
+        }
+        return toViewWithParts(session);
+    }
+
+    private UploadSessionView toViewWithParts(UploadSession session) {
+        List<UploadPartView> parts = uploadFileRepository.findSessionBundleFile(session.sessionId())
+                .map(bundle -> uploadPartRepository.listByFileId(bundle.fileId()).stream()
+                        .map(UploadPartView::from)
+                        .toList())
+                .orElse(List.of());
+        return UploadSessionView.from(session, null, parts);
     }
 
     /** 签发 Part 上传 URL。 */

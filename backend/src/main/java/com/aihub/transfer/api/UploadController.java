@@ -48,6 +48,13 @@ public class UploadController {
         return uploadApplicationService.getSession(sessionId);
     }
 
+    /** 按资产查询上传会话详情（含分片状态，用于恢复）。 */
+    @GetMapping("/assets/{assetId}/upload-sessions/{sessionId}")
+    public UploadSessionView getSessionForAsset(@PathVariable String assetId,
+                                                 @PathVariable String sessionId) {
+        return uploadApplicationService.getSessionForAsset(assetId, sessionId);
+    }
+
     /** 签发 Part 上传预签名 URL。 */
     @GetMapping("/upload-sessions/{sessionId}/parts/{partNumber}/presign")
     public Map<String, String> presignPart(@PathVariable String sessionId,

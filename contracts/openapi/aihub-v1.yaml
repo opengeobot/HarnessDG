@@ -1564,6 +1564,80 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  # ── PAT（PatController） ──
+
+  /tokens:
+    post:
+      operationId: createPat
+      summary: 创建个人访问令牌（完整 Token 仅返回一次）
+      tags: [auth]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
+      x-required-permissions: [token:create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePatRequest' }
+      responses:
+        '201':
+          description: PAT 已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatedPatView' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    get:
+      operationId: listPats
+      summary: 列出当前用户的 PAT
+      tags: [auth]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [token:create]
+      responses:
+        '200':
+          description: PAT 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PatView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /tokens/{tokenId}:
+    parameters:
+      - { name: tokenId, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: revokePat
+      summary: 吊销 PAT
+      tags: [auth]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [token:create]
+      responses:
+        '204':
+          description: 已吊销
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 集成（IntegrationsController） ──
+
+  /integrations/agent-bundle:
+    get:
+      operationId: getAgentBundle
+      summary: 获取 Agent 接入配置包
+      tags: [integrations]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: Agent 接入配置包
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentBundleView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets:
     post:
       operationId: createAsset
@@ -2953,7 +3027,26 @@ paths:
       - { name: sessionId, in: path, required: true, schema: { type: string } }
     get:
       operationId: getUploadSession
-      summary: 查询上传会话详情
+      summary: 查询上传会话详情（含分片状态）
+      tags: [transfer]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 会话详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionView' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/upload-sessions/{sessionId}:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getUploadSessionForAsset
+      summary: 按资产查询上传会话详情（含分片状态，用于恢复）
       tags: [transfer]
       x-implementation-status: implemented
       x-error-codes: [AUTH_PERMISSION_DENIED]
@@ -4498,6 +4591,79 @@ components:
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
         materializeJobId: { type: [string, 'null'] }
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/UploadPartView' }
+
+    UploadPartView:
+      type: object
+      description: 上传分片状态
+      properties:
+        partNumber: { type: integer }
+        size: { type: integer, format: int64 }
+        etag: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [PENDING, COMPLETED]
+        uploadedAt: { type: [string, 'null'], format: date-time }
+
+    PatView:
+      type: object
+      properties:
+        tokenId: { type: string }
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [ACTIVE, REVOKED, EXPIRED]
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+
+    CreatedPatView:
+      type: object
+      properties:
+        tokenId: { type: string }
+        name: { type: string }
+        token: { type: string, format: password }
+        scopes:
+          type: array
+          items: { type: string }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+
+    CreatePatRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        ttlDays: { type: integer, minimum: 1, maximum: 365 }
+
+    AgentBundleView:
+      type: object
+      properties:
+        mcpEndpointUrl: { type: string, format: uri }
+        openApiUrl: { type: string, format: uri }
+        skillTemplates:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              description: { type: string }
+              path: { type: string }
+        exampleCommands:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              command: { type: string }
 
     CursorPageUploadSessionView:
       type: object

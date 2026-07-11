@@ -34,6 +34,7 @@
   },
   "nav": {
     "assetCatalog": "资产目录",
+    "createAsset": "新建资产",
     "versionCenter": "版本中心",
     "reviewCenter": "发布审批",
     "uploadCenter": "上传中心",
@@ -367,7 +368,10 @@
     "startUpload": "开始上传",
     "pause": "暂停",
     "resume": "恢复",
-    "completeUpload": "完成上传"
+    "completeUpload": "完成上传",
+    "sessionRestored": "已恢复上传会话: {{id}}",
+    "restoreFailed": "恢复上传会话失败",
+    "restoringSession": "正在恢复上传会话…"
   },
   "version": {
     "title": "版本中心",
@@ -762,6 +766,21 @@
     "noScopes": "无可用权限",
     "notAuthenticated": "未登录",
     "apiTokens": "API Token",
-    "tokensComingSoon": "Token 管理功能即将上线"
+    "tokensComingSoon": "Token 管理功能即将上线",
+    "createToken": "创建 Token",
+    "noTokenPermission": "需要 token:create 权限",
+    "noTokens": "暂无 Token",
+    "tokenCreated": "Token 已创建",
+    "tokenCreateFailed": "创建 Token 失败",
+    "tokenRevoked": "Token 已吊销",
+    "tokenRevokeFailed": "吊销 Token 失败",
+    "confirmRevoke": "确认吊销此 Token？",
+    "revokeToken": "吊销",
+    "expiresAt": "过期时间",
+    "tokenNameRequired": "请输入 Token 名称",
+    "tokenNamePlaceholder": "例如 CI 流水线",
+    "tokenCreatedTitle": "Token 已创建",
+    "tokenShownOnce": "请立即复制 Token，关闭后将无法再次查看。",
+    "tokenCopiedAck": "我已复制"
   }
 }

@@ -78,10 +78,13 @@ public class JwtTokenService implements TokenSigner, TokenVerifier {
 
     @Override
     public IssuedToken issue(TokenIssueRequest request) {
+        Duration ttl = resolveTtl(request.tokenType());
+        return issueWithTtl(request, ttl);
+    }
+
+    @Override
+    public IssuedToken issueWithTtl(TokenIssueRequest request, Duration ttl) {
         Instant now = clock.instant();
-        Duration ttl = request.tokenType() == TokenType.REFRESH
-                ? properties.refreshTokenTtl()
-                : properties.accessTokenTtl();
         Instant expiresAt = now.plus(ttl);
         String jwtId = idGenerator.generate(IdPrefix.TOKEN);
 
@@ -105,6 +108,13 @@ public class JwtTokenService implements TokenSigner, TokenVerifier {
                 request.principalId(), request.principalType(), jwtId, request.tokenVersion(),
                 scopes, now, expiresAt, request.tokenType());
         return new IssuedToken(token, claims);
+    }
+
+    private Duration resolveTtl(TokenType tokenType) {
+        return switch (tokenType) {
+            case REFRESH -> properties.refreshTokenTtl();
+            case ACCESS -> properties.accessTokenTtl();
+        };
     }
 
     @Override

@@ -105,6 +105,34 @@ class UploadApplicationServiceTest {
     }
 
     @Test
+    void getSessionReturnsParts() {
+        UploadSession session = createOpenSession();
+        when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+        UploadFile bundle = new UploadFile(
+                "upf_bundle", "upl_01", "_session_bundle", 1024,
+                null, "application/octet-stream", 1,
+                UploadFile.UploadFileStatus.UPLOADING);
+        when(uploadFileRepository.findSessionBundleFile("upl_01")).thenReturn(Optional.of(bundle));
+        when(uploadPartRepository.listByFileId("upf_bundle")).thenReturn(List.of(
+                new com.aihub.transfer.domain.UploadPart(
+                        "upf_bundle", 1, 512L, "etag1", null, Instant.now())));
+
+        UploadSessionView view = service.getSession("upl_01");
+
+        assertThat(view.parts()).hasSize(1);
+        assertThat(view.parts().getFirst().status()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void getSessionForAssetRejectsMismatchedAsset() {
+        UploadSession session = createOpenSession();
+        when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.getSessionForAsset("ast_other", "upl_01"))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
     void getSessionThrowsNotFound() {
         when(sessionRepository.findBySessionId("upl_missing")).thenReturn(Optional.empty());
 

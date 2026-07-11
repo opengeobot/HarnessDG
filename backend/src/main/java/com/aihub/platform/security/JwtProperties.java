@@ -22,6 +22,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param previousPublicKeyPem 轮换重叠期上一公钥 PEM（仅校验，不用于签发）
  * @param accessTokenTtl 访问令牌有效期
  * @param refreshTokenTtl 刷新令牌有效期
+ * @param patTokenTtl PAT 默认有效期
  */
 @ConfigurationProperties(prefix = "aihub.security.jwt")
 public record JwtProperties(String issuer,
@@ -31,12 +32,14 @@ public record JwtProperties(String issuer,
                             String publicKeyPem,
                             String previousPublicKeyPem,
                             Duration accessTokenTtl,
-                            Duration refreshTokenTtl) {
+                            Duration refreshTokenTtl,
+                            Duration patTokenTtl) {
 
     public JwtProperties {
         issuer = (issuer == null || issuer.isBlank()) ? "aihub-platform" : issuer;
         audience = (audience == null || audience.isBlank()) ? "aihub-clients" : audience;
         accessTokenTtl = accessTokenTtl == null ? Duration.ofMinutes(15) : accessTokenTtl;
         refreshTokenTtl = refreshTokenTtl == null ? Duration.ofDays(7) : refreshTokenTtl;
+        patTokenTtl = patTokenTtl == null ? Duration.ofDays(90) : patTokenTtl;
     }
 }

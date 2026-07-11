@@ -34,6 +34,7 @@
   },
   "nav": {
     "assetCatalog": "Asset Catalog",
+    "createAsset": "Create Asset",
     "versionCenter": "Version Center",
     "reviewCenter": "Publish Review",
     "uploadCenter": "Upload Center",
@@ -367,7 +368,10 @@
     "startUpload": "Start Upload",
     "pause": "Pause",
     "resume": "Resume",
-    "completeUpload": "Complete Upload"
+    "completeUpload": "Complete Upload",
+    "sessionRestored": "Upload session restored: {{id}}",
+    "restoreFailed": "Failed to restore upload session",
+    "restoringSession": "Restoring upload session…"
   },
   "version": {
     "title": "Version Center",
@@ -762,6 +766,21 @@
     "noScopes": "No scopes available",
     "notAuthenticated": "Not authenticated",
     "apiTokens": "API Tokens",
-    "tokensComingSoon": "Token management coming soon"
+    "tokensComingSoon": "Token management coming soon",
+    "createToken": "Create Token",
+    "noTokenPermission": "Requires token:create permission",
+    "noTokens": "No tokens yet",
+    "tokenCreated": "Token created",
+    "tokenCreateFailed": "Failed to create token",
+    "tokenRevoked": "Token revoked",
+    "tokenRevokeFailed": "Failed to revoke token",
+    "confirmRevoke": "Revoke this token?",
+    "revokeToken": "Revoke",
+    "expiresAt": "Expires",
+    "tokenNameRequired": "Token name is required",
+    "tokenNamePlaceholder": "e.g. CI pipeline",
+    "tokenCreatedTitle": "Token Created",
+    "tokenShownOnce": "Copy the token now. It will not be shown again.",
+    "tokenCopiedAck": "Done"
   }
 }

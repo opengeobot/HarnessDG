@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/app/layout/AppLayout';
 import { RouteGuard } from '@/app/permission';
-import { AssetsPage, AssetDetailPage, AssetSettingsPage, AssetAccessPage, AssetLineagePage } from '@/features/assets';
+import { AssetsPage, AssetDetailPage, AssetSettingsPage, AssetAccessPage, AssetLineagePage, CreateAssetPage } from '@/features/assets';
 import { VersionPage, VersionDetailPage, ReviewPage } from '@/features/version';
 import { UploadPage } from '@/features/upload';
 import { AccessPage } from '@/features/access';
@@ -53,6 +53,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/assets" replace /> },
       { path: 'assets', element: guarded(<AssetsPage />, ['asset:read']) },
+      { path: 'assets/new', element: guarded(<CreateAssetPage />, ['asset:create']) },
       { path: 'assets/:assetId', element: guarded(<AssetDetailPage />, ['asset:read']) },
       { path: 'assets/:assetId/settings', element: guarded(<AssetSettingsPage />, ['asset:write']) },
       { path: 'assets/:assetId/lineage', element: guarded(<AssetLineagePage />, ['asset:read']) },

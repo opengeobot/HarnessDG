@@ -39,9 +39,10 @@
 | V31 | _跳过_（`principal_id` 已由 V20 添加） | **D** |
 | V32 | `owner_team_id` NOT NULL 回填 | **D** |
 | V33 | `iam_token.jti_digest` | **D** |
-| V34+ | 预留给后续差距闭合 | 下一可用 |
+| V34 | `iam_token` PAT 类型 + name | **F** |
+| V35+ | 预留给后续差距闭合 | 下一可用 |
 
-> 历史 TASK-P1-002 曾预留 `V27__asset_backfill.sql`；该编号已被 P3 占用。Wave D 占用 V29–V33。
+> 历史 TASK-P1-002 曾预留 `V27__asset_backfill.sql`；该编号已被 P3 占用。Wave D 占用 V29–V33，Wave F 占用 V34。
 
 ## 3. 已关闭的关键差距（相对 2026-07-02）
 
@@ -84,8 +85,19 @@
 | C | `9526632` | 前端 Wave C：4 个 admin 页面 + 幂等只读 API、资产表单受控字典字段、讨论 moderation、导航/路由 |
 | D | _this commit_ | 数据模型与安全 Wave D：asset_relation 血缘、版本约束、owner_team NOT NULL、JWT 轮换、jti digest、Swagger 门控、DVC STS/scoped 凭据 |
 | E | _this commit_ | 通知 Wave E：VERSION_* fan-out、讨论订阅/DISCUSSION_REPLIED、配额/依赖告警、渠道接口桩 |
+| F | _this commit_ | 业务 Wave F：PAT/agent-bundle、上传恢复、aih push/resume/verify、CreateAssetPage |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
+
+### Wave F 摘要（F1–F5）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| F1 血缘页面 | VERIFIED (D1) | `AssetLineagePage` + `/assets/:id/lineage` + 方向切换 + 详情页链接已由 Wave D 完成，本波次跳过 |
+| F2 PAT + agent-bundle | IMPLEMENTED_UNVERIFIED | V34 + `POST/GET/DELETE /tokens` + `GET /integrations/agent-bundle` + AccessPage 实装 |
+| F3 上传会话恢复 | IMPLEMENTED_UNVERIFIED | `GET /assets/{id}/upload-sessions/{sessionId}` 含 parts + UploadPage `?sessionId=` 恢复 |
+| F4 aih CLI push/resume/verify | IMPLEMENTED_UNVERIFIED | `scripts/aih/aih` 三命令对齐 OpenAPI `/api/v1` |
+| F5 新建资产页 | IMPLEMENTED_UNVERIFIED | `CreateAssetPage` `/assets/new` + 导航 + 弹窗保留 |
 
 ### Wave E 摘要（E1–E4）
 
