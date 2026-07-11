@@ -43,6 +43,8 @@ get_env() {
 }
 ADMIN_USER="$(get_env AIHUB_BOOTSTRAP_ADMIN_USERNAME admin)"
 ADMIN_PASS="$(get_env AIHUB_BOOTSTRAP_ADMIN_PASSWORD change-me-admin-01)"
+# E2E 改密后的持久口令（与 verify-journey.sh 对齐）
+JOURNEY_ADMIN_PASS="${JOURNEY_ADMIN_PASSWORD:-${ADMIN_PASS}Journey-E2E-01!}"
 
 step() {
   local id="$1"; local name="$2"; shift 2
@@ -71,10 +73,12 @@ http_status() {
 }
 
 # 登录并回显响应体（用于取 accessToken）；可选将 Set-Cookie 写入 cookie_jar。
+# 用法: http_login_body [cookie_jar] [password]
 http_login_body() {
   local cookie_jar="${1:-}"
+  local pass="${2:-${ADMIN_PASS}}"
   local args=(-s -m 15 -X POST -H 'Content-Type: application/json'
-    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}"
+    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${pass}\"}"
     "${BASE_URL}/api/v1/auth/login")
   [ -n "${cookie_jar}" ] && args=(-c "${cookie_jar}" "${args[@]}")
   curl "${args[@]}" 2>/dev/null
@@ -170,13 +174,40 @@ check_migrations() {
 
 # ---- V05: JWT 生命周期（登录/me/匿名 401 + refresh Cookie 轮换，PRD V22 子集）----
 check_jwt() {
-  local cookie_jar body token me anon refresh_body refresh_token
+  local cookie_jar body token me anon refresh_body refresh_token must_change
   cookie_jar="$(mktemp)"
-  body="$(http_login_body "${cookie_jar}")"
-  token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+
+  # 双密码回退：先试 JOURNEY_ADMIN_PASS（改密后），再试 ADMIN_PASS（初始/未改密）
+  token=""
+  for pass in "${JOURNEY_ADMIN_PASS}" "${ADMIN_PASS}"; do
+    body="$(http_login_body "${cookie_jar}" "${pass}")"
+    token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+    if [ -n "${token}" ]; then
+      ADMIN_PASS="${pass}"
+      break
+    fi
+  done
+
   if [ -z "${token}" ]; then echo "  登录未取得 accessToken（凭据/改密状态？）"; rm -f "${cookie_jar}"; return 1; fi
   ACCESS_TOKEN="${token}"
-  me="$(http_status GET /api/v1/me "${token}")"
+
+  # 处理 must_change_password 强制改密闸门
+  if postgres_reachable; then
+    must_change="$(psql_q "select must_change_password from iam_user where username='${ADMIN_USER}'")"
+    if [ "${must_change}" = "t" ]; then
+      local code
+      code="$(http_status PUT /api/v1/me/password "${ACCESS_TOKEN}" \
+        "{\"currentPassword\":\"${ADMIN_PASS}\",\"newPassword\":\"${JOURNEY_ADMIN_PASS}\"}")"
+      if [ "${code}" != "200" ]; then echo "  改密门 PUT /me/password 返回 ${code}"; rm -f "${cookie_jar}"; return 1; fi
+      body="$(http_login_body "${cookie_jar}" "${JOURNEY_ADMIN_PASS}")"
+      token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+      if [ -z "${token}" ]; then echo "  改密后重新登录未取得 accessToken"; rm -f "${cookie_jar}"; return 1; fi
+      ACCESS_TOKEN="${token}"
+      ADMIN_PASS="${JOURNEY_ADMIN_PASS}"
+    fi
+  fi
+
+  me="$(http_status GET /api/v1/me "${ACCESS_TOKEN}")"
   if [ "${me}" != "200" ]; then echo "  /me 携带 token 返回 ${me}，期望 200"; rm -f "${cookie_jar}"; return 1; fi
   anon="$(http_status GET /api/v1/system/users)"
   if [ "${anon}" != "401" ]; then echo "  无 Token 访问 /system/users 返回 ${anon}，期望 401"; rm -f "${cookie_jar}"; return 1; fi

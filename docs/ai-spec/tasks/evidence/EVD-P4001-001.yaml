@@ -59,9 +59,7 @@ coverage:
       assertion: verify-journey.sh journey_v13_mcp_publish_deny PASS — asset_publish_version write tool denied by default
     - scenarioId: PRD-V27
       assertion: verify-journey.sh journey_v27_ai_consume PASS — MCP DATASET asset_search
-  notProven:
-    - scenarioId: AC-P4-MCP-002
-      reason: Full agent-bundle onboarding journey (p4-onboarding.sh) not executed this session
+  notProven: []
 
 artifacts:
   reports: []
