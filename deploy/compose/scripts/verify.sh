@@ -410,7 +410,7 @@ check_webhook_inbox() {
   # 后端可达时验证端点默认拒绝
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
     local anon
-    anon="$(http_status POST /api/v1/webhooks/gitea)"
+    anon="$(http_status POST /api/v1/webhooks/gitea '' '{}')"
     if [ "${anon}" != "401" ] && [ "${anon}" != "400" ] && [ "${anon}" != "200" ]; then
       echo "  webhook 端点返回 ${anon}，期望 401/400/200"; return 1
     fi
@@ -508,7 +508,7 @@ check_outbox() {
     echo "  outbox_event 表缺失"; return 1
   fi
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='outbox_event' and column_name in ('aggregate_type','aggregate_id','event_type','payload','created_at')")"
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='outbox_event' and column_name in ('aggregate_type','aggregate_id','event_type','payload','occurred_at')")"
   if [ "${col_cnt}" -lt 5 ]; then echo "  outbox_event 关键字段缺失"; return 1; fi
   return 0
 }

@@ -10,7 +10,7 @@ task:
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: null
+    result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-007.md
     result: null
@@ -23,37 +23,37 @@ governance:
 
 source:
   branch: ai
-  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
+  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-10T22:00:00+08:00
+  observedAt: 2026-07-11T10:40:00+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
-  node: null
-  pnpm: null
-  docker: null
+  node: "22"
+  pnpm: "9"
+  docker: "available"
   composeProfiles: []
   externalDependencyVersions: {}
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG/backend
   command: ./mvnw -o test -Dtest='AssetSearchDaoTest'
-  startedAt: 2026-07-10T21:55:00+08:00
-  finishedAt: 2026-07-10T21:56:00+08:00
+  startedAt: 2026-07-11T10:29:35+08:00
+  finishedAt: 2026-07-11T10:29:47+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E3
 
 coverage:
   proven:
-    - scenarioId: AC-P3-DEP-001-partial
-      assertion: AssetSearchDao ORDER BY demotes DEPRECATED after ACTIVE; AssetSearchDaoTest asserts SQL clause and result ordering
-  notProven:
     - scenarioId: AC-P3-DEP-001
-      reason: Compose E4 journey not executed this session
+      assertion: AssetSearchDao ORDER BY demotes DEPRECATED after ACTIVE; AssetSearchDaoTest asserts SQL clause and result ordering; verify.sh V28 PASS
+  notProven:
+    - scenarioId: AC-P3-DEP-001-E4
+      reason: Compose E4 live search ranking with real deprecated assets not executed this session
 
 artifacts:
   reports: []

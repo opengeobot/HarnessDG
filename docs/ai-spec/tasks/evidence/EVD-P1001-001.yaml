@@ -11,39 +11,39 @@ task:
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: null
+    result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-001.md
-    result: null
+    result: FAIL
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-001.md -CheckChangedPaths
     result: null
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-001.md -CheckCompletion
-    result: null
+    result: FAIL
 
 source:
   branch: ai
-  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
+  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-10T22:00:00+08:00
+  observedAt: 2026-07-11T10:40:00+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
-  node: null
-  pnpm: null
-  docker: null
+  node: "22"
+  pnpm: "9"
+  docker: "available"
   composeProfiles: []
   externalDependencyVersions: {}
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG/backend
-  command: ./mvnw -o test -Dtest='*AssetCoordinate*'
-  startedAt: 2026-07-10T21:55:00+08:00
-  finishedAt: 2026-07-10T21:56:00+08:00
+  command: ./mvnw -o test -Dtest='AssetCoordinateTest,AssetViewCoordinateTest'
+  startedAt: 2026-07-11T10:28:00+08:00
+  finishedAt: 2026-07-11T10:28:13+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E3
@@ -51,10 +51,10 @@ execution:
 coverage:
   proven:
     - scenarioId: AC-P1-AST-001
-      assertion: Asset.coordinate() returns aih://{namespace}/{type}/{name}; AssetCoordinateTest and OpenAPI AssetView/SummaryView coordinate field
+      assertion: Asset.coordinate() returns aih://{namespace}/{type}/{name}; AssetCoordinateTest + AssetViewCoordinateTest (4 tests PASS); OpenAPI AssetView/SummaryView coordinate field present
   notProven:
-    - scenarioId: AC-P1-AST-001
-      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-P1-AST-001-E4
+      reason: Compose E4 coordinate end-to-end journey not proven; verify.sh 26/28 PASS (V05 JWT blocked by admin credential drift on persistent DB)
 
 artifacts:
   reports: []
@@ -72,7 +72,7 @@ limitations:
   skippedTests: []
   assumptions: []
   environmentDifferences:
-    - Compose E4 asset coordinate end-to-end not executed this session
+    - Persistent Compose DB admin password differs from .env default; V05/V20 verify.sh FAIL
 
 review:
   recordedBy: AI

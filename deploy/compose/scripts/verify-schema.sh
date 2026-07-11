@@ -124,7 +124,7 @@ check_outbox_schema() {
     return 1
   fi
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='outbox_event' and column_name in ('aggregate_type','aggregate_id','event_type','payload','created_at')")"
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='outbox_event' and column_name in ('aggregate_type','aggregate_id','event_type','payload','occurred_at')")"
   if [ "${col_cnt}" -lt 5 ]; then
     echo "  outbox_event 关键字段缺失"
     return 1

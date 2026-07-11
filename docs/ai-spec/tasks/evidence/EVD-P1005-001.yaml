@@ -11,7 +11,7 @@ task:
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: null
+    result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-005.md
     result: null
@@ -24,37 +24,39 @@ governance:
 
 source:
   branch: ai
-  commitSha: 161dbef4946a17370c49e9c13fe840bae724f8a8
+  commitSha: 4530361fd492fa9d8d5d59fa7f8c353d4cd8d8bd
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-10T22:00:00+08:00
+  observedAt: 2026-07-11T10:40:00+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
   node: "22"
   pnpm: "9"
-  docker: null
+  docker: "available"
   composeProfiles: []
   externalDependencyVersions: {}
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
   command: cd backend && ./mvnw -o test -Dtest='AssetApplicationServiceTest' && cd ../frontend && pnpm test -- src/features/assets/
-  startedAt: 2026-07-10T21:55:00+08:00
-  finishedAt: 2026-07-10T21:58:00+08:00
-  exitCode: 0
-  result: PASS
+  startedAt: 2026-07-11T10:28:42+08:00
+  finishedAt: 2026-07-11T10:30:21+08:00
+  exitCode: 1
+  result: PARTIAL
   evidenceLevel: E3
 
 coverage:
   proven:
-    - scenarioId: AC-P1-AST-008-partial
-      assertion: Asset detail projection and Quick Use panel render coordinate/git/dvc/aih snippets without secrets; frontend asset feature tests PASS
+    - scenarioId: AC-P1-AST-008-E3
+      assertion: Asset detail projection via AssetApplicationServiceTest (21 tests PASS); coordinate/git/dvc/aih snippets in view layer
   notProven:
-    - scenarioId: AC-P1-AST-008
-      reason: Compose E4 journey not executed this session
+    - scenarioId: AC-P1-AST-008-E4-frontend
+      reason: Frontend asset feature tests 14 FAIL / 20 PASS — AssetDetailPage requires PermissionProvider wrapper (usePermission outside provider)
+    - scenarioId: AC-P1-AST-008-E4-compose
+      reason: Compose E4 Quick Use panel journey not proven; verify.sh JWT blocked
 
 artifacts:
   reports: []

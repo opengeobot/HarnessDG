@@ -13,7 +13,7 @@
 | P1 资产目录 | PARTIAL / IMPLEMENTED_UNVERIFIED | CRUD/搜索/Facet/Discussion/坐标/归档守卫已落地；Owner 字符串列表、资产 ACL 页、rename Saga、E4 证据未闭环 |
 | P2 版本与数据面 | PARTIAL / IMPLEMENTED_UNVERIFIED | Version/Upload/Download/Preview API 与 complete→UPLOAD_MATERIALIZE 已接线；真实 multipart、DVC/Git 物化、Manifest 写 Gitea、STS 凭据未闭环 |
 | P3 发布治理 | PARTIAL / IMPLEMENTED_UNVERIFIED | 四眼审批、冻结 Commit、Gitea Tag（enabled 时）已落地；多审批人策略、Diff UI、Saga 故障注入 E4 未闭环 |
-| P4 Agent 接入 | PARTIAL / IMPLEMENTED_UNVERIFIED | MCP + REST `/agent/*` 只读/贡献写、幂等、限流、onboarding E4 脚本已落地；Compose E4 人工验收仍 `notProven` |
+| P4 Agent 接入 | PARTIAL / IMPLEMENTED_UNVERIFIED | MCP + REST `/agent/*` 只读/贡献写、幂等、限流、onboarding E4 脚本已落地；Compose verify.sh 26/28 PASS（V05 JWT/V20 因持久化 DB 凭据漂移 FAIL）；行为级 E4 旅程仍 `notProven` |
 | P5 质量与运维 | PARTIAL / IMPLEMENTED_UNVERIFIED | 对账增强、下载统计 API、runbook/备份脚本已落地；OpenAPI stats、in-app DEAD_JOB、E5 演练未闭环 |
 
 **不得将 PARTIAL / IMPLEMENTED_UNVERIFIED 表述为阶段 VERIFIED。** 关键 P1–P5 Evidence Manifest 已更新为 `PARTIAL`（E2/E3 单元测试已证；Compose E4 仍 `notProven`，需人工验收后才能 `-CheckCompletion`）。
@@ -87,7 +87,8 @@
 | E | _this commit_ | 通知 Wave E：VERSION_* fan-out、讨论订阅/DISCUSSION_REPLIED、配额/依赖告警、渠道接口桩 |
 | F | _this commit_ | 业务 Wave F：PAT/agent-bundle、上传恢复、aih push/resume/verify、CreateAssetPage |
 | G | _this commit_ | CI Wave G：verify.sh/verify-schema 入 CI、gitleaks、MCP 契约校验、Task Card 门禁、用例对照 runbook、perf-smoke 可选 |
-| H | _this commit_ | Agent Wave H：REST 贡献写端点、主体级限流、P4 onboarding E4 脚本 |
+| H | `cbdfe12` | Agent Wave H：REST 贡献写端点、主体级限流、P4 onboarding E4 脚本 |
+| I | `4530361` | 验收 Wave I：Compose E4 尽力执行、EVD E2/E3 PASS 翻转、CheckCompletion 尝试、V25/outbox 验收修复 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
 
@@ -141,3 +142,33 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | D6 jti digest | IMPLEMENTED_UNVERIFIED | V33 + 新 token 存 digest，jti 回退查询 |
 | D7 Swagger gating | IMPLEMENTED_UNVERIFIED | compose/prod 需认证 |
 | D8 DVC STS | PARTIAL | STS 尝试 + scoped 回退 + runbook；Compose MinIO IAM 未配 |
+
+## 7. Validation snapshot (I) — 2026-07-11
+
+| 检查 | 结果 |
+| --- | --- |
+| `validate-spec.ps1` | **PASS**（123 manifest docs, 695 stable IDs） |
+| `validate-task-card -TaskPath TASK-P1-001.md` | **FAIL**（baseCommit 不匹配 HEAD `4530361`） |
+| `validate-task-card -CheckCompletion` | **FAIL**（420 issues：allowedPaths 外变更、Evidence PARTIAL/E4 notProven、review.accepted 未人工验收） |
+| 定向后端回归 `*Asset*,*Auth*,*Mcp*,*Agent*,*Publish*,*Notification*` | **191 PASS / 1 FAIL / 23 SKIP**（`AuthenticationApplicationServiceTest.refreshReplayRecordsDeniedEvent` mock 断言） |
+| 前端 `pnpm test` | **137 PASS / 14 FAIL**（`AssetDetailPage` 缺 `PermissionProvider` 包裹） |
+| `verify-schema.sh` | **PASS**（V04/V16/V17/V21/V22/V28 全通过；33 迁移） |
+| Compose `verify.sh` 全量 E4 | **26/28 PASS**；**V05 JWT 生命周期 FAIL**（持久化 DB admin 口令≠`.env` 默认）；**V20 对账 Worker FAIL**（依赖 V05 token）；V18/V22 经 Wave I 修复后 PASS |
+| Compose E4 行为旅程（P1–P5 AC） | **notProven** — 无 JWT 的 authenticated 端到端旅程未闭环 |
+
+### Wave I 摘要（I1–I4）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| I1 Compose E4 | PARTIAL | Docker 可用；`docker compose up -d --build` 成功；V25 迁移列名修复后 backend healthy；verify.sh 26/28 |
+| I2 EVD PASS 翻转 | PARTIAL | 10 个关键 EVD 更新 E3 proven + E4 notProven；`commitSha=4530361`；`review.accepted=false` |
+| I3 CheckCompletion | FAIL（预期） | spec PASS；task baseCommit 不匹配；completion 420 issues |
+| I4 状态快照 | DONE | 本文件 Wave H/I 行 + Validation snapshot (I) |
+
+### 剩余 E4 差距（诚实）
+
+- P1–P5 全量 authenticated Compose 旅程（创建→上传→发布→Agent 调用）需重置 admin 凭据或刷新 DB 后重跑 V05
+- 前端 `AssetDetailPage` 测试需 `PermissionProvider` 测试包裹
+- `AuthenticationApplicationServiceTest.refreshReplayRecordsDeniedEvent` 后端回归 1 FAIL
+- P4 `p4-onboarding.sh` 全链路 E4 未在本会话执行（依赖有效 admin JWT）
+- E5 SAST/dependency/image 扫描仍 `notProven`

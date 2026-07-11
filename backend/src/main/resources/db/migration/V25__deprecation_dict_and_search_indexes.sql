@@ -3,31 +3,22 @@
 -- 时间: 2026-07-08
 
 -- ============================================================
--- 1. 弃用原因字典种子
+-- 1. 弃用原因字典项种子（类型已由 V6 预置）
 -- ============================================================
-INSERT INTO system_dict_type (dict_code, dict_name, description, status, created_at, updated_at)
-SELECT 'deprecation_reason', '弃用原因', '资产弃用时必须选择的原因分类', 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM system_dict_type WHERE dict_code = 'deprecation_reason');
-
-INSERT INTO system_dict_item (dict_code, item_code, item_name, description, sort_order, status, created_at, updated_at)
-SELECT 'deprecation_reason', 'REPLACED', '已被替代', '该资产已被其他资产替代', 1, 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM system_dict_item WHERE dict_code = 'deprecation_reason' AND item_code = 'REPLACED');
-
-INSERT INTO system_dict_item (dict_code, item_code, item_name, description, sort_order, status, created_at, updated_at)
-SELECT 'deprecation_reason', 'OUTDATED', '已过时', '该资产内容已过时不再适用', 2, 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM system_dict_item WHERE dict_code = 'deprecation_reason' AND item_code = 'OUTDATED');
-
-INSERT INTO system_dict_item (dict_code, item_code, item_name, description, sort_order, status, created_at, updated_at)
-SELECT 'deprecation_reason', 'SECURITY_ISSUE', '安全问题', '该资产存在已知安全风险', 3, 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM system_dict_item WHERE dict_code = 'deprecation_reason' AND item_code = 'SECURITY_ISSUE');
-
-INSERT INTO system_dict_item (dict_code, item_code, item_name, description, sort_order, status, created_at, updated_at)
-SELECT 'deprecation_reason', 'UNSUPPORTED', '不再维护', '该资产已停止维护支持', 4, 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM system_dict_item WHERE dict_code = 'deprecation_reason' AND item_code = 'UNSUPPORTED');
-
-INSERT INTO system_dict_item (dict_code, item_code, item_name, description, sort_order, status, created_at, updated_at)
-SELECT 'deprecation_reason', 'MERGED', '已合并', '该资产已合并到其他资产', 5, 'ACTIVE', NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM system_dict_item WHERE dict_code = 'deprecation_reason' AND item_code = 'MERGED');
+INSERT INTO system_dict_item (dict_item_id, dict_code, item_code, i18n_key, sort_order)
+SELECT 'dct_' || dict_code || '_' || item_code,
+       dict_code,
+       item_code,
+       'dict.' || dict_code || '.' || item_code,
+       sort_order
+FROM (VALUES
+    ('deprecation_reason', 'REPLACED',       1),
+    ('deprecation_reason', 'OUTDATED',       2),
+    ('deprecation_reason', 'SECURITY_ISSUE', 3),
+    ('deprecation_reason', 'UNSUPPORTED',    4),
+    ('deprecation_reason', 'MERGED',         5)
+) AS seed(dict_code, item_code, sort_order)
+ON CONFLICT (dict_code, item_code) DO NOTHING;
 
 -- ============================================================
 -- 2. asset_dataset JSONB 数组 GIN 索引（加速多值分类过滤）
