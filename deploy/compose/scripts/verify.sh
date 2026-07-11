@@ -148,8 +148,8 @@ check_buckets() {
 check_migrations() {
   local count ok=0
   count="$(psql_q 'select count(*) from flyway_schema_history where success = true')"
-  if [ -z "${count}" ] || [ "${count}" -lt 28 ]; then echo "  成功迁移数 ${count} < 28"; return 1; fi
-  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert reconciliation_checkpoint; do
+  if [ -z "${count}" ] || [ "${count}" -lt 33 ]; then echo "  成功迁移数 ${count} < 33"; return 1; fi
+  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert reconciliation_checkpoint asset_relation asset_subscription team api_idempotency; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"; ok=1
     fi

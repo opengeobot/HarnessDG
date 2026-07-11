@@ -16,7 +16,7 @@ COMPOSE_DIR="$(dirname "${SCRIPT_DIR}")"
 REPO_ROOT="$(cd "${COMPOSE_DIR}/../.." && pwd)"
 
 FAILED=0
-MIN_MIGRATIONS="${MIN_MIGRATIONS:-28}"
+MIN_MIGRATIONS="${MIN_MIGRATIONS:-33}"
 
 step() {
   local id="$1"; local name="$2"; shift 2
@@ -61,7 +61,7 @@ check_migrations() {
     echo "  成功迁移数 ${count:-0} < ${MIN_MIGRATIONS}"
     return 1
   fi
-  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert reconciliation_checkpoint; do
+  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert reconciliation_checkpoint asset_relation asset_subscription team api_idempotency; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"
       ok=1

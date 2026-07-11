@@ -1945,6 +1945,41 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/lineage:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: depth
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 10, default: 3 }
+      - name: direction
+        in: query
+        required: false
+        schema: { type: string, enum: [up, down], default: down }
+    get:
+      operationId: getAssetLineage
+      summary: 查询资产血缘关系（向上/向下）
+      tags: [assets]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 血缘关系
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AssetLineageView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/deprecate:
     parameters:
       - name: assetId
@@ -2406,6 +2441,57 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/discussions/subscription:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getDiscussionSubscription
+      summary: 查询当前主体对资产讨论的订阅状态
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 订阅状态
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          subscribed: { type: boolean }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: subscribeDiscussion
+      summary: 订阅/取消订阅资产讨论通知
+      tags: [discussions]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subscribe: { type: boolean, default: true }
+      responses:
+        '200':
+          description: 订阅状态已更新
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   # ── 系统告警（SystemAlertController） ──
 
   /system/alerts:
@@ -2431,6 +2517,31 @@ paths:
                       data:
                         type: array
                         items: { $ref: '#/components/schemas/SystemAlert' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/idempotency:
+    get:
+      operationId: listIdempotencyRecords
+      summary: 查询幂等记录列表（管理员只读）
+      tags: [system]
+      x-implementation-status: implemented
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [job:read]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        '200':
+          description: 幂等记录列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/IdempotencyRecord' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /system/alerts/firing:
@@ -3998,6 +4109,45 @@ components:
         byVersion:
           type: array
           items: { $ref: '#/components/schemas/DownloadLeaderboardEntry' }
+
+    AssetLineageView:
+      type: object
+      description: 资产血缘关系视图
+      required: [assetId, direction, depth, relations]
+      properties:
+        assetId: { type: string }
+        direction: { type: string, enum: [up, down] }
+        depth: { type: integer }
+        relations:
+          type: array
+          items: { $ref: '#/components/schemas/AssetRelationEntry' }
+
+    AssetRelationEntry:
+      type: object
+      required: [relationId, parentAssetId, childAssetId, relationType]
+      properties:
+        relationId: { type: string }
+        parentAssetId: { type: string }
+        parentName: { type: [string, 'null'] }
+        childAssetId: { type: string }
+        childName: { type: [string, 'null'] }
+        relationType: { type: string, enum: [DERIVED_FROM, TRAINED_ON, BASED_ON, FINE_TUNED_FROM] }
+        createdBy: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    IdempotencyRecord:
+      type: object
+      description: 幂等记录（管理员只读）
+      required: [idempotencyKey, method, path, digest]
+      properties:
+        idempotencyKey: { type: string }
+        principalId: { type: [string, 'null'] }
+        method: { type: string }
+        path: { type: string }
+        digest: { type: string }
+        responseStatus: { type: [integer, 'null'] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
 
     SystemDependencySummary:
       type: object

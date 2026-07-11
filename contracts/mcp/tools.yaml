@@ -126,6 +126,7 @@ tools:
     requiredScopes: [asset:manage]
     requiredPermissions: [asset:manage]
     reusesApplicationService: VersionApplicationService
+    idempotency: required
     parameters:
       type: object
       additionalProperties: false
@@ -159,6 +160,7 @@ tools:
     requiredScopes: [asset:manage]
     requiredPermissions: [asset:manage]
     reusesApplicationService: UploadApplicationService
+    idempotency: required
     parameters:
       type: object
       additionalProperties: false
@@ -188,6 +190,7 @@ tools:
     requiredScopes: [asset:publish]
     requiredPermissions: [asset:publish]
     auditEvent: VERSION_PUBLISHED
+    idempotency: required
 
   - name: asset_delete
     enabled: false
@@ -197,3 +200,4 @@ tools:
     requiredScopes: [asset:delete]
     requiredPermissions: [asset:delete]
     auditEvent: ASSET_DELETED
+    idempotency: required
