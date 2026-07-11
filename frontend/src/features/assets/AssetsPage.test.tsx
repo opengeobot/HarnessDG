@@ -25,6 +25,11 @@ vi.mock('./api', () => ({
     totalCount: 2,
   }),
   deleteAsset: vi.fn().mockResolvedValue(undefined),
+  createAsset: vi.fn().mockResolvedValue({ assetId: 'ast_new' }),
+  getAsset: vi.fn().mockResolvedValue(null),
+  updateAsset: vi.fn().mockResolvedValue(null),
+  listTags: vi.fn().mockResolvedValue([]),
+  listDictionaryItems: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock ControlledSelect 避免测试中发起真实 API 请求

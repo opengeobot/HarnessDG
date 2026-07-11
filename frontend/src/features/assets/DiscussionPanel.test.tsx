@@ -30,6 +30,7 @@ vi.mock('@/app/permission', () => ({
     hasAllScopes: () => true,
     scopes: new Set(['asset:moderate']),
   }),
+  PermissionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('./api', () => ({

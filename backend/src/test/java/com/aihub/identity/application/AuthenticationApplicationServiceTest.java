@@ -165,7 +165,7 @@ class AuthenticationApplicationServiceTest {
                 .issuedAt(NOW).expiresAt(NOW.plusSeconds(3600))
                 .status(com.aihub.identity.domain.RefreshTokenStatus.ROTATED)
                 .build();
-        when(refreshTokenRepository.findByJti("jti_old")).thenReturn(Optional.of(rotated));
+        when(refreshTokenRepository.findByJwtId("jti_old")).thenReturn(Optional.of(rotated));
 
         assertThatThrownBy(() -> service.refresh("rt"))
                 .isInstanceOf(AuthenticationException.class);
