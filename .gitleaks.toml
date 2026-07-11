@@ -1,0 +1,28 @@
+# ============================================================================
+# 功能: Gitleaks 密钥扫描配置。排除 .env.example 占位符与已知开发默认值。
+# 时间: 2026-07-11
+# 作者: AxeXie
+# ============================================================================
+
+title = "AIHub gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "开发占位与环境示例文件"
+paths = [
+  '''(?i)(^|/)\\.env\\.example$''',
+  '''(?i)deploy/compose/\\.env\\.example$''',
+  '''(?i)docs/.*/fixtures/''',
+  '''(?i)\.gitleaks\.toml$''',
+]
+regexes = [
+  '''change-me''',
+  '''example\.com''',
+  '''gitea-minio-key''',
+  '''aihub-minio-key''',
+  '''dvc-minio-key''',
+  '''minio-root''',
+  '''PLACEHOLDER''',
+]

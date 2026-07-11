@@ -86,8 +86,20 @@
 | D | _this commit_ | 数据模型与安全 Wave D：asset_relation 血缘、版本约束、owner_team NOT NULL、JWT 轮换、jti digest、Swagger 门控、DVC STS/scoped 凭据 |
 | E | _this commit_ | 通知 Wave E：VERSION_* fan-out、讨论订阅/DISCUSSION_REPLIED、配额/依赖告警、渠道接口桩 |
 | F | _this commit_ | 业务 Wave F：PAT/agent-bundle、上传恢复、aih push/resume/verify、CreateAssetPage |
+| G | _this commit_ | CI Wave G：verify.sh/verify-schema 入 CI、gitleaks、MCP 契约校验、Task Card 门禁、用例对照 runbook、perf-smoke 可选 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
+
+### Wave G 摘要（G1–G6，PRD §15.10）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| G1 verify.sh 入 CI | IMPLEMENTED_UNVERIFIED | `verify-schema` 强制（Postgres+Flyway+V04/V28 子集）；`compose-e2e` 全量 verify.sh（main 强制、PR 可选失败） |
+| G2 Secret 扫描 | IMPLEMENTED_UNVERIFIED | gitleaks-action + `.gitleaks.toml` 排除 `.env.example` 占位 |
+| G3 MCP schema diff | IMPLEMENTED_UNVERIFIED | `validate-tools.sh` + `McpToolCatalogContractTest` 显式 CI 作业 |
+| G4 validate-task-card | IMPLEMENTED_UNVERIFIED | 变更 `TASK-*.md` 时 `-CheckChangedPaths` |
+| G5 用例编号对照 | VERIFIED | `docs/runbooks/verify-case-mapping.md`（仓库 V01–V28 ↔ PRD §13.2） |
+| G6 性能冒烟 | PARTIAL | `perf-smoke.sh`（100 并发 P95≤500ms）；`workflow_dispatch`/main 可选作业 |
 
 ### Wave F 摘要（F1–F5）
 
