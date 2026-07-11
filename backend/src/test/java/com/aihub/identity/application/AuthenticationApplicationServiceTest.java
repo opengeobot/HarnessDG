@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.audit.domain.AuditResult;
+import com.aihub.authorization.application.EffectiveScopeResolver;
 import com.aihub.identity.domain.AgentIdentityRepository;
 import com.aihub.identity.domain.LocalUser;
 import com.aihub.identity.domain.LocalUserRepository;
@@ -67,6 +68,8 @@ class AuthenticationApplicationServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private AuditPort auditPort;
+    @Mock
+    private EffectiveScopeResolver effectiveScopeResolver;
 
     private AuthenticationApplicationService service;
 
@@ -74,7 +77,13 @@ class AuthenticationApplicationServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         service = new AuthenticationApplicationService(userRepository, agentRepository, refreshTokenRepository,
-                tokenSigner, tokenVerifier, passwordHasher, passwordPolicy, idGenerator, clock, auditPort);
+                tokenSigner, tokenVerifier, passwordHasher, passwordPolicy, idGenerator, clock, auditPort,
+                effectiveScopeResolver);
+        // 默认：EffectiveScopeResolver 返回静态 scopes（保持既有测试语义）。
+        lenient().when(effectiveScopeResolver.resolve(anyString(), any())).thenAnswer(inv -> {
+            Set<String> staticScopes = inv.getArgument(1);
+            return staticScopes == null ? Set.of() : new java.util.LinkedHashSet<>(staticScopes);
+        });
     }
 
     private LocalUser activeUser() {
@@ -193,6 +202,35 @@ class AuthenticationApplicationServiceTest {
         service.login("alice", "pw");
 
         verify(auditPort, never()).record(eq("AUTH_LOGIN_FAILED"), any(), anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void loginMergesRoleBindingScopesIntoJwt() {
+        // 静态 scopes 仅 asset:read；角色绑定解析返回额外 dictionary:read/job:read/audit:read 等。
+        LocalUser user = activeUser();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordHasher.matches("pw", "$hash")).thenReturn(true);
+        stubTokenIssuance();
+        Set<String> roleScopes = Set.of("dictionary:read", "job:read", "audit:read",
+                "notification:read", "system:observe", "tag:read", "system:configure");
+        when(effectiveScopeResolver.resolve("prn_1", user.scopes()))
+                .thenReturn(new java.util.LinkedHashSet<>() {{
+                    addAll(user.scopes());
+                    addAll(roleScopes);
+                }});
+
+        com.aihub.identity.application.TokenPairResult result =
+                service.login("alice", "pw");
+
+        assertThat(result.principal().scopes()).contains("asset:read", "dictionary:read",
+                "job:read", "audit:read", "notification:read", "system:observe",
+                "tag:read", "system:configure");
+        // 签发 JWT 时也使用合并后的 scopes（access + refresh 两次调用都应包含）
+        ArgumentCaptor<com.aihub.shared.security.TokenIssueRequest> req =
+                ArgumentCaptor.forClass(com.aihub.shared.security.TokenIssueRequest.class);
+        verify(tokenSigner, org.mockito.Mockito.atLeastOnce()).issue(req.capture());
+        assertThat(req.getAllValues()).allMatch(r -> r.scopes().contains("dictionary:read")
+                && r.scopes().contains("job:read") && r.scopes().contains("asset:read"));
     }
 
     private void assertNoSensitive(Map<String, Object> attrs) {

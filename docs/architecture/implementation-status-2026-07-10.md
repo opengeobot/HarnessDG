@@ -74,5 +74,6 @@
 | W5 | `9e08b3a` | P4：Agent REST 适配器、MCP 幂等、batch latestPublished、auth alias、onboarding |
 | W6 | `2482eb1` | P5：DEAD_JOB 告警、preview limits、i18n badge、E5 drill stubs |
 | W7 | `811390f` / `4642e33` | evidence 卫生：P0BR REQ 修复、verify.sh V23–V28、EVD PARTIAL 诚实更新、CheckCompletion 尝试 |
+| A | _pending_ | 授权断链修复：EffectiveScopeResolver 合并角色绑定 scopes 进 JWT，管理员登录后菜单可见 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。

@@ -10,6 +10,7 @@ import com.aihub.identity.domain.AgentIdentityRepository;
 import com.aihub.identity.domain.LocalUser;
 import com.aihub.identity.domain.LocalUserRepository;
 import com.aihub.audit.domain.AuditResult;
+import com.aihub.authorization.application.EffectiveScopeResolver;
 import com.aihub.identity.domain.RefreshTokenRecord;
 import com.aihub.identity.domain.RefreshTokenRepository;
 import com.aihub.shared.error.AuthenticationException;
@@ -57,6 +58,7 @@ public class AuthenticationApplicationService {
     private final IdGenerator idGenerator;
     private final Clock clock;
     private final AuditPort auditPort;
+    private final EffectiveScopeResolver effectiveScopeResolver;
 
     public AuthenticationApplicationService(LocalUserRepository userRepository,
                                             AgentIdentityRepository agentRepository,
@@ -67,7 +69,8 @@ public class AuthenticationApplicationService {
                                             PasswordPolicy passwordPolicy,
                                             IdGenerator idGenerator,
                                             Clock clock,
-                                            AuditPort auditPort) {
+                                            AuditPort auditPort,
+                                            EffectiveScopeResolver effectiveScopeResolver) {
         this.userRepository = userRepository;
         this.agentRepository = agentRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -78,6 +81,7 @@ public class AuthenticationApplicationService {
         this.idGenerator = idGenerator;
         this.clock = clock;
         this.auditPort = auditPort;
+        this.effectiveScopeResolver = effectiveScopeResolver;
     }
 
     /**
@@ -276,7 +280,7 @@ public class AuthenticationApplicationService {
     }
 
     private TokenPairResult issueUserTokenPair(LocalUser user, String family) {
-        Set<String> scopes = user.scopes();
+        Set<String> scopes = effectiveScopeResolver.resolve(user.principalId(), user.scopes());
         IssuedToken access = tokenSigner.issue(new TokenIssueRequest(
                 user.principalId(), PrincipalType.USER, user.tokenVersion(), scopes, TokenType.ACCESS));
         IssuedToken refresh = tokenSigner.issue(new TokenIssueRequest(
@@ -299,9 +303,10 @@ public class AuthenticationApplicationService {
     }
 
     private CurrentPrincipalView toPrincipalView(LocalUser user) {
+        Set<String> effectiveScopes = effectiveScopeResolver.resolve(user.principalId(), user.scopes());
         return new CurrentPrincipalView(
                 user.principalId(), user.userId(), PrincipalType.USER, user.principalId(),
-                user.displayName(), null, List.of(), List.copyOf(user.scopes()),
+                user.displayName(), null, List.of(), List.copyOf(effectiveScopes),
                 user.locale(), user.mustChangePassword());
     }
 
