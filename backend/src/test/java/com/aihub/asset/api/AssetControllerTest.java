@@ -7,6 +7,7 @@ package com.aihub.asset.api;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -16,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aihub.asset.application.AssetApplicationService;
+import com.aihub.asset.application.AssetLineageQueryService;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.domain.Asset;
@@ -76,6 +78,7 @@ class AssetControllerTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private TokenSigner tokenSigner;
     @MockitoBean private AssetApplicationService assetService;
+    @MockitoBean private AssetLineageQueryService lineageQueryService;
     @MockitoBean private RoleBindingRepository roleBindingRepository;
     @MockitoBean private ResourceAclRepository resourceAclRepository;
     @MockitoBean private AgentToolRepository agentToolRepository;
@@ -192,6 +195,22 @@ class AssetControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.assetId").value("ast_demo"));
+    }
+
+    @Test
+    void getAssetLineageReturnsRelations() throws Exception {
+        var lineage = new com.aihub.asset.application.AssetLineageView(
+                "ast_demo", "down", 3, List.of());
+        given(lineageQueryService.queryLineage(eq("ast_demo"), any(), eq("down"), any()))
+                .willReturn(lineage);
+
+        mockMvc.perform(get("/api/v1/assets/ast_demo/lineage")
+                        .param("depth", "3")
+                        .param("direction", "down")
+                        .header(HttpHeaders.AUTHORIZATION, bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assetId").value("ast_demo"))
+                .andExpect(jsonPath("$.data.direction").value("down"));
     }
 
     @Test

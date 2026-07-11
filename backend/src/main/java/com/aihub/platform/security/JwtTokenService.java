@@ -62,6 +62,7 @@ public class JwtTokenService implements TokenSigner, TokenVerifier {
     private final Clock clock;
     private final PrivateKey privateKey;
     private final PublicKey publicKey;
+    private final PublicKey previousPublicKey;
     private final String keyId;
 
     public JwtTokenService(JwtProperties properties, IdGenerator idGenerator, Clock clock) {
@@ -71,6 +72,7 @@ public class JwtTokenService implements TokenSigner, TokenVerifier {
         KeyPair keyPair = resolveKeyPair(properties);
         this.privateKey = keyPair.getPrivate();
         this.publicKey = keyPair.getPublic();
+        this.previousPublicKey = resolvePreviousPublicKey(properties);
         this.keyId = resolveKeyId(properties, this.publicKey);
     }
 
@@ -111,14 +113,7 @@ public class JwtTokenService implements TokenSigner, TokenVerifier {
             throw new AuthenticationException(ErrorCode.AUTH_UNAUTHENTICATED, "Missing token", Map.of());
         }
         try {
-            Claims payload = Jwts.parser()
-                    .verifyWith(publicKey)
-                    .requireIssuer(properties.issuer())
-                    .requireAudience(properties.audience())
-                    .clock(() -> Date.from(clock.instant()))
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+            Claims payload = parseClaims(token);
             return toClaims(payload);
         } catch (ExpiredJwtException ex) {
             throw new AuthenticationException(ErrorCode.AUTH_TOKEN_EXPIRED, "Token expired", Map.of());
@@ -177,6 +172,35 @@ public class JwtTokenService implements TokenSigner, TokenVerifier {
             return Set.of();
         }
         return new LinkedHashSet<>(List.of(value.trim().split("\\s+")));
+    }
+
+    private Claims parseClaims(String token) {
+        try {
+            return parseWithKey(token, publicKey);
+        } catch (JwtException | IllegalArgumentException currentKeyFailure) {
+            if (previousPublicKey == null) {
+                throw currentKeyFailure;
+            }
+            return parseWithKey(token, previousPublicKey);
+        }
+    }
+
+    private Claims parseWithKey(String token, PublicKey key) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .requireIssuer(properties.issuer())
+                .requireAudience(properties.audience())
+                .clock(() -> Date.from(clock.instant()))
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    private static PublicKey resolvePreviousPublicKey(JwtProperties properties) {
+        if (properties.previousPublicKeyPem() == null || properties.previousPublicKeyPem().isBlank()) {
+            return null;
+        }
+        return loadPublicKey(properties.previousPublicKeyPem());
     }
 
     private static KeyPair resolveKeyPair(JwtProperties properties) {

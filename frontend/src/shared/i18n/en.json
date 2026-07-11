@@ -175,7 +175,20 @@
       "aliases": "Aliases",
       "knownRisks": "Known Risks",
       "usageRestrictions": "Usage Restrictions",
-      "settingsLink": "Settings"
+      "settingsLink": "Settings",
+      "lineageLink": "Lineage"
+    },
+    "lineage": {
+      "title": "Asset Lineage",
+      "relations": "Relations",
+      "relationType": "Type",
+      "parent": "Parent Asset",
+      "child": "Child Asset",
+      "hopDepth": "Depth",
+      "createdAt": "Created At",
+      "directionUp": "Upstream",
+      "directionDown": "Downstream",
+      "empty": "No lineage relations found"
     },
     "create": {
       "title": "Register Asset",

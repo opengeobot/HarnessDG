@@ -22,6 +22,11 @@ public interface RefreshTokenRepository {
     Optional<RefreshTokenRecord> findByJti(String jti);
 
     /**
+     * 按 jti 摘要或明文 jti 查找（摘要优先，明文 jti 回退兼容历史记录）。
+     */
+    Optional<RefreshTokenRecord> findByJwtId(String jwtId);
+
+    /**
      * 将旧 jti 标记为已轮换并记录后继 jti。
      */
     void markRotated(String jti, String replacedByJti);

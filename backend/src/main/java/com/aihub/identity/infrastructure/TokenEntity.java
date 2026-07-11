@@ -27,6 +27,9 @@ public class TokenEntity {
     @TableField("jti")
     private String jti;
 
+    @TableField("jti_digest")
+    private String jtiDigest;
+
     @TableField("token_family")
     private String tokenFamily;
 
@@ -85,6 +88,14 @@ public class TokenEntity {
 
     public void setJti(String jti) {
         this.jti = jti;
+    }
+
+    public String getJtiDigest() {
+        return jtiDigest;
+    }
+
+    public void setJtiDigest(String jtiDigest) {
+        this.jtiDigest = jtiDigest;
     }
 
     public String getTokenFamily() {

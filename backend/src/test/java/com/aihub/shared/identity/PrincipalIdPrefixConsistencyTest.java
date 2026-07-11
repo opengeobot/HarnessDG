@@ -40,7 +40,7 @@ class PrincipalIdPrefixConsistencyTest {
     @BeforeEach
     void setUp() {
         var properties = new JwtProperties("aihub-test", "aihub-test",
-                null, null, null, Duration.ofMinutes(15), Duration.ofHours(24));
+                null, null, null, null, Duration.ofMinutes(15), Duration.ofHours(24));
         IdGenerator idGenerator = new UlidIdGenerator();
         var clock = Clock.fixed(Instant.parse("2026-07-06T10:00:00Z"), ZoneOffset.UTC);
         tokenService = new JwtTokenService(properties, idGenerator, clock);

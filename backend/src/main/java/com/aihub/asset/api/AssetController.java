@@ -7,6 +7,8 @@ package com.aihub.asset.api;
 
 import com.aihub.asset.application.AssetApplicationService;
 import com.aihub.asset.application.AssetFacetView;
+import com.aihub.asset.application.AssetLineageQueryService;
+import com.aihub.asset.application.AssetLineageView;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.application.CreateAssetCommand;
@@ -45,13 +47,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssetController {
 
     private final AssetApplicationService assetService;
+    private final AssetLineageQueryService lineageQueryService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
 
     public AssetController(AssetApplicationService assetService,
+                           AssetLineageQueryService lineageQueryService,
                            IdempotencyService idempotencyService,
                            ObjectMapper objectMapper) {
         this.assetService = assetService;
+        this.lineageQueryService = lineageQueryService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
     }
@@ -160,6 +165,18 @@ public class AssetController {
             return new IdempotencyService.IdempotencyResponse(200, "");
         });
         return AssetApiContext.respond(null);
+    }
+
+    /**
+     * 查询资产血缘关系（BFS 上下游遍历）。
+     */
+    @GetMapping("/{assetId}/lineage")
+    public ApiResponse<AssetLineageView> getAssetLineage(
+            @PathVariable String assetId,
+            @RequestParam(required = false) Integer depth,
+            @RequestParam(required = false, defaultValue = "down") String direction) {
+        return AssetApiContext.respond(
+                lineageQueryService.queryLineage(assetId, depth, direction, AssetApiContext.principalId()));
     }
 
     /**

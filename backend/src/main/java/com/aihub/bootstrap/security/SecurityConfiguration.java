@@ -7,9 +7,11 @@ package com.aihub.bootstrap.security;
 
 import com.aihub.shared.security.TokenRevocationChecker;
 import com.aihub.shared.security.TokenVerifier;
+import java.util.Arrays;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -31,7 +33,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>{@code /api/v1/auth/refresh}</li>
  *   <li>{@code GET /actuator/health}、{@code /actuator/health/**}</li>
  *   <li>{@code POST /api/v1/webhooks/gitea}（HMAC 签名作为认证机制）</li>
- *   <li>{@code /v3/api-docs/**}、{@code /swagger-ui/**}、{@code /swagger-ui.html}（仅非生产）</li>
+ *   <li>{@code /v3/api-docs/**}、{@code /swagger-ui/**}、{@code /swagger-ui.html}（仅非 compose/非 prod）</li>
  * </ul>
  */
 @Configuration
@@ -41,15 +43,18 @@ public class SecurityConfiguration {
     private final ObjectProvider<TokenRevocationChecker> revocationChecker;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
+    private final Environment environment;
 
     public SecurityConfiguration(TokenVerifier tokenVerifier,
                                  ObjectProvider<TokenRevocationChecker> revocationChecker,
                                  RestAuthenticationEntryPoint authenticationEntryPoint,
-                                 RestAccessDeniedHandler accessDeniedHandler) {
+                                 RestAccessDeniedHandler accessDeniedHandler,
+                                 Environment environment) {
         this.tokenVerifier = tokenVerifier;
         this.revocationChecker = revocationChecker;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
+        this.environment = environment;
     }
 
     /**
@@ -66,18 +71,31 @@ public class SecurityConfiguration {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
-                        .requestMatchers("/api/v1/auth/token", "/api/v1/auth/agent/token", "/api/v1/auth/refresh").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/gitea").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                            .requestMatchers("/api/v1/auth/token", "/api/v1/auth/agent/token", "/api/v1/auth/refresh").permitAll()
+                            .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                            .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/gitea").permitAll();
+                    if (swaggerPermitAll()) {
+                        auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
+                    }
+                    auth.anyRequest().authenticated();
+                })
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Swagger/OpenAPI 仅在非 compose、非 prod 环境匿名放行；生产与 Compose 验收需认证。
+     */
+    private boolean swaggerPermitAll() {
+        return Arrays.stream(environment.getActiveProfiles())
+                .noneMatch(profile -> "compose".equals(profile)
+                        || "prod".equals(profile)
+                        || "production".equals(profile));
     }
 }

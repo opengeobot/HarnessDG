@@ -133,6 +133,7 @@ public class AssetApplicationService {
         }
         authorizationService.requirePermission(Permissions.ASSET_CREATE);
         rejectFreeFormOwners(command.owners(), true);
+        rejectFreeFormTags(command.tags(), true);
         validateOwnerTeamId(command.ownerTeamId());
         validateGovernanceFields(command.type(), command.license(),
                 modelFramework(command), modelTask(command),
@@ -182,7 +183,6 @@ public class AssetApplicationService {
                 datasetFormat(command), datasetModality(command));
         List<String> validatedTagIds = resolveValidatedTagIds(command.tagIds(),
                 command.organizationId() != null ? command.organizationId() : asset.organizationId());
-        rejectFreeFormOwners(command.owners(), false);
         if (command.ownerTeamId() != null) {
             validateOwnerTeamId(command.ownerTeamId());
         }
@@ -202,7 +202,7 @@ public class AssetApplicationService {
                 command.description(),
                 command.visibility(),
                 null,
-                command.tags(),
+                null,
                 validatedTagIds,
                 command.license(),
                 command.model(),
@@ -554,6 +554,15 @@ public class AssetApplicationService {
         throw new ValidationException(onCreate
                 ? "free-form owners are deprecated; use ownerTeamId instead"
                 : "free-form owners cannot be updated; use ownerTeamId instead");
+    }
+
+    private void rejectFreeFormTags(List<String> tags, boolean onCreate) {
+        if (tags == null || tags.isEmpty()) {
+            return;
+        }
+        throw new ValidationException(onCreate
+                ? "free-form tags are deprecated; use tagIds instead"
+                : "free-form tags cannot be updated; use tagIds instead");
     }
 
     private void validateOwnerTeamId(String ownerTeamId) {

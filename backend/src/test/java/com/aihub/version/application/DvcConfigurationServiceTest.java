@@ -8,6 +8,7 @@ package com.aihub.version.application;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.integration.minio.infrastructure.MinioProperties;
+import com.aihub.integration.minio.infrastructure.MinioStsCredentialIssuer;
 import com.aihub.shared.error.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +31,8 @@ class DvcConfigurationServiceTest {
     private AuthorizationService authorizationService;
     @Mock
     private AuditService auditService;
+    @Mock
+    private MinioStsCredentialIssuer stsCredentialIssuer;
 
     private MinioProperties dvcStorageProperties;
     private DvcConfigurationService service;
@@ -40,7 +45,12 @@ class DvcConfigurationServiceTest {
         dvcStorageProperties.setSecretKey("minioadmin");
         dvcStorageProperties.setDvcAccessKey("dvc-scoped-key");
         dvcStorageProperties.setDvcSecretKey("dvc-scoped-secret");
-        service = new DvcConfigurationService(dvcStorageProperties, authorizationService, auditService);
+        service = new DvcConfigurationService(dvcStorageProperties, stsCredentialIssuer,
+                authorizationService, auditService);
+    }
+
+    private void stubStsUnavailable() {
+        when(stsCredentialIssuer.issue(anyString(), anyString(), any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -71,6 +81,7 @@ class DvcConfigurationServiceTest {
     @Test
     @DisplayName("签发 DVC 凭据应使用 scoped 密钥而非 root")
     void issueCredentialsShouldUseScopedKeys() {
+        stubStsUnavailable();
         DvcConfigurationService.DvcCredentials credentials = service.issueCredentials("asset_1");
 
         assertThat(credentials.accessKey()).isEqualTo("dvc-scoped-key");
@@ -88,6 +99,7 @@ class DvcConfigurationServiceTest {
     @Test
     @DisplayName("未配置 scoped 密钥时应 fail-closed")
     void issueCredentialsShouldFailWhenScopedKeysMissing() {
+        stubStsUnavailable();
         dvcStorageProperties.setDvcAccessKey("");
         dvcStorageProperties.setDvcSecretKey("");
 

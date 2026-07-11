@@ -149,13 +149,33 @@ export interface UpdateAssetRequest {
   displayName?: string;
   description?: string;
   visibility?: Visibility;
-  owners?: string[];
-  tags?: string[];
   tagIds?: string[];
   license?: string;
   ownerTeamId?: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
+}
+
+/** 血缘遍历方向 */
+export type LineageDirection = 'up' | 'down';
+
+/** 血缘关系边 */
+export interface AssetLineageEdge {
+  relationId: string;
+  parentAssetId: string;
+  childAssetId: string;
+  relationType: string;
+  hopDepth: number;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+/** 资产血缘查询结果 */
+export interface AssetLineageView {
+  assetId: string;
+  direction: LineageDirection;
+  depth: number;
+  relations: AssetLineageEdge[];
 }
 
 /** 检索查询参数 */

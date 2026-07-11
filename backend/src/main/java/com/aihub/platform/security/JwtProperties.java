@@ -19,6 +19,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param keyId          密钥标识（{@code kid}），留空时由实现派生
  * @param privateKeyPem  RSA 私钥 PEM（PKCS#8）
  * @param publicKeyPem   RSA 公钥 PEM（X.509）
+ * @param previousPublicKeyPem 轮换重叠期上一公钥 PEM（仅校验，不用于签发）
  * @param accessTokenTtl 访问令牌有效期
  * @param refreshTokenTtl 刷新令牌有效期
  */
@@ -28,6 +29,7 @@ public record JwtProperties(String issuer,
                             String keyId,
                             String privateKeyPem,
                             String publicKeyPem,
+                            String previousPublicKeyPem,
                             Duration accessTokenTtl,
                             Duration refreshTokenTtl) {
 

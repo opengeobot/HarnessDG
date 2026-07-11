@@ -106,7 +106,7 @@ class AssetApplicationServiceTest {
     private CreateAssetCommand modelCommand() {
         return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, null,
-                List.of("text-generation"), null, "Apache-2.0", "team_nlp",
+                null, null, "Apache-2.0", "team_nlp",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
@@ -145,7 +145,7 @@ class AssetApplicationServiceTest {
         doNothing().when(assetRepository).update(any(Asset.class));
 
         UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, "新名", "新描述",
-                Visibility.PUBLIC, null, List.of("llm"), null, "MIT",
+                Visibility.PUBLIC, null, "MIT",
                 null,
                 new ModelProfile("vllm", "chat", null), null, "usr_02");
         AssetView view = service.updateAsset("ast_stored", command);
@@ -321,6 +321,18 @@ class AssetApplicationServiceTest {
     }
 
     @Test
+    void createAssetRejectsFreeFormTags() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "legacy-tags", "Legacy Tags", null, Visibility.INTERNAL, null,
+                List.of("free-tag"), null, "Apache-2.0", "team_nlp",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
     void createAssetRejectsFreeFormOwners() {
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "legacy-owners", "Legacy", null, Visibility.INTERNAL, List.of("prn_legacy"),
@@ -340,7 +352,7 @@ class AssetApplicationServiceTest {
         when(cardProjectionPortProvider.getIfAvailable()).thenReturn(mock(AssetCardProjectionPort.class));
 
         UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, "新展示名", null,
-                null, null, null, null, null, null, null, null, "usr_02");
+                null, null, null, null, null, null, "usr_02");
         service.updateAsset("ast_stored", command);
 
         verify(assetRepository).insertAlias(eq("ast_stored"), eq("nlp"), eq("领域问答模型"));
@@ -354,7 +366,7 @@ class AssetApplicationServiceTest {
         when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
 
         UpdateAssetCommand command = new UpdateAssetCommand(99L, null, null, "新名", null,
-                null, null, null, null, null, null, null, null, "usr_02");
+                null, null, null, null, null, null, "usr_02");
 
         assertThatThrownBy(() -> service.updateAsset("ast_stored", command))
                 .isInstanceOf(ConflictException.class);

@@ -46,7 +46,7 @@ class JwtTokenServiceTest {
 
     private JwtProperties properties() {
         return new JwtProperties("aihub-platform", "aihub-clients", "test-kid",
-                privateKeyPem, publicKeyPem, Duration.ofMinutes(15), Duration.ofDays(7));
+                privateKeyPem, publicKeyPem, null, Duration.ofMinutes(15), Duration.ofDays(7));
     }
 
     private JwtTokenService serviceAt(Instant now) {
@@ -95,6 +95,35 @@ class JwtTokenServiceTest {
                 .isInstanceOf(AuthenticationException.class)
                 .extracting(ex -> ((AuthenticationException) ex).errorCode())
                 .isEqualTo(ErrorCode.AUTH_TOKEN_EXPIRED);
+    }
+
+    @Test
+    void verifiesTokenSignedWithPreviousKeyDuringOverlap() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair previousPair = generator.generateKeyPair();
+        KeyPair currentPair = generator.generateKeyPair();
+
+        String previousPublicPem = Base64.getEncoder().encodeToString(previousPair.getPublic().getEncoded());
+        String currentPrivatePem = Base64.getEncoder().encodeToString(currentPair.getPrivate().getEncoded());
+        String currentPublicPem = Base64.getEncoder().encodeToString(currentPair.getPublic().getEncoded());
+
+        JwtProperties previousOnly = new JwtProperties("aihub-platform", "aihub-clients", "prev-kid",
+                Base64.getEncoder().encodeToString(previousPair.getPrivate().getEncoded()),
+                previousPublicPem, null, Duration.ofMinutes(15), Duration.ofDays(7));
+        JwtTokenService previousSigner = new JwtTokenService(previousOnly, new UlidIdGenerator(),
+                Clock.fixed(Instant.parse("2026-07-11T00:00:00Z"), ZoneOffset.UTC));
+        String token = previousSigner.issue(new TokenIssueRequest(
+                "usr_01", PrincipalType.USER, 0L, Set.of("asset:read"), TokenType.ACCESS)).token();
+
+        JwtProperties overlap = new JwtProperties("aihub-platform", "aihub-clients", "curr-kid",
+                currentPrivatePem, currentPublicPem, previousPublicPem,
+                Duration.ofMinutes(15), Duration.ofDays(7));
+        JwtTokenService overlapVerifier = new JwtTokenService(overlap, new UlidIdGenerator(),
+                Clock.fixed(Instant.parse("2026-07-11T00:00:00Z"), ZoneOffset.UTC));
+
+        JwtClaims claims = overlapVerifier.verify(token);
+        assertThat(claims.principalId()).isEqualTo("usr_01");
     }
 
     @Test

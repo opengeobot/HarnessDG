@@ -19,8 +19,6 @@ import java.util.List;
  * @param displayName    展示名称
  * @param description 描述
  * @param visibility  可见性（为空表示不变更）
- * @param owners      Owner 列表（为空表示不变更）
- * @param tags        标签列表（legacy，为空表示不变更）
  * @param tagIds      受控标签 ID 列表（为空表示不变更；非空时重写 asset_tag 关联）
  * @param license     许可证
  * @param ownerTeamId 主 Owner 团队 ID（为空表示不变更）
@@ -34,8 +32,6 @@ public record UpdateAssetCommand(long expectedVersion,
                                  String displayName,
                                  String description,
                                  Visibility visibility,
-                                 List<String> owners,
-                                 List<String> tags,
                                  List<String> tagIds,
                                  String license,
                                  String ownerTeamId,

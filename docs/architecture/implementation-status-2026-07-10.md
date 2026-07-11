@@ -34,9 +34,14 @@
 | V23–V26 | observer / deprecation / publish changes | P1/P3 |
 | V27 | `publish_request_frozen_commit` | **P3**（非 P1 回填） |
 | V28 | `reconciliation_checkpoint` | P5 |
-| V29+ | 预留给 P1 Owner/tag 回填与后续差距闭合 | 下一可用 |
+| V29 | `asset_relation`（血缘 lineage） | **D** |
+| V30 | version/artifact 唯一约束 | **D** |
+| V31 | _跳过_（`principal_id` 已由 V20 添加） | **D** |
+| V32 | `owner_team_id` NOT NULL 回填 | **D** |
+| V33 | `iam_token.jti_digest` | **D** |
+| V34+ | 预留给后续差距闭合 | 下一可用 |
 
-> 历史 TASK-P1-002 曾预留 `V27__asset_backfill.sql`；该编号已被 P3 占用，回填下限改为 **V29+**。
+> 历史 TASK-P1-002 曾预留 `V27__asset_backfill.sql`；该编号已被 P3 占用。Wave D 占用 V29–V33。
 
 ## 3. 已关闭的关键差距（相对 2026-07-02）
 
@@ -77,5 +82,19 @@
 | A | _pending_ | 授权断链修复：EffectiveScopeResolver 合并角色绑定 scopes 进 JWT，管理员登录后菜单可见 |
 | B | _pending_ | 架构分层 Wave B：Preview/VersionQuery/transition 入队/DvcStoragePort/DownloadStatsRepo/ArchUnit 强化 |
 | C | `9526632` | 前端 Wave C：4 个 admin 页面 + 幂等只读 API、资产表单受控字典字段、讨论 moderation、导航/路由 |
+| D | _this commit_ | 数据模型与安全 Wave D：asset_relation 血缘、版本约束、owner_team NOT NULL、JWT 轮换、jti digest、Swagger 门控、DVC STS/scoped 凭据 |
 
 W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E4 Compose 仍 `notProven`）。`validate-task-card -CheckCompletion` 预期仍失败直至人工验收与 Compose E4 补验。
+
+### Wave D 摘要（D1–D8）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| D1 asset_relation + lineage API/UI | IMPLEMENTED_UNVERIFIED | V29 + BFS 查询 + `/assets/:id/lineage` |
+| D2 version constraints | IMPLEMENTED_UNVERIFIED | V30 partial index + artifact path unique |
+| D3 idempotency principal_id | VERIFIED (V20) | 无 V31；JdbcIdempotencyStore 已使用 |
+| D4 owner/tag governance | IMPLEMENTED_UNVERIFIED | V32 NOT NULL；更新拒绝 free-form owners/tags |
+| D5 JWT key rotation | IMPLEMENTED_UNVERIFIED | `previous-public-key-pem` + runbook |
+| D6 jti digest | IMPLEMENTED_UNVERIFIED | V33 + 新 token 存 digest，jti 回退查询 |
+| D7 Swagger gating | IMPLEMENTED_UNVERIFIED | compose/prod 需认证 |
+| D8 DVC STS | PARTIAL | STS 尝试 + scoped 回退 + runbook；Compose MinIO IAM 未配 |

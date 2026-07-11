@@ -7,6 +7,7 @@ import { apiClient } from '@/shared/api';
 import type { CursorPage } from '@/shared/types';
 import type {
   AssetFacetView,
+  AssetLineageView,
   AssetSearchParams,
   AssetSummary,
   AssetView,
@@ -41,6 +42,14 @@ export function updateAsset(
   payload: UpdateAssetRequest,
 ): Promise<AssetView> {
   return apiClient.patch<AssetView>(`/assets/${assetId}`, payload);
+}
+
+/** 查询资产血缘 */
+export function getAssetLineage(
+  assetId: string,
+  params?: { depth?: number; direction?: 'up' | 'down' },
+): Promise<AssetLineageView> {
+  return apiClient.get(`/assets/${assetId}/lineage`, { params });
 }
 
 /** 逻辑删除资产 */

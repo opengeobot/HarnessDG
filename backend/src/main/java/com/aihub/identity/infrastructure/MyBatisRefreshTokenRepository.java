@@ -8,6 +8,7 @@ package com.aihub.identity.infrastructure;
 import com.aihub.identity.domain.RefreshTokenRecord;
 import com.aihub.identity.domain.RefreshTokenRepository;
 import com.aihub.identity.domain.RefreshTokenStatus;
+import com.aihub.platform.security.JtiDigest;
 import com.aihub.shared.identity.PrincipalType;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import java.time.Instant;
@@ -38,6 +39,17 @@ public class MyBatisRefreshTokenRepository implements RefreshTokenRepository {
         TokenEntity entity = tokenMapper.selectOne(
                 Wrappers.<TokenEntity>lambdaQuery().eq(TokenEntity::getJti, jti));
         return entity == null ? Optional.empty() : Optional.of(toDomain(entity));
+    }
+
+    @Override
+    public Optional<RefreshTokenRecord> findByJwtId(String jwtId) {
+        String digest = JtiDigest.sha256Hex(jwtId);
+        TokenEntity entity = tokenMapper.selectOne(
+                Wrappers.<TokenEntity>lambdaQuery().eq(TokenEntity::getJtiDigest, digest));
+        if (entity != null) {
+            return Optional.of(toDomain(entity));
+        }
+        return findByJti(jwtId);
     }
 
     @Override
@@ -72,6 +84,7 @@ public class MyBatisRefreshTokenRepository implements RefreshTokenRepository {
         TokenEntity entity = new TokenEntity();
         entity.setTokenId(record.tokenId());
         entity.setJti(record.jti());
+        entity.setJtiDigest(JtiDigest.sha256Hex(record.jti()));
         entity.setTokenFamily(record.tokenFamily());
         entity.setPrincipalId(record.principalId());
         entity.setTokenType("REFRESH");

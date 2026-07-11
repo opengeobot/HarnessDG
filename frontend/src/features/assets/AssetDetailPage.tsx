@@ -154,6 +154,9 @@ export function AssetDetailPage() {
           <Button type="link" onClick={() => navigate(`/assets/${assetId}/settings`)}>
             {t('assets.detail.settingsLink')}
           </Button>
+          <Button type="link" onClick={() => navigate(`/assets/${assetId}/lineage`)}>
+            {t('assets.detail.lineageLink')}
+          </Button>
         </Space>
       </Flex>
 

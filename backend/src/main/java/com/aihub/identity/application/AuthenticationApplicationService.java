@@ -143,7 +143,7 @@ public class AuthenticationApplicationService {
             throw new AuthenticationException(ErrorCode.AUTH_UNAUTHENTICATED, "not a refresh token", Map.of());
         }
 
-        RefreshTokenRecord record = refreshTokenRepository.findByJti(claims.jwtId())
+        RefreshTokenRecord record = refreshTokenRepository.findByJwtId(claims.jwtId())
                 .orElseThrow(() -> new AuthenticationException(
                         ErrorCode.AUTH_UNAUTHENTICATED, "unknown refresh token", Map.of()));
 
@@ -220,7 +220,7 @@ public class AuthenticationApplicationService {
         }
         try {
             JwtClaims claims = tokenVerifier.verify(refreshToken);
-            refreshTokenRepository.findByJti(claims.jwtId())
+            refreshTokenRepository.findByJwtId(claims.jwtId())
                     .ifPresent(record -> {
                         refreshTokenRepository.revokeFamily(record.tokenFamily());
                         audit("AUTH_LOGOUT", AuditResult.SUCCEEDED, record.principalId(), record.tokenFamily(),

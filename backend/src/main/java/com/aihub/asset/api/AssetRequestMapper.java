@@ -51,8 +51,6 @@ public final class AssetRequestMapper {
                 request.displayName(),
                 request.description(),
                 request.visibility(),
-                request.owners(),
-                request.tags(),
                 request.tagIds(),
                 request.license(),
                 request.ownerTeamId(),

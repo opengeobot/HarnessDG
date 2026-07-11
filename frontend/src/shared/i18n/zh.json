@@ -175,7 +175,20 @@
       "aliases": "别名",
       "knownRisks": "已知风险",
       "usageRestrictions": "使用限制",
-      "settingsLink": "设置"
+      "settingsLink": "设置",
+      "lineageLink": "血缘"
+    },
+    "lineage": {
+      "title": "资产血缘",
+      "relations": "关系列表",
+      "relationType": "关系类型",
+      "parent": "父资产",
+      "child": "子资产",
+      "hopDepth": "跳数",
+      "createdAt": "创建时间",
+      "directionUp": "上游",
+      "directionDown": "下游",
+      "empty": "暂无血缘关系"
     },
     "create": {
       "title": "登记资产",

@@ -109,7 +109,7 @@ class AssetCatalogIT {
         assertThat(miss.items()).isEmpty();
 
         assetService.updateAsset(created.assetId(), new UpdateAssetCommand(0L, null, null, "改名后", "新描述",
-                Visibility.PUBLIC, null, List.of("chat"), null, "MIT",
+                Visibility.PUBLIC, null, "MIT",
                 null,
                 new ModelProfile("vllm", "chat", null), null, "usr_02"));
         AssetView updated = assetService.getAsset(created.assetId(), "usr_02");
