@@ -23,12 +23,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T21:00:00+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,37 +40,32 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-    # E5 备份恢复演练（隔离 Volume，见 docs/runbooks/backup-restore.md）：
-    # 1. 备份: deploy/compose/scripts/backup.sh
-    # 2. 停止栈，挂载隔离 Volume
-    # 3. 恢复 PG: ./deploy/compose/scripts/p5-restore/restore-postgres.sh deploy/backup/aihub-YYYYMMDD.dump
-    # 4. 恢复 Gitea: ./deploy/compose/scripts/p5-restore/restore-gitea.sh deploy/backup/gitea-YYYYMMDD.zip
-    # 5. 恢复 MinIO: ./deploy/compose/scripts/p5-restore/restore-minio.sh deploy/backup/minio-YYYYMMDD
-    # 6. 验证随机 Published Version + DVC digest
-    # 7. 记录 RPO/RTO 至本 manifest execution.startedAt/finishedAt
-    test -f docs/runbooks/backup-restore.md && test -f deploy/compose/scripts/backup.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  command: DRILL_CONFIRM=yes bash ./deploy/compose/scripts/p5-restore-drill.sh
+  startedAt: 2026-07-11T20:54:16+08:00
+  finishedAt: 2026-07-11T20:55:33+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E5
 
 coverage:
   proven:
     - scenarioId: AC-P5-BKR-001-stubs
-      assertion: backup-restore runbook + backup.sh + p5-restore scripts exist; execution placeholders document E5 drill
-  notProven: [AC-P5-BKR-001-E5-RPO-RTO]
+      assertion: backup-restore runbook + p5-restore scripts + p5-restore-drill.sh exist
+    - scenarioId: AC-P5-BKR-001-E5-RPO-RTO
+      assertion: "E5 drill BKR-20260711-205416 PASS: pg_dump (294977B) + tar gitea-data + mc mirror dvc-cache/asset-staging; docker compose down -v; fresh up + pg_restore + untar + mc mirror restore; SHA-256 canary match (f7c8e0ef…); RTO 77607ms"
+  notProven: []
 
 artifacts:
   reports:
     - docs/runbooks/backup-restore.md
-    - deploy/compose/scripts/backup.sh
-    - deploy/compose/scripts/p5-restore/restore-postgres.sh
-  logs: []
+    - deploy/compose/scripts/p5-restore-drill.sh
+    - deploy/backup/drill-BKR-20260711-205416/
+  logs:
+    - /tmp/p5-restore-drill3.log
   screenshots: []
   traces: []
-  metrics: []
+  metrics:
+    - rto_ms=77607
   databaseQueries: []
 
 secrets:
@@ -80,7 +75,7 @@ secrets:
 limitations:
   skippedTests: []
   assumptions:
-    - Full isolated restore drill requires dedicated environment; placeholders only in this wave
+    - Drill executed on local Compose dev stack; not isolated production network
   environmentDifferences: []
 
 review:

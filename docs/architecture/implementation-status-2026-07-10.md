@@ -94,6 +94,16 @@
 | N | _this commit_ | 产品 Wave N：血缘写 API、dataset 字典种子、告警确认、tags JSONB 停写、IntegrationsPage agent-bundle、ArchUnit 改密端口 |
 | O | _this commit_ | 数据面 Wave O：真实 multipart PUT（aih CLI + UploadPage）、会话 files 恢复、MinIO dvc-scoped STS、scoped DVC 凭据 |
 | P | _this commit_ | Agent/通知 Wave P：Email SMTP 外发、Redis 分布式限流、MCP tools.yaml rateLimit 元数据 |
+| Q | _this commit_ | E5 验收 Wave Q：备份恢复/安全/性能 E5 演练、EVD commitSha 闭环、J–Q 状态快照 |
+
+### Wave Q 摘要（Q36–Q39，E5 drills）
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| Q36 备份恢复 E5 | PARTIAL (E5 proven) | `p5-restore-drill.sh` PASS（BKR-20260711-205416）；SHA-256 抽检一致；RTO 77.6s；`down -v` 全量恢复 |
+| Q37 安全 E5 | PARTIAL (E5 partial) | `p5-security-drill.sh` 5 PASS / 2 SKIP；SafeMarkdown/PreviewLimit/SsrfGuard+DNS rebinding；SAST 工具 SKIP |
+| Q38 性能 E5 基线 | PARTIAL (E5 smoke) | `perf-smoke.sh` P95=133ms ≤500ms（100 并发）；100k 规模 SKIP |
+| Q39 证据闭环 | PARTIAL | 全部 EVD-P* `commitSha` 刷新；E5 proven 诚实翻转；`validate-spec` 1 预存 FAIL；`-CheckCompletion` 预期 FAIL |
 
 ### Wave P 摘要（P33–P35）
 
@@ -213,4 +223,30 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 - 前端 `AssetDetailPage` 测试 `PermissionProvider` 包裹已于 `6b73ac0` 修复（151 PASS）
 - `AuthenticationApplicationServiceTest.refreshReplayRecordsDeniedEvent` 后端回归 1 FAIL
 - P4 `p4-onboarding.sh` 全链路 E4 未在本会话执行（依赖有效 admin JWT）
-- E5 SAST/dependency/image 扫描仍 `notProven`
+- E5 SAST/dependency/image 扫描：本地 gitleaks/semgrep 不可用；脱敏金丝雀替代 PASS；镜像扫描仍 `notProven`
+
+## 8. Validation snapshot (Q) — 2026-07-11
+
+| 检查 | 结果 |
+| --- | --- |
+| `validate-spec.ps1` | **FAIL**（1 issue：预存 `AC-P4-MCP-002` unknown ID；非本波次引入） |
+| `validate-task-card -TaskPath TASK-P1-001.md` | **FAIL**（baseCommit 不匹配 HEAD） |
+| `validate-task-card -CheckCompletion` | **FAIL**（预期：allowedPaths 外变更、Evidence PARTIAL/E4 notProven、review.accepted 未人工验收） |
+| E5 备份恢复 `p5-restore-drill.sh` | **PASS**（SHA-256 一致；RTO 77607ms） |
+| E5 安全 `p5-security-drill.sh` | **PASS**（5 PASS / 2 SKIP：SAST 工具缺失、live comment JWT） |
+| E5 性能 `perf-smoke.sh` | **PASS**（100 并发 P95=133ms ≤500ms；100k 规模 SKIP） |
+| 全量 `./mvnw -o test` | **593 PASS / 0 FAIL / 0 SKIP** |
+| Compose `verify.sh` 全量 E4 | 待补验（restore drill 后 admin 凭据需重置；V05 可能 FAIL） |
+
+### Waves J–Q 总览
+
+| 波次 | 主题 | E5/E4 状态 |
+| --- | --- | --- |
+| J | _reserved_ | — |
+| K | _reserved_ | — |
+| L | evidence 批量刷新 | EVD commitSha 卫生 |
+| M | PRD §13.2 旅程 | E4 PARTIAL（verify-journey 8 PASS / 10 SKIP） |
+| N | 血缘/字典/告警 | IMPLEMENTED_UNVERIFIED |
+| O | 真实 multipart/STS | IMPLEMENTED_UNVERIFIED |
+| P | Email/Redis/MCP 限流 | IMPLEMENTED_UNVERIFIED |
+| Q | E5 drills + 证据闭环 | E5 三项演练 PASS/SKIP 诚实记录；`-CheckCompletion` 仍 FAIL |

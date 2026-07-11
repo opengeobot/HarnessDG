@@ -23,12 +23,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T21:00:00+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"

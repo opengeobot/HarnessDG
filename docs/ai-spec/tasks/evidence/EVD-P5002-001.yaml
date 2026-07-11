@@ -23,12 +23,12 @@ governance:
 
 source:
   branch: ai
-  commitSha: 0295a9aee56a15d006ad50f6061d454ba5475d06
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T19:50:10+08:00
+  observedAt: 2026-07-11T21:00:00+08:00
   os: Ubuntu 24.04 LTS
   timezone: Asia/Shanghai
   java: "21"
@@ -40,24 +40,22 @@ environment:
 
 execution:
   workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-    cd backend && ./mvnw -o test -Dtest='PreviewJobHandlerTest,PlatformMetricsTest#shouldIncrementPreviewFailureCounter'
-    # E5 压力/隔离演练（隔离 Worker 环境）：
-    # 1. 调低 aihub.preview.max-bytes 验证 PREVIEW_LIMIT_EXCEEDED
-    # 2. 观察 aihub_preview_failures_total{reason="limit_exceeded"}
-    # 3. Worker cgroup：deploy/compose/docker-compose.yml worker mem_limit
-    # 4. PII canary: ./deploy/security/run-redaction-canary.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  command: bash ./deploy/security/p5-security-drill.sh # PreviewJobHandlerTest zip-limit path
+  startedAt: 2026-07-11T20:49:16+08:00
+  finishedAt: 2026-07-11T20:49:25+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E5
 
 coverage:
   proven:
     - scenarioId: AC-P5-PRE-001-partial
       assertion: Configurable aihub.preview.max-bytes/max-rows; PREVIEW_LIMIT_EXCEEDED stable error; preview failure metric
-  notProven: [AC-P5-PRE-001-E5-pressure]
+    - scenarioId: AC-P5-PRE-001-E5-zip-limit
+      assertion: PreviewJobHandlerTest PREVIEW_LIMIT_EXCEEDED rejects oversized content (p5-security-drill.sh PASS)
+  notProven:
+    - scenarioId: AC-P5-PRE-001-E5-pressure
+      reason: Worker cgroup/isolation pressure drill not executed this session
 
 artifacts:
   reports:
@@ -74,9 +72,10 @@ secrets:
   findings: []
 
 limitations:
-  skippedTests: []
+  skippedTests:
+    - Worker cgroup pressure drill
   assumptions:
-    - Full E5 pressure script deferred; config + unit tests prove limit enforcement path
+    - Zip-bomb coverage via unit test path, not live zip upload
   environmentDifferences: []
 
 review:
