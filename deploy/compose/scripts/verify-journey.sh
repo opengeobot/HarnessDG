@@ -201,6 +201,27 @@ create_model_asset() {
     echo "NO_ASSET_ID"
     return 1
   fi
+  # 轮询 provisioningStatus 直到 PROVISIONED 或超时（默认 60 秒）
+  local max_wait="${2:-60}"
+  local waited=0
+  if [ -n "${prov}" ] && [ "${prov}" != "PROVISIONED" ]; then
+    while [ "${waited}" -lt "${max_wait}" ]; do
+      sleep 3
+      waited=$((waited + 3))
+      local poll_resp poll_prov
+      poll_resp="$(http_body GET "/api/v1/assets/${asset_id}" "${ACCESS_TOKEN}")"
+      poll_prov="$(printf '%s' "${poll_resp}" | sed -nE 's/.*"provisioningStatus"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
+      if [ "${poll_prov}" = "PROVISIONED" ]; then
+        prov="PROVISIONED"
+        break
+      fi
+      if [ "${poll_prov}" = "FAILED" ]; then
+        prov="FAILED"
+        break
+      fi
+      prov="${poll_prov:-${prov}}"
+    done
+  fi
   JOURNEY_ASSET_ID="${asset_id}"
   echo "${asset_id}|${prov:-UNKNOWN}"
   return 0
@@ -279,7 +300,10 @@ journey_v06_dvc_roundtrip() {
     journey_skip "V06" "DVC 往返 push/pull" "asset repo not provisioned yet"
     return
   fi
-  journey_skip "V06" "DVC 往返 push/pull" "git clone + dvc roundtrip not automated in journey script (repo=${repo_name})"
+  # SKIP_REASON: DVC 往返测试需要真实 Gitea 仓库 + DVC remote + DVC CLI；
+  # Compose 环境中 Gitea webhook 异步创建仓库，但 git clone + dvc push/pull 涉及
+  # 本地文件系统操作和 SSH 密钥配置，超出自动化旅程脚本范围。
+  journey_skip "V06" "DVC 往返 push/pull" "git clone + dvc roundtrip requires local DVC remote and SSH keys (repo=${repo_name})"
 }
 
 journey_v07_webhook_index() {
@@ -412,7 +436,9 @@ journey_v10_two_principal_search() {
     journey_skip "V10" "搜索与权限（多主体）" "only one active user in Compose"
     return
   fi
-  journey_skip "V10" "搜索与权限（多主体）" "second principal credentials not in fixtures"
+  # SKIP_REASON: 需要第二个已注册并激活的用户凭据，Compose fixture 仅包含 admin 引导用户；
+  # 多主体权限验证需预置非 admin 用户及其角色绑定，属于 fixture 增强范畴。
+  journey_skip "V10" "搜索与权限（多主体）" "second principal credentials not in Compose fixtures; requires pre-seeded non-admin user with role bindings"
 }
 
 journey_v11_download_ttl() {
@@ -579,7 +605,9 @@ journey_v19_notification_recovery() {
   if [ "${n_cnt}" -ge 1 ] 2>/dev/null || [ "${o_done}" -ge 1 ] 2>/dev/null; then
     journey_pass "V19" "通知/Outbox 有处理记录（notifications=${n_cnt}, outbox_delivered=${o_done})"
   else
-    journey_skip "V19" "可靠通知恢复" "notification/outbox tables exist but no rows processed yet"
+    # SKIP_REASON: notification/outbox 表存在但无处理记录，说明 Compose 环境中尚未触发
+    # 业务操作产生通知事件；属于正常的冷启动状态，非测试失败。
+    journey_skip "V19" "可靠通知恢复" "notification/outbox tables exist but no rows processed yet (cold start)"
   fi
 }
 
@@ -609,7 +637,9 @@ journey_v25_dataset_detail() {
 journey_v26_cli_search() {
   local cli="${REPO_ROOT}/scripts/aih/aih"
   if [ ! -x "${cli}" ]; then
-    journey_skip "V26" "数据集 CLI search" "aih CLI not found at scripts/aih/aih"
+    # SKIP_REASON: aih CLI 为独立分发物，需单独构建并放置在 scripts/aih/aih；
+    # Compose E2E 不包含 CLI 构建步骤，需 CI 或手动预置。
+    journey_skip "V26" "数据集 CLI search" "aih CLI not found at scripts/aih/aih (requires separate build step)"
     return
   fi
   local out rc=0
@@ -646,7 +676,9 @@ journey_v28_ai_contribute() {
     journey_pass "V28" "AI 数据贡献 isError=true（默认拒绝）"
     return
   fi
-  journey_skip "V28" "AI 数据贡献" "write tools may be enabled; not asserting publish path"
+  # SKIP_REASON: 写工具拒绝路径仅在 MCP 配置为只读模式时确定；
+  # 当配置允许写操作时，此处无法断言拒绝行为，故 SKIP 而非 FAIL。
+  journey_skip "V28" "AI 数据贡献" "write tools may be enabled in current MCP config; denial assertion requires read-only MCP profile"
 }
 
 # ---- 主流程 ----

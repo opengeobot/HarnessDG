@@ -231,6 +231,49 @@ jobs:
       - name: Run verify-journey.sh
         run: chmod +x ./scripts/verify-journey.sh && ./scripts/verify-journey.sh
 
+  playwright-e2e:
+    name: Playwright E2E (frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [compose-e2e]
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    defaults:
+      run:
+        working-directory: deploy/compose
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare .env
+        run: cp .env.example .env
+      - name: Start stack and wait for health
+        run: docker compose up -d --build --wait
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install frontend deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run Playwright E2E tests
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://localhost:5173
+        run: pnpm test:e2e
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
   task-card-gate:
     name: Task Card Gate
     runs-on: ubuntu-latest

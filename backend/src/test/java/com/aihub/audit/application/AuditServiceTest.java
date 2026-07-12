@@ -33,7 +33,11 @@ import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
+import java.util.stream.Stream;
 
 /**
  * 审计服务单元测试。
@@ -128,5 +132,120 @@ class AuditServiceTest {
         auditService.record(event);
 
         verify(repository, times(1)).append(any(AuditRecord.class));
+    }
+
+    // ── 参数化测试：每个业务操作产生审计（AC-P0B-AUD-001/004）──────
+
+    static Stream<Arguments> businessOperations() {
+        return Stream.of(
+                Arguments.of("ASSET_CREATED", "CREATE", "ast_1", "ASSET", AuditResult.SUCCEEDED, null),
+                Arguments.of("ASSET_UPDATED", "UPDATE", "ast_1", "ASSET", AuditResult.SUCCEEDED, null),
+                Arguments.of("ASSET_DELETED", "DELETE", "ast_1", "ASSET", AuditResult.SUCCEEDED, null),
+                Arguments.of("VERSION_PUBLISHED", "PUBLISH", "ver_1", "VERSION", AuditResult.SUCCEEDED, null),
+                Arguments.of("PUBLISH_APPROVED", "APPROVE", "pub_1", "PUBLISH", AuditResult.SUCCEEDED, null),
+                Arguments.of("AUTH_PERMISSION_DENIED", "DENIED", "usr_1", "AUTH", AuditResult.DENIED, "AUTH_PERMISSION_DENIED"),
+                Arguments.of("UPLOAD_SESSION_CREATED", "CREATE", "upl_1", "UPLOAD", AuditResult.SUCCEEDED, null),
+                Arguments.of("ROLE_CREATED", "CREATE", "rol_1", "ROLE", AuditResult.SUCCEEDED, null),
+                Arguments.of("USER_LOGIN", "LOGIN", "usr_1", "USER", AuditResult.SUCCEEDED, null)
+        );
+    }
+
+    @ParameterizedTest(name = "操作 {0} 产生审计记录")
+    @MethodSource("businessOperations")
+    void eachBusinessOperationProducesAuditRecord(
+            String eventType, String action, String resourceId,
+            String resourceType, AuditResult result, String errorCode) {
+
+        AuditEvent event = new AuditEvent(
+                eventType, action, "usr_1", "USER",
+                resourceType, resourceId, null, null, result, errorCode, Map.of());
+
+        auditService.record(event);
+
+        ArgumentCaptor<AuditRecord> captor = ArgumentCaptor.forClass(AuditRecord.class);
+        verify(repository, times(1)).append(captor.capture());
+
+        AuditRecord record = captor.getValue();
+        assertThat(record.eventType()).isEqualTo(eventType);
+        assertThat(record.action()).isEqualTo(action);
+        assertThat(record.resourceId()).isEqualTo(resourceId);
+        assertThat(record.resourceType()).isEqualTo(resourceType);
+        assertThat(record.result()).isEqualTo(result);
+        assertThat(record.errorCode()).isEqualTo(errorCode);
+    }
+
+    // ── 审计字段完整性（AC-P0B-AUD-004）──────────────────────
+
+    @Test
+    void auditRecordContainsAllRequiredFields() {
+        AuditEvent event = new AuditEvent(
+                "ASSET_CREATED", "CREATE", "usr_1", "USER",
+                "ASSET", "ast_test_complete", "org", "org_1",
+                AuditResult.SUCCEEDED, null,
+                Map.of("namespace", "test", "name", "my-model"));
+
+        auditService.record(event);
+
+        ArgumentCaptor<AuditRecord> captor = ArgumentCaptor.forClass(AuditRecord.class);
+        verify(repository).append(captor.capture());
+
+        AuditRecord record = captor.getValue();
+        // 审计 ID
+        assertThat(record.auditId()).startsWith("aud_");
+        // 主体信息
+        assertThat(record.principalId()).isEqualTo("usr_1");
+        assertThat(record.principalType()).isEqualTo("USER");
+        // 资源信息
+        assertThat(record.resourceType()).isEqualTo("ASSET");
+        assertThat(record.resourceId()).isEqualTo("ast_test_complete");
+        // Scope 信息
+        assertThat(record.scopeType()).isEqualTo("org");
+        assertThat(record.scopeId()).isEqualTo("org_1");
+        // 结果
+        assertThat(record.result()).isEqualTo(AuditResult.SUCCEEDED);
+        // 追踪上下文
+        assertThat(record.traceId()).isEqualTo("trace-1");
+        assertThat(record.requestId()).isEqualTo("req-1");
+        // 时间戳
+        assertThat(record.occurredAt()).isNotNull();
+        // 请求摘要已脱敏
+        assertThat(record.requestSummary()).contains("namespace");
+    }
+
+    @Test
+    void auditRecordFromPrincipalContextWhenEventFieldsNull() {
+        // 当 event 字段为 null 时，应回退到 PrincipalContextHolder
+        AuditEvent event = new AuditEvent(
+                "SYSTEM_CONFIG", null, null, null,
+                null, null, null, null, null, null, Map.of());
+
+        auditService.record(event);
+
+        ArgumentCaptor<AuditRecord> captor = ArgumentCaptor.forClass(AuditRecord.class);
+        verify(repository).append(captor.capture());
+
+        AuditRecord record = captor.getValue();
+        // 回退到 PrincipalContext
+        assertThat(record.principalId()).isEqualTo("usr_1");
+        assertThat(record.principalType()).isEqualTo("USER");
+        // action 回退到 eventType
+        assertThat(record.action()).isEqualTo("SYSTEM_CONFIG");
+        // result 回退到 SUCCEEDED
+        assertThat(record.result()).isEqualTo(AuditResult.SUCCEEDED);
+    }
+
+    @Test
+    void durationMsExtractedFromAttributes() {
+        AuditEvent event = new AuditEvent(
+                "SLOW_QUERY", "QUERY", "usr_1", "USER",
+                null, null, null, null, AuditResult.SUCCEEDED, null,
+                Map.of("__durationMs", 1500));
+
+        auditService.record(event);
+
+        ArgumentCaptor<AuditRecord> captor = ArgumentCaptor.forClass(AuditRecord.class);
+        verify(repository).append(captor.capture());
+
+        assertThat(captor.getValue().durationMs()).isEqualTo(1500L);
     }
 }

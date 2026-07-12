@@ -42,7 +42,8 @@ class LayeredArchitectureTest {
             "com.aihub.mcp..",
             "com.aihub.audit..",
             "com.aihub.notification..",
-            "com.aihub.bootstrap.."
+            "com.aihub.bootstrap..",
+            "com.aihub.agent.."
     };
 
     /** 规则一：shared-kernel 不得依赖任何业务模块或启动层。 */
@@ -67,12 +68,14 @@ class LayeredArchitectureTest {
                     .should(onlyBeAccessedFromSameModule())
                     .allowEmptyShould(true);
 
-    /** 规则四：domain 层不得依赖 Spring 或 MyBatis-Plus。 */
+    /** 规则四：domain 层不得依赖 Spring 或 MyBatis-Plus 或外部 SDK（Gitea/MinIO/DVC）。 */
     @ArchTest
     static final ArchRule domain_must_not_depend_on_spring_or_mybatis =
             noClasses().that().resideInAPackage("com.aihub..domain..")
                     .should().dependOnClassesThat().resideInAnyPackage(
-                            "org.springframework..", "com.baomidou..")
+                            "org.springframework..", "com.baomidou..",
+                            "io.minio..", "org.eclipse.jgit..",
+                            "io.gitea..", "com.iterative.dvc..")
                     .allowEmptyShould(true);
 
     /** 规则五：application 层不得依赖 infrastructure 层。 */
@@ -96,6 +99,20 @@ class LayeredArchitectureTest {
     static final ArchRule controllers_must_not_return_entities =
             noClasses().that().resideInAPackage("com.aihub..api..")
                     .should(haveMethodReturningEntity())
+                    .allowEmptyShould(true);
+
+    /** 规则八：接口层（api）不得返回 MyBatis-Plus Entity 或 Mapper 类型。 */
+    @ArchTest
+    static final ArchRule interfaces_must_not_expose_persistence =
+            noClasses().that().resideInAPackage("com.aihub..api..")
+                    .should().dependOnClassesThat().resideInAPackage("com.baomidou.mybatisplus..")
+                    .allowEmptyShould(true);
+
+    /** 规则九：infrastructure 层不得反向依赖 application 层。 */
+    @ArchTest
+    static final ArchRule infrastructure_must_not_depend_on_application =
+            noClasses().that().resideInAPackage("com.aihub..infrastructure..")
+                    .should().dependOnClassesThat().resideInAPackage("com.aihub..application..")
                     .allowEmptyShould(true);
 
     private static ArchCondition<JavaClass> onlyBeAccessedFromSameModule() {

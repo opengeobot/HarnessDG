@@ -188,6 +188,7 @@ spring:
 ---
 #
 # test Profile：供 Testcontainers 集成测试使用，数据源由容器动态注入。
+# AC-P0B-ENG-006: 无空 Principal、无 allow-all、无默认全 Scope。
 #
 spring:
   config:
@@ -200,3 +201,20 @@ spring:
 aihub:
   gitea:
     enabled: false
+  security:
+    cookie:
+      secure: false
+      same-site: Lax
+  # 测试环境引导管理员：确保 IT 测试有可用的 admin 凭据
+  bootstrap:
+    admin:
+      username: admin
+      display-name: Test Admin
+      password: test-admin-password-01!
+  # 禁用邮件外发
+  notification:
+    email:
+      enabled: false
+  # 内存限流后端（测试无 Redis）
+  rate-limit:
+    backend: memory
