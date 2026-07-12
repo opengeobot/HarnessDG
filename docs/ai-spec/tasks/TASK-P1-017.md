@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P1-017
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P1
-baseCommit: b15a30918f53172087b80306d91cf9181494fac0
+baseCommit: 30059da755288d8228d35ab541f430c1680d86de
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；契约已落地但 overstated；本任务据实校正 x-implementation-status
 stageGateEvidenceRefs:
@@ -51,8 +51,8 @@ requiredValidationCommands:
   - pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-017.md -CheckChangedPaths
   - npx @redocly/cli lint --config contracts/openapi/redocly.yaml contracts/openapi/aihub-v1.yaml
   - npx @redocly/cli diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T09:30:00Z
 ---
 # TASK-P1-017：OpenAPI x-implementation-status 据实校正（Wave B7）
 

@@ -2,7 +2,8 @@
 # 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5、8、11、15、16 章
 # 说明：P0-B 平台基础 + P1 资产目录 + P2 版本传输 + P3 发布治理 +
 #       P4 Agent 集成 + P5 质量运营均已实施。
-#       x-implementation-status 用于区分 planned/partial/implemented。
+#       x-implementation-status 用于区分 planned/partial/implemented/implemented-unverified。
+#       项目整体状态为 IMPLEMENTED_UNVERIFIED；端点级 x-implementation-status 据实标注。
 # 作者：AxeXie
 openapi: 3.1.0
 x-contract-status: implemented-p5
@@ -10,6 +11,7 @@ x-document-version: 3.0
 info:
   title: AIHub Platform API
   version: v1
+  x-verification-status: implemented-unverified
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -48,7 +50,7 @@ paths:
       summary: 本地用户登录并签发 JWT
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_INVALID_CREDENTIALS, AUTH_ACCOUNT_LOCKED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
       x-audit-event: AUTH_LOGIN_SUCCEEDED_OR_FAILED
       requestBody:
@@ -76,7 +78,7 @@ paths:
       summary: 轮换刷新 JWT 并签发新访问 JWT
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_TOKEN_EXPIRED, AUTH_REFRESH_REPLAYED]
       x-audit-event: AUTH_TOKEN_REFRESHED_OR_REPLAY_REJECTED
       requestBody:
@@ -104,7 +106,7 @@ paths:
       summary: Agent/Service/API Client 凭据换取 JWT
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
       x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
       requestBody:
@@ -132,7 +134,7 @@ paths:
       summary: Agent 凭据换取 JWT（/auth/token 别名）
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
       x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
       description: |
@@ -161,7 +163,7 @@ paths:
       operationId: logout
       summary: 吊销当前 Token Family
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED]
       x-audit-event: AUTH_LOGOUT
       responses:
@@ -177,7 +179,7 @@ paths:
       operationId: getCurrentPrincipal
       summary: 获取当前主体、角色和粗粒度 Scope
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED]
       responses:
         '200':
@@ -197,7 +199,7 @@ paths:
       operationId: changeCurrentUserPassword
       summary: 修改当前本地用户密码并吊销其他 Token Family
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_UNAUTHENTICATED, PASSWORD_POLICY_VIOLATION, COMMON_INVALID_ARGUMENT]
       x-audit-event: USER_PASSWORD_CHANGED
       requestBody:
@@ -219,7 +221,7 @@ paths:
       operationId: listPrincipals
       summary: 查询统一访问主体
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:read]
       parameters:
@@ -243,7 +245,7 @@ paths:
       operationId: listUsers
       summary: 分页查询本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:read]
       parameters:
@@ -267,7 +269,7 @@ paths:
       operationId: createUser
       summary: 创建本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [USER_ALREADY_EXISTS, COMMON_INVALID_ARGUMENT, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [user:manage]
       x-audit-event: USER_CREATED
@@ -300,7 +302,7 @@ paths:
       operationId: getUser
       summary: 获取本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:read]
       responses:
@@ -320,7 +322,7 @@ paths:
       operationId: updateUser
       summary: 更新本地用户资料
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [USER_NOT_FOUND, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [user:manage]
       x-audit-event: USER_UPDATED
@@ -349,7 +351,7 @@ paths:
       operationId: enableUser
       summary: 启用本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:manage]
       x-audit-event: USER_ENABLED
@@ -366,7 +368,7 @@ paths:
       operationId: disableUser
       summary: 禁用本地用户并吊销其 Token
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:manage]
       x-audit-event: USER_DISABLED
@@ -383,7 +385,7 @@ paths:
       operationId: resetUserPassword
       summary: 设置临时密码、强制下次修改并吊销现有 Token
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED, PASSWORD_POLICY_VIOLATION, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [user:manage]
       x-audit-event: USER_PASSWORD_RESET
@@ -405,7 +407,7 @@ paths:
       operationId: listAgents
       summary: 查询 Agent 主体
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
@@ -424,7 +426,7 @@ paths:
       operationId: createAgent
       summary: 注册 Agent 主体
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [agent:register]
       x-audit-event: AGENT_REGISTERED
@@ -454,7 +456,7 @@ paths:
       operationId: enableAgent
       summary: 启用 Agent
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AGENT_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_ENABLED
@@ -470,7 +472,7 @@ paths:
       operationId: disableAgent
       summary: 禁用 Agent 并吊销凭据/Token
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AGENT_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_DISABLED
@@ -486,7 +488,7 @@ paths:
       operationId: updateAgentToolAllowlist
       summary: 替换 Agent MCP Tool 白名单
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AGENT_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_TOOL_ALLOWLIST_UPDATED
@@ -507,7 +509,7 @@ paths:
       operationId: listOrganizations
       summary: 查询调用者可管理或可访问的组织
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
@@ -526,7 +528,7 @@ paths:
       operationId: createOrganization
       summary: 创建组织作用域
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ORGANIZATION_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_CREATED
@@ -558,7 +560,7 @@ paths:
       operationId: listOrganizationMembers
       summary: 查询组织成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [organization:manage]
       responses:
@@ -577,7 +579,7 @@ paths:
       operationId: addOrganizationMember
       summary: 添加组织成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ORGANIZATION_NOT_FOUND, ORGANIZATION_MEMBER_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_MEMBER_ADDED
@@ -607,7 +609,7 @@ paths:
       operationId: removeOrganizationMember
       summary: 移除组织成员并使其组织作用域授权失效
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ORGANIZATION_NOT_FOUND, ORGANIZATION_MEMBER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_MEMBER_REMOVED
@@ -626,7 +628,7 @@ paths:
       operationId: listOrganizationProjects
       summary: 查询组织项目
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
@@ -645,7 +647,7 @@ paths:
       operationId: createProject
       summary: 创建组织项目
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [PROJECT_ALREADY_EXISTS, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [project:manage]
       x-audit-event: PROJECT_CREATED
@@ -677,7 +679,7 @@ paths:
       operationId: listTeams
       summary: 列出组织下的 Team
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
@@ -696,7 +698,7 @@ paths:
       operationId: createTeam
       summary: 创建 Team
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TEAM_ALREADY_EXISTS, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_CREATED
@@ -727,7 +729,7 @@ paths:
       operationId: getTeam
       summary: 查询 Team 详情
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TEAM_NOT_FOUND, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
@@ -747,7 +749,7 @@ paths:
       operationId: updateTeam
       summary: 更新 Team
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TEAM_NOT_FOUND, TEAM_ALREADY_EXISTS, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_UPDATED
@@ -779,7 +781,7 @@ paths:
       operationId: listTeamMembers
       summary: 列出 Team 成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TEAM_NOT_FOUND, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
@@ -799,7 +801,7 @@ paths:
       operationId: addTeamMember
       summary: 添加 Team 成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TEAM_NOT_FOUND, TEAM_MEMBER_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_MEMBER_ADDED
@@ -828,7 +830,7 @@ paths:
       operationId: removeTeamMember
       summary: 移除 Team 成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TEAM_NOT_FOUND, TEAM_MEMBER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_MEMBER_REMOVED
@@ -846,7 +848,7 @@ paths:
       operationId: listRoles
       summary: 查询角色
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
@@ -865,7 +867,7 @@ paths:
       operationId: createRole
       summary: 创建业务角色
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ROLE_ALREADY_EXISTS, PERMISSION_UNKNOWN, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_CREATED
@@ -895,7 +897,7 @@ paths:
       operationId: listPermissions
       summary: 查询系统权限定义
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
@@ -916,7 +918,7 @@ paths:
       operationId: updateRole
       summary: 更新自定义角色名称和权限集合
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ROLE_NOT_FOUND, ROLE_BUILTIN_IMMUTABLE, PERMISSION_UNKNOWN, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_UPDATED
@@ -945,7 +947,7 @@ paths:
       operationId: deleteRole
       summary: 删除无有效绑定的自定义角色
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ROLE_NOT_FOUND, ROLE_BUILTIN_IMMUTABLE, ROLE_IN_USE, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_DELETED
@@ -962,7 +964,7 @@ paths:
       operationId: listRoleBindings
       summary: 查询主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
@@ -981,7 +983,7 @@ paths:
       operationId: createRoleBinding
       summary: 创建主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ROLE_NOT_FOUND, ROLE_BINDING_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_BINDING_CREATED
@@ -1011,7 +1013,7 @@ paths:
       operationId: deleteRoleBinding
       summary: 删除主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ROLE_BINDING_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_BINDING_DELETED
@@ -1027,7 +1029,7 @@ paths:
       operationId: listResourceAcls
       summary: 查询资源 ACL
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
@@ -1046,7 +1048,7 @@ paths:
       operationId: createResourceAcl
       summary: 创建资源 ACL
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [RESOURCE_ACL_ALREADY_EXISTS, PERMISSION_UNKNOWN, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: RESOURCE_ACL_CREATED
@@ -1076,7 +1078,7 @@ paths:
       operationId: deleteResourceAcl
       summary: 删除资源 ACL
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [RESOURCE_ACL_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: RESOURCE_ACL_DELETED
@@ -1092,7 +1094,7 @@ paths:
       operationId: listDictionaries
       summary: 查询字典类型
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [dictionary:read]
       responses:
@@ -1115,7 +1117,7 @@ paths:
       operationId: listDictionaryItems
       summary: 查询字典项
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [dictionary:read]
       responses:
@@ -1134,7 +1136,7 @@ paths:
       operationId: createDictionaryItem
       summary: 新增字典项
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [DICTIONARY_ITEM_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [dictionary:manage]
       x-audit-event: DICTIONARY_ITEM_CREATED
@@ -1164,7 +1166,7 @@ paths:
       operationId: updateDictionaryItem
       summary: 更新、启用或停用字典项
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [DICTIONARY_ITEM_NOT_FOUND, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [dictionary:manage]
       x-audit-event: DICTIONARY_ITEM_UPDATED
@@ -1195,7 +1197,7 @@ paths:
       operationId: listTags
       summary: 查询平台/组织受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:read]
       parameters:
@@ -1219,7 +1221,7 @@ paths:
       operationId: createTag
       summary: 创建平台/组织受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TAG_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_CREATED
@@ -1249,7 +1251,7 @@ paths:
       operationId: updateTag
       summary: 更新、启用或停用受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TAG_NOT_FOUND, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_UPDATED
@@ -1279,7 +1281,7 @@ paths:
       operationId: enableTag
       summary: 启用受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TAG_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_ENABLED
@@ -1295,7 +1297,7 @@ paths:
       operationId: disableTag
       summary: 停用受控标签，保留历史关联回显
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [TAG_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_DISABLED
@@ -1311,7 +1313,7 @@ paths:
       operationId: listConfigurations
       summary: 查询非敏感运行配置
       tags: [configuration]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:configure]
       responses:
@@ -1332,7 +1334,7 @@ paths:
       operationId: updateConfiguration
       summary: 更新非敏感运行配置
       tags: [configuration]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [CONFIG_NOT_FOUND, CONFIG_SECRET_FORBIDDEN, CONFIG_VALUE_INVALID, AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:configure]
       x-audit-event: SYSTEM_CONFIGURATION_UPDATED
@@ -1363,7 +1365,7 @@ paths:
       operationId: listJobs
       summary: 游标查询持久化任务
       tags: [jobs]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:read]
       parameters:
@@ -1388,7 +1390,7 @@ paths:
       operationId: retryJob
       summary: 人工重试可重试任务
       tags: [jobs]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [JOB_NOT_FOUND, JOB_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:manage]
       x-audit-event: JOB_MANUALLY_RETRIED
@@ -1405,7 +1407,7 @@ paths:
       operationId: cancelJob
       summary: 取消尚未开始且允许取消的持久化任务
       tags: [jobs]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [JOB_NOT_FOUND, JOB_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:manage]
       x-audit-event: JOB_MANUALLY_CANCELLED
@@ -1422,7 +1424,7 @@ paths:
       operationId: listAuditLogs
       summary: 游标查询不可变审计记录
       tags: [audit]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [audit:read]
       parameters:
@@ -1449,7 +1451,7 @@ paths:
       operationId: listCurrentNotifications
       summary: 查询当前主体站内通知
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [notification:read]
       parameters:
@@ -1474,7 +1476,7 @@ paths:
       operationId: markNotificationRead
       summary: 标记当前主体通知已读
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [NOTIFICATION_NOT_FOUND, AUTH_UNAUTHENTICATED]
       x-required-permissions: [notification:read]
       x-audit-event: NOTIFICATION_MARKED_READ
@@ -1490,7 +1492,7 @@ paths:
       operationId: getMetricsSummary
       summary: 获取受保护的平台指标摘要
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
@@ -1511,7 +1513,7 @@ paths:
       operationId: getDownloadLeaderboard
       summary: 平台下载热度排行（基于 audit_log 下载授权事件聚合）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [system:observe]
       parameters:
@@ -1544,7 +1546,7 @@ paths:
         P0-B 补齐认证保护、Gitea/MinIO 探测和脱敏后的诊断信息。
       tags:
         - system
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
@@ -1571,7 +1573,7 @@ paths:
       operationId: createPat
       summary: 创建个人访问令牌（完整 Token 仅返回一次）
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [token:create]
       requestBody:
@@ -1591,7 +1593,7 @@ paths:
       operationId: listPats
       summary: 列出当前用户的 PAT
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [token:create]
       responses:
@@ -1611,7 +1613,7 @@ paths:
       operationId: revokePat
       summary: 吊销 PAT
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [token:create]
       responses:
@@ -1627,7 +1629,7 @@ paths:
       operationId: getAgentBundle
       summary: 获取 Agent 接入配置包
       tags: [integrations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
@@ -1644,7 +1646,7 @@ paths:
       summary: 登记新资产（模型/数据集）
       description: 校验坐标唯一、开通 Git 仓库并写入初始卡片，返回资产详情。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_ALREADY_EXISTS, DICTIONARY_VALUE_INVALID, TAG_VALUE_INVALID, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [asset:create]
       x-audit-event: ASSET_CREATED
@@ -1677,7 +1679,7 @@ paths:
       summary: 检索资产摘要（游标分页）
       description: 精确字段过滤 + 关键词全文 + 权限可见性过滤；默认排除归档资产。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED, DICTIONARY_VALUE_INVALID, TAG_VALUE_INVALID]
       x-required-permissions: [asset:read]
       parameters:
@@ -1745,7 +1747,7 @@ paths:
       operationId: getAsset
       summary: 查询资产详情
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -1766,7 +1768,7 @@ paths:
       operationId: updateAsset
       summary: 更新资产可变元数据
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, ASSET_CONCURRENT_MODIFICATION, DICTIONARY_VALUE_INVALID, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_UPDATED
@@ -1796,7 +1798,7 @@ paths:
       operationId: deleteAsset
       summary: 逻辑删除资产
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, ASSET_HAS_ACTIVE_VERSIONS, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:delete]
       x-audit-event: ASSET_DELETED
@@ -1816,7 +1818,7 @@ paths:
       summary: 获取资产 Facet 聚合统计
       description: 返回各维度（type/framework/task/modality/format）的聚合计数，用于搜索侧栏过滤。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -1844,7 +1846,7 @@ paths:
       operationId: listAssetAccess
       summary: 列出资产显式 ACL
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -1871,7 +1873,7 @@ paths:
       operationId: createAssetAccess
       summary: 为资产创建显式 ACL
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, RESOURCE_ACL_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       parameters:
@@ -1917,7 +1919,7 @@ paths:
       operationId: deleteAssetAccess
       summary: 删除资产显式 ACL
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, RESOURCE_ACL_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       parameters:
@@ -1946,7 +1948,7 @@ paths:
       operationId: getAssetDownloadStats
       summary: 查询资产下载统计（基于 DOWNLOAD_TICKET_ISSUED 审计聚合）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -1981,7 +1983,7 @@ paths:
       operationId: getAssetLineage
       summary: 查询资产血缘关系（向上/向下）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -2008,7 +2010,7 @@ paths:
       operationId: createAssetRelation
       summary: 创建资产血缘关系边（当前资产为 parent）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, ASSET_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: ASSET_RELATION_CREATED
@@ -2047,7 +2049,7 @@ paths:
       operationId: deleteAssetRelation
       summary: 删除资产血缘关系边（硬删除；历史由 audit_log 保留）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: ASSET_RELATION_DELETED
@@ -2072,7 +2074,7 @@ paths:
       operationId: deprecateAsset
       summary: 弃用资产（ACTIVE → DEPRECATED）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_DEPRECATED
@@ -2120,7 +2122,7 @@ paths:
       operationId: archiveAsset
       summary: 归档资产（ACTIVE/DEPRECATED → ARCHIVED）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_ARCHIVED
@@ -2151,7 +2153,7 @@ paths:
       operationId: restoreAsset
       summary: 恢复资产（DEPRECATED/ARCHIVED → ACTIVE）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_RESTORED
@@ -2182,7 +2184,7 @@ paths:
       operationId: createDiscussionThread
       summary: 创建资产讨论线程
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:discuss]
       x-audit-event: DISCUSSION_CREATED
@@ -2212,7 +2214,7 @@ paths:
       operationId: listDiscussionThreads
       summary: 列出资产讨论线程（游标分页）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -2243,7 +2245,7 @@ paths:
       operationId: createComment
       summary: 在讨论线程下创建评论
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_CREATED
@@ -2273,7 +2275,7 @@ paths:
       operationId: listComments
       summary: 列出讨论线程下的评论（游标分页）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -2299,7 +2301,7 @@ paths:
       operationId: searchModels
       summary: 检索模型列表（固定类型语义入口）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -2336,7 +2338,7 @@ paths:
       summary: 检索数据集列表（固定类型语义入口）
       description: 复用统一资产检索，支持 taskCodes/modalityCodes/formatCodes 多值分类过滤（同维度 OR、跨维度 AND）。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -2396,7 +2398,7 @@ paths:
       operationId: editComment
       summary: 编辑评论（作者）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_EDITED
@@ -2427,7 +2429,7 @@ paths:
       operationId: retractComment
       summary: 撤回评论（作者）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_RETRACTED
@@ -2453,7 +2455,7 @@ paths:
       operationId: hideComment
       summary: 隐藏评论（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: COMMENT_HIDDEN
@@ -2479,7 +2481,7 @@ paths:
       operationId: unhideComment
       summary: 恢复评论（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: COMMENT_UNHIDDEN
@@ -2504,7 +2506,7 @@ paths:
       operationId: lockThread
       summary: 锁定线程（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: THREAD_LOCKED
@@ -2529,7 +2531,7 @@ paths:
       operationId: unlockThread
       summary: 解锁线程（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: THREAD_UNLOCKED
@@ -2557,7 +2559,7 @@ paths:
       operationId: getDiscussionSubscription
       summary: 查询当前主体对资产讨论的订阅状态
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -2579,7 +2581,7 @@ paths:
       operationId: subscribeDiscussion
       summary: 订阅/取消订阅资产讨论通知
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       requestBody:
@@ -2605,7 +2607,7 @@ paths:
       operationId: listAlerts
       summary: 查询告警列表（按触发时间降序）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
@@ -2635,7 +2637,7 @@ paths:
       operationId: acknowledgeAlert
       summary: 人工确认告警（FIRING → RESOLVED）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
@@ -2657,7 +2659,7 @@ paths:
       operationId: listIdempotencyRecords
       summary: 查询幂等记录列表（管理员只读）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:read]
       parameters:
@@ -2682,7 +2684,7 @@ paths:
       operationId: listFiringAlerts
       summary: 查询当前活跃告警（FIRING）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
@@ -2707,7 +2709,7 @@ paths:
       operationId: listOutboxEvents
       summary: 查询最近 Outbox 事件
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
@@ -2732,7 +2734,7 @@ paths:
       operationId: countPendingOutbox
       summary: 统计 Outbox 待处理事件数
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
@@ -2756,7 +2758,7 @@ paths:
       operationId: listDeliveries
       summary: 查询最近 Webhook 投递记录
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
@@ -2781,7 +2783,7 @@ paths:
       operationId: retryDelivery
       summary: 手动重试失败投递
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
@@ -2813,7 +2815,7 @@ paths:
       operationId: listVersions
       summary: 列出版本（游标分页）
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -2837,7 +2839,7 @@ paths:
       operationId: createDraftVersion
       summary: 创建草稿版本
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:update]
       requestBody:
@@ -2867,7 +2869,7 @@ paths:
       operationId: listPublishRequestsByAsset
       summary: 查询资产发布请求列表
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -2893,7 +2895,7 @@ paths:
       operationId: listPublishDecisions
       summary: 查询审批决策历史
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -2919,7 +2921,7 @@ paths:
       operationId: getVersion
       summary: 查询版本详情
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -2944,7 +2946,7 @@ paths:
       operationId: listArtifacts
       summary: 列出版本工件
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -2971,7 +2973,7 @@ paths:
       operationId: transitionVersion
       summary: 推进版本状态
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       requestBody:
@@ -3002,7 +3004,7 @@ paths:
       operationId: getValidationReport
       summary: 查询校验报告
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -3028,7 +3030,7 @@ paths:
       operationId: submitPublishRequest
       summary: 提交发布请求
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: PUBLISH_REQUESTED
@@ -3051,7 +3053,7 @@ paths:
       operationId: submitDecision
       summary: 提交审批决策
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [publish:approve]
       x-audit-event: PUBLISH_DECISION_SUBMITTED
@@ -3079,7 +3081,7 @@ paths:
       operationId: deprecateVersion
       summary: 弃用版本
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: VERSION_DEPRECATED
@@ -3102,7 +3104,7 @@ paths:
       operationId: archiveVersion
       summary: 归档版本
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: VERSION_ARCHIVED
@@ -3127,7 +3129,7 @@ paths:
       operationId: getPreview
       summary: 获取资产预览
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, PREVIEW_NOT_FOUND, PREVIEW_TOO_LARGE]
       x-required-permissions: [asset:read]
       parameters:
@@ -3149,7 +3151,7 @@ paths:
       summary: 触发预览生成 Job
       description: 入队 PREVIEW_GENERATE；content 可空，Worker 在 content 为空时按 versionId 解析首个可预览 artifact 并从对象存储自动取数（csv/jsonl/parquet/text/image）。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, PREVIEW_TOO_LARGE, PREVIEW_UNSUPPORTED_FORMAT, PREVIEW_SOURCE_UNAVAILABLE]
       x-required-permissions: [asset:manage]
       requestBody:
@@ -3182,7 +3184,7 @@ paths:
       operationId: getDvcRemoteConfig
       summary: 获取 DVC Remote 配置
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -3201,7 +3203,7 @@ paths:
       operationId: getDvcCredentials
       summary: 签发短期 DVC 凭据
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -3222,7 +3224,7 @@ paths:
       operationId: listUploadSessions
       summary: 列出资产上传会话
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -3244,7 +3246,7 @@ paths:
       operationId: createUploadSession
       summary: 创建上传会话
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:manage]
       requestBody:
@@ -3274,7 +3276,7 @@ paths:
       operationId: getUploadSession
       summary: 查询上传会话详情（含分片状态）
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -3293,7 +3295,7 @@ paths:
       operationId: getUploadSessionForAsset
       summary: 按资产查询上传会话详情（含分片状态，用于恢复）
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
@@ -3312,7 +3314,7 @@ paths:
       operationId: presignPartUpload
       summary: 签发 Part 上传预签名 URL
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       responses:
@@ -3336,7 +3338,7 @@ paths:
       summary: 完成上传会话
       description: files 必须非空且包含真实文件元数据（path/sha256/size/mediaType）；空 files 返回 COMMON_INVALID_ARGUMENT（PRD §6.5 Manifest 为机器事实，不接受占位文件）。
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, UPLOAD_SESSION_EXPIRED]
       x-required-permissions: [asset:manage]
       requestBody:
@@ -3380,7 +3382,7 @@ paths:
       operationId: cancelUploadSession
       summary: 取消上传会话
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       responses:
@@ -3400,7 +3402,7 @@ paths:
       operationId: issueDownloadTicket
       summary: 签发下载票据
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
@@ -3421,7 +3423,7 @@ paths:
       operationId: receiveGiteaWebhook
       summary: 接收 Gitea Webhook
       tags: [integration]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [COMMON_INVALID_ARGUMENT]
       security: []
       parameters:
@@ -3445,7 +3447,7 @@ paths:
       operationId: mcpJsonRpc
       summary: MCP JSON-RPC 端点
       tags: [mcp]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-error-codes: [MCP_TOOL_NOT_ALLOWED, AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       description: |
         支持方法: initialize、tools/list、tools/call、resources/list、resources/read。

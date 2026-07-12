@@ -6,6 +6,7 @@ openapi: 3.1.0
 info:
   title: AIHub Agent API
   version: 0.1.0
+  x-verification-status: implemented-unverified
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -32,7 +33,7 @@ paths:
   /agent/assets/search:
     get:
       operationId: agentSearchAssets
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_search
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       tags: [read-only]
@@ -78,7 +79,7 @@ paths:
   /agent/assets/{assetId}:
     get:
       operationId: agentGetAsset
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_get
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND]
       tags: [read-only]
@@ -101,7 +102,7 @@ paths:
   /agent/assets/{assetId}/versions:
     get:
       operationId: agentListVersions
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_list_versions
       x-error-codes: [AUTH_UNAUTHENTICATED, ASSET_NOT_FOUND]
       tags: [read-only]
@@ -135,7 +136,7 @@ paths:
   /agent/versions/{versionId}:
     get:
       operationId: agentGetVersion
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_get_version
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
       tags: [read-only]
@@ -158,7 +159,7 @@ paths:
   /agent/versions/{versionId}/download:
     post:
       operationId: agentRequestDownload
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_request_download
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
       tags: [read-only]
@@ -187,7 +188,7 @@ paths:
   /agent/assets/{assetId}/versions/draft:
     post:
       operationId: agentCreateDraftVersion
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_create_draft
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT, RATE_LIMIT_EXCEEDED]
       tags: [contribution]
@@ -227,7 +228,7 @@ paths:
   /agent/assets/{assetId}/upload-sessions:
     post:
       operationId: agentCreateUploadSession
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_create_upload_session
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
       tags: [contribution]
@@ -265,7 +266,7 @@ paths:
   /agent/assets/{assetId}/upload-sessions/{sessionId}/complete:
     post:
       operationId: agentCompleteUploadSession
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_complete_upload
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, UPLOAD_SESSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
       tags: [contribution]
@@ -319,7 +320,7 @@ paths:
   /agent/assets/{assetId}/upload-sessions/{sessionId}:
     get:
       operationId: agentGetUploadSession
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
       x-mcp-equivalent: asset_get_upload_status
       x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, UPLOAD_SESSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
       tags: [contribution]
