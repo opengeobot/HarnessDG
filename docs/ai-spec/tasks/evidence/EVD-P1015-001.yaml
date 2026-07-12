@@ -1,0 +1,78 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1015-001
+status: DRAFT
+
+task:
+  taskId: TASK-P1-015
+  requirements: [REQ-AST-001]
+  scenarios: [AC-P1-AST-014]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-015.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-015.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-015.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T09:05:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  docker: available
+  composeProfiles: [default]
+
+execution:
+  workingDirectory: deploy/compose
+  command: docker compose config --quiet && bash scripts/verify.sh
+  startedAt: 2026-07-12T09:00:00Z
+  finishedAt: 2026-07-12T09:05:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-014
+      assertion: verify.sh V01-V28 全 PASS（28/28）。assert_default_deny 重定义为 anon=401 + admin=200（admin 经 rol_admin 合法访问 system 端点）；V05/V20 经 Wave W 口令重置兜底 PASS；V06/V07/V09/V10/V11/V21 不再因陈旧 admin=403 断言 FAIL。verify.ps1 Assert-DefaultDeny 同步。
+  notProven: []
+
+artifacts:
+  reports:
+    - docker compose config --quiet → PASS
+    - verify.sh → V01-V28 28/28 PASS（EXIT=0）
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - admin 合法访问 system 端点（Wave A EffectiveScopeResolver 合并 rol_admin 全权限，V4__authorization.sql L207-210）；不降权，仅重定义 verify 断言
+    - reader 用户 403 真默认拒绝证明为可选，本轮未加（admin=200 + anon=401 已满足 AC；reader 403 可作后续增强）
+  environmentDifferences: []
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

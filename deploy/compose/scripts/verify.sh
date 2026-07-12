@@ -113,14 +113,16 @@ psql_q() {
   docker compose exec -T postgres sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"$1\"" 2>/dev/null | tr -d '[:space:]'
 }
 
-# 断言无 Token=401，携带管理员 Token 被拒=403（默认拒绝/最小权限/改密门）。
+# 断言无 Token=401（默认拒绝），携带管理员 Token 合法访问=200（admin 经 rol_admin 持 system:* 权限）。
+# 注：早期版本期望 admin=403，但 Wave A 后 admin 合并 rol_admin 全权限合法访问 system 端点，
+# 故 admin=403 是陈旧「假 PASS」（V05 修复前因 ACCESS_TOKEN 空跳过 admin 断言）。真默认拒绝由 reader 用户证明（可选 ensure_reader_jwt）。
 assert_default_deny() {
   local path="$1" anon auth
   anon="$(http_status GET "${path}")"
   if [ "${anon}" != "401" ]; then echo "  无 Token 访问 ${path} 返回 ${anon}，期望 401"; return 1; fi
   if [ -n "${ACCESS_TOKEN}" ]; then
     auth="$(http_status GET "${path}" "${ACCESS_TOKEN}")"
-    if [ "${auth}" != "403" ]; then echo "  越权 Token 访问 ${path} 返回 ${auth}，期望 403"; return 1; fi
+    if [ "${auth}" != "200" ]; then echo "  admin Token 访问 ${path} 返回 ${auth}，期望 200（rol_admin 合法访问）"; return 1; fi
   fi
   return 0
 }

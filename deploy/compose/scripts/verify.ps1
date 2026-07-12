@@ -208,7 +208,8 @@ function Assert-DefaultDeny {
     if ($anon.Status -ne 401) { throw "无 Token 访问 $Path 返回 $($anon.Status)，期望 401" }
     if ($script:accessToken) {
         $auth = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:accessToken)" }
-        if ($auth.Status -ne 403) { throw "越权 Token 访问 $Path 返回 $($auth.Status)，期望 403（默认拒绝）" }
+        # admin 经 rol_admin 持 system:* 权限合法访问 system 端点（Wave A 后），期望 200
+        if ($auth.Status -ne 200) { throw "admin Token 访问 $Path 返回 $($auth.Status)，期望 200（rol_admin 合法访问）" }
     }
 }
 

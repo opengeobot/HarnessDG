@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P1-015
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P1
-baseCommit: b15a30918f53172087b80306d91cf9181494fac0
+baseCommit: 4ea00d69ef639cd75f548d47081b8473d3dd01a2
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；P1 旅程脚本已部分落地；本任务重定义 verify 断言以反映 admin 合法权限
 stageGateEvidenceRefs:
@@ -50,8 +50,8 @@ requiredValidationCommands:
   - pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-015.md -CheckChangedPaths
   - docker compose config --quiet
   - ./deploy/compose/scripts/verify.sh
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T08:55:00Z
 ---
 # TASK-P1-015：重定义 verify 断言（admin=200，不降权）（Wave Y）
 
