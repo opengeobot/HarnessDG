@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P2-011
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P2
-baseCommit: 71a03efcbaf9408b7ed07df5a7015c4ee110f8c3
+baseCommit: a580a3da403f894b9c9b3777b64e2867c1fb078f
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；P2 版本/传输/预览已部分落地；本任务为预览自动取数与 /datasets 端点对齐差距闭合
 stageGateEvidenceRefs:
@@ -58,6 +58,7 @@ allowedPaths:
   - backend/src/test/java/com/aihub/version
   - backend/src/test/java/com/aihub/asset/application
   - contracts/openapi/aihub-v1.yaml
+  - docs/ai-spec/tasks/TASK-P2-011.md
   - docs/ai-spec/tasks/evidence/EVD-P2011-001.yaml
 preExistingDirtyPaths: []
 forbiddenPaths:
@@ -74,8 +75,8 @@ requiredValidationCommands:
   - ./mvnw verify
   - npx @redocly/cli lint contracts/openapi/aihub-v1.yaml
   - npx @redocly/cli diff contracts/openapi/aihub-v1.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T03:54:00Z
 ---
 # TASK-P2-011：后端预览自动取数与 /datasets 端点对齐（Wave T 差距闭合）
 

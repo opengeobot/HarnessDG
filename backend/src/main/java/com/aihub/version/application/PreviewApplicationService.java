@@ -70,7 +70,7 @@ public class PreviewApplicationService {
      *
      * @param assetId     资产 ID
      * @param versionId   版本 ID
-     * @param content     预览源内容（可空，由 Worker 从 MinIO 拉取时再扩展）
+     * @param content     预览源内容（可空；为空时 Worker 按 versionId 从对象存储自动取数）
      * @param contentType 内容类型
      * @param principalId 发起主体
      * @return 任务 ID

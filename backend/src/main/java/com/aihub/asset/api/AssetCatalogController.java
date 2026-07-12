@@ -10,6 +10,7 @@ import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.api.CursorPage;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,6 +54,9 @@ public class AssetCatalogController {
 
     /**
      * 检索数据集列表。
+     *
+     * <p>支持 taskCodes/modalityCodes/formatCodes 多值分类过滤（同维度 OR、跨维度 AND），
+     * 与 GET /assets 全分类维度对齐（REQ-DST-TAX-001）。
      */
     @GetMapping("/api/v1/datasets")
     public ApiResponse<CursorPage<AssetSummaryView>> searchDatasets(
@@ -64,13 +68,16 @@ public class AssetCatalogController {
             @RequestParam(required = false) String tagId,
             @RequestParam(required = false) String owner,
             @RequestParam(required = false) String sensitivity,
+            @RequestParam(required = false) List<String> taskCodes,
+            @RequestParam(required = false) List<String> modalityCodes,
+            @RequestParam(required = false) List<String> formatCodes,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, AssetType.DATASET, namespace, null, null, null, null, null,
                 null, null, format, modality, tagId, owner,
-                language, sensitivity, null, null, null,
+                language, sensitivity, taskCodes, modalityCodes, formatCodes,
                 includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 }

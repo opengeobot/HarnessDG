@@ -187,6 +187,28 @@ class AssetApplicationServiceTest {
     }
 
     @Test
+    void searchAssetsPropagatesDatasetMultiValueFilters() {
+        when(assetRepository.search(any())).thenReturn(new CursorPage<>(List.of(), null, false));
+
+        AssetSearchQuery query = new AssetSearchQuery(null, AssetType.DATASET, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
+                List.of("text-classification", "token-classification"),
+                List.of("text"),
+                List.of("parquet", "csv"),
+                false, null, 20, "usr_01");
+        service.searchAssets(query);
+
+        org.mockito.ArgumentCaptor<com.aihub.asset.domain.AssetSearchCriteria> captor =
+                org.mockito.ArgumentCaptor.forClass(com.aihub.asset.domain.AssetSearchCriteria.class);
+        verify(assetRepository).search(captor.capture());
+        com.aihub.asset.domain.AssetSearchCriteria criteria = captor.getValue();
+        assertThat(criteria.type()).isEqualTo(AssetType.DATASET);
+        assertThat(criteria.taskCodes()).containsExactly("text-classification", "token-classification");
+        assertThat(criteria.modalityCodes()).containsExactly("text");
+        assertThat(criteria.formatCodes()).containsExactly("parquet", "csv");
+    }
+
+    @Test
     void createAssetReturnsCoordinateInView() {
         AssetView view = service.createAsset(modelCommand());
 

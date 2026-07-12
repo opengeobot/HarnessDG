@@ -1697,6 +1697,24 @@ paths:
         - { name: sensitivity, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
+        - name: taskCodes
+          in: query
+          description: 多值模型任务过滤（DATASET 多值分类，同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: modalityCodes
+          in: query
+          description: 多值数据模态过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: formatCodes
+          in: query
+          description: 多值数据格式过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
         - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
@@ -2262,6 +2280,8 @@ paths:
         - { name: task, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20 } }
       responses:
@@ -2285,6 +2305,7 @@ paths:
     get:
       operationId: searchDatasets
       summary: 检索数据集列表（固定类型语义入口）
+      description: 复用统一资产检索，支持 taskCodes/modalityCodes/formatCodes 多值分类过滤（同维度 OR、跨维度 AND）。
       tags: [assets]
       x-implementation-status: implemented
       x-error-codes: [AUTH_PERMISSION_DENIED]
@@ -2294,8 +2315,29 @@ paths:
         - { name: namespace, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { type: string } }
         - { name: modality, in: query, schema: { type: string } }
+        - { name: language, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
+        - name: taskCodes
+          in: query
+          description: 多值数据任务过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: modalityCodes
+          in: query
+          description: 多值数据模态过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: formatCodes
+          in: query
+          description: 多值数据格式过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20 } }
       responses:
@@ -3057,7 +3099,7 @@ paths:
       summary: 获取资产预览
       tags: [assets]
       x-implementation-status: implemented
-      x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, PREVIEW_NOT_FOUND, PREVIEW_TOO_LARGE]
       x-required-permissions: [asset:read]
       parameters:
         - { name: versionId, in: query, schema: { type: string } }
@@ -3076,9 +3118,10 @@ paths:
     post:
       operationId: triggerPreviewGeneration
       summary: 触发预览生成 Job
+      description: 入队 PREVIEW_GENERATE；content 可空，Worker 在 content 为空时按 versionId 解析首个可预览 artifact 并从对象存储自动取数（csv/jsonl/parquet/text/image）。
       tags: [assets]
       x-implementation-status: implemented
-      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, PREVIEW_TOO_LARGE, PREVIEW_UNSUPPORTED_FORMAT, PREVIEW_SOURCE_UNAVAILABLE]
       x-required-permissions: [asset:manage]
       requestBody:
         required: true
