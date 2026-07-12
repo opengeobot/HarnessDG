@@ -127,6 +127,10 @@ GOV（决策与基线）
 | `TASK-P1-012` | Asset Discussion/Comment/Revision/Moderation/Notification 纵向闭环 | REQ-DST-DISC-001、JRN-P1-005、E4 |
 | `TASK-P1-013` | 前端详情页统一外壳（Tab+版本切换器+URL 同步）与 Files 树/Preview Tab，修复 `/assets/:id/versions` 路由（Wave S 差距闭合） | REQ-DST-DETAIL-001、AC-DST-DETAIL-*、E4 |
 | `TASK-P1-014` | Compose E4 旅程闭合：V05 JWT 生命周期、对账 Worker、verify-journey 资产创建/发布、E2E（Wave W 差距闭合） | AC-P1-AST-014、AC-P2-EXIT-001、AC-P3-EXIT-001、E4 |
+| `TASK-P1-015` | 重定义 verify.sh/verify.ps1 断言（admin=200，不降权；可选 reader 403）（Wave Y） | AC-P1-AST-014、E4 |
+| `TASK-P1-016` | 前端 F7 createDraftVersion/getDvcConfig 接线 + F8 三页迁移 Ant Design 去手填 assetId（Wave Z） | REQ-DST-DETAIL-001、AC-DST-DETAIL-*、E4 |
+| `TASK-P1-017` | OpenAPI x-implementation-status 据实校正（Wave B7） | REQ-AST-001、AC-P1-AST-001、E3 |
+| `TASK-P1-018` | Compose E4 全栈验收闭合（重建+verify+E2E+EVD 翻 PASS）（Wave E4，依赖 X/Y/Z） | AC-P1-AST-014、AC-P2-EXIT-001、AC-P3-EXIT-001、E4 |
 
 ## 6. Wave P2：版本与数据面
 
@@ -144,6 +148,7 @@ GOV（决策与基线）
 | `TASK-P2-010` | Dataset 详情的 Version/Files/Preview(Subset/Split/Stats)/CLI 纵向旅程 | JRN-P2-004、E4 |
 | `TASK-P2-011` | 后端预览从对象存储自动取数（Parquet/CSV/JSONL/图片/文本）与 `/datasets` 过滤维度对齐 + 字典接入（Wave T 差距闭合） | REQ-PRE-001、REQ-DST-TAX-001、AC-DST-PRE-*、AC-DST-TAX-*、E4 |
 | `TASK-P2-012` | 上传 Manifest 真实化（移除占位文件）与血缘关系删除 API（Wave U 差距闭合） | REQ-UPL-001/003、REQ-MNF-001、REQ-AST-006、AC-P2-UPL-*、AC-P2-MNF-001、AC-P1-AST-010、E4 |
+| `TASK-P2-013` | languageCodes 多值接入应用层 AssetSearchQuery/控制器/OpenAPI（Wave L） | REQ-DST-TAX-001、AC-DST-TAX-*、E4 |
 
 ## 7. Wave P3：发布治理
 
@@ -158,6 +163,7 @@ GOV（决策与基线）
 | `TASK-P3-007` | 弃用/归档/下载/搜索降权 | JRN-P3-003 |
 | `TASK-P3-008` | 发布不可变完整 Compose 出口 | E4 |
 | `TASK-P3-009` | 详情/版本上下文集成发布提交与下载（含 DVC 凭据），消除手填 assetId（Wave V 差距闭合） | REQ-REV-002、REQ-DL-001、AC-P3-UI-001、AC-P2-DL-001、E4 |
+| `TASK-P3-010` | 修复 JdbcJobRepository.insert 占位符 bug，恢复 job 子系统与资产创建（Wave X 关键 bug） | REQ-AST-002、AC-P1-AST-002、E4 |
 
 ## 8. Wave P4：Agent 接入
 

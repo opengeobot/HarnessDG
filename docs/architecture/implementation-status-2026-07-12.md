@@ -110,3 +110,20 @@ AC 证据映射；完成后跑 `-CheckCompletion`，未达 PASS 保持 `IMPLEMEN
 本快照不将任何 PARTIAL 翻为 VERIFIED。B7（OpenAPI overstated）需在阶段二 Wave T 中据实
 校正契约 `x-implementation-status` 与项目状态的一致性。阶段二 E4 旅程若本机 Docker 不可用，
 保持 `notProven`，不谎报。
+
+## 7. 阶段二后审计补充（post Wave T-W，2026-07-12 PM）
+
+阶段二 Wave T/U/S/V/W 已提交（commits `3608e96`..`b15a309`），闭合 B1-B6/F1-F6/E1-E2。
+5 张卡保持 `IMPLEMENTED_UNVERIFIED`（`-CheckCompletion` FAIL：EVD DRAFT、E4 notProven、review 未人工验收）。
+本轮审计确认 2 个 E4 真正根因 + 4 项剩余差距，登记为阶段三 Wave X/Y/Z/B7/L/E4：
+
+| Wave | 差距 | 根因/文件:行号 | 修复方向 |
+| --- | --- | --- | --- |
+| X（关键 bug） | 资产创建 500 / job 子系统阻断 | `backend/src/main/java/com/aihub/job/infrastructure/JdbcJobRepository.java` L70 `INSERT INTO job_task ... VALUES (?,?,?::jsonb,?,?,?,?,?,?,?,?,?,?,?,?)` — **16 列但 15 个 `?` 占位符**，致 `DataIntegrityViolationException: column index out of range: 16`；阻断 `REPOSITORY_PROVISION` 入队 + `RecurringJobBootstrapper` 启动 | 补第 16 个 `?`；排查 `JobWorker.claimNext` FOR UPDATE SKIP LOCKED 次生问题 |
+| Y | verify.sh V06/V07/V09/V10/V11/V21 FAIL（admin=200 非 403） | `deploy/compose/scripts/verify.sh` `assert_default_deny` L116-126 期望 admin=403；但 admin 经 Wave A `EffectiveScopeResolver` L40-48 合并 `rol_admin` 全权限（`V4__authorization.sql` L207-210），合法访问 system 端点返回 200。V05 修复前因 `ACCESS_TOKEN` 空「假 PASS」。`verify.ps1` L204-212 同病 | 重定义断言（admin=200），不降权；可选 reader 用户 403 真默认拒绝 |
+| Z | F7 `createDraftVersion`/`getDvcConfig` 未接线；F8 `VersionPage`/`ReviewPage`/`UploadPage` 仍 Tailwind + 手填 assetId | `frontend/src/features/version/api.ts` L33/L119 已定义未用；`VersionPage.tsx` L30 `useState('')` 手填 | 接线 + 三页迁移 Ant Design + 路由 query 带参去手填 |
+| B7 | OpenAPI 109 端点全标 `implemented`，项目 IMPLEMENTED_UNVERIFIED | `contracts/openapi/aihub-v1.yaml`；`aihub-agent-v1.yaml` | 据实校正 `x-implementation-status` |
+| L | `languageCodes` 多值未接入应用层 | `AssetSearchQuery.java` 无 `languageCodes` 字段（Wave T follow-up） | 增字段 + 接入 4 个调用方 + OpenAPI |
+| E4 | Compose 全栈验收未闭合 | 需重建镜像（含 X 修复）+ verify.sh + verify-journey + E2E + EVD 翻 PASS | 依赖 X/Y/Z |
+
+阶段三实施顺序：X（关键 bug，E4 根因）→ Y/Z/B7/L（并行）→ E4（依赖 X/Y/Z）。每波遵守 DEC-009 门禁。
