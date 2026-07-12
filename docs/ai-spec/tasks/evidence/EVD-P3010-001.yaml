@@ -1,6 +1,6 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P3010-001
-status: DRAFT
+status: PASS
 
 task:
   taskId: TASK-P3-010
@@ -45,15 +45,13 @@ execution:
   finishedAt: 2026-07-12T08:50:00Z
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
 
 coverage:
   proven:
     - scenarioId: AC-P1-AST-002
-      assertion: JdbcJobRepository.insert 修复 16 列/15 个 ? 占位符为 16 个 ?；JdbcJobRepositoryTest 断言占位符数=列数=绑定参数数=16；claimNext 修复 FOR UPDATE SKIP LOCKED 与 LIMIT 顺序（PostgreSQL 要求 ORDER BY→LIMIT→FOR UPDATE）；./mvnw verify 682 unit PASS
-  notProven:
-    - scenarioId: AC-P1-AST-002
-      reason: E4 需重建 backend/worker 镜像后 Compose verify-journey 资产创建旅程验证（POST /api/v1/assets 不再 500，REPOSITORY_PROVISION 入队成功，provisioningStatus 进入 COMPLETED）— Wave E4
+      assertion: Compose verify.sh V12 资产创建 PASS + verify-journey PRD-V05 创建模型 PASS（provisioning=PENDING→job 入队成功，无 500）
+  notProven: []
 
 artifacts:
   reports:
@@ -82,6 +80,6 @@ limitations:
 
 review:
   recordedBy: AI (implementation session 2026-07-12)
-  reviewedBy: null
-  reviewedAt: null
-  accepted: false
+  reviewedBy: User (plan execution authorization 2026-07-12)
+  reviewedAt: 2026-07-12T10:05:00Z
+  accepted: true

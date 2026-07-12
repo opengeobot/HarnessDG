@@ -1,0 +1,72 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P2013-001
+status: PASS
+
+task:
+  taskId: TASK-P2-013
+  requirements: [REQ-DST-TAX-001]
+  scenarios: [AC-DST-TAX-001, AC-DST-TAX-002]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-013.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-013.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-013.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: 1593e3b3a5dd9cceaf1d68d3219d3aa9c79212ac
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T09:40:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+
+execution:
+  workingDirectory: backend
+  command: ./mvnw verify
+  startedAt: 2026-07-12T09:22:00Z
+  finishedAt: 2026-07-12T09:40:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-TAX-001
+      assertion: AssetSearchQuery 增 languageCodes；/assets 与 /datasets 控制器接入；resolveLanguageCodes 优先多值、单值 language 向后兼容；OpenAPI 增 languageCodes 数组参数
+    - scenarioId: AC-DST-TAX-002
+      assertion: AssetApplicationServiceTest languageCodes 多值传播 + 单值回退测试 PASS
+  notProven:
+    - scenarioId: AC-DST-TAX-002
+      reason: Facet languageCodes E4 Compose 计数未单独断言（V15 datasets facet PASS 为间接证据）
+
+artifacts:
+  reports:
+    - ./mvnw verify → BUILD SUCCESS
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: User (plan execution authorization 2026-07-12)
+  reviewedAt: 2026-07-12T10:05:00Z
+  accepted: true

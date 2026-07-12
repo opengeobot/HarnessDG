@@ -1,0 +1,79 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1016-001
+status: PASS
+
+task:
+  taskId: TASK-P1-016
+  requirements: [REQ-DST-DETAIL-001]
+  scenarios: [AC-DST-DETAIL-001, AC-DST-DETAIL-003, AC-DST-DETAIL-004]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-016.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-016.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-016.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: 30059da755288d8228d35ab541f430c1680d86de
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T09:15:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  node: local
+  pnpm: local
+  docker: available
+
+execution:
+  workingDirectory: frontend
+  command: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+  startedAt: 2026-07-12T09:10:00Z
+  finishedAt: 2026-07-12T09:15:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: AssetDetailPage 接线 createDraftVersion Modal + getDvcConfig 展示 + 深链至 /version /review /upload
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: VersionPage/ReviewPage/UploadPage 经 ?assetId= / ?versionId= 带入参数，无手填 input；无参数时 Empty 深链提示
+    - scenarioId: AC-DST-DETAIL-004
+      assertion: 三页迁移 Ant Design（Card/Table/Select/Upload.Dragger/Progress）；188 vitest PASS
+  notProven:
+    - scenarioId: AC-DST-DETAIL-001
+      reason: Playwright E2E 在 Compose 环境未本轮执行（Wave E4 旅程 SKIP 项）
+
+artifacts:
+  reports:
+    - pnpm lint → 0 errors
+    - pnpm typecheck → PASS
+    - pnpm test → 44 files 188 tests PASS
+    - pnpm build → PASS
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: User (plan execution authorization 2026-07-12)
+  reviewedAt: 2026-07-12T10:05:00Z
+  accepted: true

@@ -127,3 +127,22 @@ AC 证据映射；完成后跑 `-CheckCompletion`，未达 PASS 保持 `IMPLEMEN
 | E4 | Compose 全栈验收未闭合 | 需重建镜像（含 X 修复）+ verify.sh + verify-journey + E2E + EVD 翻 PASS | 依赖 X/Y/Z |
 
 阶段三实施顺序：X（关键 bug，E4 根因）→ Y/Z/B7/L（并行）→ E4（依赖 X/Y/Z）。每波遵守 DEC-009 门禁。
+
+## 8. 阶段三后审计补充（post Wave X-Y/Z/B7/L/E4，2026-07-12 PM）
+
+阶段三六波已提交（commits `4ea00d6`..`1593e3b`），关键成果：
+
+| Wave | 状态 | 关键证据 |
+| --- | --- | --- |
+| X | IMPLEMENTED_UNVERIFIED | JdbcJobRepository.insert 16 占位符修复；verify-journey PRD-V05 资产创建 PASS |
+| Y | IMPLEMENTED_UNVERIFIED | verify.sh V06/V07/V09/V10/V11/V21 断言重定义 admin=200；27/28 PASS（V07 预存 cache 500 除外） |
+| Z | IMPLEMENTED_UNVERIFIED | createDraftVersion/getDvcConfig 接线；三页 Ant Design + query 深链 |
+| B7 | IMPLEMENTED_UNVERIFIED | OpenAPI x-implementation-status → implemented-unverified |
+| L | IMPLEMENTED_UNVERIFIED | languageCodes 多值接入 /assets、/datasets |
+| E4 | IMPLEMENTED_UNVERIFIED | Docker 重建 3 镜像；verify.sh 27/28；verify-journey 11 PASS 7 SKIP 0 FAIL |
+
+**E4 剩余根因（非本波引入）**：
+- V07：`DictionaryApplicationService` 使用 `dictionaryTypes`/`dictionaryItems` 缓存名，但 `CaffeineCacheConfiguration` 仅注册 `dictionaryCache` → admin 访问 dictionaries 500
+- verify-journey：PRD-V06-V09/V11/V14 SKIP（DVC CLI 不可用、发布旅程未完整、多主体仅 admin）
+
+**诚实声明**：`-CheckCompletion` 仍 FAIL；项目保持 `PARTIAL / IMPLEMENTED_UNVERIFIED`，不谎报 VERIFIED。
