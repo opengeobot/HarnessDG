@@ -166,7 +166,7 @@ public class McpToolCatalog {
                     AssetSearchQuery query = new AssetSearchQuery(
                             keyword, type, namespace, null, null, null, null, null,
                             null, null, null, null, tagId, null, null, null,
-                            null, null, null, false, null, limit, principalId);
+                            null, null, null, null, false, null, limit, principalId);
                     CursorPage<AssetSummaryView> page = assetService.searchAssets(query);
                     Map<String, Version> latestByAsset = versionQueryService.findLatestPublishedByAssetIds(
                             Set.copyOf(page.items().stream().map(AssetSummaryView::assetId).toList()));

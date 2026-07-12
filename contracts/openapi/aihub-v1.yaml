@@ -1717,6 +1717,12 @@ paths:
           schema: { type: array, items: { type: string } }
           style: form
           explode: true
+        - name: languageCodes
+          in: query
+          description: 多值语言过滤（同维度 OR；优先于单值 language）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
         - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
@@ -2336,7 +2342,7 @@ paths:
     get:
       operationId: searchDatasets
       summary: 检索数据集列表（固定类型语义入口）
-      description: 复用统一资产检索，支持 taskCodes/modalityCodes/formatCodes 多值分类过滤（同维度 OR、跨维度 AND）。
+      description: 复用统一资产检索，支持 taskCodes/modalityCodes/formatCodes/languageCodes 多值分类过滤（同维度 OR、跨维度 AND）。
       tags: [assets]
       x-implementation-status: implemented-unverified
       x-error-codes: [AUTH_PERMISSION_DENIED]
@@ -2365,6 +2371,12 @@ paths:
         - name: formatCodes
           in: query
           description: 多值数据格式过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: languageCodes
+          in: query
+          description: 多值语言过滤（同维度 OR；优先于单值 language）
           schema: { type: array, items: { type: string } }
           style: form
           explode: true

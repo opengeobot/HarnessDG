@@ -51,7 +51,7 @@ class PerformanceBenchmarkTest {
             long start = System.nanoTime();
             assetService.searchAssets(new AssetSearchQuery(
                     "test", AssetType.MODEL, null, null, null, null, null, null, null, null,
-                    null, null, null, null, null, null, null, null, null, false, null, 20, "usr_perf"));
+                    null, null, null, null, null, null, null, null, null, null, false, null, 20, "usr_perf"));
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             totalTimeMs.addAndGet(elapsed);
         }
@@ -69,7 +69,7 @@ class PerformanceBenchmarkTest {
         for (int i = 0; i < 1000; i++) {
             assetService.searchAssets(new AssetSearchQuery(
                     "batch-" + i, null, null, null, null, null, null, null, null, null,
-                    null, null, null, null, null, null, null, null, null, false, null, 20, "usr_perf"));
+                    null, null, null, null, null, null, null, null, null, null, false, null, 20, "usr_perf"));
         }
 
         // 如果执行到这里没有 OOM 则通过

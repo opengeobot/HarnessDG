@@ -71,13 +71,14 @@ public class AssetCatalogController {
             @RequestParam(required = false) List<String> taskCodes,
             @RequestParam(required = false) List<String> modalityCodes,
             @RequestParam(required = false) List<String> formatCodes,
+            @RequestParam(required = false) List<String> languageCodes,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, AssetType.DATASET, namespace, null, null, null, null, null,
                 null, null, format, modality, tagId, owner,
-                language, sensitivity, taskCodes, modalityCodes, formatCodes,
+                language, sensitivity, taskCodes, modalityCodes, formatCodes, languageCodes,
                 includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 }

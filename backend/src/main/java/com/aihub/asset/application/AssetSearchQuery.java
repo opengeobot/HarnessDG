@@ -30,6 +30,7 @@ import java.util.List;
  * @param taskCodes       多值模型任务过滤（可空，DATASET 多值分类）
  * @param modalityCodes   多值数据模态过滤（可空，DATASET 多值分类）
  * @param formatCodes     多值数据格式过滤（可空，DATASET 多值分类）
+ * @param languageCodes   多值语言过滤（可空，DATASET 多值分类；优先于单值 language）
  * @param includeArchived 是否包含归档资产（默认否，需管理员）
  * @param cursor          游标（首页为空）
  * @param limit           每页大小（&lt;=0 使用默认）
@@ -54,6 +55,7 @@ public record AssetSearchQuery(String keyword,
                                List<String> taskCodes,
                                List<String> modalityCodes,
                                List<String> formatCodes,
+                               List<String> languageCodes,
                                boolean includeArchived,
                                String cursor,
                                int limit,

@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P2-013
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P2
-baseCommit: b15a30918f53172087b80306d91cf9181494fac0
+baseCommit: b4d244a2f03efa18e4a8fe3ceb5796d46b0ca2c5
 stageGatePassed: true
 stageGateEvidence: P2 版本/传输已部分落地；Wave T 已对齐 taskCodes/modalityCodes/formatCodes；本任务补 languageCodes 多值
 stageGateEvidenceRefs:
@@ -60,8 +60,8 @@ requiredValidationCommands:
   - ./mvnw verify
   - npx @redocly/cli lint --config contracts/openapi/redocly.yaml contracts/openapi/aihub-v1.yaml
   - npx @redocly/cli diff /tmp/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T09:45:00Z
 ---
 # TASK-P2-013：languageCodes 多值接入应用层（Wave L）
 

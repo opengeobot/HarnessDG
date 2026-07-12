@@ -78,13 +78,14 @@ public final class AssetRequestMapper {
                                           List<String> taskCodes,
                                           List<String> modalityCodes,
                                           List<String> formatCodes,
+                                          List<String> languageCodes,
                                           boolean includeArchived,
                                           String cursor,
                                           int limit,
                                           String principalId) {
         return new AssetSearchQuery(keyword, type, namespace, organizationId, projectId, visibility,
                 status, teamId, framework, task, format, modality, tagId, owner, language, sensitivity,
-                taskCodes, modalityCodes, formatCodes,
+                taskCodes, modalityCodes, formatCodes, languageCodes,
                 includeArchived, cursor, limit, principalId);
     }
 

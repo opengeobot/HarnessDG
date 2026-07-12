@@ -177,7 +177,7 @@ class AssetApplicationServiceTest {
         when(assetRepository.search(any())).thenReturn(new CursorPage<>(List.of(summary), null, false));
 
         AssetSearchQuery query = new AssetSearchQuery("qwen", AssetType.MODEL, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, false, null, 20, "usr_01");
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, null, 20, "usr_01");
         CursorPage<AssetSummaryView> page = service.searchAssets(query);
 
         assertThat(page.items()).hasSize(1);
@@ -195,6 +195,7 @@ class AssetApplicationServiceTest {
                 List.of("text-classification", "token-classification"),
                 List.of("text"),
                 List.of("parquet", "csv"),
+                List.of("zh", "en"),
                 false, null, 20, "usr_01");
         service.searchAssets(query);
 
@@ -206,6 +207,23 @@ class AssetApplicationServiceTest {
         assertThat(criteria.taskCodes()).containsExactly("text-classification", "token-classification");
         assertThat(criteria.modalityCodes()).containsExactly("text");
         assertThat(criteria.formatCodes()).containsExactly("parquet", "csv");
+        assertThat(criteria.languageCodes()).containsExactly("zh", "en");
+    }
+
+    @Test
+    void searchAssetsFallsBackToSingleLanguageFilter() {
+        when(assetRepository.search(any())).thenReturn(new CursorPage<>(List.of(), null, false));
+
+        AssetSearchQuery query = new AssetSearchQuery(null, AssetType.DATASET, null, null, null, null,
+                null, null, null, null, null, null, null, null, "zh", null,
+                null, null, null, null,
+                false, null, 20, "usr_01");
+        service.searchAssets(query);
+
+        org.mockito.ArgumentCaptor<com.aihub.asset.domain.AssetSearchCriteria> captor =
+                org.mockito.ArgumentCaptor.forClass(com.aihub.asset.domain.AssetSearchCriteria.class);
+        verify(assetRepository).search(captor.capture());
+        assertThat(captor.getValue().languageCodes()).containsExactly("zh");
     }
 
     @Test

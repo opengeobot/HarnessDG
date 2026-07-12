@@ -108,13 +108,14 @@ public class AssetController {
             @RequestParam(required = false) List<String> taskCodes,
             @RequestParam(required = false) List<String> modalityCodes,
             @RequestParam(required = false) List<String> formatCodes,
+            @RequestParam(required = false) List<String> languageCodes,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, type, namespace, organizationId, projectId, visibility, status, teamId,
                 framework, task, format, modality, tagId, owner,
-                language, sensitivity, taskCodes, modalityCodes, formatCodes,
+                language, sensitivity, taskCodes, modalityCodes, formatCodes, languageCodes,
                 includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 

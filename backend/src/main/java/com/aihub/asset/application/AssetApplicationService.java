@@ -341,7 +341,7 @@ public class AssetApplicationService {
                 query.framework(), query.task(), query.format(), query.modality(),
                 query.tagId(), query.owner(), statuses, allowed, accessScope,
                 query.taskCodes(), query.modalityCodes(), query.formatCodes(),
-                query.language() != null ? java.util.List.of(query.language()) : null,
+                resolveLanguageCodes(query),
                 null,
                 query.sensitivity(),
                 query.cursor(), query.limit());
@@ -607,6 +607,13 @@ public class AssetApplicationService {
 
     private static String datasetModality(UpdateAssetCommand command) {
         return command.dataset() == null ? null : command.dataset().modality();
+    }
+
+    private static List<String> resolveLanguageCodes(AssetSearchQuery query) {
+        if (query.languageCodes() != null && !query.languageCodes().isEmpty()) {
+            return query.languageCodes();
+        }
+        return query.language() != null ? java.util.List.of(query.language()) : null;
     }
 
     private void publishOutbox(String aggregateType, String aggregateId, String eventType,
