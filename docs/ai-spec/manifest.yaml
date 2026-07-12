@@ -352,6 +352,12 @@ documents:
   - path: tasks/TASK-P1-012.md
     kind: task-card
     status: READY
+  - path: tasks/TASK-P1-013.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P1-014.md
+    kind: task-card
+    status: READY
   - path: tasks/TASK-P2-001.md
     kind: task-card
     status: READY
@@ -382,6 +388,12 @@ documents:
   - path: tasks/TASK-P2-010.md
     kind: task-card
     status: READY
+  - path: tasks/TASK-P2-011.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P2-012.md
+    kind: task-card
+    status: READY
   - path: tasks/TASK-P3-001.md
     kind: task-card
     status: READY
@@ -404,6 +416,9 @@ documents:
     kind: task-card
     status: READY
   - path: tasks/TASK-P3-008.md
+    kind: task-card
+    status: READY
+  - path: tasks/TASK-P3-009.md
     kind: task-card
     status: READY
   - path: tasks/TASK-P4-001.md

@@ -1644,6 +1644,22 @@ QwenPaw 已提供 MCP 管理、Bearer 认证、Tool 白名单能力和自定义 
 | Agent 接入 | 创建服务账号、Scope、MCP/REST 配置、连通性检查 |
 | 管理中心 | 组织、团队、任务、Webhook、存储、审计 |
 
+#### 10.1.1 详情页统一外壳与版本切换
+
+模型详情与数据集详情共用统一外壳，按权限与阶段聚合入口，对齐 `docs/ai-spec/01-requirements/dataset-experience.md` REQ-DST-DETAIL-001：
+
+- Tab 顺序：`Overview | Versions | Files | Preview | Discussions | Lineage | Access | Settings`；未实现阶段能力的 Tab 不展示，后端明确「支持但当前无内容」时显示合法 Empty 状态，禁止用静态假数据或可点击 Placeholder 冒充；
+- 顶部含版本切换器；切换 Version 必须更新 URL 与所有版本化 Query Key，禁止混用不同版本缓存；
+- `Overview`：Card（README/asset.yaml 投影，含 `sourceCommit` 与投影时间）、分类、受控标签、Owner、License、敏感等级、使用限制；
+- `Files`：选定 Version 的 Artifact 树（路径、大小、媒体类型、SHA-256）；
+- `Preview`：选定 Version 的安全样例、Schema、Split 和基础统计；数据集支持 Parquet/CSV/JSONL 的列类型与分页，模型支持文本/图片等安全预览；
+- `Versions`：精确 Version、状态、Git Tag、Commit SHA、Manifest/DVC Digest；
+- `Discussions/Lineage/Access/Settings`：继承资产权限，按 `asset:discuss/asset:read/asset:manage/asset:write` 显示；
+- 发布提交、下载、DVC 凭据等动作在版本/详情上下文中入口，不要求用户手填 `assetId`；
+- Card/Markdown/外链/图片/讨论均为不可信数据，安全渲染且不改变 AI Tool Policy；私有资产不存在与无权访问采用相同防枚举语义；Gitea/MinIO/DVC 内部 Endpoint、服务凭据和预签名查询串不进入页面数据。
+
+本节为措辞澄清，不改变 §3 技术基线与 §6 资产/版本设计决策。
+
 ### 10.2 大文件交互
 
 - 浏览器不得读取完整文件计算单一 SHA-256 后才开始上传，可按分片并行计算；

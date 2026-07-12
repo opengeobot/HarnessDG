@@ -125,6 +125,8 @@ GOV（决策与基线）
 | `TASK-P1-010` | DATASET 多值分类、受控标签、权限过滤 Facet 和 matchedFields | REQ-DST-TAX-001、AC-DST-TAX-* |
 | `TASK-P1-011` | Dataset Card 详情外壳和精确版本导航，不展示后续 Placeholder | REQ-DST-DETAIL-001、AC-DST-DETAIL-* |
 | `TASK-P1-012` | Asset Discussion/Comment/Revision/Moderation/Notification 纵向闭环 | REQ-DST-DISC-001、JRN-P1-005、E4 |
+| `TASK-P1-013` | 前端详情页统一外壳（Tab+版本切换器+URL 同步）与 Files 树/Preview Tab，修复 `/assets/:id/versions` 路由（Wave S 差距闭合） | REQ-DST-DETAIL-001、AC-DST-DETAIL-*、E4 |
+| `TASK-P1-014` | Compose E4 旅程闭合：V05 JWT 生命周期、对账 Worker、verify-journey 资产创建/发布、E2E（Wave W 差距闭合） | AC-P1-AST-014、AC-P2-EXIT-001、AC-P3-EXIT-001、E4 |
 
 ## 6. Wave P2：版本与数据面
 
@@ -140,6 +142,8 @@ GOV（决策与基线）
 | `TASK-P2-008` | CSV/JSONL/Parquet 最小安全预览 Job、API 和页面；Subset 下拉+Split Tab 选择器（首版单 Subset）+ 统计卡片（DEC-015） | REQ-PRE-001、AC-DST-PRE-* |
 | `TASK-P2-009` | `aih dataset search/inspect/pull/create/push/status` 薄 CLI 与稳定退出码 | REQ-DST-CLI-001、AC-DST-CLI-* |
 | `TASK-P2-010` | Dataset 详情的 Version/Files/Preview(Subset/Split/Stats)/CLI 纵向旅程 | JRN-P2-004、E4 |
+| `TASK-P2-011` | 后端预览从对象存储自动取数（Parquet/CSV/JSONL/图片/文本）与 `/datasets` 过滤维度对齐 + 字典接入（Wave T 差距闭合） | REQ-PRE-001、REQ-DST-TAX-001、AC-DST-PRE-*、AC-DST-TAX-*、E4 |
+| `TASK-P2-012` | 上传 Manifest 真实化（移除占位文件）与血缘关系删除 API（Wave U 差距闭合） | REQ-UPL-001/003、REQ-MNF-001、REQ-AST-006、AC-P2-UPL-*、AC-P2-MNF-001、AC-P1-AST-010、E4 |
 
 ## 7. Wave P3：发布治理
 
@@ -153,6 +157,7 @@ GOV（决策与基线）
 | `TASK-P3-006` | 审批中心、版本详情和 Diff UI | PAGE-VER/REV-* |
 | `TASK-P3-007` | 弃用/归档/下载/搜索降权 | JRN-P3-003 |
 | `TASK-P3-008` | 发布不可变完整 Compose 出口 | E4 |
+| `TASK-P3-009` | 详情/版本上下文集成发布提交与下载（含 DVC 凭据），消除手填 assetId（Wave V 差距闭合） | REQ-REV-002、REQ-DL-001、AC-P3-UI-001、AC-P2-DL-001、E4 |
 
 ## 8. Wave P4：Agent 接入
 
