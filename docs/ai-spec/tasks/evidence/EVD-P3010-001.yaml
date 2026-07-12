@@ -1,0 +1,87 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P3010-001
+status: DRAFT
+
+task:
+  taskId: TASK-P3-010
+  requirements: [REQ-AST-002]
+  scenarios: [AC-P1-AST-002]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T08:50:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  node: local
+  pnpm: local
+  docker: available
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: backend
+  command: ./mvnw -o verify
+  startedAt: 2026-07-12T08:45:00Z
+  finishedAt: 2026-07-12T08:50:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-002
+      assertion: JdbcJobRepository.insert 修复 16 列/15 个 ? 占位符为 16 个 ?；JdbcJobRepositoryTest 断言占位符数=列数=绑定参数数=16；claimNext 修复 FOR UPDATE SKIP LOCKED 与 LIMIT 顺序（PostgreSQL 要求 ORDER BY→LIMIT→FOR UPDATE）；./mvnw verify 682 unit PASS
+  notProven:
+    - scenarioId: AC-P1-AST-002
+      reason: E4 需重建 backend/worker 镜像后 Compose verify-journey 资产创建旅程验证（POST /api/v1/assets 不再 500，REPOSITORY_PROVISION 入队成功，provisioningStatus 进入 COMPLETED）— Wave E4
+
+artifacts:
+  reports:
+    - ./mvnw -o verify → BUILD SUCCESS, 682 unit PASS, 96 IT SKIP
+    - JdbcJobRepositoryTest → 1 PASS（SQL 占位符一致性回归防护）
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries:
+    - INSERT INTO job_task (...) VALUES (?,?,?::jsonb,?,?,?,?,?,?,?,?,?,?,?,?,?) — 16 占位符
+    - claimNext: ORDER BY next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - 96 Testcontainers IT（disabledWithoutDocker from JVM）
+  assumptions:
+    - claimNext BadSqlGrammar 根因为 FOR UPDATE SKIP LOCKED 在 LIMIT 之前（PostgreSQL 语法要求 LIMIT 在 FOR UPDATE 前）；同源 job_task SQL，一并修复
+    - insert 占位符 bug 是资产创建 500 与 RecurringJobBootstrapper 启动失败的根因；修复后需重建镜像验证
+  environmentDifferences:
+    - Testcontainers IT 从 JVM 不可达 Docker（disabledWithoutDocker 跳过）；E4 旅程留 Wave E4
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

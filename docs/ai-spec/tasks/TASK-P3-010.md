@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P3-010
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P3
-baseCommit: b15a30918f53172087b80306d91cf9181494fac0
+baseCommit: 34f5cb16bcb128757707d3dd3cb7137b25b2acff
 stageGatePassed: true
 stageGateEvidence: P3 发布治理已部分落地；本任务修复 job 子系统阻断 bug（资产创建 500 根因），属 P3 发布链路依赖
 stageGateEvidenceRefs:
@@ -51,8 +51,8 @@ requiredValidationCommands:
   - pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md
   - pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md -CheckChangedPaths
   - ./mvnw verify
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T08:35:00Z
 ---
 # TASK-P3-010：修复 JdbcJobRepository.insert 占位符 bug（Wave X 关键 bug）
 
