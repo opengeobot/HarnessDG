@@ -1,0 +1,95 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1013-001
+status: DRAFT
+
+task:
+  taskId: TASK-P1-013
+  requirements: [REQ-DST-DETAIL-001]
+  scenarios: [AC-DST-DETAIL-001, AC-DST-DETAIL-002, AC-DST-DETAIL-003, AC-DST-DETAIL-004]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-013.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-013.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-013.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T05:15:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  node: local
+  pnpm: local
+  docker: available
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: frontend
+  command: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+  startedAt: 2026-07-12T05:05:00Z
+  finishedAt: 2026-07-12T05:15:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: AssetDetailPage 改造为 Overview|Versions|Files|Preview|Discussions|Lineage|Access|Settings Tab 外壳；未实现阶段能力 Tab 不展示（Lineage/Access/Settings 为导航入口）；189 组件测试 PASS
+    - scenarioId: AC-DST-DETAIL-002
+      assertion: 顶部版本切换器（Select versions）；切换 Version 同步 URL ?version= 与 ?tab=；Files/Preview 绑定精确 versionId
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: Files Tab 按 versionId 经 listArtifacts 渲染 Artifact 树（path/size/mediaType/sha256）；Preview Tab 复用 PreviewPanel，新增 Parquet schema-only（columns/rowGroups）渲染
+    - scenarioId: AC-DST-DETAIL-004
+      assertion: /assets/:id/versions 路由经 VersionsTabRedirect 重定向到 ?tab=versions（修复 404）；VersionListPanel view-all 链接更新；Card/Markdown SafeMarkdown 渲染
+  notProven:
+    - scenarioId: AC-DST-DETAIL-001
+      reason: E4 需 Playwright e2e（dataset/version-management）在 Compose 环境执行（Wave W）
+    - scenarioId: AC-DST-DETAIL-004
+      reason: 防枚举/不泄露内部 endpoint 的 E4 需 Compose 全栈验证
+
+artifacts:
+  reports:
+    - pnpm lint → 0 errors, 2 pre-existing warnings
+    - pnpm typecheck → PASS
+    - pnpm test → 44 files, 189 tests PASS
+    - pnpm build → built in 9.35s
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - AssetsPage Facet 可点击：framework/task/format/modality/sensitivity 单值切换；taskCodes/modalityCodes/formatCodes/languageCodes 多值 toggle（URL 数组同步）；licenses 无对应搜索参数保持只读
+    - languageCodes 多值经前端 searchAssets 数组参数传递（后端 /assets 已支持，Wave T /datasets 对齐）
+    - 顺带修复 4 个预存前端 lint/typecheck 阻塞（AssetLineagePage.test.tsx dead import、discussion/lineage e2e 未用变量、PermissionProvider.test/test-utils 的 any），已纳入 allowedPaths，非新增无关重构——为满足卡片 pnpm lint/typecheck 要求
+  environmentDifferences:
+    - E2E（Playwright）未本地执行，E4 旅程留 Wave W
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

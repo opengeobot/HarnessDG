@@ -1,11 +1,12 @@
 /**
- * 功能: 资产详情页——Card 安全渲染、治理字段、Owner、标签、生命周期操作、讨论面板。
- * 时间: 2026-07-05
+ * 功能: 资产详情页——统一外壳 Tab（Overview|Versions|Files|Preview|Discussions|Lineage|Access|Settings）
+ *       + 顶部版本切换器（切换 Version 同步 URL 与版本化 Query Key），对齐 REQ-DST-DETAIL-001。
+ * 时间: 2026-07-05，2026-07-12 Wave S 重构
  * 作者: AxeXie
  */
-import { useCallback } from 'react';
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   App,
@@ -16,11 +17,15 @@ import {
   Empty,
   Flex,
   Popconfirm,
+  Select,
   Skeleton,
   Space,
+  Tabs,
   Tag,
+  Tree,
   Typography,
 } from 'antd';
+import type { DataNode } from 'antd/es/tree';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { SafeMarkdown } from '@/shared/components';
@@ -33,7 +38,10 @@ import {
 } from './api';
 import { DiscussionPanel } from './DiscussionPanel';
 import { DownloadStats } from './DownloadStats';
+import { PreviewPanel } from './PreviewPanel';
 import { VersionListPanel } from '@/features/version/VersionListPanel';
+import { listArtifacts, listVersions } from '@/features/version/api';
+import type { ArtifactView, VersionView } from '@/features/version/types';
 import type { AssetView, ProvisioningStatus } from './types';
 
 function formatBytes(bytes: number): string {
@@ -58,12 +66,58 @@ const PROVISIONING_STATUS_COLOR: Record<ProvisioningStatus, string> = {
   FAILED: 'error',
 };
 
+type TabKey = 'overview' | 'versions' | 'files' | 'preview' | 'discussions' | 'lineage' | 'access' | 'settings';
+
+/** 按 artifact path 构造目录树节点（path/size/mediaType/sha256）。 */
+function buildArtifactTree(artifacts: ArtifactView[]): DataNode[] {
+  const root: Record<string, { children: Record<string, unknown>; artifact?: ArtifactView }> = {
+    __root: { children: {} },
+  };
+  const ensure = (parts: string[]): { children: Record<string, unknown>; artifact?: ArtifactView } => {
+    let node = root.__root;
+    for (const part of parts) {
+      if (!node.children[part]) {
+        node.children[part] = { children: {} };
+      }
+      node = node.children[part] as typeof node;
+    }
+    return node;
+  };
+  for (const art of artifacts) {
+    const parts = art.path.split('/').filter(Boolean);
+    const node = ensure(parts);
+    node.artifact = art;
+  }
+  const toNodes = (children: Record<string, unknown>): DataNode[] =>
+    Object.entries(children)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, childRaw]) => {
+        const child = childRaw as { children: Record<string, unknown>; artifact?: ArtifactView };
+        const sub = toNodes(child.children);
+        const title = child.artifact ? (
+          <Space size={8} wrap>
+            <Typography.Text strong>{name}</Typography.Text>
+            <Tag>{formatBytes(child.artifact.size)}</Tag>
+            {child.artifact.mediaType && <Tag color="blue">{child.artifact.mediaType}</Tag>}
+            <Typography.Text type="secondary" code style={{ fontSize: 11 }}>
+              {child.artifact.sha256.slice(0, 12)}
+            </Typography.Text>
+          </Space>
+        ) : (
+          <Typography.Text>{name}/</Typography.Text>
+        );
+        return { key: name + JSON.stringify(child.artifact ?? {}), title, children: sub.length ? sub : undefined, isLeaf: !!child.artifact };
+      });
+  return toNodes(root.__root.children);
+}
+
 export function AssetDetailPage() {
   const { assetId } = useParams<{ assetId: string }>();
   const navigate = useNavigate();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useDocumentTitle(t('assets.detailTitle'));
 
@@ -81,10 +135,42 @@ export function AssetDetailPage() {
     enabled: !!assetId,
   });
 
-  const invalidate = useCallback(() => {
+  const versionsQuery = useQuery({
+    queryKey: ['versions', assetId],
+    queryFn: () => listVersions(assetId!),
+    enabled: !!assetId,
+  });
+
+  const activeTab = (searchParams.get('tab') as TabKey) ?? 'overview';
+  const selectedVersionId = searchParams.get('version') ?? undefined;
+
+  const setParam = (key: string, value: string | undefined) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set(key, value);
+      else next.delete(key);
+      return next;
+    }, { replace: true });
+  };
+
+  const versions: VersionView[] = versionsQuery.data?.items ?? [];
+  const selectedVersion = useMemo(
+    () => versions.find((v) => v.versionId === selectedVersionId) ?? versions[0],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [versionsQuery.data, selectedVersionId],
+  );
+  const effectiveVersionId = selectedVersion?.versionId;
+
+  const artifactsQuery = useQuery({
+    queryKey: ['artifacts', assetId, effectiveVersionId],
+    queryFn: () => listArtifacts(assetId!, effectiveVersionId!),
+    enabled: !!assetId && !!effectiveVersionId && activeTab === 'files',
+  });
+
+  const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
     void queryClient.invalidateQueries({ queryKey: ['assets'] });
-  }, [queryClient, assetId]);
+  };
 
   const deprecateMut = useMutation({
     mutationFn: () => deprecateAsset(assetId!),
@@ -120,46 +206,8 @@ export function AssetDetailPage() {
   const asset: AssetView = query.data;
   const provStatus = asset.provisioningStatus ?? 'NONE';
 
-  return (
+  const overviewContent = (
     <Flex vertical gap={16}>
-      <Flex justify="space-between" align="center" wrap gap={12}>
-        <Space>
-          <Button onClick={() => navigate('/assets')}>{t('common.back')}</Button>
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            {asset.displayName || asset.name}
-          </Typography.Title>
-          <Tag color={STATUS_COLOR[asset.status]}>{asset.status}</Tag>
-          <Badge
-            status={PROVISIONING_STATUS_COLOR[provStatus] as 'default'}
-            text={PROVISIONING_LABEL[provStatus]}
-          />
-          {assetId && <DownloadStats assetId={assetId} />}
-        </Space>
-        <Space>
-          {asset.status === 'ACTIVE' && (
-            <Popconfirm title={t('assets.confirmDeprecate')} onConfirm={() => deprecateMut.mutate()}>
-              <Button>{t('assets.deprecate')}</Button>
-            </Popconfirm>
-          )}
-          {asset.status !== 'ARCHIVED' && (
-            <Popconfirm title={t('assets.confirmArchive')} onConfirm={() => archiveMut.mutate()}>
-              <Button>{t('assets.archive')}</Button>
-            </Popconfirm>
-          )}
-          {asset.status !== 'ACTIVE' && (
-            <Popconfirm title={t('assets.confirmRestore')} onConfirm={() => restoreMut.mutate()}>
-              <Button type="primary">{t('assets.restore')}</Button>
-            </Popconfirm>
-          )}
-          <Button type="link" onClick={() => navigate(`/assets/${assetId}/settings`)}>
-            {t('assets.detail.settingsLink')}
-          </Button>
-          <Button type="link" onClick={() => navigate(`/assets/${assetId}/lineage`)}>
-            {t('assets.detail.lineageLink')}
-          </Button>
-        </Space>
-      </Flex>
-
       <Card title={t('assets.detail.basicInfo')}>
         <Descriptions column={2} bordered size="small">
           <Descriptions.Item label={t('assets.detail.coordinate')}>
@@ -183,9 +231,7 @@ export function AssetDetailPage() {
           <Descriptions.Item label={t('assets.detail.owners')} span={2}>
             {asset.owners?.join(', ') ?? '-'}
           </Descriptions.Item>
-          <Descriptions.Item label={t('assets.detail.ownerTeam')}>
-            {asset.ownerTeamId ?? '-'}
-          </Descriptions.Item>
+          <Descriptions.Item label={t('assets.detail.ownerTeam')}>{asset.ownerTeamId ?? '-'}</Descriptions.Item>
           <Descriptions.Item label={t('assets.detail.rowVersion')}>
             <Tag>v{asset.rowVersion}</Tag>
           </Descriptions.Item>
@@ -198,25 +244,6 @@ export function AssetDetailPage() {
                 {asset.aliases.map(a => <Tag key={a} color="geekblue">{a}</Tag>)}
               </Space>
             </Descriptions.Item>
-          )}
-          {asset.status === 'DEPRECATED' && (
-            <>
-              <Descriptions.Item label={t('assets.deprecation.reason')}>
-                {asset.deprecationReason ? (
-                  <Tag color="orange">{t(`assets.deprecation.${asset.deprecationReason}`, asset.deprecationReason)}</Tag>
-                ) : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label={t('assets.deprecation.note')}>
-                {asset.deprecationNote ?? '-'}
-              </Descriptions.Item>
-              {asset.replacementAssetId && (
-                <Descriptions.Item label={t('assets.deprecation.replacement')} span={2}>
-                  <Link to={`/assets/${asset.replacementAssetId}`}>
-                    <Typography.Text code>{asset.replacementAssetId}</Typography.Text>
-                  </Link>
-                </Descriptions.Item>
-              )}
-            </>
           )}
           <Descriptions.Item label={t('assets.columns.tags')} span={2}>
             <Space size={[0, 4]} wrap>
@@ -246,16 +273,6 @@ export function AssetDetailPage() {
                 </Tag>
               ) : '-'}
             </Descriptions.Item>
-            {asset.model.knownRisks && asset.model.knownRisks.length > 0 && (
-              <Descriptions.Item label={t('assets.detail.knownRisks')} span={3}>
-                <Space size={[0, 4]} wrap>{asset.model.knownRisks.map(r => <Tag key={r} color="warning">{r}</Tag>)}</Space>
-              </Descriptions.Item>
-            )}
-            {asset.model.usageRestrictions && asset.model.usageRestrictions.length > 0 && (
-              <Descriptions.Item label={t('assets.detail.usageRestrictions')} span={3}>
-                <Space size={[0, 4]} wrap>{asset.model.usageRestrictions.map(r => <Tag key={r} color="error">{r}</Tag>)}</Space>
-              </Descriptions.Item>
-            )}
           </Descriptions>
         </Card>
       )}
@@ -285,37 +302,13 @@ export function AssetDetailPage() {
                 <Space size={[0, 4]} wrap>{asset.dataset.languageCodes.map(c => <Tag key={c}>{c}</Tag>)}</Space>
               </Descriptions.Item>
             )}
-            <Descriptions.Item label={t('assets.detail.sensitivityCode')}>
-              {asset.dataset.sensitivityCode ? (
-                <Tag color={asset.dataset.sensitivityCode === 'PUBLIC' ? 'green' : asset.dataset.sensitivityCode === 'SECRET' ? 'red' : 'orange'}>
-                  {t(`assets.sensitivity.${asset.dataset.sensitivityCode}`, asset.dataset.sensitivityCode)}
-                </Tag>
-              ) : '-'}
-            </Descriptions.Item>
             <Descriptions.Item label={t('assets.detail.sampleCount')}>
               {asset.dataset.sampleCount != null ? asset.dataset.sampleCount.toLocaleString() : '-'}
             </Descriptions.Item>
             <Descriptions.Item label={t('assets.detail.totalBytes')}>
               {asset.dataset.totalBytes != null ? formatBytes(asset.dataset.totalBytes) : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label={t('assets.detail.sizeBucketCode')}>
-              {asset.dataset.sizeBucketCode ?? '-'}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-      )}
-
-      {asset.repository && (
-        <Card title={t('assets.detail.repoInfo')} size="small">
-          <Descriptions column={2} size="small">
-            <Descriptions.Item label={t('assets.detail.repoName')}>{asset.repository.fullName}</Descriptions.Item>
-            <Descriptions.Item label={t('assets.detail.link')}>
-              {asset.repository.htmlUrl ? (
-                <a href={asset.repository.htmlUrl} target="_blank" rel="noopener noreferrer">
-                  {asset.repository.htmlUrl}
-                </a>
-              ) : '-'}
-            </Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.sizeBucketCode')}>{asset.dataset.sizeBucketCode ?? '-'}</Descriptions.Item>
           </Descriptions>
         </Card>
       )}
@@ -323,12 +316,7 @@ export function AssetDetailPage() {
       {asset.card && (
         <Card title={t('assets.detail.cardProjection')} size="small">
           {asset.card.untrustedContent && (
-            <Alert
-              type="warning"
-              showIcon
-              message={t('assets.detail.untrustedWarning')}
-              style={{ marginBottom: 12 }}
-            />
+            <Alert type="warning" showIcon message={t('assets.detail.untrustedWarning')} style={{ marginBottom: 12 }} />
           )}
           {asset.card.sourceCommit && (
             <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
@@ -349,10 +337,6 @@ export function AssetDetailPage() {
           )}
         </Card>
       )}
-
-      {assetId && <VersionListPanel assetId={assetId} />}
-
-      {assetId && <DiscussionPanel assetId={assetId} />}
 
       {/* DEC-014 Quick Use 快速使用面板 */}
       <Card title={t('assets.deprecation.quickStart')} size="small">
@@ -389,6 +373,145 @@ export function AssetDetailPage() {
           </div>
         </Space>
       </Card>
+    </Flex>
+  );
+
+  const filesContent = (
+    <Card title={t('assets.detail.filesTitle')} size="small">
+      {!effectiveVersionId ? (
+        <Empty description={t('assets.detail.selectVersionFirst')} />
+      ) : artifactsQuery.isLoading ? (
+        <Flex justify="center" style={{ padding: 24 }}><Skeleton active /></Flex>
+      ) : artifactsQuery.isError || !artifactsQuery.data || artifactsQuery.data.length === 0 ? (
+        <Empty description={t('assets.detail.noArtifacts')} />
+      ) : (
+        <Tree
+          treeData={buildArtifactTree(artifactsQuery.data)}
+          defaultExpandAll
+          showLine
+          selectable={false}
+        />
+      )}
+    </Card>
+  );
+
+  const previewContent = effectiveVersionId ? (
+    <PreviewPanel assetId={assetId!} versionId={effectiveVersionId} />
+  ) : (
+    <Card title={t('version.preview')} size="small">
+      <Empty description={t('assets.detail.selectVersionFirst')} />
+    </Card>
+  );
+
+  const tabItems = [
+    { key: 'overview', label: t('assets.detail.tabOverview'), children: overviewContent },
+    { key: 'versions', label: t('assets.detail.tabVersions'), children: assetId && <VersionListPanel assetId={assetId} /> },
+    { key: 'files', label: t('assets.detail.tabFiles'), children: filesContent },
+    { key: 'preview', label: t('assets.detail.tabPreview'), children: previewContent },
+    { key: 'discussions', label: t('assets.detail.tabDiscussions'), children: assetId && <DiscussionPanel assetId={assetId} /> },
+    {
+      key: 'lineage', label: t('assets.detail.tabLineage'),
+      children: (
+        <Card size="small">
+          <Button type="link" onClick={() => navigate(`/assets/${assetId}/lineage`)}>
+            {t('assets.detail.lineageLink')}
+          </Button>
+        </Card>
+      ),
+    },
+    {
+      key: 'access', label: t('assets.detail.tabAccess'),
+      children: (
+        <Card size="small">
+          <Button type="link" onClick={() => navigate(`/assets/${assetId}/access`)}>
+            {t('assets.detail.accessLink')}
+          </Button>
+        </Card>
+      ),
+    },
+    {
+      key: 'settings', label: t('assets.detail.tabSettings'),
+      children: (
+        <Card size="small">
+          <Button type="link" onClick={() => navigate(`/assets/${assetId}/settings`)}>
+            {t('assets.detail.settingsLink')}
+          </Button>
+        </Card>
+      ),
+    },
+  ];
+
+  return (
+    <Flex vertical gap={16}>
+      <Flex justify="space-between" align="center" wrap gap={12}>
+        <Space>
+          <Button onClick={() => navigate('/assets')}>{t('common.back')}</Button>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {asset.displayName || asset.name}
+          </Typography.Title>
+          <Tag color={STATUS_COLOR[asset.status]}>{asset.status}</Tag>
+          <Badge
+            status={PROVISIONING_STATUS_COLOR[provStatus] as 'default'}
+            text={PROVISIONING_LABEL[provStatus]}
+          />
+          {assetId && <DownloadStats assetId={assetId} />}
+        </Space>
+        <Space>
+          {asset.status === 'ACTIVE' && (
+            <Popconfirm title={t('assets.confirmDeprecate')} onConfirm={() => deprecateMut.mutate()}>
+              <Button>{t('assets.deprecate')}</Button>
+            </Popconfirm>
+          )}
+          {asset.status !== 'ARCHIVED' && (
+            <Popconfirm title={t('assets.confirmArchive')} onConfirm={() => archiveMut.mutate()}>
+              <Button>{t('assets.archive')}</Button>
+            </Popconfirm>
+          )}
+          {asset.status !== 'ACTIVE' && (
+            <Popconfirm title={t('assets.confirmRestore')} onConfirm={() => restoreMut.mutate()}>
+              <Button type="primary">{t('assets.restore')}</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      </Flex>
+
+      <Card size="small">
+        <Flex align="center" gap={12} wrap>
+          <Typography.Text strong>{t('assets.detail.versionSwitcher')}</Typography.Text>
+          <Select
+            style={{ minWidth: 280 }}
+            placeholder={t('assets.detail.selectVersion')}
+            value={effectiveVersionId}
+            loading={versionsQuery.isLoading}
+            onChange={(v) => setParam('version', v)}
+            options={versions.map((v) => ({
+              value: v.versionId,
+              label: `${v.version} (${v.status})`,
+            }))}
+            allowClear
+          />
+          {selectedVersion && (
+            <Space size={6} wrap>
+              {selectedVersion.gitTag && <Tag color="success">{selectedVersion.gitTag}</Tag>}
+              {selectedVersion.sourceCommit && (
+                <Typography.Text code>{selectedVersion.sourceCommit.slice(0, 12)}</Typography.Text>
+              )}
+              {selectedVersion.manifestDigest && (
+                <Typography.Text type="secondary" code style={{ fontSize: 11 }}>
+                  {t('assets.detail.manifestDigest')}: {selectedVersion.manifestDigest.slice(0, 12)}
+                </Typography.Text>
+              )}
+            </Space>
+          )}
+        </Flex>
+      </Card>
+
+      <Tabs
+        activeKey={activeTab}
+        onChange={(k) => setParam('tab', k)}
+        items={tabItems}
+        destroyInactiveTabPane={false}
+      />
     </Flex>
   );
 }

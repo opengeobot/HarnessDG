@@ -196,6 +196,10 @@ export interface AssetSearchParams {
   sensitivity?: string;
   tagId?: string;
   owner?: string;
+  taskCodes?: string[];
+  modalityCodes?: string[];
+  formatCodes?: string[];
+  languageCodes?: string[];
   includeArchived?: boolean;
   cursor?: string;
   limit?: number;

@@ -27,7 +27,7 @@ function createWrapper(authContext: Partial<AuthContextValue> = {}) {
       forcePasswordChange: false,
     },
     scopes: new Set(['asset:read', 'asset:write', 'user:read']),
-    login: vi.fn().mockResolvedValue({} as any),
+    login: vi.fn().mockResolvedValue({} as unknown),
     logout: vi.fn().mockResolvedValue(undefined),
     reloadPrincipal: vi.fn().mockResolvedValue(undefined),
     ...authContext,

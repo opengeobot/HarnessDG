@@ -5,7 +5,7 @@
  * 作者: AxeXie
  */
 import type { ReactNode } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import { AppLayout } from '@/app/layout/AppLayout';
 import { RouteGuard } from '@/app/permission';
 import { AssetsPage, AssetDetailPage, AssetSettingsPage, AssetAccessPage, AssetLineagePage, CreateAssetPage } from '@/features/assets';
@@ -42,6 +42,12 @@ function guarded(element: ReactNode, requiredScopes?: Scope[]) {
   return <RouteGuard requiredScopes={requiredScopes}>{element}</RouteGuard>;
 }
 
+/** /assets/:assetId/versions → 详情页 Versions Tab（修复 404） */
+function VersionsTabRedirect() {
+  const { assetId } = useParams<{ assetId: string }>();
+  return <Navigate to={`/assets/${assetId}?tab=versions`} replace />;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -55,6 +61,7 @@ export const router = createBrowserRouter([
       { path: 'assets', element: guarded(<AssetsPage />, ['asset:read']) },
       { path: 'assets/new', element: guarded(<CreateAssetPage />, ['asset:create']) },
       { path: 'assets/:assetId', element: guarded(<AssetDetailPage />, ['asset:read']) },
+      { path: 'assets/:assetId/versions', element: <VersionsTabRedirect /> },
       { path: 'assets/:assetId/settings', element: guarded(<AssetSettingsPage />, ['asset:write']) },
       { path: 'assets/:assetId/lineage', element: guarded(<AssetLineagePage />, ['asset:read']) },
       { path: 'assets/:assetId/access', element: guarded(<AssetAccessPage />, ['asset:manage']) },

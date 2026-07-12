@@ -33,7 +33,7 @@ test.describe('讨论与评论流程', () => {
 
       // 检查是否有讨论相关 Tab 或区域
       const discussionTab = page.getByText(/讨论|discussion|comment/i).first();
-      const hasDiscussion = await discussionTab.isVisible({ timeout: 3000 }).catch(() => false);
+      await discussionTab.isVisible({ timeout: 3000 }).catch(() => false);
       // 讨论区域可能存在也可能不存在（取决于资产是否有讨论）
       expect(page.locator('#root')).toBeVisible();
     }

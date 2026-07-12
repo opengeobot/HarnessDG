@@ -48,7 +48,7 @@ test.describe('资产血缘页面', () => {
 
     // 检查是否有方向切换控件
     const directionBtn = page.locator('[data-testid="direction-toggle"], button:has-text("上游"), button:has-text("下游")').first();
-    const hasDirection = await directionBtn.isVisible({ timeout: 3000 }).catch(() => false);
+    await directionBtn.isVisible({ timeout: 3000 }).catch(() => false);
     // 即使没有方向切换也不应报错
     await expect(page.locator('#root')).toBeVisible();
   });
@@ -67,7 +67,6 @@ test.describe('资产血缘页面', () => {
     await page.goto('/assets');
     await page.waitForTimeout(2000);
 
-    const emptyState = page.locator('.ant-empty, [data-testid="empty-lineage"]').first();
     // 空状态可能存在也可能不存在
     await expect(page.locator('#root')).toBeVisible();
   });

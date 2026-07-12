@@ -3,7 +3,6 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { AssetLineagePage } from './AssetLineagePage';
 import { renderWithProviders } from '@/test/test-utils';
 

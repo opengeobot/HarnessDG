@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P1-013
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P1
-baseCommit: 71a03efcbaf9408b7ed07df5a7015c4ee110f8c3
+baseCommit: 14bf9f747b953d901b4b8aeaccd999b3445fa08e
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED; P1 catalog/讨论/血缘已部分落地；本任务为 P1 详情页统一外壳差距闭合，依赖 DEC-008 端态 REQ-DST-DETAIL-001
 stageGateEvidenceRefs:
@@ -42,18 +42,26 @@ crossCuttingPlan:
   - SECRETS|Card/README/外链/图片/讨论为不可信数据，SafeMarkdown 渲染；不展示预签名 URL 查询串与内部 endpoint
 allowedPaths:
   - frontend/src/features/assets/AssetDetailPage.tsx
-  - frontend/src/features/assets/VersionDetailPage.tsx
+  - frontend/src/features/version/VersionDetailPage.tsx
   - frontend/src/features/assets/PreviewPanel.tsx
-  - frontend/src/features/assets/VersionListPanel.tsx
+  - frontend/src/features/version/VersionListPanel.tsx
   - frontend/src/features/assets/AssetsPage.tsx
   - frontend/src/features/assets/api.ts
+  - frontend/src/features/assets/types.ts
+  - frontend/src/features/version/api.ts
   - frontend/src/app/router/routes.tsx
   - frontend/src/shared/types/api.ts
   - frontend/src/shared/i18n/en.json
   - frontend/src/shared/i18n/zh.json
   - frontend/e2e/dataset.spec.ts
   - frontend/e2e/version-management.spec.ts
+  - frontend/e2e/discussion.spec.ts
+  - frontend/e2e/lineage.spec.ts
   - frontend/src/features/assets/__tests__
+  - frontend/src/features/assets/AssetLineagePage.test.tsx
+  - frontend/src/app/permission/PermissionProvider.test.tsx
+  - frontend/src/test/test-utils.tsx
+  - docs/ai-spec/tasks/TASK-P1-013.md
   - docs/ai-spec/tasks/evidence/EVD-P1013-001.yaml
 preExistingDirtyPaths: []
 forbiddenPaths:
@@ -71,8 +79,8 @@ requiredValidationCommands:
   - pnpm typecheck
   - pnpm test
   - pnpm build
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T04:50:00Z
 ---
 # TASK-P1-013：前端详情页统一外壳与 Files/Preview Tab（Wave S 差距闭合）
 

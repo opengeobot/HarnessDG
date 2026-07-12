@@ -89,7 +89,7 @@ export function VersionListPanel({ assetId }: VersionListPanelProps) {
       title={t('version.versionList')}
       size="small"
       extra={
-        <Link to={`/assets/${assetId}/versions`}>
+        <Link to={`/assets/${assetId}?tab=versions`}>
           <Button type="link" size="small">
             {t('version.viewAll')}
           </Button>

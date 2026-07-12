@@ -44,7 +44,7 @@ const defaultMockAuth: AuthContextValue = {
     'project:view', 'project:manage', 'organization:manage',
     'token:create', 'mcp:invoke',
   ]),
-  login: vi.fn().mockResolvedValue({} as any),
+  login: vi.fn().mockResolvedValue({} as unknown),
   logout: vi.fn().mockResolvedValue(undefined),
   reloadPrincipal: vi.fn().mockResolvedValue(undefined),
 };
