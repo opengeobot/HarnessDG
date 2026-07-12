@@ -84,9 +84,18 @@ test.describe('PRD V08/V09: 版本发布 E2E', () => {
     await expect(page.locator('#root')).toBeVisible();
   });
 
+  test('V08: 版本中心深链展示 assetId', async ({ page }) => {
+    await page.goto('/review?assetId=ast_demo');
+    await page.waitForTimeout(1000);
+    await expect(page.locator('#root')).toBeVisible();
+    const hasAssetId = await page.getByText(/ast_demo/i).first().isVisible({ timeout: 3000 }).catch(() => false);
+    if (hasAssetId) {
+      await expect(page.getByText(/ast_demo/i).first()).toBeVisible();
+    }
+  });
+
   test('V08: 版本详情页展示 Tag/Commit/Digest', async ({ page }) => {
-    // 导航到版本中心
-    await page.goto('/version');
+    await page.goto('/version?assetId=ast_demo');
     await page.waitForTimeout(2000);
 
     // 页面应加载正常

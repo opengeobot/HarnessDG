@@ -30,6 +30,13 @@ test.describe('版本管理流程', () => {
     await expect(content).toBeVisible();
   });
 
+  test('版本中心深链带 assetId 参数', async ({ page }) => {
+    await page.goto('/version?assetId=ast_demo');
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect(page.getByText(/ast_demo/i).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.ant-card')).toBeVisible();
+  });
+
   test('输入 assetId 查询版本列表', async ({ page }) => {
     await page.goto('/assets');
 

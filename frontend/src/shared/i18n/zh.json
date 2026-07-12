@@ -203,7 +203,19 @@
       "downloadMethods": "下载方法",
       "dvcCredentials": "DVC 凭据",
       "dvcCredentialsTitle": "DVC 短期凭据",
-      "dvcCredentialsWarning": "凭据为短期敏感信息，请勿提交至 Git 或日志。"
+      "dvcCredentialsWarning": "凭据为短期敏感信息，请勿提交至 Git 或日志。",
+      "createDraftVersion": "新建草稿版本",
+      "createDraftVersionTitle": "创建草稿版本",
+      "draftVersionLabel": "版本号",
+      "draftVersionPlaceholder": "如 v1.0.0",
+      "draftNotesLabel": "备注",
+      "draftNotesPlaceholder": "可选备注",
+      "draftVersionCreated": "草稿版本已创建",
+      "dvcConfig": "DVC 配置",
+      "dvcConfigTitle": "DVC Remote 配置",
+      "openVersionCenter": "版本中心",
+      "openReview": "发布审批",
+      "openUpload": "上传文件"
     },
     "lineage": {
       "title": "资产血缘",
@@ -415,7 +427,10 @@
     "selectFilesToResume": "请先选择本地文件后再继续上传",
     "retryPart": "重试",
     "retryFailedPart": "重试 Part {{part}}",
-    "missingEtags": "部分分片缺少 ETag，请重新上传"
+    "missingEtags": "部分分片缺少 ETag，请重新上传",
+    "deepLinkHint": "请从资产详情页进入，或携带 ?assetId=&versionId= 查询参数",
+    "assetIdLabel": "资产 ID",
+    "versionIdLabel": "版本 ID"
   },
   "version": {
     "title": "版本中心",
@@ -459,7 +474,9 @@
     "noValidationReport": "暂无校验报告",
     "frozenDigestHint": "审批前请核对冻结摘要与 Commit；内容漂移将使旧审批失效。",
     "deprecate": "弃用",
-    "archive": "归档"
+    "archive": "归档",
+    "deepLinkHint": "请从资产详情页进入，或携带 ?assetId= 查询参数",
+    "assetIdLabel": "资产 ID"
   },
   "review": {
     "title": "发布审批",

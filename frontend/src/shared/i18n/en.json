@@ -203,7 +203,19 @@
       "downloadMethods": "Methods",
       "dvcCredentials": "DVC credentials",
       "dvcCredentialsTitle": "DVC short-term credentials",
-      "dvcCredentialsWarning": "Credentials are short-term sensitive data. Do not commit to Git or logs."
+      "dvcCredentialsWarning": "Credentials are short-term sensitive data. Do not commit to Git or logs.",
+      "createDraftVersion": "New draft version",
+      "createDraftVersionTitle": "Create draft version",
+      "draftVersionLabel": "Version",
+      "draftVersionPlaceholder": "e.g. v1.0.0",
+      "draftNotesLabel": "Notes",
+      "draftNotesPlaceholder": "Optional notes",
+      "draftVersionCreated": "Draft version created",
+      "dvcConfig": "DVC config",
+      "dvcConfigTitle": "DVC remote config",
+      "openVersionCenter": "Version center",
+      "openReview": "Publish review",
+      "openUpload": "Upload files"
     },
     "lineage": {
       "title": "Asset Lineage",
@@ -415,7 +427,10 @@
     "selectFilesToResume": "Select local files before resuming upload",
     "retryPart": "Retry",
     "retryFailedPart": "Retry Part {{part}}",
-    "missingEtags": "Some parts are missing ETags; please re-upload"
+    "missingEtags": "Some parts are missing ETags; please re-upload",
+    "deepLinkHint": "Open from asset detail or use ?assetId=&versionId= query parameters",
+    "assetIdLabel": "Asset ID",
+    "versionIdLabel": "Version ID"
   },
   "version": {
     "title": "Version Center",
@@ -459,7 +474,9 @@
     "noValidationReport": "No validation report yet",
     "frozenDigestHint": "Review frozen digest and commit before approving; content drift invalidates prior approval.",
     "deprecate": "Deprecate",
-    "archive": "Archive"
+    "archive": "Archive",
+    "deepLinkHint": "Open from asset detail or use ?assetId= query parameter",
+    "assetIdLabel": "Asset ID"
   },
   "review": {
     "title": "Release Review",

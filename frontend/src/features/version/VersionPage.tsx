@@ -1,10 +1,28 @@
 /**
  * 功能: 版本中心页面——版本列表 + 详情（Commit/Tag/Manifest/Artifact 展示）。
- * 时间: 2026-07-05
+ * 时间: 2026-07-05，2026-07-12 Wave Z Ant Design 迁移
  * 作者: AxeXie
  */
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  Flex,
+  Row,
+  Space,
+  Spin,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { useDocumentTitle } from '@/shared/hooks';
 import {
   getValidationReport,
@@ -15,19 +33,29 @@ import {
 } from './api';
 import type { ArtifactView, VersionView } from './types';
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  VALIDATING: 'bg-yellow-100 text-yellow-800',
-  PENDING_REVIEW: 'bg-blue-100 text-blue-800',
-  PUBLISHED: 'bg-green-100 text-green-800',
-  DEPRECATED: 'bg-orange-100 text-orange-800',
-  ARCHIVED: 'bg-gray-200 text-gray-600',
+const STATUS_COLOR: Record<string, string> = {
+  DRAFT: 'default',
+  VALIDATING: 'processing',
+  PENDING_REVIEW: 'blue',
+  PUBLISHED: 'success',
+  DEPRECATED: 'warning',
+  ARCHIVED: 'default',
 };
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
 
 export function VersionPage() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   useDocumentTitle(t('version.title'));
-  const [assetId, setAssetId] = useState('');
+  const [searchParams] = useSearchParams();
+  const assetId = searchParams.get('assetId') ?? '';
   const [versions, setVersions] = useState<VersionView[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<VersionView | null>(null);
   const [artifacts, setArtifacts] = useState<ArtifactView[]>([]);
@@ -50,7 +78,7 @@ export function VersionPage() {
   }, [assetId, t]);
 
   useEffect(() => {
-    loadVersions();
+    void loadVersions();
   }, [loadVersions]);
 
   const handleSelectVersion = async (v: VersionView) => {
@@ -62,7 +90,6 @@ export function VersionPage() {
     } catch {
       setArtifacts([]);
     }
-    // 加载校验报告（非 DRAFT 状态）
     if (v.status !== 'DRAFT') {
       try {
         const report = await getValidationReport(assetId, v.versionId);
@@ -76,14 +103,10 @@ export function VersionPage() {
   const handleTransition = async (v: VersionView, target: string) => {
     try {
       const updated = await transitionVersion(assetId, v.versionId, target);
-      setVersions((prev) =>
-        prev.map((x) => (x.versionId === v.versionId ? updated : x)),
-      );
-      if (selectedVersion?.versionId === v.versionId) {
-        setSelectedVersion(updated);
-      }
+      setVersions((prev) => prev.map((x) => (x.versionId === v.versionId ? updated : x)));
+      if (selectedVersion?.versionId === v.versionId) setSelectedVersion(updated);
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('version.transitionFailed'));
+      message.error(e instanceof Error ? e.message : t('version.transitionFailed'));
     }
   };
 
@@ -93,251 +116,232 @@ export function VersionPage() {
       if (ticket.method === 'PRESIGNED_URL' && ticket.presignedUrl) {
         window.open(ticket.presignedUrl, '_blank');
       } else {
-        alert(t('version.downloadMethod', { method: ticket.method }));
+        message.info(t('version.downloadMethod', { method: ticket.method }));
       }
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('version.downloadTicketFailed'));
+      message.error(e instanceof Error ? e.message : t('version.downloadTicketFailed'));
     }
   };
 
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  const artifactColumns: ColumnsType<ArtifactView> = [
+    { title: t('version.path'), dataIndex: 'path', key: 'path', render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+    { title: t('version.size'), dataIndex: 'size', key: 'size', align: 'right', render: (v: number) => formatBytes(v) },
+    {
+      title: 'SHA-256',
+      dataIndex: 'sha256',
+      key: 'sha256',
+      align: 'right',
+      render: (v: string) => <Typography.Text code style={{ fontSize: 11 }}>{v.slice(0, 12)}…</Typography.Text>,
+    },
+    {
+      title: t('common.action'),
+      key: 'action',
+      align: 'center',
+      render: (_, record) =>
+        selectedVersion?.status === 'PUBLISHED' ? (
+          <Button type="link" size="small" onClick={() => handleDownload(selectedVersion, record.artifactId)}>
+            {t('version.download')}
+          </Button>
+        ) : null,
+    },
+  ];
+
+  if (!assetId) {
+    return (
+      <Card title={t('version.title')}>
+        <Empty description={t('version.deepLinkHint')}>
+          <Link to="/assets">
+            <Button type="primary">{t('nav.assetCatalog')}</Button>
+          </Link>
+        </Empty>
+      </Card>
+    );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">{t('version.title')}</h1>
+    <Flex vertical gap={16}>
+      <Card
+        title={t('version.title')}
+        extra={
+          <Link to={`/assets/${assetId}`}>
+            <Button type="link">{t('assets.detailTitle')}</Button>
+          </Link>
+        }
+      >
+        <Descriptions size="small" column={1}>
+          <Descriptions.Item label={t('version.assetIdLabel')}>
+            <Typography.Text code>{assetId}</Typography.Text>
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
 
-      <div className="mb-4 flex gap-2">
-        <input
-          className="border rounded px-3 py-2 flex-1"
-          placeholder={t('version.assetIdPlaceholder')}
-          value={assetId}
-          onChange={(e) => setAssetId(e.target.value)}
-        />
-        <button
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          onClick={loadVersions}
-        >
-          {t('common.query')}
-        </button>
-      </div>
+      {error && <Alert type="error" showIcon message={error} />}
+      {loading && <Flex justify="center"><Spin /></Flex>}
 
-      {error && <p className="text-red-600 mb-4">{error}</p>}
-      {loading && <p className="text-gray-500">{t('common.loading')}</p>}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <h2 className="text-lg font-semibold mb-2">{t('version.versionList')}</h2>
-          <div className="space-y-2">
-            {versions.map((v) => (
-              <div
-                key={v.versionId}
-                className={`p-3 border rounded cursor-pointer transition ${
-                  selectedVersion?.versionId === v.versionId
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'hover:bg-gray-50'
-                }`}
-                onClick={() => handleSelectVersion(v)}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-semibold">{v.version}</span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded ${STATUS_COLORS[v.status] ?? 'bg-gray-100'}`}
+      <Row gutter={16}>
+        <Col xs={24} lg={12}>
+          <Card title={t('version.versionList')} size="small">
+            {versions.length === 0 && !loading ? (
+              <Empty description={t('version.noVersions')} />
+            ) : (
+              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                {versions.map((v) => (
+                  <Card
+                    key={v.versionId}
+                    size="small"
+                    hoverable
+                    onClick={() => void handleSelectVersion(v)}
+                    style={{
+                      borderColor: selectedVersion?.versionId === v.versionId ? '#1677ff' : undefined,
+                      background: selectedVersion?.versionId === v.versionId ? '#e6f4ff' : undefined,
+                    }}
                   >
-                    {v.status}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-500 mt-1">
-                  {v.createdAt && new Date(v.createdAt).toLocaleString()}
-                  {v.sourceCommit && ` | Commit: ${v.sourceCommit.slice(0, 8)}`}
-                </div>
-                {v.status === 'DRAFT' && (
-                  <div className="mt-2 flex gap-1">
-                    <button
-                      className="text-xs px-2 py-1 bg-yellow-100 rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTransition(v, 'VALIDATING');
-                      }}
-                    >
-                      {t('version.submitValidation')}
-                    </button>
-                  </div>
-                )}
-                {v.status === 'PUBLISHED' && (
-                  <div className="mt-2 flex gap-1">
-                    <button
-                      className="text-xs px-2 py-1 bg-green-100 rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(v);
-                      }}
-                    >
-                      {t('version.downloadDvc')}
-                    </button>
-                    <button
-                      className="text-xs px-2 py-1 bg-orange-100 rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTransition(v, 'DEPRECATED');
-                      }}
-                    >
-                      {t('version.deprecate')}
-                    </button>
-                  </div>
-                )}
-                {v.status === 'DEPRECATED' && (
-                  <div className="mt-2 flex gap-1">
-                    <button
-                      className="text-xs px-2 py-1 bg-gray-100 rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTransition(v, 'ARCHIVED');
-                      }}
-                    >
-                      {t('version.archive')}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-            {!loading && versions.length === 0 && (
-              <p className="text-gray-400 text-sm">{t('version.noVersions')}</p>
+                    <Flex justify="space-between" align="center">
+                      <Typography.Text strong code>{v.version}</Typography.Text>
+                      <Tag color={STATUS_COLOR[v.status]}>{v.status}</Tag>
+                    </Flex>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {v.createdAt && new Date(v.createdAt).toLocaleString()}
+                      {v.sourceCommit && ` | Commit: ${v.sourceCommit.slice(0, 8)}`}
+                    </Typography.Text>
+                    <Space size={4} style={{ marginTop: 8 }} wrap>
+                      {v.status === 'DRAFT' && (
+                        <Button
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleTransition(v, 'VALIDATING');
+                          }}
+                        >
+                          {t('version.submitValidation')}
+                        </Button>
+                      )}
+                      {v.status === 'PUBLISHED' && (
+                        <>
+                          <Button
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDownload(v);
+                            }}
+                          >
+                            {t('version.downloadDvc')}
+                          </Button>
+                          <Button
+                            size="small"
+                            danger
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleTransition(v, 'DEPRECATED');
+                            }}
+                          >
+                            {t('version.deprecate')}
+                          </Button>
+                        </>
+                      )}
+                      {v.status === 'DEPRECATED' && (
+                        <Button
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleTransition(v, 'ARCHIVED');
+                          }}
+                        >
+                          {t('version.archive')}
+                        </Button>
+                      )}
+                    </Space>
+                  </Card>
+                ))}
+              </Space>
             )}
-          </div>
-        </div>
+          </Card>
+        </Col>
 
-        <div>
-          <h2 className="text-lg font-semibold mb-2">{t('version.versionDetail')}</h2>
-          {selectedVersion ? (
-            <div className="space-y-4">
-              <div className="border rounded p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('version.versionId')}</span>
-                  <span className="font-mono text-sm">{selectedVersion.versionId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('common.status')}</span>
-                  <span className={STATUS_COLORS[selectedVersion.status] ?? ''}>
-                    {selectedVersion.status}
-                  </span>
-                </div>
-                {selectedVersion.sourceCommit && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t('version.commit')}</span>
-                    <span className="font-mono text-sm">{selectedVersion.sourceCommit}</span>
-                  </div>
-                )}
-                {selectedVersion.gitTag && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Git Tag</span>
-                    <span className="font-mono text-sm">{selectedVersion.gitTag}</span>
-                  </div>
-                )}
-                {selectedVersion.manifestDigest && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Manifest Digest</span>
-                    <span className="font-mono text-xs">{selectedVersion.manifestDigest}</span>
-                  </div>
-                )}
-                {selectedVersion.notes && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">{t('version.notes')}</span>
-                    <span className="text-sm">{selectedVersion.notes}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('version.createdBy')}</span>
-                  <span className="text-sm">{selectedVersion.createdBy}</span>
-                </div>
-              </div>
+        <Col xs={24} lg={12}>
+          <Card title={t('version.versionDetail')} size="small">
+            {selectedVersion ? (
+              <Flex vertical gap={16}>
+                <Descriptions column={1} size="small" bordered>
+                  <Descriptions.Item label={t('version.versionId')}>
+                    <Typography.Text code>{selectedVersion.versionId}</Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('common.status')}>
+                    <Tag color={STATUS_COLOR[selectedVersion.status]}>{selectedVersion.status}</Tag>
+                  </Descriptions.Item>
+                  {selectedVersion.sourceCommit && (
+                    <Descriptions.Item label={t('version.commit')}>
+                      <Typography.Text code>{selectedVersion.sourceCommit}</Typography.Text>
+                    </Descriptions.Item>
+                  )}
+                  {selectedVersion.gitTag && (
+                    <Descriptions.Item label="Git Tag">
+                      <Typography.Text code>{selectedVersion.gitTag}</Typography.Text>
+                    </Descriptions.Item>
+                  )}
+                  {selectedVersion.manifestDigest && (
+                    <Descriptions.Item label="Manifest Digest">
+                      <Typography.Text code style={{ fontSize: 11 }}>{selectedVersion.manifestDigest}</Typography.Text>
+                    </Descriptions.Item>
+                  )}
+                  {selectedVersion.notes && (
+                    <Descriptions.Item label={t('version.notes')}>{selectedVersion.notes}</Descriptions.Item>
+                  )}
+                  <Descriptions.Item label={t('version.createdBy')}>{selectedVersion.createdBy}</Descriptions.Item>
+                </Descriptions>
 
-              {/* 校验报告 */}
-              {validationReport && (
-                <div>
-                  <h3 className="font-semibold mb-2">{t('version.validationReport')}</h3>
-                  <div className="border rounded p-4 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Report ID</span>
-                      <span className="font-mono text-sm">{String(validationReport.report_id)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">{t('version.policyVersion')}</span>
-                      <span className="text-sm">{String(validationReport.policy_version)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">{t('common.status')}</span>
-                      <span className={`text-sm ${validationReport.status === 'PASSED' ? 'text-green-600' : 'text-red-600'}`}>
-                        {String(validationReport.status)}
-                      </span>
-                    </div>
+                {validationReport && (
+                  <Card title={t('version.validationReport')} size="small" type="inner">
+                    <Descriptions column={1} size="small">
+                      <Descriptions.Item label="Report ID">
+                        <Typography.Text code>{String(validationReport.report_id)}</Typography.Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t('version.policyVersion')}>
+                        {String(validationReport.policy_version)}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t('common.status')}>
+                        <Tag color={validationReport.status === 'PASSED' ? 'success' : 'error'}>
+                          {String(validationReport.status)}
+                        </Tag>
+                      </Descriptions.Item>
+                    </Descriptions>
                     {validationReport.findings ? (
-                      <div>
-                        <span className="text-gray-500 text-sm">{t('version.findings')}</span>
-                        <pre className="text-xs bg-gray-50 p-2 rounded mt-1 overflow-auto max-h-48">
+                      <Typography.Paragraph>
+                        <pre style={{ fontSize: 11, maxHeight: 192, overflow: 'auto' }}>
                           {typeof validationReport.findings === 'string'
-                            ? (validationReport.findings as string)
+                            ? validationReport.findings
                             : JSON.stringify(validationReport.findings, null, 2)}
                         </pre>
-                      </div>
+                      </Typography.Paragraph>
                     ) : null}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h3 className="font-semibold mb-2">
-                  {t('version.artifactList')} ({artifacts.length})
-                </h3>
-                {artifacts.length > 0 ? (
-                  <table className="w-full text-sm border">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="text-left p-2">{t('version.path')}</th>
-                        <th className="text-right p-2">{t('version.size')}</th>
-                        <th className="text-right p-2">SHA-256</th>
-                        <th className="text-center p-2">{t('common.action')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {artifacts.map((a) => (
-                        <tr key={a.artifactId} className="border-t">
-                          <td className="p-2 font-mono">{a.path}</td>
-                          <td className="p-2 text-right">{formatBytes(a.size)}</td>
-                          <td className="p-2 text-right font-mono text-xs">
-                            {a.sha256.slice(0, 12)}...
-                          </td>
-                          <td className="p-2 text-center">
-                            {selectedVersion.status === 'PUBLISHED' && (
-                              <button
-                                className="text-xs text-blue-600 hover:underline"
-                                onClick={() =>
-                                  handleDownload(selectedVersion, a.artifactId)
-                                }
-                              >
-                                {t('version.download')}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="text-gray-400 text-sm">{t('version.noArtifacts')}</p>
+                  </Card>
                 )}
-              </div>
-            </div>
-          ) : (
-            <p className="text-gray-400">{t('version.selectVersion')}</p>
-          )}
-        </div>
-      </div>
-    </div>
+
+                <Card
+                  title={`${t('version.artifactList')} (${artifacts.length})`}
+                  size="small"
+                  type="inner"
+                >
+                  {artifacts.length > 0 ? (
+                    <Table
+                      size="small"
+                      rowKey="artifactId"
+                      columns={artifactColumns}
+                      dataSource={artifacts}
+                      pagination={false}
+                      scroll={{ y: 240 }}
+                    />
+                  ) : (
+                    <Empty description={t('version.noArtifacts')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                  )}
+                </Card>
+              </Flex>
+            ) : (
+              <Empty description={t('version.selectVersion')} />
+            )}
+          </Card>
+        </Col>
+      </Row>
+    </Flex>
   );
 }

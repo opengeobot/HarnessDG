@@ -16,6 +16,7 @@ import {
   Descriptions,
   Empty,
   Flex,
+  Input,
   Modal,
   Popconfirm,
   Select,
@@ -42,13 +43,15 @@ import { DownloadStats } from './DownloadStats';
 import { PreviewPanel } from './PreviewPanel';
 import { VersionListPanel } from '@/features/version/VersionListPanel';
 import {
+  getDvcConfig,
   getDvcCredentials,
   issueDownloadTicket,
   listArtifacts,
   listVersions,
   submitPublishRequest,
+  createDraftVersion,
 } from '@/features/version/api';
-import type { ArtifactView, DownloadTicket, DvcCredentials, VersionView } from '@/features/version/types';
+import type { ArtifactView, DownloadTicket, DvcCredentials, DvcRemoteConfig, VersionView } from '@/features/version/types';
 import type { AssetView, ProvisioningStatus } from './types';
 
 function formatBytes(bytes: number): string {
@@ -204,6 +207,10 @@ export function AssetDetailPage() {
 
   const [downloadTicket, setDownloadTicket] = useState<DownloadTicket | null>(null);
   const [dvcCreds, setDvcCreds] = useState<DvcCredentials | null>(null);
+  const [dvcConfig, setDvcConfig] = useState<DvcRemoteConfig | null>(null);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftVersion, setDraftVersion] = useState('');
+  const [draftNotes, setDraftNotes] = useState('');
 
   const submitPublishMut = useMutation({
     mutationFn: () => submitPublishRequest(effectiveVersionId!),
@@ -218,6 +225,24 @@ export function AssetDetailPage() {
   const dvcCredsMut = useMutation({
     mutationFn: () => getDvcCredentials(assetId!),
     onSuccess: (creds) => setDvcCreds(creds),
+    onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
+  });
+  const dvcConfigMut = useMutation({
+    mutationFn: () => getDvcConfig(assetId!),
+    onSuccess: (config) => setDvcConfig(config),
+    onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
+  });
+  const createDraftMut = useMutation({
+    mutationFn: () => createDraftVersion(assetId!, draftVersion.trim(), draftNotes.trim() || undefined),
+    onSuccess: (created) => {
+      message.success(t('assets.detail.draftVersionCreated'));
+      setDraftOpen(false);
+      setDraftVersion('');
+      setDraftNotes('');
+      void queryClient.invalidateQueries({ queryKey: ['versions', assetId] });
+      setParam('version', created.versionId);
+      setParam('tab', 'versions');
+    },
     onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
   });
 
@@ -531,6 +556,27 @@ export function AssetDetailPage() {
           )}
           {effectiveVersionId && (
             <Space wrap>
+              <Button size="small" onClick={() => setDraftOpen(true)}>
+                {t('assets.detail.createDraftVersion')}
+              </Button>
+              <Button
+                size="small"
+                onClick={() => navigate(`/version?assetId=${assetId}`)}
+              >
+                {t('assets.detail.openVersionCenter')}
+              </Button>
+              <Button
+                size="small"
+                onClick={() => navigate(`/review?assetId=${assetId}`)}
+              >
+                {t('assets.detail.openReview')}
+              </Button>
+              <Button
+                size="small"
+                onClick={() => navigate(`/upload?assetId=${assetId}&versionId=${effectiveVersionId}`)}
+              >
+                {t('assets.detail.openUpload')}
+              </Button>
               <Popconfirm
                 title={t('assets.detail.confirmSubmitPublish')}
                 onConfirm={() => submitPublishMut.mutate()}
@@ -548,9 +594,14 @@ export function AssetDetailPage() {
                 {t('assets.detail.download')}
               </Button>
               {asset.type === 'DATASET' && (
-                <Button size="small" loading={dvcCredsMut.isPending} onClick={() => dvcCredsMut.mutate()}>
-                  {t('assets.detail.dvcCredentials')}
-                </Button>
+                <>
+                  <Button size="small" loading={dvcConfigMut.isPending} onClick={() => dvcConfigMut.mutate()}>
+                    {t('assets.detail.dvcConfig')}
+                  </Button>
+                  <Button size="small" loading={dvcCredsMut.isPending} onClick={() => dvcCredsMut.mutate()}>
+                    {t('assets.detail.dvcCredentials')}
+                  </Button>
+                </>
               )}
             </Space>
           )}
@@ -584,6 +635,55 @@ export function AssetDetailPage() {
                 {downloadTicket.fileName}
               </Descriptions.Item>
             )}
+          </Descriptions>
+        )}
+      </Modal>
+
+      <Modal
+        title={t('assets.detail.createDraftVersionTitle')}
+        open={draftOpen}
+        onCancel={() => setDraftOpen(false)}
+        onOk={() => createDraftMut.mutate()}
+        confirmLoading={createDraftMut.isPending}
+        okButtonProps={{ disabled: !draftVersion.trim() }}
+      >
+        <Flex vertical gap={12} style={{ marginTop: 8 }}>
+          <div>
+            <Typography.Text>{t('assets.detail.draftVersionLabel')}</Typography.Text>
+            <Input
+              value={draftVersion}
+              onChange={(e) => setDraftVersion(e.target.value)}
+              placeholder={t('assets.detail.draftVersionPlaceholder')}
+              style={{ marginTop: 4 }}
+            />
+          </div>
+          <div>
+            <Typography.Text>{t('assets.detail.draftNotesLabel')}</Typography.Text>
+            <Input.TextArea
+              value={draftNotes}
+              onChange={(e) => setDraftNotes(e.target.value)}
+              placeholder={t('assets.detail.draftNotesPlaceholder')}
+              rows={3}
+              style={{ marginTop: 4 }}
+            />
+          </div>
+        </Flex>
+      </Modal>
+
+      <Modal
+        title={t('assets.detail.dvcConfigTitle')}
+        open={!!dvcConfig}
+        onCancel={() => setDvcConfig(null)}
+        footer={null}
+        width={640}
+      >
+        {dvcConfig && (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="type">{dvcConfig.type}</Descriptions.Item>
+            <Descriptions.Item label="bucket">{dvcConfig.bucket}</Descriptions.Item>
+            <Descriptions.Item label="endpoint">{dvcConfig.endpoint}</Descriptions.Item>
+            <Descriptions.Item label="prefix">{dvcConfig.prefix}</Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.downloadExpires')}>{dvcConfig.expiresAt}</Descriptions.Item>
           </Descriptions>
         )}
       </Modal>

@@ -1,11 +1,28 @@
 /**
  * 功能: 上传中心页面——Multipart 上传（Part 进度/暂停/刷新恢复/Complete/Worker 状态）。
- * 时间: 2026-07-05
+ * 时间: 2026-07-05，2026-07-12 Wave Z Ant Design 迁移
  * 作者: AxeXie
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Descriptions,
+  Empty,
+  Flex,
+  Progress,
+  Space,
+  Spin,
+  Table,
+  Tag,
+  Typography,
+  Upload,
+} from 'antd';
+import { InboxOutlined } from '@ant-design/icons';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
 
@@ -45,7 +62,7 @@ interface PartProgress {
   etag?: string;
 }
 
-const PART_SIZE = 5 * 1024 * 1024; // 5MiB
+const PART_SIZE = 5 * 1024 * 1024;
 
 interface PresignResponse {
   url: string;
@@ -79,26 +96,24 @@ function uploadPartWithProgress(
 
 export function UploadPage() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [searchParams] = useSearchParams();
   useDocumentTitle(t('upload.title'));
-  const [assetId, setAssetId] = useState('');
-  const [versionId, setVersionId] = useState('');
+  const assetId = searchParams.get('assetId') ?? '';
+  const versionId = searchParams.get('versionId') ?? '';
   const [files, setFiles] = useState<File[]>([]);
   const [session, setSession] = useState<UploadSession | null>(null);
   const [parts, setParts] = useState<PartProgress[]>([]);
   const [uploading, setUploading] = useState(false);
   const [paused, setPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [retryPart, setRetryPart] = useState<number | null>(null);
   const uploadBlobRef = useRef<Blob | null>(null);
 
   const buildPartsFromSession = useCallback((sess: UploadSession): PartProgress[] => {
     const totalParts = Math.max(1, Math.ceil(sess.totalBytes / PART_SIZE));
-    const serverParts = new Map(
-      (sess.parts ?? []).map((p) => [p.partNumber, p]),
-    );
+    const serverParts = new Map((sess.parts ?? []).map((p) => [p.partNumber, p]));
     return Array.from({ length: totalParts }, (_, i) => {
       const partNumber = i + 1;
       const server = serverParts.get(partNumber);
@@ -121,16 +136,14 @@ export function UploadPage() {
         : `/upload-sessions/${sessionId}`;
       const result = await apiClient.get<UploadSession>(path);
       setSession(result);
-      setAssetId(result.assetId);
-      setVersionId(result.versionId);
       setParts(buildPartsFromSession(result));
-      setMessage(t('upload.sessionRestored', { id: result.sessionId }));
+      message.success(t('upload.sessionRestored', { id: result.sessionId }));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('upload.restoreFailed'));
     } finally {
       setRestoring(false);
     }
-  }, [buildPartsFromSession, t]);
+  }, [buildPartsFromSession, message, t]);
 
   useEffect(() => {
     const sessionId = searchParams.get('sessionId');
@@ -140,20 +153,12 @@ export function UploadPage() {
     }
   }, [searchParams, restoreSession]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
-      uploadBlobRef.current = null;
-    }
-  };
-
   const createSession = useCallback(async () => {
     if (!assetId || !versionId || files.length === 0) {
       setError(t('upload.fillRequired'));
       return;
     }
     setError(null);
-    setMessage(null);
 
     const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
     if (totalBytes > 20 * 1024 * 1024 * 1024) {
@@ -169,11 +174,11 @@ export function UploadPage() {
       setSession(result);
       setParts(buildPartsFromSession(result));
       uploadBlobRef.current = new Blob(files);
-      setMessage(t('upload.sessionCreated', { id: result.sessionId }));
+      message.success(t('upload.sessionCreated', { id: result.sessionId }));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('upload.createSessionFailed'));
     }
-  }, [assetId, versionId, files, t, buildPartsFromSession]);
+  }, [assetId, versionId, files, t, buildPartsFromSession, message]);
 
   const presignAndUploadPart = async (
     sessionId: string,
@@ -190,9 +195,7 @@ export function UploadPage() {
     try {
       return await uploadPartWithProgress(presign.url, slice, (pct) => {
         setParts((prev) =>
-          prev.map((p) =>
-            p.partNumber === partNumber ? { ...p, progress: pct } : p,
-          ),
+          prev.map((p) => (p.partNumber === partNumber ? { ...p, progress: pct } : p)),
         );
       });
     } catch (firstError) {
@@ -202,9 +205,7 @@ export function UploadPage() {
       try {
         return await uploadPartWithProgress(retryPresign.url, slice, (pct) => {
           setParts((prev) =>
-            prev.map((p) =>
-              p.partNumber === partNumber ? { ...p, progress: pct } : p,
-            ),
+            prev.map((p) => (p.partNumber === partNumber ? { ...p, progress: pct } : p)),
           );
         });
       } catch {
@@ -228,9 +229,7 @@ export function UploadPage() {
     setError(null);
     setRetryPart(null);
 
-    const indices = onlyPart != null
-      ? [onlyPart - 1]
-      : parts.map((_, i) => i);
+    const indices = onlyPart != null ? [onlyPart - 1] : parts.map((_, i) => i);
 
     try {
       for (const i of indices) {
@@ -247,21 +246,17 @@ export function UploadPage() {
 
         setParts((prev) =>
           prev.map((p) =>
-            p.partNumber === i + 1
-              ? { ...p, status: 'completed', progress: 100, etag }
-              : p,
+            p.partNumber === i + 1 ? { ...p, status: 'completed', progress: 100, etag } : p,
           ),
         );
       }
 
-      setMessage(t('upload.allPartsComplete'));
+      message.success(t('upload.allPartsComplete'));
     } catch (e: unknown) {
       const failedPart = parts.find((p) => p.status === 'uploading')?.partNumber ?? onlyPart;
       if (failedPart != null) {
         setParts((prev) =>
-          prev.map((p) =>
-            p.partNumber === failedPart ? { ...p, status: 'failed' } : p,
-          ),
+          prev.map((p) => (p.partNumber === failedPart ? { ...p, status: 'failed' } : p)),
         );
         setRetryPart(failedPart);
       }
@@ -279,16 +274,13 @@ export function UploadPage() {
       return;
     }
     try {
-      await apiClient.post(
-        `/upload-sessions/${session.sessionId}/complete`,
-        {
-          parts: parts
-            .filter((p) => p.status === 'completed')
-            .map((p) => ({ partNumber: p.partNumber, etag: p.etag })),
-        },
-      );
-      setMessage(t('upload.uploadCompleted'));
-      setSession((prev) => prev ? { ...prev, status: 'COMPLETED' } : null);
+      await apiClient.post(`/upload-sessions/${session.sessionId}/complete`, {
+        parts: parts
+          .filter((p) => p.status === 'completed')
+          .map((p) => ({ partNumber: p.partNumber, etag: p.etag })),
+      });
+      message.success(t('upload.uploadCompleted'));
+      setSession((prev) => (prev ? { ...prev, status: 'COMPLETED' } : null));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('upload.completeFailed'));
     }
@@ -298,7 +290,7 @@ export function UploadPage() {
     if (!session) return;
     try {
       await apiClient.post(`/upload-sessions/${session.sessionId}/cancel`);
-      setMessage(t('upload.uploadCancelled'));
+      message.info(t('upload.uploadCancelled'));
       setSession(null);
       setParts([]);
       uploadBlobRef.current = null;
@@ -308,246 +300,226 @@ export function UploadPage() {
   };
 
   const completedParts = parts.filter((p) => p.status === 'completed').length;
-  const overallProgress =
-    parts.length > 0 ? Math.round((completedParts / parts.length) * 100) : 0;
+  const overallProgress = parts.length > 0 ? Math.round((completedParts / parts.length) * 100) : 0;
 
   if (restoring) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <h1 className="text-2xl font-bold mb-4">{t('upload.title')}</h1>
-        <p className="text-gray-600">{t('upload.restoringSession')}</p>
-      </div>
+      <Card title={t('upload.title')}>
+        <Flex justify="center" align="center" style={{ minHeight: 120 }}>
+          <Spin tip={t('upload.restoringSession')} />
+        </Flex>
+      </Card>
+    );
+  }
+
+  if (!assetId || !versionId) {
+    return (
+      <Card title={t('upload.title')}>
+        <Empty description={t('upload.deepLinkHint')}>
+          <Link to="/assets">
+            <Button type="primary">{t('nav.assetCatalog')}</Button>
+          </Link>
+        </Empty>
+      </Card>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">{t('upload.title')}</h1>
+    <Flex vertical gap={16}>
+      <Card
+        title={t('upload.title')}
+        extra={
+          <Link to={`/assets/${assetId}?version=${versionId}`}>
+            <Button type="link">{t('assets.detailTitle')}</Button>
+          </Link>
+        }
+      >
+        <Descriptions size="small" column={2}>
+          <Descriptions.Item label={t('upload.assetIdLabel')}>
+            <Typography.Text code>{assetId}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label={t('upload.versionIdLabel')}>
+            <Typography.Text code>{versionId}</Typography.Text>
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
+
+      {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
 
       {!session && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <input
-              className="border rounded px-3 py-2"
-              placeholder={t('upload.assetIdPlaceholder')}
-              value={assetId}
-              onChange={(e) => setAssetId(e.target.value)}
-            />
-            <input
-              className="border rounded px-3 py-2"
-              placeholder={t('upload.versionIdPlaceholder')}
-              value={versionId}
-              onChange={(e) => setVersionId(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">{t('upload.selectFiles')}</label>
-            <input
-              type="file"
+        <Card>
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Upload.Dragger
               multiple
-              onChange={handleFileSelect}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
+              beforeUpload={() => false}
+              onChange={(info) => {
+                const selected = info.fileList
+                  .map((f) => f.originFileObj)
+                  .filter((f): f is NonNullable<typeof f> => !!f);
+                setFiles(selected);
+                uploadBlobRef.current = null;
+              }}
+              fileList={files.map((f, i) => ({
+                uid: `${i}`,
+                name: f.name,
+                size: f.size,
+                status: 'done' as const,
+              }))}
+            >
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">{t('upload.selectFiles')}</p>
+            </Upload.Dragger>
             {files.length > 0 && (
-              <div className="mt-2 text-sm text-gray-600">
+              <Typography.Text type="secondary">
                 {t('upload.fileCount', { count: files.length })},{' '}
-                {t('upload.totalSize', { size: (files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1) })}
-              </div>
+                {t('upload.totalSize', {
+                  size: (files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1),
+                })}
+              </Typography.Text>
             )}
-          </div>
-
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-            onClick={createSession}
-            disabled={!assetId || !versionId || files.length === 0}
-          >
-            {t('upload.createSession')}
-          </button>
-        </div>
+            <Button
+              type="primary"
+              onClick={() => void createSession()}
+              disabled={files.length === 0}
+            >
+              {t('upload.createSession')}
+            </Button>
+          </Space>
+        </Card>
       )}
 
-      {error && <p className="text-red-600 mt-4">{error}</p>}
-      {message && <p className="text-green-600 mt-4">{message}</p>}
-
       {session && (
-        <div className="mt-6 space-y-4">
-          <div className="border rounded p-4">
-            <h2 className="font-semibold mb-2">{t('upload.sessionInfo')}</h2>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <span className="text-gray-500">{t('upload.sessionId')}:</span>{' '}
-                <span className="font-mono">{session.sessionId}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">{t('common.status')}:</span>{' '}
-                <span>{session.status}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">{t('upload.fileCountLabel')}:</span>{' '}
-                <span>{session.fileCount}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">{t('upload.totalSizeLabel')}:</span>{' '}
-                <span>{(session.totalBytes / 1024 / 1024).toFixed(1)} MB</span>
-              </div>
-            </div>
-          </div>
+        <>
+          <Card title={t('upload.sessionInfo')} size="small">
+            <Descriptions column={2} size="small">
+              <Descriptions.Item label={t('upload.sessionId')}>
+                <Typography.Text code>{session.sessionId}</Typography.Text>
+              </Descriptions.Item>
+              <Descriptions.Item label={t('common.status')}>
+                <Tag>{session.status}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label={t('upload.fileCountLabel')}>{session.fileCount}</Descriptions.Item>
+              <Descriptions.Item label={t('upload.totalSizeLabel')}>
+                {(session.totalBytes / 1024 / 1024).toFixed(1)} MB
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
 
           {(session.files?.length ?? 0) > 0 && (
-            <div>
-              <h3 className="font-semibold mb-2">{t('upload.fileList')}</h3>
-              <div className="max-h-40 overflow-y-auto border rounded text-sm">
-                {session.files!.map((f) => (
-                  <div key={f.fileId} className="flex items-center gap-2 p-2 border-b last:border-b-0">
-                    <span className="flex-1 font-mono truncate">{f.path}</span>
-                    <span className="text-gray-500">{(f.size / 1024).toFixed(1)} KB</span>
-                    <span className={`text-xs ${
-                      f.status === 'COMPLETED'
-                        ? 'text-green-600'
-                        : f.status === 'FAILED'
-                          ? 'text-red-600'
-                          : 'text-gray-500'
-                    }`}
-                    >
-                      {f.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <Card title={t('upload.fileList')} size="small">
+              <Table
+                size="small"
+                rowKey="fileId"
+                pagination={false}
+                dataSource={session.files}
+                columns={[
+                  { title: t('version.path'), dataIndex: 'path', key: 'path', render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+                  {
+                    title: t('version.size'),
+                    dataIndex: 'size',
+                    key: 'size',
+                    render: (v: number) => `${(v / 1024).toFixed(1)} KB`,
+                  },
+                  {
+                    title: t('common.status'),
+                    dataIndex: 'status',
+                    key: 'status',
+                    render: (v: string) => (
+                      <Tag color={v === 'COMPLETED' ? 'success' : v === 'FAILED' ? 'error' : 'default'}>
+                        {v}
+                      </Tag>
+                    ),
+                  },
+                ]}
+              />
+            </Card>
           )}
 
           {session.status === 'OPEN' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">{t('upload.reselectFiles')}</label>
-              <input
-                type="file"
+            <Card size="small">
+              <Upload.Dragger
                 multiple
-                onChange={handleFileSelect}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
+                beforeUpload={() => false}
+                onChange={(info) => {
+                  const selected = info.fileList
+                    .map((f) => f.originFileObj)
+                    .filter((f): f is NonNullable<typeof f> => !!f);
+                  setFiles(selected);
+                  uploadBlobRef.current = null;
+                }}
+              >
+                <p className="ant-upload-text">{t('upload.reselectFiles')}</p>
+              </Upload.Dragger>
+            </Card>
           )}
 
-          <div>
-            <div className="flex justify-between text-sm mb-1">
-              <span>{t('upload.overallProgress')}</span>
-              <span>{overallProgress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded h-4">
-              <div
-                className="bg-blue-600 rounded h-4 transition-all"
-                style={{ width: `${overallProgress}%` }}
-              />
-            </div>
-          </div>
+          <Card title={t('upload.overallProgress')} size="small">
+            <Progress percent={overallProgress} status={uploading ? 'active' : undefined} />
+          </Card>
 
-          <div>
-            <h3 className="font-semibold mb-2">
-              {t('upload.partDetails')} ({completedParts}/{parts.length})
-            </h3>
-            <div className="max-h-48 overflow-y-auto border rounded">
+          <Card title={`${t('upload.partDetails')} (${completedParts}/${parts.length})`} size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
               {parts.map((p) => (
-                <div
-                  key={p.partNumber}
-                  className="flex items-center gap-2 p-2 border-b last:border-b-0 text-sm"
-                >
-                  <span className="w-16">Part {p.partNumber}</span>
-                  <div className="flex-1 bg-gray-200 rounded h-2">
-                    <div
-                      className={`rounded h-2 transition-all ${
-                        p.status === 'completed'
-                          ? 'bg-green-500'
-                          : p.status === 'uploading'
-                            ? 'bg-blue-500'
-                            : p.status === 'failed'
-                              ? 'bg-red-500'
-                              : 'bg-gray-300'
-                      }`}
-                      style={{ width: `${p.progress}%` }}
-                    />
-                  </div>
-                  <span className="w-12 text-right">{p.progress}%</span>
-                  <span
-                    className={`w-16 text-xs ${
-                      p.status === 'completed'
-                        ? 'text-green-600'
-                        : p.status === 'failed'
-                          ? 'text-red-600'
-                          : 'text-gray-500'
-                    }`}
+                <Flex key={p.partNumber} align="center" gap={8}>
+                  <Typography.Text style={{ width: 64 }}>Part {p.partNumber}</Typography.Text>
+                  <Progress
+                    percent={p.progress}
+                    size="small"
+                    style={{ flex: 1 }}
+                    status={
+                      p.status === 'failed' ? 'exception' : p.status === 'completed' ? 'success' : 'active'
+                    }
+                  />
+                  <Tag
+                    color={
+                      p.status === 'completed' ? 'success' : p.status === 'failed' ? 'error' : 'default'
+                    }
                   >
                     {p.status}
-                  </span>
+                  </Tag>
                   {p.status === 'failed' && !uploading && (
-                    <button
-                      type="button"
-                      className="text-xs text-blue-600 hover:underline"
-                      onClick={() => void startUpload(p.partNumber)}
-                    >
+                    <Button type="link" size="small" onClick={() => void startUpload(p.partNumber)}>
                       {t('upload.retryPart')}
-                    </button>
+                    </Button>
                   )}
-                </div>
+                </Flex>
               ))}
-            </div>
-          </div>
+            </Space>
+          </Card>
 
           {retryPart != null && !uploading && (
-            <button
-              type="button"
-              className="px-3 py-1 text-sm bg-orange-100 text-orange-800 rounded hover:bg-orange-200"
-              onClick={() => void startUpload(retryPart)}
-            >
+            <Button onClick={() => void startUpload(retryPart)}>
               {t('upload.retryFailedPart', { part: retryPart })}
-            </button>
+            </Button>
           )}
 
-          <div className="flex gap-2">
+          <Space wrap>
             {session.status === 'OPEN' && !uploading && (
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={() => void startUpload()}
-              >
+              <Button type="primary" onClick={() => void startUpload()}>
                 {t('upload.startUpload')}
-              </button>
+              </Button>
             )}
             {uploading && !paused && (
-              <button
-                className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                onClick={() => setPaused(true)}
-              >
-                {t('upload.pause')}
-              </button>
+              <Button onClick={() => setPaused(true)}>{t('upload.pause')}</Button>
             )}
             {uploading && paused && (
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={() => void startUpload()}
-              >
+              <Button type="primary" onClick={() => void startUpload()}>
                 {t('upload.resume')}
-              </button>
+              </Button>
             )}
-            {session.status === 'OPEN' &&
-              completedParts === parts.length &&
-              parts.length > 0 && (
-                <button
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  onClick={() => void completeUpload()}
-                >
-                  {t('upload.completeUpload')}
-                </button>
-              )}
-            <button
-              className="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
-              onClick={() => void cancelUpload()}
-            >
+            {session.status === 'OPEN' && completedParts === parts.length && parts.length > 0 && (
+              <Button type="primary" onClick={() => void completeUpload()}>
+                {t('upload.completeUpload')}
+              </Button>
+            )}
+            <Button danger onClick={() => void cancelUpload()}>
               {t('common.cancel')}
-            </button>
-          </div>
-        </div>
+            </Button>
+          </Space>
+        </>
       )}
-    </div>
+    </Flex>
   );
 }

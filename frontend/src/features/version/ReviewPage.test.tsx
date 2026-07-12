@@ -26,18 +26,18 @@ describe('ReviewPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders asset ID input', () => {
-    renderWithProviders(<ReviewPage />);
-    expect(screen.getByPlaceholderText(/资产 ID|Asset ID/i)).toBeInTheDocument();
+  it('shows deep-link hint when assetId missing', () => {
+    renderWithProviders(<ReviewPage />, { route: '/review' });
+    expect(screen.getByText(/assetId|查询参数/i)).toBeInTheDocument();
   });
 
-  it('shows query button', () => {
-    renderWithProviders(<ReviewPage />);
-    expect(screen.getByRole('button', { name: /query|查询/i })).toBeInTheDocument();
+  it('renders asset ID from query params', () => {
+    renderWithProviders(<ReviewPage />, { route: '/review?assetId=ast_1' });
+    expect(screen.getByText('ast_1')).toBeInTheDocument();
   });
 
   it('shows select-request prompt in decision panel', () => {
-    renderWithProviders(<ReviewPage />);
+    renderWithProviders(<ReviewPage />, { route: '/review?assetId=ast_1' });
     const hints = screen.getAllByText(/select|选择/i);
     expect(hints.length).toBeGreaterThan(0);
   });
@@ -57,15 +57,12 @@ describe('ReviewPage', () => {
     ]);
 
     const user = userEvent.setup();
-    renderWithProviders(<ReviewPage />);
-
-    await user.type(screen.getByPlaceholderText(/资产 ID|Asset ID/i), 'ast_1');
-    await user.click(screen.getByRole('button', { name: /query|查询/i }));
+    renderWithProviders(<ReviewPage />, { route: '/review?assetId=ast_1' });
 
     await user.click(await screen.findByText('ver_1'));
 
     const select = await screen.findByRole('combobox');
-    const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
-    expect(options.some((o) => /request changes|要求修改/i.test(o ?? ''))).toBe(true);
+    await user.click(select);
+    expect(await screen.findByText(/要求修改|request changes/i)).toBeInTheDocument();
   });
 });

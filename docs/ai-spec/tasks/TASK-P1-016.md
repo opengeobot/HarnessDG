@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P1-016
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P1
-baseCommit: b15a30918f53172087b80306d91cf9181494fac0
+baseCommit: 5924cb1f129412475de29a44c1955d17f8c40759
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；P1 详情外壳已落地（Wave S）；本任务补 F7 接线 + F8 三页迁移
 stageGateEvidenceRefs:
@@ -48,6 +48,9 @@ allowedPaths:
   - frontend/src/shared/i18n/zh.json
   - frontend/e2e/version-management.spec.ts
   - frontend/e2e/publish-flow.spec.ts
+  - frontend/src/features/version/VersionPage.test.tsx
+  - frontend/src/features/version/ReviewPage.test.tsx
+  - frontend/src/features/upload/UploadPage.test.tsx
   - docs/ai-spec/tasks/TASK-P1-016.md
   - docs/ai-spec/tasks/evidence/EVD-P1016-001.yaml
 preExistingDirtyPaths: []
@@ -66,8 +69,8 @@ requiredValidationCommands:
   - pnpm typecheck
   - pnpm test
   - pnpm build
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T09:10:00Z
 ---
 # TASK-P1-016：前端 F7 createDraftVersion/getDvcConfig 接线 + F8 三页迁移（Wave Z）
 
