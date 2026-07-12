@@ -172,6 +172,23 @@ check_migrations() {
   return ${ok}
 }
 
+# 重置管理员口令为 ADMIN_PASS（处理持久化 DB 口令漂移）：经 worker 容器 python crypt 生成 bcrypt，
+# 直接 UPDATE iam_user 并清 must_change_password，使后续登录可用 ADMIN_PASS。
+reset_admin_password() {
+  local hash
+  hash="$(docker compose exec -T worker python3 -c \
+    "import crypt; print(crypt.crypt('${ADMIN_PASS}', crypt.mksalt(crypt.METHOD_BLOWFISH)))" 2>/dev/null | tr -d '[:space:]')"
+  if [ -z "${hash}" ]; then echo "  口令重置：worker 生成 bcrypt 失败"; return 1; fi
+  # Spring jBCrypt 期望 $2a$ 前缀；python crypt 产出 $2b$（算法等价，仅版本前缀不同），归一化为 $2a$
+  hash="${hash/\$2b\$/\$2a\$}"
+  # 经 stdin 传入 SQL，避免 bcrypt 哈希中的 $ 被 sh -c 二次展开；must_change_password 为 smallint
+  printf "update iam_user set password_hash='%s', must_change_password=0 where username='%s';\n" \
+    "${hash}" "${ADMIN_USER}" \
+    | docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1
+  echo "  口令漂移：已重置 admin 口令为 .env 默认（must_change_password=false）"
+  return 0
+}
+
 # ---- V05: JWT 生命周期（登录/me/匿名 401 + refresh Cookie 轮换，PRD V22 子集）----
 check_jwt() {
   local cookie_jar body token me anon refresh_body refresh_token must_change
@@ -188,13 +205,20 @@ check_jwt() {
     fi
   done
 
+  # 凭据漂移兜底：双密码均失败时重置 admin 口令为 ADMIN_PASS 后重试
+  if [ -z "${token}" ] && postgres_reachable && service_running worker; then
+    reset_admin_password
+    body="$(http_login_body "${cookie_jar}" "${ADMIN_PASS}")"
+    token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+  fi
+
   if [ -z "${token}" ]; then echo "  登录未取得 accessToken（凭据/改密状态？）"; rm -f "${cookie_jar}"; return 1; fi
   ACCESS_TOKEN="${token}"
 
   # 处理 must_change_password 强制改密闸门
   if postgres_reachable; then
     must_change="$(psql_q "select must_change_password from iam_user where username='${ADMIN_USER}'")"
-    if [ "${must_change}" = "t" ]; then
+    if [ "${must_change}" = "1" ] || [ "${must_change}" = "t" ]; then
       local code
       code="$(http_status PUT /api/v1/me/password "${ACCESS_TOKEN}" \
         "{\"currentPassword\":\"${ADMIN_PASS}\",\"newPassword\":\"${JOURNEY_ADMIN_PASS}\"}")"

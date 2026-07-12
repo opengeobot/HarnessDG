@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P1-014
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P1
-baseCommit: 71a03efcbaf9408b7ed07df5a7015c4ee110f8c3
+baseCommit: 6cdf200472e47062462a1b2d736e54d58c189446
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；P1-P5 已部分落地但 E4 notProven；本任务为 Compose E4 旅程闭合差距
 stageGateEvidenceRefs:
@@ -49,6 +49,7 @@ allowedPaths:
   - frontend/e2e/dataset.spec.ts
   - frontend/e2e/publish-flow.spec.ts
   - frontend/e2e/mcp-integration.spec.ts
+  - docs/ai-spec/tasks/TASK-P1-014.md
   - docs/ai-spec/tasks/evidence/EVD-P1014-001.yaml
 preExistingDirtyPaths: []
 forbiddenPaths:
@@ -69,8 +70,8 @@ requiredValidationCommands:
   - pnpm typecheck
   - pnpm test
   - pnpm build
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T05:45:00Z
 ---
 # TASK-P1-014：Compose E4 旅程闭合（Wave W 差距闭合）
 

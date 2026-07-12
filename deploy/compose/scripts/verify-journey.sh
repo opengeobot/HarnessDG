@@ -201,18 +201,18 @@ create_model_asset() {
     echo "NO_ASSET_ID"
     return 1
   fi
-  # 轮询 provisioningStatus 直到 PROVISIONED 或超时（默认 60 秒）
+  # 轮询 provisioningStatus 直到 COMPLETED 或超时（默认 60 秒）
   local max_wait="${2:-60}"
   local waited=0
-  if [ -n "${prov}" ] && [ "${prov}" != "PROVISIONED" ]; then
+  if [ -n "${prov}" ] && [ "${prov}" != "COMPLETED" ]; then
     while [ "${waited}" -lt "${max_wait}" ]; do
       sleep 3
       waited=$((waited + 3))
       local poll_resp poll_prov
       poll_resp="$(http_body GET "/api/v1/assets/${asset_id}" "${ACCESS_TOKEN}")"
       poll_prov="$(printf '%s' "${poll_resp}" | sed -nE 's/.*"provisioningStatus"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
-      if [ "${poll_prov}" = "PROVISIONED" ]; then
-        prov="PROVISIONED"
+      if [ "${poll_prov}" = "COMPLETED" ]; then
+        prov="COMPLETED"
         break
       fi
       if [ "${poll_prov}" = "FAILED" ]; then
