@@ -135,7 +135,7 @@ class AssetCatalogIT {
         assertThat(dataset.dataset().format()).isEqualTo("parquet");
 
         CursorPage<?> datasets = assetService.searchAssets(new AssetSearchQuery(null, AssetType.DATASET,
-                null, null, null, null, null, null, null, "parquet", "image", null, null, null, null, null, null, null, null, false, null, 10, "usr_01"));
+                null, null, null, null, null, null, null, null, "parquet", "image", null, null, null, null, null, null, null, null, null, false, null, 10, "usr_01"));
         assertThat(datasets.items()).hasSize(1);
     }
 }
