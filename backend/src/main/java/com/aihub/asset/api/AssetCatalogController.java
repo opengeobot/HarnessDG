@@ -48,7 +48,7 @@ public class AssetCatalogController {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
                 keyword, AssetType.MODEL, namespace, null, null, null, null, null,
                 framework, task, null, null, tagId, owner,
-                null, sensitivity, null, null, null,
+                null, sensitivity, null, null, null, null,
                 includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 
