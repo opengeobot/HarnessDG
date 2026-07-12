@@ -192,7 +192,18 @@
       "selectVersionFirst": "请先在顶部选择一个版本",
       "selectVersion": "选择版本",
       "versionSwitcher": "当前版本",
-      "manifestDigest": "Manifest 摘要"
+      "manifestDigest": "Manifest 摘要",
+      "submitPublish": "提交发布审核",
+      "confirmSubmitPublish": "确认提交该版本进入发布审核？",
+      "publishSubmitted": "已提交发布审核",
+      "download": "下载版本",
+      "downloadTicket": "下载票据",
+      "downloadAsset": "资产",
+      "downloadExpires": "过期时间",
+      "downloadMethods": "下载方法",
+      "dvcCredentials": "DVC 凭据",
+      "dvcCredentialsTitle": "DVC 短期凭据",
+      "dvcCredentialsWarning": "凭据为短期敏感信息，请勿提交至 Git 或日志。"
     },
     "lineage": {
       "title": "资产血缘",

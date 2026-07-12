@@ -4,7 +4,7 @@
  * 时间: 2026-07-05，2026-07-12 Wave S 重构
  * 作者: AxeXie
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -16,6 +16,7 @@ import {
   Descriptions,
   Empty,
   Flex,
+  Modal,
   Popconfirm,
   Select,
   Skeleton,
@@ -40,8 +41,14 @@ import { DiscussionPanel } from './DiscussionPanel';
 import { DownloadStats } from './DownloadStats';
 import { PreviewPanel } from './PreviewPanel';
 import { VersionListPanel } from '@/features/version/VersionListPanel';
-import { listArtifacts, listVersions } from '@/features/version/api';
-import type { ArtifactView, VersionView } from '@/features/version/types';
+import {
+  getDvcCredentials,
+  issueDownloadTicket,
+  listArtifacts,
+  listVersions,
+  submitPublishRequest,
+} from '@/features/version/api';
+import type { ArtifactView, DownloadTicket, DvcCredentials, VersionView } from '@/features/version/types';
 import type { AssetView, ProvisioningStatus } from './types';
 
 function formatBytes(bytes: number): string {
@@ -192,6 +199,25 @@ export function AssetDetailPage() {
   const restoreMut = useMutation({
     mutationFn: () => restoreAsset(assetId!),
     onSuccess: () => { message.success(t('assets.restored')); invalidate(); },
+    onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
+  });
+
+  const [downloadTicket, setDownloadTicket] = useState<DownloadTicket | null>(null);
+  const [dvcCreds, setDvcCreds] = useState<DvcCredentials | null>(null);
+
+  const submitPublishMut = useMutation({
+    mutationFn: () => submitPublishRequest(effectiveVersionId!),
+    onSuccess: () => { message.success(t('assets.detail.publishSubmitted')); invalidate(); void queryClient.invalidateQueries({ queryKey: ['versions', assetId] }); },
+    onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
+  });
+  const downloadMut = useMutation({
+    mutationFn: () => issueDownloadTicket(effectiveVersionId!),
+    onSuccess: (ticket) => setDownloadTicket(ticket),
+    onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
+  });
+  const dvcCredsMut = useMutation({
+    mutationFn: () => getDvcCredentials(assetId!),
+    onSuccess: (creds) => setDvcCreds(creds),
     onError: (err) => message.error(isApiError(err) ? err.message : t('common.operationFailed')),
   });
 
@@ -503,8 +529,95 @@ export function AssetDetailPage() {
               )}
             </Space>
           )}
+          {effectiveVersionId && (
+            <Space wrap>
+              <Popconfirm
+                title={t('assets.detail.confirmSubmitPublish')}
+                onConfirm={() => submitPublishMut.mutate()}
+                disabled={selectedVersion?.status !== 'PENDING_REVIEW' && selectedVersion?.status !== 'VALIDATING'}
+              >
+                <Button
+                  size="small"
+                  loading={submitPublishMut.isPending}
+                  disabled={selectedVersion?.status !== 'PENDING_REVIEW' && selectedVersion?.status !== 'VALIDATING'}
+                >
+                  {t('assets.detail.submitPublish')}
+                </Button>
+              </Popconfirm>
+              <Button size="small" loading={downloadMut.isPending} onClick={() => downloadMut.mutate()}>
+                {t('assets.detail.download')}
+              </Button>
+              {asset.type === 'DATASET' && (
+                <Button size="small" loading={dvcCredsMut.isPending} onClick={() => dvcCredsMut.mutate()}>
+                  {t('assets.detail.dvcCredentials')}
+                </Button>
+              )}
+            </Space>
+          )}
         </Flex>
       </Card>
+
+      <Modal
+        title={t('assets.detail.downloadTicket')}
+        open={!!downloadTicket}
+        onCancel={() => setDownloadTicket(null)}
+        footer={null}
+        width={640}
+      >
+        {downloadTicket && (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label={t('assets.detail.downloadMethods')}>
+              <Tag color="blue">{downloadTicket.method}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.downloadExpires')}>
+              {downloadTicket.expiresAt ?? '-'}
+            </Descriptions.Item>
+            {downloadTicket.presignedUrl && (
+              <Descriptions.Item label="URL">
+                <Typography.Paragraph code copyable style={{ margin: 0, fontSize: 12 }}>
+                  {downloadTicket.presignedUrl}
+                </Typography.Paragraph>
+              </Descriptions.Item>
+            )}
+            {downloadTicket.fileName && (
+              <Descriptions.Item label={t('assets.detail.downloadAsset')}>
+                {downloadTicket.fileName}
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
+      </Modal>
+
+      <Modal
+        title={t('assets.detail.dvcCredentialsTitle')}
+        open={!!dvcCreds}
+        onCancel={() => setDvcCreds(null)}
+        footer={null}
+        width={640}
+      >
+        {dvcCreds && (
+          <Alert
+            type="warning"
+            showIcon
+            message={t('assets.detail.dvcCredentialsWarning')}
+            style={{ marginBottom: 12 }}
+          />
+        )}
+        {dvcCreds && (
+          <Descriptions column={1} size="small" bordered>
+            <Descriptions.Item label="bucket">{dvcCreds.bucket}</Descriptions.Item>
+            <Descriptions.Item label="prefix">{dvcCreds.prefix}</Descriptions.Item>
+            <Descriptions.Item label={t('assets.detail.downloadExpires')}>{dvcCreds.expiresAt}</Descriptions.Item>
+            <Descriptions.Item label="accessKey">
+              <Typography.Text code>{dvcCreds.accessKey}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="secretKey">
+              <Typography.Text code>••••••••</Typography.Text>
+            </Descriptions.Item>
+          </Descriptions>
+        )}
+      </Modal>
+
 
       <Tabs
         activeKey={activeTab}

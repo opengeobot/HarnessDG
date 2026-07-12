@@ -192,7 +192,18 @@
       "selectVersionFirst": "Select a version above first",
       "selectVersion": "Select version",
       "versionSwitcher": "Current version",
-      "manifestDigest": "Manifest digest"
+      "manifestDigest": "Manifest digest",
+      "submitPublish": "Submit for review",
+      "confirmSubmitPublish": "Submit this version for publish review?",
+      "publishSubmitted": "Submitted for publish review",
+      "download": "Download version",
+      "downloadTicket": "Download ticket",
+      "downloadAsset": "Asset",
+      "downloadExpires": "Expires at",
+      "downloadMethods": "Methods",
+      "dvcCredentials": "DVC credentials",
+      "dvcCredentialsTitle": "DVC short-term credentials",
+      "dvcCredentialsWarning": "Credentials are short-term sensitive data. Do not commit to Git or logs."
     },
     "lineage": {
       "title": "Asset Lineage",

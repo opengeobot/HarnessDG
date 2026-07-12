@@ -89,6 +89,17 @@ export function publishVersion(
   });
 }
 
+/** 提交发布请求（详情/版本上下文集成，无需手填 assetId） */
+export function submitPublishRequest(
+  versionId: string,
+  gitTag?: string,
+): Promise<Record<string, unknown>> {
+  return apiClient.post<Record<string, unknown>>(
+    `/versions/${versionId}/publish-requests`,
+    { gitTag },
+  );
+}
+
 /** 列出版本工件 */
 export function listArtifacts(assetId: string, versionId: string): Promise<ArtifactView[]> {
   return apiClient.get<ArtifactView[]>(`/assets/${assetId}/versions/${versionId}/artifacts`);

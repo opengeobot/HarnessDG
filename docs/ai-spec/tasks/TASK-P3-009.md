@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P3-009
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P3
-baseCommit: 71a03efcbaf9408b7ed07df5a7015c4ee110f8c3
+baseCommit: 1156da6e91077f4a9948fecb7899a694a52e88b8
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；P3 发布治理已部分落地；本任务为详情/版本上下文集成发布与下载差距闭合
 stageGateEvidenceRefs:
@@ -53,6 +53,7 @@ allowedPaths:
   - backend/src/main/java/com/aihub/transfer/application/DownloadApplicationService.java
   - backend/src/test/java/com/aihub/version
   - backend/src/test/java/com/aihub/transfer
+  - docs/ai-spec/tasks/TASK-P3-009.md
   - docs/ai-spec/tasks/evidence/EVD-P3009-001.yaml
 preExistingDirtyPaths: []
 forbiddenPaths:
@@ -71,8 +72,8 @@ requiredValidationCommands:
   - pnpm typecheck
   - pnpm test
   - pnpm build
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T05:20:00Z
 ---
 # TASK-P3-009：详情/版本上下文集成发布与下载（Wave V 差距闭合）
 
