@@ -34,7 +34,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -181,6 +180,11 @@ public class UploadApplicationService {
                                              String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         UploadSession session = loadSession(sessionId);
+        if (files == null || files.isEmpty()) {
+            throw new ValidationException(ErrorCode.COMMON_INVALID_ARGUMENT,
+                    "upload files required: complete must include non-empty file metadata",
+                    Map.of("sessionId", sessionId));
+        }
         try {
             session.commit();
         } catch (IllegalStateException ex) {
@@ -258,26 +262,13 @@ public class UploadApplicationService {
     // ---- 私有辅助 ----
 
     private void persistCompletedFiles(String sessionId, List<FileMetadata> files, int fileCount) {
-        List<FileMetadata> effective = files == null || files.isEmpty()
-                ? placeholderFiles(fileCount) : files;
-        for (FileMetadata file : effective) {
+        for (FileMetadata file : files) {
             String fileId = idGenerator.generate(IdPrefix.UPLOAD_FILE);
             uploadFileRepository.insert(new UploadFile(
                     fileId, sessionId, file.path(),
                     file.size(), file.sha256(), file.mediaType(),
                     1, UploadFileStatus.COMPLETED));
         }
-    }
-
-    private List<FileMetadata> placeholderFiles(int fileCount) {
-        if (fileCount <= 0) {
-            return List.of();
-        }
-        List<FileMetadata> placeholders = new ArrayList<>();
-        for (int i = 0; i < fileCount; i++) {
-            placeholders.add(new FileMetadata("upload-" + (i + 1) + ".bin", "", 0L, null, null));
-        }
-        return placeholders;
     }
 
     private void ensureSessionOpen(UploadSession session, String sessionId) {
@@ -321,18 +312,7 @@ public class UploadApplicationService {
 
     private List<Map<String, Object>> toFilePayload(List<FileMetadata> files, int fileCount) {
         if (files == null || files.isEmpty()) {
-            if (fileCount <= 0) {
-                return List.of();
-            }
-            List<Map<String, Object>> placeholders = new ArrayList<>();
-            for (int i = 0; i < fileCount; i++) {
-                Map<String, Object> entry = new LinkedHashMap<>();
-                entry.put("path", "upload-" + (i + 1) + ".bin");
-                entry.put("sha256", "");
-                entry.put("size", 0L);
-                placeholders.add(entry);
-            }
-            return placeholders;
+            return List.of();
         }
         return files.stream().map(f -> {
             Map<String, Object> entry = new LinkedHashMap<>();

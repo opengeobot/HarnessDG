@@ -2033,6 +2033,35 @@ paths:
         '404': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/relations/{relationId}:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: relationId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteAssetRelation
+      summary: 删除资产血缘关系边（硬删除；历史由 audit_log 保留）
+      tags: [assets]
+      x-implementation-status: implemented
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      x-audit-event: ASSET_RELATION_DELETED
+      responses:
+        '200':
+          description: 关系已删除
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/deprecate:
     parameters:
       - name: assetId
@@ -3305,9 +3334,10 @@ paths:
     post:
       operationId: completeUploadSession
       summary: 完成上传会话
+      description: files 必须非空且包含真实文件元数据（path/sha256/size/mediaType）；空 files 返回 COMMON_INVALID_ARGUMENT（PRD §6.5 Manifest 为机器事实，不接受占位文件）。
       tags: [transfer]
       x-implementation-status: implemented
-      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, UPLOAD_SESSION_EXPIRED]
       x-required-permissions: [asset:manage]
       requestBody:
         required: true

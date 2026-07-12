@@ -199,6 +199,17 @@ public class AssetController {
     }
 
     /**
+     * 删除资产血缘关系边（硬删除；历史由 audit_log 保留）。需 asset:manage 权限。
+     */
+    @DeleteMapping("/{assetId}/relations/{relationId}")
+    public ApiResponse<Void> deleteAssetRelation(
+            @PathVariable String assetId,
+            @PathVariable String relationId) {
+        relationApplicationService.deleteRelation(assetId, relationId, AssetApiContext.principalId());
+        return AssetApiContext.respond(null);
+    }
+
+    /**
      * 弃用资产：仍可访问但检索降权。支持弃用原因与替代资产。
      */
     @PostMapping("/{assetId}/deprecate")

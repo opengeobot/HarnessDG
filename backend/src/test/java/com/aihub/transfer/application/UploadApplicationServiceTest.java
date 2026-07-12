@@ -225,6 +225,23 @@ class UploadApplicationServiceTest {
     }
 
     @Test
+    void completeSessionRejectsEmptyFiles() {
+        UploadSession session = createOpenSession();
+        when(sessionRepository.findBySessionId("upl_01")).thenReturn(Optional.of(session));
+
+        List<StoragePort.PartInfo> parts = List.of(new StoragePort.PartInfo(1, "etag1"));
+        assertThatThrownBy(() -> service.completeSession("upl_01", parts, List.of(), "usr_01"))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("upload files required");
+
+        // 空文件不应推进物化或审计
+        verify(storagePort, org.mockito.Mockito.never())
+                .completeMultipartUpload(anyString(), anyString(), anyString(), any());
+        verify(jobApplicationService, org.mockito.Mockito.never())
+                .enqueue(anyString(), anyString(), any(), any(), anyString(), anyInt());
+    }
+
+    @Test
     void cancelSessionTransitionsToCancelled() {
         UploadSession session = createOpenSession();
         session.bindMinioUploadId("minio-id");

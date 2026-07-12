@@ -2,9 +2,9 @@
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P2-012
 status: READY
-implementationAuthorized: false
+implementationAuthorized: true
 phase: P2
-baseCommit: 71a03efcbaf9408b7ed07df5a7015c4ee110f8c3
+baseCommit: 3608e9670ceb6ea6a61d2ad672e38183bb4dc8d1
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED；P2 上传/物化与 P1 血缘已部分落地；本任务为上传 Manifest 真实化与血缘删除差距闭合
 stageGateEvidenceRefs:
@@ -50,9 +50,12 @@ allowedPaths:
   - backend/src/main/java/com/aihub/asset/application/AssetRelationApplicationService.java
   - backend/src/main/java/com/aihub/asset/api/AssetController.java
   - backend/src/main/java/com/aihub/asset/domain/AssetRelation.java
+  - backend/src/main/java/com/aihub/asset/domain/AssetRelationRepository.java
+  - backend/src/main/java/com/aihub/asset/infrastructure/JdbcAssetRelationRepository.java
   - backend/src/test/java/com/aihub/transfer/application
   - backend/src/test/java/com/aihub/asset/application
   - contracts/openapi/aihub-v1.yaml
+  - docs/ai-spec/tasks/TASK-P2-012.md
   - docs/ai-spec/tasks/evidence/EVD-P2012-001.yaml
 preExistingDirtyPaths: []
 forbiddenPaths:
@@ -69,8 +72,8 @@ requiredValidationCommands:
   - ./mvnw verify
   - npx @redocly/cli lint contracts/openapi/aihub-v1.yaml
   - npx @redocly/cli diff contracts/openapi/aihub-v1.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
-approvedBy: pending-verification-authority
-approvedAt: 2026-07-12T00:00:00Z
+approvedBy: User (plan execution authorization 2026-07-12)
+approvedAt: 2026-07-12T04:30:00Z
 ---
 # TASK-P2-012：上传 Manifest 真实化与血缘删除 API（Wave U 差距闭合）
 

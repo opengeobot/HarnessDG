@@ -92,6 +92,47 @@ class AssetRelationApplicationServiceTest {
                 .isInstanceOf(ValidationException.class);
     }
 
+    @Test
+    void deletesRelationAndAudits() {
+        Asset parent = sampleAsset("ast_parent");
+        when(assetRepository.findByAssetId("ast_parent")).thenReturn(Optional.of(parent));
+        when(accessPolicy.canAccess(parent, "usr_01")).thenReturn(true);
+        AssetRelation relation = new AssetRelation("rel_1", "ast_parent", "ast_child",
+                AssetRelationType.TRAINED_ON, "usr_01", Instant.now());
+        when(relationRepository.findByRelationId("rel_1")).thenReturn(Optional.of(relation));
+        when(relationRepository.deleteByRelationId("rel_1")).thenReturn(1);
+
+        service.deleteRelation("ast_parent", "rel_1", "usr_01");
+
+        verify(relationRepository).deleteByRelationId("rel_1");
+        verify(auditService).record(any());
+    }
+
+    @Test
+    void deleteRelationRejectsWhenRelationNotBelongingToAsset() {
+        Asset parent = sampleAsset("ast_parent");
+        when(assetRepository.findByAssetId("ast_parent")).thenReturn(Optional.of(parent));
+        when(accessPolicy.canAccess(parent, "usr_01")).thenReturn(true);
+        AssetRelation foreign = new AssetRelation("rel_2", "ast_other", "ast_third",
+                AssetRelationType.TRAINED_ON, "usr_01", Instant.now());
+        when(relationRepository.findByRelationId("rel_2")).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> service.deleteRelation("ast_parent", "rel_2", "usr_01"))
+                .isInstanceOf(com.aihub.shared.error.NotFoundException.class);
+        verify(relationRepository, org.mockito.Mockito.never()).deleteByRelationId(any());
+    }
+
+    @Test
+    void deleteRelationRejectsWhenRelationMissing() {
+        Asset parent = sampleAsset("ast_parent");
+        when(assetRepository.findByAssetId("ast_parent")).thenReturn(Optional.of(parent));
+        when(accessPolicy.canAccess(parent, "usr_01")).thenReturn(true);
+        when(relationRepository.findByRelationId("rel_missing")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.deleteRelation("ast_parent", "rel_missing", "usr_01"))
+                .isInstanceOf(com.aihub.shared.error.NotFoundException.class);
+    }
+
     private static Asset sampleAsset(String assetId) {
         return Asset.create(assetId, AssetType.MODEL, null, null, "nlp", "demo", "Demo",
                 null, Visibility.INTERNAL, null, null, null, "Apache-2.0", "team_nlp",

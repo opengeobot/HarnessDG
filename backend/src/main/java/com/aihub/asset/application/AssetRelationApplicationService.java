@@ -106,6 +106,45 @@ public class AssetRelationApplicationService {
         return AssetLineageView.RelationEdge.from(relation, 1);
     }
 
+    /**
+     * 删除资产血缘关系边（硬删除；历史由 audit_log 保留）。
+     *
+     * <p>需 asset:manage 权限；关系必须归属于 assetId（作为 parent 或 child）；
+     * 越权或关系不存在采用防枚举语义返回 ASSET_NOT_FOUND。
+     */
+    @Transactional
+    public void deleteRelation(String assetId, String relationId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        Asset asset = loadAccessible(assetId, principalId);
+        AssetRelation relation = relationRepository.findByRelationId(relationId)
+                .orElseThrow(() -> new NotFoundException(
+                        ErrorCode.ASSET_NOT_FOUND,
+                        "asset relation not found: " + relationId,
+                        Map.of("relationId", relationId)));
+        if (!assetId.equals(relation.parentAssetId()) && !assetId.equals(relation.childAssetId())) {
+            throw new NotFoundException(
+                    ErrorCode.ASSET_NOT_FOUND,
+                    "asset relation not found: " + relationId,
+                    Map.of("relationId", relationId));
+        }
+
+        int affected = relationRepository.deleteByRelationId(relationId);
+        if (affected == 0) {
+            throw new NotFoundException(
+                    ErrorCode.ASSET_NOT_FOUND,
+                    "asset relation not found: " + relationId,
+                    Map.of("relationId", relationId));
+        }
+
+        auditRelation("ASSET_RELATION_DELETED", principalId, asset.assetId(), Map.of(
+                "relationId", relationId,
+                "parentAssetId", relation.parentAssetId(),
+                "childAssetId", relation.childAssetId(),
+                "relationType", relation.relationType().name()));
+        LOG.info("deleted asset relation relationId={} assetId={} principalId={}",
+                relationId, assetId, principalId);
+    }
+
     private Asset loadAccessible(String assetId, String principalId) {
         return assetRepository.findByAssetId(assetId)
                 .filter(asset -> accessPolicy.canAccess(asset, principalId))

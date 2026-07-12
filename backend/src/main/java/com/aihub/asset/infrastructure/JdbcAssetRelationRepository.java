@@ -67,6 +67,23 @@ public class JdbcAssetRelationRepository implements AssetRelationRepository {
                                 : relation.createdAt().atOffset(ZoneOffset.UTC)));
     }
 
+    @Override
+    public java.util.Optional<AssetRelation> findByRelationId(String relationId) {
+        return jdbcTemplate.query(
+                        "SELECT " + SELECT_COLUMNS + " FROM asset_relation WHERE relation_id = :relationId",
+                        new MapSqlParameterSource("relationId", relationId),
+                        this::mapRelation)
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public int deleteByRelationId(String relationId) {
+        return jdbcTemplate.update(
+                "DELETE FROM asset_relation WHERE relation_id = :relationId",
+                new MapSqlParameterSource("relationId", relationId));
+    }
+
     private AssetRelation mapRelation(ResultSet rs, int rowNum) throws SQLException {
         OffsetDateTime createdAt = rs.getObject("created_at", OffsetDateTime.class);
         return new AssetRelation(
