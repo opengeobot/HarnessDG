@@ -1,0 +1,13 @@
+# 统一 LF 换行（计划约定：Windows 路径/换行风险缓解）
+* text=auto eol=lf
+
+# 二进制类型不做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.gz binary
+*.parquet binary
