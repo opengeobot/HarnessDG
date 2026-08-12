@@ -8,13 +8,17 @@ import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -150,28 +154,150 @@ public class GiteaClient {
      */
     public void putFile(String org, String repo, String path, String content, String message, String branch) {
         String base64 = Base64.getEncoder().encodeToString(content.getBytes(StandardCharsets.UTF_8));
+        putFileBase64(org, repo, path, base64, message, branch);
+    }
+
+    public record PutFileResult(String commitSha, String fileSha) {}
+
+    /** 写入 base64 内容并返回提交结果（commit sha + 新 blob sha）；幂等携既有 sha 更新。 */
+    public PutFileResult putFileBase64(String org, String repo, String path, String contentBase64,
+                                       String message, String branch) {
         String existingSha = fileSha(org, repo, path);
         try {
             java.util.HashMap<String, Object> body = new java.util.HashMap<>();
             body.put("message", message);
-            body.put("content", base64);
+            body.put("content", contentBase64);
             body.put("branch", branch);
             if (existingSha != null) {
                 body.put("sha", existingSha);
-                rest.put().uri("/api/v1/repos/{org}/{repo}/contents/{path}", org, repo, path)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(body)
-                        .retrieve().toBodilessEntity();
-            } else {
-                rest.post().uri("/api/v1/repos/{org}/{repo}/contents/{path}", org, repo, path)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(body)
-                        .retrieve().toBodilessEntity();
             }
+            Map<String, Object> resp = (existingSha != null
+                    ? rest.put().uri("/api/v1/repos/{org}/{repo}/contents/{path}", org, repo, path)
+                    : rest.post().uri("/api/v1/repos/{org}/{repo}/contents/{path}", org, repo, path))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve().body(Map.class);
+            String commitSha = null;
+            String fileSha = null;
+            if (resp != null) {
+                if (resp.get("commit") instanceof Map<?, ?> commit) {
+                    Object sha = commit.get("sha");
+                    commitSha = sha == null ? null : sha.toString();
+                }
+                if (resp.get("content") instanceof Map<?, ?> contentMap) {
+                    Object sha = contentMap.get("sha");
+                    fileSha = sha == null ? null : sha.toString();
+                }
+            }
+            return new PutFileResult(commitSha, fileSha);
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             throw new GiteaException(e.getStatusCode().value(),
                     "写入 Gitea 文件失败: " + org + "/" + repo + "/" + path
                             + " status=" + e.getStatusCode() + " body=" + e.getResponseBodyAsString());
+        }
+    }
+
+    /** 幂等删除文件：不存在视为已删除返回 false；存在则提交删除 commit 返回 true。 */
+    public boolean deleteFile(String org, String repo, String path, String message, String branch) {
+        String existingSha = fileSha(org, repo, path);
+        if (existingSha == null) {
+            return false;
+        }
+        try {
+            // Gitea DeleteFile 需要 body（sha/message/branch），rest.delete() 不携带 body，改用 method()
+            rest.method(HttpMethod.DELETE)
+                    .uri("/api/v1/repos/{org}/{repo}/contents/{path}", org, repo, path)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("message", message, "sha", existingSha, "branch", branch))
+                    .retrieve().toBodilessEntity();
+            return true;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                return false;
+            }
+            throw new GiteaException(e.getStatusCode().value(),
+                    "删除 Gitea 文件失败: " + org + "/" + repo + "/" + path
+                            + " status=" + e.getStatusCode() + " body=" + e.getResponseBodyAsString());
+        }
+    }
+
+    public record GiteaBranch(String name, String headCommitSha, boolean isProtected) {}
+
+    /** 列出仓库分支（04 Artifacts listBranches）。 */
+    public List<GiteaBranch> listBranches(String org, String repo) {
+        try {
+            List<Map<String, Object>> resp = rest.get().uri("/api/v1/repos/{org}/{repo}/branches", org, repo)
+                    .retrieve().body(List.class);
+            List<GiteaBranch> out = new ArrayList<>();
+            if (resp == null) {
+                return out;
+            }
+            for (Map<String, Object> b : resp) {
+                String name = (String) b.get("name");
+                boolean isProtected = Boolean.TRUE.equals(b.get("protected"));
+                String head = null;
+                if (b.get("commit") instanceof Map<?, ?> commit) {
+                    Object id = commit.get("id");
+                    head = id == null ? null : id.toString();
+                }
+                out.add(new GiteaBranch(name, head, isProtected));
+            }
+            return out;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            throw new GiteaException(e.getStatusCode().value(), "查询 Gitea 分支列表失败: " + org + "/" + repo);
+        }
+    }
+
+    public record GiteaCommit(String sha, String message, String author, OffsetDateTime committedAt) {}
+
+    /** 分支提交历史（04 Artifacts listCommits，Gitea 侧分页）。 */
+    public List<GiteaCommit> listCommits(String org, String repo, String branch, int page, int limit) {
+        try {
+            List<Map<String, Object>> resp = rest.get()
+                    .uri("/api/v1/repos/{org}/{repo}/commits?sha={branch}&page={page}&limit={limit}",
+                            org, repo, branch, page, limit)
+                    .retrieve().body(List.class);
+            List<GiteaCommit> out = new ArrayList<>();
+            if (resp == null) {
+                return out;
+            }
+            for (Map<String, Object> c : resp) {
+                String sha = c.get("sha") == null ? null : c.get("sha").toString();
+                String message = null;
+                String author = null;
+                OffsetDateTime committedAt = null;
+                if (c.get("commit") instanceof Map<?, ?> commit) {
+                    message = commit.get("message") == null ? null : commit.get("message").toString();
+                    if (commit.get("author") instanceof Map<?, ?> a) {
+                        author = a.get("name") == null ? null : a.get("name").toString();
+                    }
+                    if (commit.get("committer") instanceof Map<?, ?> cm
+                            && cm.get("date") != null) {
+                        try {
+                            committedAt = OffsetDateTime.parse(cm.get("date").toString());
+                        } catch (Exception ignored) {
+                            // Gitea 日期格式异常时置空，不阻断列表
+                        }
+                    }
+                }
+                out.add(new GiteaCommit(sha, message, author, committedAt));
+            }
+            return out;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            throw new GiteaException(e.getStatusCode().value(), "查询 Gitea 提交历史失败: " + org + "/" + repo);
+        }
+    }
+
+    /** 读取指定 ref 的文件原始字节（05 §6.3 git 下载与预览取值）。 */
+    public byte[] rawFile(String org, String repo, String ref, String path) {
+        try {
+            return rest.get().uri("/api/v1/repos/{org}/{repo}/raw/{path}?ref={ref}", org, repo, path, ref)
+                    .retrieve().body(byte[].class);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                return null;
+            }
+            throw new GiteaException(e.getStatusCode().value(), "读取 Gitea 原始文件失败: " + path);
         }
     }
 

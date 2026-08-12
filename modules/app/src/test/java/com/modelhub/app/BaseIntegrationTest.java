@@ -45,6 +45,17 @@ public abstract class BaseIntegrationTest {
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379).withReuse(true);
 
+    /** MinIO（M2b artifact 阶段真相源）：所有 app 上下文必需（ArtifactConfiguration 无条件建 S3Client）。 */
+    static final GenericContainer<?> MINIO = new GenericContainer<>(
+            DockerImageName.parse("docker.m.daocloud.io/minio/minio:latest"))
+            .withCommand("server", "/data", "--console-address", ":9001")
+            .withEnv("MINIO_ROOT_USER", "modelhub")
+            .withEnv("MINIO_ROOT_PASSWORD", "ModelHub-Minio-1x")
+            .withExposedPorts(9000, 9001)
+            .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000)
+                    .withStartupTimeout(Duration.ofMinutes(3)))
+            .withReuse(true);
+
     static final GenericContainer<?> GITEA = new GenericContainer<>(
             DockerImageName.parse("docker.m.daocloud.io/gitea/gitea:1.24.0"))
             .withExposedPorts(3000)
@@ -62,6 +73,7 @@ public abstract class BaseIntegrationTest {
         POSTGRES.start();
         REDIS.start();
         GITEA.start();
+        MINIO.start();
         try {
             // 以运行用户 git 身份创建管理员，避免 root 写 /data 产生权限问题
             GITEA.execInContainer("sh", "-c",
@@ -115,6 +127,16 @@ public abstract class BaseIntegrationTest {
             registry.add("modelhub.catalog.provision-max-retries",
                     () -> o.get("modelhub.catalog.provision-max-retries"));
         }
+        // artifact：S3Client Bean 无条件创建，所有上下文必须携带凭据；
+        // internal 与 public 基址在测试网段同址（05 §2：预签名 URL 对测试客户端可达）
+        registry.add("modelhub.artifact.internal-endpoint",
+                () -> "http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000));
+        registry.add("modelhub.artifact.public-base-url",
+                () -> "http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000));
+        registry.add("modelhub.artifact.access-key", () -> "modelhub");
+        registry.add("modelhub.artifact.secret-key", () -> "ModelHub-Minio-1x");
+        registry.add("modelhub.artifact.bucket", () -> "artifacts");
+        registry.add("modelhub.artifact.api-base-url", () -> "http://localhost:8080");
     }
 
     protected static final ObjectMapper JSON = new ObjectMapper();

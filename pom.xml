@@ -35,6 +35,8 @@
     <archunit.version>1.3.0</archunit.version>
     <nimbus-jose-jwt.version>9.40</nimbus-jose-jwt.version>
     <logstash-logback.version>8.0</logstash-logback.version>
+    <aws-sdk.version>2.25.60</aws-sdk.version>
+    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -70,6 +72,17 @@
         <groupId>com.tngtech.archunit</groupId>
         <artifactId>archunit-junit5</artifactId>
         <version>${archunit.version}</version>
+      </dependency>
+      <!-- artifact 模块 S3 兼容客户端（MinIO）：multipart + 预签名 URL -->
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>s3</artifactId>
+        <version>${aws-sdk.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>apache-client</artifactId>
+        <version>${aws-sdk.version}</version>
       </dependency>
       <!-- 内部模块 -->
       <dependency>
@@ -124,11 +137,23 @@
   </dependencies>
 
   <build>
+    <plugins>
+      <!-- 声明后 pluginManagement 的 <parameters>true</parameters> 才对所有模块生效：
+           默认生命周期绑定使用默认配置（parameters=false），Controller 的
+           @PathVariable 未显式命名时无法反射解析参数名（Spring 6.1 已移除
+           LocalVariableTable 回退），导致 500 IllegalArgumentException -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
+      </plugin>
+    </plugins>
     <pluginManagement>
       <plugins>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
           <configuration>
             <!-- Spring MVC 参数名解析（@PathVariable/@RequestParam 未显式命名时）必须 -parameters -->
             <parameters>true</parameters>

@@ -40,9 +40,15 @@ public class SecurityConfig {
                                 "/api/v1/repositories",
                                 "/api/v1/repositories/*",
                                 "/api/v1/repositories/*/related",
+                                "/api/v1/repositories/*/branches",
+                                "/api/v1/repositories/*/commits",
+                                "/api/v1/repositories/*/files",
                                 "/api/v1/repositories/resolve/**",
                                 "/api/v1/resource-types/**",
-                                "/api/v1/metadata/options").permitAll()
+                                "/api/v1/metadata/options",
+                                "/api/v1/downloads/*/content").permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/repositories/*/files/*/download-sessions").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint((request, response, ex) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

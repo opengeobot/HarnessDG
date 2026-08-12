@@ -15,11 +15,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Outbox 投递器（05 §10.1 至少一次投递）：
- * - 轮询未投递事件，按事件类型分发到 {@link ProvisioningWorker}；
+ * - 轮询未投递事件，按事件类型分发到 {@link ProvisioningWorker} 或跨模块
+ *   {@link OutboxEventHandler}（如 artifact 上传事件）；
  * - 成功后标记 published_at；失败按指数退避重试；
  * - provisioning 失败受仓库侧重试上限约束，超限置 failed 等待管理员（05 §8）。
  * 消费端幂等由处理器保证，重复投递不产生副作用。
@@ -39,16 +42,23 @@ public class OutboxPoller {
     private final TransactionTemplate tx;
     private final ObjectMapper objectMapper;
     private final CatalogProperties props;
+    private final Map<String, OutboxEventHandler> handlers;
 
     public OutboxPoller(OutboxEventRepository outbox, RepositoryRepository repositories,
                         ProvisioningWorker worker, TransactionTemplate tx,
-                        ObjectMapper objectMapper, CatalogProperties props) {
+                        ObjectMapper objectMapper, CatalogProperties props,
+                        List<OutboxEventHandler> handlerList) {
         this.outbox = outbox;
         this.repositories = repositories;
         this.worker = worker;
         this.tx = tx;
         this.objectMapper = objectMapper;
         this.props = props;
+        Map<String, OutboxEventHandler> map = new HashMap<>();
+        for (OutboxEventHandler h : handlerList) {
+            map.put(h.eventType(), h);
+        }
+        this.handlers = Map.copyOf(map);
     }
 
     @Scheduled(fixedDelayString = "${modelhub.catalog.poll-interval-ms:2000}")
@@ -70,13 +80,22 @@ public class OutboxPoller {
                 case "RepositoryProvisionRequested" -> worker.handleProvision(payload);
                 case "RepositoryDeletionRequested" -> worker.handleDeletion(payload);
                 case "RepositoryRestoreRequested" -> worker.handleRestore(payload);
-                default -> log.warn("未知 outbox 事件类型: {}", eventType);
+                default -> dispatchToHandler(eventType, payload);
             }
             markPublished(eventId);
         } catch (Exception ex) {
             log.warn("outbox 事件处理失败 id={} type={}: {}", eventId, eventType, ex.getMessage());
             handleFailure(eventId, eventType, payloadJson, ex);
         }
+    }
+
+    private void dispatchToHandler(String eventType, JsonNode payload) throws Exception {
+        OutboxEventHandler handler = handlers.get(eventType);
+        if (handler == null) {
+            log.warn("未知 outbox 事件类型: {}", eventType);
+            return;
+        }
+        handler.handle(payload);
     }
 
     private void markPublished(Long eventId) {

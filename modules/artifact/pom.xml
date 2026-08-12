@@ -12,12 +12,49 @@
 
   <artifactId>modelhub-artifact</artifactId>
   <name>ModelHub Artifact</name>
-  <description>placeholder module</description>
+  <description>对象存储、分片上传/下载、文件版本与 Git 投影（05 章）</description>
 
   <dependencies>
     <dependency>
       <groupId>com.modelhub</groupId>
       <artifactId>modelhub-shared</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.modelhub</groupId>
+      <artifactId>modelhub-identity-access</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.modelhub</groupId>
+      <artifactId>modelhub-catalog</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+    </dependency>
+    <!-- S3 兼容客户端（MinIO）：服务端 multipart/校验 + 双端点预签名（05 §2） -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>apache-client</artifactId>
     </dependency>
   </dependencies>
 </project>
