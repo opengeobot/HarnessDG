@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: modelhub
+  datasource:
+    url: ${MODEHUB_DB_URL:jdbc:postgresql://localhost:5432/modelhub?stringtype=unspecified}
+    username: ${MODEHUB_DB_USER:modelhub}
+    password: ${MODEHUB_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  data:
+    redis:
+      host: ${MODEHUB_REDIS_HOST:localhost}
+      port: ${MODEHUB_REDIS_PORT:6379}
+      password: ${MODEHUB_REDIS_PASSWORD:}
+      timeout: 2s
+
+server:
+  port: ${MODEHUB_HTTP_PORT:8080}
+  shutdown: graceful
+
+modelhub:
+  identity:
+    jwt:
+      # 私钥 PEM 由部署环境注入；为空时启动生成临时密钥（仅限非生产，02 §6）
+      private-key-pem: ${MODEHUB_JWT_PRIVATE_KEY_PEM:}
+      kid: ${MODEHUB_JWT_KID:modelhub-1}
+      access-token-ttl-seconds: 900
+      clock-skew-seconds: 60
+    session:
+      refresh-ttl-seconds: 604800
+      replay-grace-seconds: 10
+      max-failed-attempts: 5
+    rate-limit:
+      max-attempts: ${MODEHUB_RATE_LIMIT_MAX:5}
+      window-seconds: ${MODEHUB_RATE_LIMIT_WINDOW:60}
+    # fail-closed：未配置 Origin 时 refresh/logout 一律拒绝（02 §6.1）
+    allowed-origins: ${MODEHUB_ALLOWED_ORIGINS:}
+    # 限流/审计客户端 IP 头：仅在可信反向代理后配置，默认关闭
+    client-ip-header: ${MODEHUB_CLIENT_IP_HEADER:}
+  bootstrap:
+    enabled: ${MODEHUB_BOOTSTRAP_ENABLED:false}
+    username: ${MODEHUB_BOOTSTRAP_USERNAME:}
+    password: ${MODEHUB_BOOTSTRAP_PASSWORD:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${MODEHUB_TRACE_SAMPLE:1.0}
+
+logging:
+  level:
+    root: INFO
+    com.modelhub: INFO
