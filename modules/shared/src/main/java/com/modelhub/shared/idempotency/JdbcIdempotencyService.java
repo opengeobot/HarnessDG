@@ -27,8 +27,8 @@ public class JdbcIdempotencyService {
     }
 
     public static String validateHeader(String key) {
-        if (key == null || key.isBlank() || key.length() > 128) {
-            throw ApiException.badRequest("Idempotency-Key 缺失或超过 128 字符",
+        if (key == null || key.isBlank() || key.trim().length() < 8 || key.length() > 128) {
+            throw ApiException.badRequest("Idempotency-Key 缺失或长度不在 8..128",
                     List.of(new ApiException.Detail("Idempotency-Key", "invalid_format")));
         }
         return key.trim();

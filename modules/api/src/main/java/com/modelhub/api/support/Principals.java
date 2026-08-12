@@ -18,4 +18,10 @@ public final class Principals {
         }
         return principal;
     }
+
+    /** 匿名可达端点：有效 Token 返回主体，否则 null（授权层自行区分 403/404）。 */
+    public static CurrentPrincipal optionalCurrent(HttpServletRequest request) {
+        Object p = request.getAttribute(JwtAuthFilter.PRINCIPAL_ATTR);
+        return p instanceof CurrentPrincipal principal ? principal : null;
+    }
 }

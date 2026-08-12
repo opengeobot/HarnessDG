@@ -17,16 +17,19 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * M1 集成测试基座：真实 PostgreSQL 16 + Redis 7（TST-04 禁止内存库作为集成证据）。
+ * M1/M2 集成测试基座：真实 PostgreSQL 16 + Redis 7 + Gitea（TST-04 禁止内存库作为集成证据）。
  * bootstrap 在首个上下文启用，创建 platform-root 管理员；限流阈值取默认 5/60s。
+ * Gitea 管理员凭据 modelhub/ModelHub-Root-1x，供 catalog provisioning Saga 使用。
  */
 @SpringBootTest(classes = ModelHubApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
@@ -42,17 +45,53 @@ public abstract class BaseIntegrationTest {
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379).withReuse(true);
 
+    static final GenericContainer<?> GITEA = new GenericContainer<>(
+            DockerImageName.parse("docker.m.daocloud.io/gitea/gitea:1.24.0"))
+            .withExposedPorts(3000)
+            // 首次启动默认进入 install 页面（/api/v1/version 返回 404），
+            // 必须经 GITEA__ 环境变量完成自动安装才能供等待策略与 API 调用使用
+            .withEnv("GITEA__database__DB_TYPE", "sqlite3")
+            .withEnv("GITEA__server__ROOT_URL", "http://localhost:3000/")
+            .withEnv("GITEA__security__INSTALL_LOCK", "true")
+            .withEnv("GITEA__service__DISABLE_REGISTRATION", "true")
+            .waitingFor(Wait.forHttp("/api/v1/version").forPort(3000)
+                    .withStartupTimeout(Duration.ofMinutes(3)))
+            .withReuse(true);
+
     static {
         POSTGRES.start();
         REDIS.start();
+        GITEA.start();
+        try {
+            // 以运行用户 git 身份创建管理员，避免 root 写 /data 产生权限问题
+            GITEA.execInContainer("sh", "-c",
+                    "su git -c \"gitea admin user create --username modelhub "
+                            + "--password ModelHub-Root-1x --email modelhub@example.com "
+                            + "--admin --must-change-password=false\"");
+        } catch (Exception e) {
+            throw new IllegalStateException("Gitea 管理员创建失败", e);
+        }
     }
+
+    /**
+     * 基础设施覆写钩子（故障注入等隔离上下文用）：子类在 static 块设置，
+     * 上下文 refresh 时消费一次后立即清空，防止后续新建上下文误读残留值。
+     * 背景：@TestPropertySource 内联属性经 addFirst 加入 Environment，但
+     * @DynamicPropertySource 在 refresh 期同样 addFirst 且执行更晚，优先级反而更高，
+     * 内联属性无法覆盖动态注册的数据源，只能经由本钩子从源头替换。
+     */
+    static volatile Map<String, String> infraOverrides = Map.of();
 
     @DynamicPropertySource
     static void infrastructure(DynamicPropertyRegistry registry) {
+        Map<String, String> o = infraOverrides;
+        infraOverrides = Map.of();
         registry.add("spring.datasource.url",
-                () -> POSTGRES.getJdbcUrl() + "&stringtype=unspecified");
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+                () -> o.getOrDefault("spring.datasource.url", POSTGRES.getJdbcUrl() + "&stringtype=unspecified"));
+        registry.add("spring.datasource.username",
+                () -> o.getOrDefault("spring.datasource.username", POSTGRES.getUsername()));
+        registry.add("spring.datasource.password",
+                () -> o.getOrDefault("spring.datasource.password", POSTGRES.getPassword()));
         // 审计/锁定走 REQUIRES_NEW 嵌套事务，并发请求需同时持有多个连接；默认 10 会饿死串行化
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> 30);
         registry.add("spring.data.redis.host", REDIS::getHost);
@@ -64,6 +103,18 @@ public abstract class BaseIntegrationTest {
         registry.add("modelhub.bootstrap.enabled", () -> true);
         registry.add("modelhub.bootstrap.username", () -> "platform-root");
         registry.add("modelhub.bootstrap.password", () -> "Boot-Strap-1x");
+        registry.add("modelhub.gitea.base-url",
+                () -> o.getOrDefault("modelhub.gitea.base-url",
+                        "http://" + GITEA.getHost() + ":" + GITEA.getMappedPort(3000)));
+        registry.add("modelhub.gitea.username", () -> "modelhub");
+        registry.add("modelhub.gitea.password", () -> "ModelHub-Root-1x");
+        // 加速 Outbox 收敛，避免用例等待默认 2s 轮询
+        registry.add("modelhub.catalog.poll-interval-ms",
+                () -> o.getOrDefault("modelhub.catalog.poll-interval-ms", "200"));
+        if (o.containsKey("modelhub.catalog.provision-max-retries")) {
+            registry.add("modelhub.catalog.provision-max-retries",
+                    () -> o.get("modelhub.catalog.provision-max-retries"));
+        }
     }
 
     protected static final ObjectMapper JSON = new ObjectMapper();

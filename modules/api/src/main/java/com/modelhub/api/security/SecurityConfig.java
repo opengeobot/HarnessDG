@@ -6,6 +6,7 @@ import com.modelhub.shared.web.TraceContext;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -16,7 +17,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import java.util.Map;
 
 /**
- * 安全配置：无状态 JWT；register/login/refresh/logout 与健康检查匿名可达，其余要求认证。
+ * 安全配置：无状态 JWT；register/login/refresh/logout 与健康检查匿名可达。
+ * 目录只读端点（列表/详情/resolve/resource-types/metadata options）匿名 GET 可达，
+ * 携带有效 Token 时仍会解析主体以获得个性化可见范围（02 §4/§5）。
  * refresh/logout 的 Cookie+CSRF+Origin 三匹配在 AuthController 内执行（02 §6.1）。
  */
 @Configuration
@@ -33,6 +36,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login",
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/repositories",
+                                "/api/v1/repositories/*",
+                                "/api/v1/repositories/*/related",
+                                "/api/v1/repositories/resolve/**",
+                                "/api/v1/resource-types/**",
+                                "/api/v1/metadata/options").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint((request, response, ex) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

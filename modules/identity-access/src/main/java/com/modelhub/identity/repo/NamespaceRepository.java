@@ -7,9 +7,13 @@ import java.util.Optional;
 
 public interface NamespaceRepository extends JpaRepository<NamespaceEntity, Long> {
 
+    Optional<NamespaceEntity> findByPublicId(java.util.UUID publicId);
+
     Optional<NamespaceEntity> findByUserIdAndNamespaceType(Long userId, String namespaceType);
 
     Optional<NamespaceEntity> findByOrganizationIdAndNamespaceType(Long organizationId, String namespaceType);
+
+    Optional<NamespaceEntity> findBySlugIgnoreCase(String slug);
 
     boolean existsBySlug(String slug);
 }
