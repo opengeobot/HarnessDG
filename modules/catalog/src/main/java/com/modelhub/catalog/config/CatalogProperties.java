@@ -17,10 +17,15 @@ public class CatalogProperties {
     /** 删除保留天数（05 §9.2 默认 30 天）。 */
     private int retentionDays = 30;
 
+    /** 匿名访问摘要轮换盐（03 §6.2）：未配置时运行时随机生成并仅告警（测试注入固定值）。 */
+    private String visitSalt;
+
     public long getPollIntervalMs() { return pollIntervalMs; }
     public void setPollIntervalMs(long pollIntervalMs) { this.pollIntervalMs = pollIntervalMs; }
     public int getProvisionMaxRetries() { return provisionMaxRetries; }
     public void setProvisionMaxRetries(int provisionMaxRetries) { this.provisionMaxRetries = provisionMaxRetries; }
     public int getRetentionDays() { return retentionDays; }
     public void setRetentionDays(int retentionDays) { this.retentionDays = retentionDays; }
+    public String getVisitSalt() { return visitSalt; }
+    public void setVisitSalt(String visitSalt) { this.visitSalt = visitSalt; }
 }

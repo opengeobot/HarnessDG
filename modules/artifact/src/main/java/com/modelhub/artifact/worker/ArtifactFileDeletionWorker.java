@@ -10,6 +10,7 @@ import com.modelhub.catalog.domain.GitBindingEntity;
 import com.modelhub.catalog.repo.GitBindingRepository;
 import com.modelhub.catalog.repo.JobRepository;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -35,17 +37,20 @@ public class ArtifactFileDeletionWorker {
     private final JobRepository jobs;
     private final GiteaClient gitea;
     private final ObjectStorageService storage;
+    private final OutboxService outbox;
     private final TransactionTemplate tx;
 
     public ArtifactFileDeletionWorker(FileVersionRepository fileVersions, ObjectBlobRepository blobs,
                                       GitBindingRepository gitBindings, JobRepository jobs,
-                                      GiteaClient gitea, ObjectStorageService storage, TransactionTemplate tx) {
+                                      GiteaClient gitea, ObjectStorageService storage,
+                                      OutboxService outbox, TransactionTemplate tx) {
         this.fileVersions = fileVersions;
         this.blobs = blobs;
         this.gitBindings = gitBindings;
         this.jobs = jobs;
         this.gitea = gitea;
         this.storage = storage;
+        this.outbox = outbox;
         this.tx = tx;
     }
 
@@ -99,6 +104,9 @@ public class ArtifactFileDeletionWorker {
             locked.setStatus("deleted");
             locked.setUpdatedAt(OffsetDateTime.now());
             fileVersions.save(locked);
+            // file_count 重算触发（06 §7.1）：与状态变更同事务
+            outbox.publish("FileCountChanged", String.valueOf(fv.getRepositoryId()), 0L,
+                    Map.of("repositoryId", fv.getRepositoryId()));
         });
         updateJob(fileId, "succeeded", null);
         log.info("文件已删除 fileId={} path={}", fileId, fv.getPath());

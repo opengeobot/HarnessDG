@@ -1,6 +1,7 @@
 package com.modelhub.api.support;
 
 import com.modelhub.api.security.JwtAuthFilter;
+import com.modelhub.identity.config.IdentityProperties;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
@@ -23,5 +24,18 @@ public final class Principals {
     public static CurrentPrincipal optionalCurrent(HttpServletRequest request) {
         Object p = request.getAttribute(JwtAuthFilter.PRINCIPAL_ATTR);
         return p instanceof CurrentPrincipal principal ? principal : null;
+    }
+
+    /** 客户端 IP（与 AuthController.clientIp 同规则）：优先信任代理配置的
+     *  client-ip-header（首个值），缺失时回退 remoteAddr。 */
+    public static String clientIp(HttpServletRequest request, IdentityProperties props) {
+        String header = props.clientIpHeader();
+        if (header != null && !header.isBlank()) {
+            String forwarded = request.getHeader(header);
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
+        }
+        return request.getRemoteAddr();
     }
 }

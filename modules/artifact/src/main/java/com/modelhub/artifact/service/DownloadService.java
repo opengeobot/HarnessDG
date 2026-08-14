@@ -14,7 +14,9 @@ import com.modelhub.catalog.access.RepositoryAccessFacade.RepoRole;
 import com.modelhub.catalog.domain.GitBindingEntity;
 import com.modelhub.catalog.repo.RepositoryRepository;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.OutboxService;
 import com.modelhub.identity.security.CurrentPrincipal;
+import com.modelhub.identity.service.AuditService;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.id.PublicIds;
@@ -23,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,11 +50,14 @@ public class DownloadService {
     private final GiteaClient gitea;
     private final BrowseService browse;
     private final ArtifactProperties props;
+    private final OutboxService outbox;
+    private final AuditService audit;
 
     public DownloadService(RepositoryAccessFacade access, RepositoryRepository repositories,
                            FileVersionRepository fileVersions, ObjectBlobRepository blobs,
                            DownloadSessionRepository downloadSessions, ObjectStorageService storage,
-                           GiteaClient gitea, BrowseService browse, ArtifactProperties props) {
+                           GiteaClient gitea, BrowseService browse, ArtifactProperties props,
+                           OutboxService outbox, AuditService audit) {
         this.access = access;
         this.repositories = repositories;
         this.fileVersions = fileVersions;
@@ -61,6 +67,8 @@ public class DownloadService {
         this.gitea = gitea;
         this.browse = browse;
         this.props = props;
+        this.outbox = outbox;
+        this.audit = audit;
     }
 
     @Transactional
@@ -104,6 +112,14 @@ public class DownloadService {
         ds.setIssuedAt(now);
         ds.setExpiresAt(expires);
         downloadSessions.save(ds);
+        // 签发即下载计数事实（03 §6.2 / 06 §7.1）：幂等键复用不重复发布，stats 由消费者重算
+        outbox.publish("DownloadSessionIssued", ctx.repo().getPublicId().toString(), null,
+                Map.of("repositoryId", ctx.repo().getId()));
+        // SEC-05：私有/受限仓库下载审计（public 匿名流量不记，避免噪音）
+        if (!"public".equals(ctx.repo().getVisibility())) {
+            audit.appendSimple(actor == null ? "anonymous" : String.valueOf(actor.userId()),
+                    "artifact.download_session", "repo:" + repoId, "success");
+        }
         return new DownloadSessionView(sessionId, fileId, url, now, expires);
     }
 

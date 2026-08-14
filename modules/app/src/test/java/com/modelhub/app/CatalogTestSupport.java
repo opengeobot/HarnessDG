@@ -152,6 +152,26 @@ public abstract class CatalogTestSupport extends BaseIntegrationTest {
         return "\"" + Long.toHexString(version + 0x5F000000L) + "\"";
     }
 
+    /** 读取详情 stats 单字段（无等待，用于断言置脏/重建后的即时值）。 */
+    protected long statsValue(String token, String repoId, String field) {
+        JsonNode stats = dataNode(repoDetail(token, repoId)).path("stats");
+        return stats.path(field).asLong(-1);
+    }
+
+    /** 轮询详情 stats 直至字段收敛（Outbox 异步重算，测试 poll-interval=200ms，超时 15s）。 */
+    protected void awaitStats(String token, String repoId, String field, long expected) throws Exception {
+        long deadline = System.currentTimeMillis() + 15_000;
+        long last = -1;
+        while (System.currentTimeMillis() < deadline) {
+            last = statsValue(token, repoId, field);
+            if (expected == last) {
+                return;
+            }
+            Thread.sleep(300);
+        }
+        Assertions.fail("等待 stats." + field + "=" + expected + " 超时，最后值=" + last);
+    }
+
     protected static String dataOf(ResponseEntity<String> resp) {
         try {
             return JSON.readTree(resp.getBody()).path("data").toString();

@@ -12,6 +12,7 @@ import com.modelhub.artifact.service.DownloadService.DownloadSessionView;
 import com.modelhub.artifact.service.DownloadService.GitContent;
 import com.modelhub.artifact.service.FilesService;
 import com.modelhub.catalog.service.CatalogService.JobView;
+import com.modelhub.identity.config.IdentityProperties;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService.Acquired;
 import com.modelhub.shared.web.ApiEnvelope;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,14 +49,17 @@ public class ArtifactsController {
     private final FilesService files;
     private final IdempotentOps idempotent;
     private final ObjectMapper objectMapper;
+    private final IdentityProperties identityProps;
 
     public ArtifactsController(BrowseService browse, DownloadService downloads, FilesService files,
-                               IdempotentOps idempotent, ObjectMapper objectMapper) {
+                               IdempotentOps idempotent, ObjectMapper objectMapper,
+                               IdentityProperties identityProps) {
         this.browse = browse;
         this.downloads = downloads;
         this.files = files;
         this.idempotent = idempotent;
         this.objectMapper = objectMapper;
+        this.identityProps = identityProps;
     }
 
     @GetMapping("/api/v1/repositories/{repoId}/branches")
@@ -90,7 +94,7 @@ public class ArtifactsController {
                                                                   @RequestParam(required = false) Integer limit,
                                                                   HttpServletRequest request) {
         FilePageData data = browse.listFiles(Principals.optionalCurrent(request), repoId,
-                branch, pathPrefix, cursor, limit(limit));
+                branch, pathPrefix, cursor, limit(limit), Principals.clientIp(request, identityProps));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("resolvedCommitSha", data.resolvedCommitSha());
         body.put("nextCursor", data.nextCursor());

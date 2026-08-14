@@ -8,6 +8,7 @@ import com.modelhub.catalog.access.RepositoryAccessFacade.RepoRole;
 import com.modelhub.catalog.domain.GitBindingEntity;
 import com.modelhub.catalog.repo.GitBindingRepository;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.VisitRecorder;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
@@ -45,13 +46,15 @@ public class BrowseService {
     private final GitBindingRepository gitBindings;
     private final FileVersionRepository fileVersions;
     private final GiteaClient gitea;
+    private final VisitRecorder visitRecorder;
 
     public BrowseService(RepositoryAccessFacade access, GitBindingRepository gitBindings,
-                         FileVersionRepository fileVersions, GiteaClient gitea) {
+                         FileVersionRepository fileVersions, GiteaClient gitea, VisitRecorder visitRecorder) {
         this.access = access;
         this.gitBindings = gitBindings;
         this.fileVersions = fileVersions;
         this.gitea = gitea;
+        this.visitRecorder = visitRecorder;
     }
 
     public BranchListData listBranches(CurrentPrincipal actor, UUID repoId, String cursor, int limit) {
@@ -85,10 +88,12 @@ public class BrowseService {
         return new CommitPageData(items, next);
     }
 
-    /** 文件清单：PG file_versions 为真相源；ETag 用 resolvedCommitSha（04 FilePageEnvelope）。 */
+    /** 文件清单：PG file_versions 为真相源；ETag 用 resolvedCommitSha（04 FilePageEnvelope）。
+     *  授权成功后投递 visit（06 §7.2）。 */
     public FilePageData listFiles(CurrentPrincipal actor, UUID repoId, String branch, String pathPrefix,
-                                  String cursor, int limit) {
+                                  String cursor, int limit, String requestIp) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.READ);
+        visitRecorder.record(actor, ctx.repo().getId(), requestIp);
         GitBindingEntity binding = requireBinding(ctx.repo().getId());
         String target = branch == null || branch.isBlank() ? ctx.repo().getDefaultBranch() : branch;
         String head = gitea.headCommitSha(binding.getExternalNamespace(), binding.getExternalName(), target);

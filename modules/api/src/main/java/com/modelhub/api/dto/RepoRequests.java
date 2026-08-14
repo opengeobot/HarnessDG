@@ -43,4 +43,8 @@ public final class RepoRequests {
 
     /** 契约 ApproveAccessRequestRequest：可选 grantExpiresAt。 */
     public record ApproveAccessRequestRequest(OffsetDateTime grantExpiresAt) {}
+
+    /** 契约 CreateFeedbackRequest：required [content]，1..10000（04 §5）。 */
+    public record CreateFeedbackRequest(
+            @NotBlank @Size(min = 1, max = 10000) String content) {}
 }

@@ -110,6 +110,7 @@ public class CatalogService {
     private final AuditService audit;
     private final ObjectMapper objectMapper;
     private final CatalogProperties props;
+    private final VisitRecorder visitRecorder;
 
     @PersistenceContext
     private EntityManager em;
@@ -120,7 +121,7 @@ public class CatalogService {
                           OrganizationMembershipRepository memberships, RepositoryAccessFacade access,
                           MetadataValidator metadataValidator, ProfileProjector projector,
                           OutboxService outbox, AuditService audit, ObjectMapper objectMapper,
-                          CatalogProperties props) {
+                          CatalogProperties props, VisitRecorder visitRecorder) {
         this.repositories = repositories;
         this.resourceTypes = resourceTypes;
         this.schemaVersions = schemaVersions;
@@ -136,6 +137,7 @@ public class CatalogService {
         this.audit = audit;
         this.objectMapper = objectMapper;
         this.props = props;
+        this.visitRecorder = visitRecorder;
     }
 
     // ---------- 创建（05 §8 Saga 入口） ----------
@@ -256,8 +258,10 @@ public class CatalogService {
 
     // ---------- 详情 / resolve ----------
 
-    public RepoView get(CurrentPrincipal actor, UUID repoId) {
+    /** 详情读取；授权成功后异步投递 visit（06 §7.2 请求线程不得同步写 visits）。 */
+    public RepoView get(CurrentPrincipal actor, UUID repoId, String requestIp) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.READ);
+        visitRecorder.record(actor, ctx.repo().getId(), requestIp);
         return toView(ctx.repo(), ctx.namespace().getSlug(), statsOf(ctx.repo().getId()));
     }
 
@@ -577,7 +581,8 @@ public class CatalogService {
         return PageResult.of(total, page, toViews(repos));
     }
 
-    private void appendScope(StringBuilder where, VisibleScope scope, Map<String, Object> qp) {
+    /** 列表可见范围过滤（供 InteractionService.listMine 等复用，ME-001 不泄漏私有资源）。 */
+    public void appendScope(StringBuilder where, VisibleScope scope, Map<String, Object> qp) {
         if (scope.seesAll()) {
             return;
         }
@@ -731,7 +736,8 @@ public class CatalogService {
 
     // ---------- 视图装配 ----------
 
-    private List<RepoView> toViews(List<RepositoryEntity> repos) {
+    /** 视图装配（供 InteractionService.listMine 等复用 CatalogService.toViews 的 RepoView）。 */
+    public List<RepoView> toViews(List<RepositoryEntity> repos) {
         if (repos.isEmpty()) {
             return List.of();
         }

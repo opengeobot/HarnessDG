@@ -3,6 +3,7 @@ package com.modelhub.api.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.modelhub.shared.web.ApiEnvelope;
 import com.modelhub.shared.web.TraceContext;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,6 +33,10 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
+                        // ASYNC/ERROR dispatch 放行：初始 REQUEST dispatch 已完成授权；
+                        // StreamingResponseBody 等异步响应完成后容器会以 ASYNC dispatch 重进过滤器链，
+                        // STATELESS 下无 SecurityContext 会导致二次授权失败并中断已提交的流式响应。
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/livez", "/api/v1/readyz").permitAll()
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login",
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
@@ -43,6 +48,7 @@ public class SecurityConfig {
                                 "/api/v1/repositories/*/branches",
                                 "/api/v1/repositories/*/commits",
                                 "/api/v1/repositories/*/files",
+                                "/api/v1/repositories/*/feedbacks",
                                 "/api/v1/repositories/resolve/**",
                                 "/api/v1/resource-types/**",
                                 "/api/v1/metadata/options",

@@ -2,6 +2,7 @@ package com.modelhub.api.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.modelhub.api.dto.RepoRequests.CreateFeedbackRequest;
 import com.modelhub.api.dto.RepoRequests.CreateRepositoryRequest;
 import com.modelhub.api.support.IdempotentOps;
 import com.modelhub.api.support.Principals;
@@ -10,9 +11,15 @@ import com.modelhub.catalog.service.CatalogService.CreateRepoCmd;
 import com.modelhub.catalog.service.CatalogService.JobView;
 import com.modelhub.catalog.service.CatalogService.RepoView;
 import com.modelhub.catalog.service.CatalogService.UpdateRepoCmd;
+import com.modelhub.catalog.service.InteractionService;
+import com.modelhub.catalog.service.InteractionService.FeedbackView;
+import com.modelhub.catalog.service.InteractionService.RelationshipState;
+import com.modelhub.identity.config.IdentityProperties;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService.Acquired;
+import com.modelhub.shared.paging.CursorQuery;
+import com.modelhub.shared.paging.CursorResult;
 import com.modelhub.shared.paging.PageQuery;
 import com.modelhub.shared.paging.PageResult;
 import com.modelhub.shared.web.ApiEnvelope;
@@ -40,8 +47,9 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 仓库目录端点（04 §2）：列表/resolve 匿名可达；写操作带 Idempotency-Key（04 §10）；
- * PATCH/DELETE 条件更新带 If-Match（04 §10）；DELETE/restore 返回 202 JobEnvelope。
+ * 仓库目录端点（04 §2/§5）：列表/resolve 匿名可达；写操作带 Idempotency-Key（04 §10）；
+ * PATCH/DELETE 条件更新带 If-Match（04 §10）；DELETE/restore 返回 202 JobEnvelope；
+ * likes/favorite POST/DELETE 幂等（禁止 Toggle），feedbacks cursor 分页匿名可读。
  */
 @RestController
 @RequestMapping("/api/v1/repositories")
@@ -50,14 +58,23 @@ public class RepositoriesController {
     private static final Set<String> UPDATABLE_FIELDS =
             Set.of("displayName", "description", "visibility", "gated", "metadataSchemaVersion", "metadata");
 
+    /** 契约 FeedbackPageEnvelope.data：items + nextCursor。 */
+    public record FeedbackPageData(List<FeedbackView> items, String nextCursor) {}
+
     private final CatalogService catalog;
+    private final InteractionService interactions;
     private final IdempotentOps idempotent;
     private final ObjectMapper objectMapper;
+    private final IdentityProperties identityProps;
 
-    public RepositoriesController(CatalogService catalog, IdempotentOps idempotent, ObjectMapper objectMapper) {
+    public RepositoriesController(CatalogService catalog, InteractionService interactions,
+                                  IdempotentOps idempotent, ObjectMapper objectMapper,
+                                  IdentityProperties identityProps) {
         this.catalog = catalog;
+        this.interactions = interactions;
         this.idempotent = idempotent;
         this.objectMapper = objectMapper;
+        this.identityProps = identityProps;
     }
 
     // ---------- 查询 ----------
@@ -70,7 +87,8 @@ public class RepositoriesController {
 
     @GetMapping("/{repoId}")
     public ResponseEntity<ApiEnvelope<RepoView>> get(@PathVariable UUID repoId, HttpServletRequest request) {
-        RepoView view = catalog.get(Principals.optionalCurrent(request), repoId);
+        RepoView view = catalog.get(Principals.optionalCurrent(request), repoId,
+                Principals.clientIp(request, identityProps));
         return ResponseEntity.ok().eTag(view.etag()).body(ApiEnvelope.ok(view));
     }
 
@@ -90,6 +108,49 @@ public class RepositoriesController {
                                                      HttpServletRequest request) {
         PageQuery page = PageQuery.from(params);
         return ApiEnvelope.ok(catalog.related(Principals.optionalCurrent(request), repoId, type, page));
+    }
+
+    // ---------- 互动（04 §5：POST/DELETE 幂等，禁止 Toggle） ----------
+
+    @PostMapping("/{repoId}/likes")
+    public ApiEnvelope<RelationshipState> like(@PathVariable UUID repoId, HttpServletRequest request) {
+        return ApiEnvelope.ok(interactions.like(Principals.requireCurrent(request), repoId));
+    }
+
+    @DeleteMapping("/{repoId}/likes")
+    public ResponseEntity<Void> unlike(@PathVariable UUID repoId, HttpServletRequest request) {
+        interactions.unlike(Principals.requireCurrent(request), repoId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{repoId}/favorite")
+    public ApiEnvelope<RelationshipState> favorite(@PathVariable UUID repoId, HttpServletRequest request) {
+        return ApiEnvelope.ok(interactions.favorite(Principals.requireCurrent(request), repoId));
+    }
+
+    @DeleteMapping("/{repoId}/favorite")
+    public ResponseEntity<Void> unfavorite(@PathVariable UUID repoId, HttpServletRequest request) {
+        interactions.unfavorite(Principals.requireCurrent(request), repoId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{repoId}/feedbacks")
+    public ApiEnvelope<FeedbackPageData> feedbacks(@PathVariable UUID repoId,
+                                                   @RequestParam Map<String, String> params,
+                                                   HttpServletRequest request) {
+        CursorQuery cursor = CursorQuery.from(new HashMap<>(params));
+        CursorResult<FeedbackView> result =
+                interactions.listFeedbacks(Principals.optionalCurrent(request), repoId, cursor);
+        return ApiEnvelope.ok(new FeedbackPageData(result.items(), result.nextCursor()));
+    }
+
+    @PostMapping("/{repoId}/feedbacks")
+    public ResponseEntity<ApiEnvelope<FeedbackView>> createFeedback(@PathVariable UUID repoId,
+                                                                    @Valid @RequestBody CreateFeedbackRequest body,
+                                                                    HttpServletRequest request) {
+        FeedbackView view = interactions.createFeedback(
+                Principals.requireCurrent(request), repoId, body.content());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiEnvelope.created(view));
     }
 
     // ---------- 创建（Idempotency-Key，05 §8 Saga 入口） ----------

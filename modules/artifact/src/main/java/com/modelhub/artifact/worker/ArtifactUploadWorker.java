@@ -291,6 +291,9 @@ public class ArtifactUploadWorker {
                     "fileVersionId", fv.getPublicId().toString(),
                     "repositoryId", s.getRepositoryId(),
                     "commitSha", fc.commitSha() == null ? "" : fc.commitSha()));
+            // file_count 重算触发（06 §7.1）：与发布同事务，消费者幂等重算
+            outbox.publish("FileCountChanged", s.getRepositoryId().toString(), 0L,
+                    Map.of("repositoryId", s.getRepositoryId()));
         });
         if ("git".equals(s.getContentSource())) {
             // git source 的临时 MinIO 对象进入回收（v1 直接删除，05 §6.3 第 11 步）
