@@ -11,9 +11,9 @@ public final class AuthRequests {
     private AuthRequests() {}
 
     public record RegisterRequest(
-            @NotBlank @Size(min = 3, max = 31) String username,
-            @NotBlank @Size(min = 8, max = 128) String password,
-            @Size(max = 128) String nickname) {}
+            @NotBlank @Size(min = 3, max = 64) String username,
+            @NotBlank @Size(min = 12, max = 128) String password,
+            @Size(max = 64) String nickname) {}
 
     public record LoginRequest(
             @NotBlank String username,
@@ -24,5 +24,5 @@ public final class AuthRequests {
 
     public record ChangePasswordRequest(
             @NotBlank String currentPassword,
-            @NotBlank @Size(min = 8, max = 128) String newPassword) {}
+            @NotBlank @Size(min = 12, max = 128) String newPassword) {}
 }

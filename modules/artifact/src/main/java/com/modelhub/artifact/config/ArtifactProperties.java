@@ -23,7 +23,9 @@ public class ArtifactProperties {
     /** part URL 有效期（05 §6.1 默认 15 分钟且可刷新）。 */
     private int partUrlTtlMinutes = 15;
     /** 下载 URL 有效期（07 章安全策略；private/gated 应更短）。 */
-    private int downloadUrlTtlSeconds = 900;
+    private int downloadUrlTtlSeconds = 600;
+    /** private/gated repo download URL TTL (shorter, <= 600). */
+    private int downloadUrlTtlSecondsPrivate = 300;
     /** git source 阈值：小于该字节数且为文本类的文件走 Gitea Git 对象（05 §3 部署配置）。 */
     private long gitSourceMaxBytes = 10L * 1024 * 1024;
     /** 业务 API 公网基址：git source 自建下载端点的绝对 URL 前缀。 */
@@ -49,6 +51,8 @@ public class ArtifactProperties {
     public void setPartUrlTtlMinutes(int partUrlTtlMinutes) { this.partUrlTtlMinutes = partUrlTtlMinutes; }
     public int getDownloadUrlTtlSeconds() { return downloadUrlTtlSeconds; }
     public void setDownloadUrlTtlSeconds(int downloadUrlTtlSeconds) { this.downloadUrlTtlSeconds = downloadUrlTtlSeconds; }
+    public int getDownloadUrlTtlSecondsPrivate() { return downloadUrlTtlSecondsPrivate; }
+    public void setDownloadUrlTtlSecondsPrivate(int downloadUrlTtlSecondsPrivate) { this.downloadUrlTtlSecondsPrivate = downloadUrlTtlSecondsPrivate; }
     public long getGitSourceMaxBytes() { return gitSourceMaxBytes; }
     public void setGitSourceMaxBytes(long gitSourceMaxBytes) { this.gitSourceMaxBytes = gitSourceMaxBytes; }
     public String getApiBaseUrl() { return apiBaseUrl; }

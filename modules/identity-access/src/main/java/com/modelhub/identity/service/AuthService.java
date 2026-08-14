@@ -14,6 +14,7 @@ import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.id.PublicIds;
 import com.modelhub.shared.web.ETags;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,10 +36,13 @@ public class AuthService {
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9_-]{2,30}$");
     public static final String GENERIC_LOGIN_FAILURE = "用户名或密码错误";
 
-    /** 当前用户视图（含 namespaceId 发现，03 §2.1）。 */
-    public record UserView(String publicId, String username, String nickname, String status,
-                           String namespaceId, List<String> platformRoles, long profileVersion,
-                           OffsetDateTime createdAt) {}
+    /** 当前用户视图（含 namespaceId 发现，03 §2.1）。字段名对齐 OpenAPI User schema。 */
+    public record UserView(
+            @JsonProperty("id") String publicId,
+            String username, String nickname, String status,
+            String namespaceId, List<String> platformRoles,
+            @JsonProperty("version") long profileVersion,
+            OffsetDateTime createdAt) {}
 
     /** 认证结果：user + access/refresh/csrf 凭据。 */
     public record AuthResult(UserView user, IssuedSession session) {}

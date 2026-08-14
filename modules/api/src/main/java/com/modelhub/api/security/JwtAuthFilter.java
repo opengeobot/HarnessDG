@@ -2,6 +2,7 @@ package com.modelhub.api.security;
 
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.identity.service.AuthService;
+import com.modelhub.identity.service.ApiKeyService;
 import com.modelhub.identity.service.JwtService;
 import com.nimbusds.jwt.JWTClaimsSet;
 import jakarta.servlet.FilterChain;
@@ -28,10 +29,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final AuthService authService;
+    private final ApiKeyService apiKeyService;
 
-    public JwtAuthFilter(JwtService jwtService, AuthService authService) {
+    public JwtAuthFilter(JwtService jwtService, AuthService authService, ApiKeyService apiKeyService) {
         this.jwtService = jwtService;
         this.authService = authService;
+        this.apiKeyService = apiKeyService;
     }
 
     @Override
@@ -40,7 +43,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String auth = request.getHeader("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) {
             try {
-                JWTClaimsSet claims = jwtService.verify(auth.substring(7).trim());
+                String token = auth.substring(7).trim();
+                if (token.startsWith("mhk_")) {
+                    CurrentPrincipal principal = apiKeyService.authenticate(token);
+                    if (principal != null) {
+                        request.setAttribute(PRINCIPAL_ATTR, principal);
+                        SecurityContextHolder.getContext().setAuthentication(
+                                new UsernamePasswordAuthenticationToken(principal, null, java.util.List.of()));
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                }
+                JWTClaimsSet claims = jwtService.verify(token);
                 CurrentPrincipal principal = authService.resolvePrincipal(claims);
                 request.setAttribute(PRINCIPAL_ATTR, principal);
                 List<SimpleGrantedAuthority> authorities = principal.platformRoles().stream()

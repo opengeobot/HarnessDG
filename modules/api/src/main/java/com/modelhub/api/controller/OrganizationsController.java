@@ -64,8 +64,9 @@ public class OrganizationsController {
     }
 
     @GetMapping("/{orgId}")
-    public ApiEnvelope<OrgView> get(@PathVariable UUID orgId, HttpServletRequest request) {
-        return ApiEnvelope.ok(organizationService.get(Principals.requireCurrent(request), orgId));
+    public ResponseEntity<ApiEnvelope<OrgView>> get(@PathVariable UUID orgId, HttpServletRequest request) {
+        OrgView view = organizationService.get(Principals.requireCurrent(request), orgId);
+        return ResponseEntity.ok().eTag(view.etag()).body(ApiEnvelope.ok(view));
     }
 
     @PatchMapping("/{orgId}")
@@ -74,7 +75,7 @@ public class OrganizationsController {
                                        @RequestHeader(value = "If-Match", required = false) String ifMatch,
                                        HttpServletRequest request) {
         return ApiEnvelope.ok(organizationService.update(Principals.requireCurrent(request), orgId,
-                body.name(), body.description(), ifMatch));
+                body.name(), body.status(), ifMatch));
     }
 
     @GetMapping("/{orgId}/members")
@@ -92,7 +93,7 @@ public class OrganizationsController {
                                                              @Valid @RequestBody AddMemberRequest body,
                                                              HttpServletRequest request) {
         MemberView member = organizationService.addMember(Principals.requireCurrent(request), orgId,
-                UUID.fromString(body.userId()), body.role());
+                body.userId(), body.role());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiEnvelope.created(member));
     }
 

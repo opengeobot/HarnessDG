@@ -39,6 +39,9 @@ public class OrganizationMembershipEntity {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt = OffsetDateTime.now();
 
+    @Column(nullable = false)
+    private long version = 0;
+
     public Long getId() { return id; }
     public Long getOrganizationId() { return organizationId; }
     public void setOrganizationId(Long organizationId) { this.organizationId = organizationId; }
@@ -56,4 +59,6 @@ public class OrganizationMembershipEntity {
 
     public boolean isActive() { return "active".equals(status); }
     public boolean isOwner() { return "owner".equals(role); }
+    public long getVersion() { return version; }
+    public void setVersion(long version) { this.version = version; }
 }

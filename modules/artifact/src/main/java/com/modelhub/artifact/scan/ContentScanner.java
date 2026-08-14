@@ -15,14 +15,14 @@ public interface ContentScanner {
 }
 
 /**
- * v1 默认扫描器：无外部扫描引擎时直接放行（clean, policyVersion=1）。
- * 部署可替换为真实恶意内容扫描实现；替换后异常即 fail closed。
+ * v1 默认扫描器：fail-closed — 未配置真实扫描器时拒绝发布（05 §6.3 第 7 条）。
+ * 部署时必须配置真实扫描器实现（如 ClamAV）替换此默认实现。
  */
 @Component
 class DefaultContentScanner implements ContentScanner {
 
     @Override
     public ScanResult scan(String objectKey, long sizeBytes) {
-        return new ScanResult("clean", 1);
+        throw new IllegalStateException("Content scanner not configured: fail closed");
     }
 }

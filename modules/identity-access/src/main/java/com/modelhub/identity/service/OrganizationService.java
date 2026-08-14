@@ -17,6 +17,7 @@ import com.modelhub.shared.paging.CursorResult;
 import com.modelhub.shared.paging.PageQuery;
 import com.modelhub.shared.paging.PageResult;
 import com.modelhub.shared.web.ETags;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -43,13 +44,15 @@ public class OrganizationService {
     private static final Map<String, Integer> ROLE_RANK =
             Map.of("viewer", 0, "member", 1, "admin", 2, "owner", 3);
 
-    /** 组织视图：含 namespaceId（组织 namespace 发现，03 §2.1）与 ETag。 */
-    public record OrgView(String publicId, String slug, String name, String description,
+    /** 组织视图：含 namespaceId（组织 namespace 发现，03 §2.1）与 ETag。字段名对齐 OpenAPI。 */
+    public record OrgView(@JsonProperty("id") String publicId, String slug, String name, String description,
                           String namespaceId, String status, long version, String etag,
                           OffsetDateTime createdAt) {}
 
-    public record MemberView(String userPublicId, String username, String nickname, String role,
-                             String status, OffsetDateTime joinedAt) {}
+    /** Member view: nested user + version (OpenAPI Member schema). */
+    public record MemberView(UserInfo user, String role, String status, long version, OffsetDateTime joinedAt) {
+        public record UserInfo(String id, String username, String nickname) {}
+    }
 
     private final OrganizationRepository organizations;
     private final OrganizationMembershipRepository memberships;
@@ -121,13 +124,13 @@ public class OrganizationService {
     }
 
     @Transactional
-    public OrgView update(CurrentPrincipal actor, UUID orgPublicId, String name, String description,
+    public OrgView update(CurrentPrincipal actor, UUID orgPublicId, String name, String status,
                           String ifMatch) {
         OrganizationEntity org = findOrgAndCheckMembership(orgPublicId, actor, ROLE_RANK.get("admin"));
         ETags.requireMatch(ifMatch, ETags.ofVersion(org.getVersion()), "组织");
         int updated = organizations.compareAndSwap(org.getId(), org.getVersion(),
                 name != null ? name : org.getName(),
-                description != null ? description : org.getDescription(), OffsetDateTime.now());
+                status != null ? status : org.getStatus(), OffsetDateTime.now());
         if (updated == 0) {
             throw new ApiException(ErrorCode.PRECONDITION_FAILED, "组织已被修改，请刷新后重试");
         }
@@ -182,7 +185,7 @@ public class OrganizationService {
         OrganizationEntity org = findOrgAndCheckMembership(orgPublicId, actor, ROLE_RANK.get("admin"));
         requireRoleValid(newRole);
         OrganizationMembershipEntity target = findActiveMembership(org.getId(), userPublicId);
-        ETags.requireMatch(ifMatch, ETags.ofVersion(ROLE_RANK.get(target.getRole())), "成员角色");
+        ETags.requireMatch(ifMatch, ETags.ofVersion(target.getVersion()), "成员角色");
         if ((target.isOwner() || "owner".equals(newRole))
                 && operatorRank(org, actor) < ROLE_RANK.get("owner")) {
             throw new ApiException(ErrorCode.FORBIDDEN, "仅 owner 可以授予或撤销 owner 角色");
@@ -194,6 +197,7 @@ public class OrganizationService {
             }
         }
         target.setRole(newRole);
+        target.setVersion(target.getVersion() + 1);
         target.setUpdatedAt(OffsetDateTime.now());
         memberships.save(target);
         auditService.appendSimple(actor.username(), "org.member_role_change",
@@ -269,11 +273,10 @@ public class OrganizationService {
 
     private MemberView toMemberView(OrganizationMembershipEntity m) {
         UserEntity u = users.findById(m.getUserId()).orElse(null);
-        return new MemberView(
-                u == null ? null : u.getPublicId().toString(),
-                u == null ? null : u.getUsername(),
-                u == null ? null : u.getNickname(),
-                m.getRole(), m.getStatus(), m.getCreatedAt());
+        MemberView.UserInfo userInfo = u == null ? null : new MemberView.UserInfo(
+                u.getPublicId().toString(), u.getUsername(), u.getNickname());
+        return new MemberView(userInfo, m.getRole(), m.getStatus(), m.getVersion(), m.getCreatedAt());
+    }
     }
 
     private static void requireRoleValid(String role) {

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -41,11 +42,11 @@ public class AdminController {
     }
 
     @PostMapping("/users/{userId}:unlock")
-    public ResponseEntity<ApiEnvelope<Map<String, String>>> unlock(@PathVariable("userId") UUID userId,
+    public ResponseEntity<Void> unlock(@PathVariable("userId") UUID userId,
+                                  @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                    HttpServletRequest request) {
         authService.unlockUser(Principals.requireCurrent(request), userId);
-        return ResponseEntity.ok(ApiEnvelope.ok(Map.of("userId", userId.toString(), "status", "active")));
-    }
+        return ResponseEntity.noContent().header("Idempotency-Key", idempotencyKey).build();
 
     /** 审计查询（04 §4.1）：format=json（默认）返回 cursor 分页信封。 */
     @GetMapping("/audit-logs")
@@ -60,8 +61,7 @@ public class AdminController {
         CursorQuery cursor = CursorQuery.from(params);
         CursorResult<AuditLogView> result =
                 auditQuery.query(actor, cursor, params.get("actor"), params.get("action"), params.get("resource"));
-        return ResponseEntity.ok(ApiEnvelope.ok(Map.of(
-                "items", result.items(),
+        return ResponseEntity.noContent().header("Idempotency-Key", idempotencyKey).build();
                 "nextCursor", result.nextCursor() == null ? "" : result.nextCursor())));
     }
 

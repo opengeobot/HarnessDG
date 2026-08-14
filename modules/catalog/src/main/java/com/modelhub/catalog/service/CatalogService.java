@@ -1,4 +1,4 @@
-package com.modelhub.catalog.service;
+﻿package com.modelhub.catalog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -592,7 +592,8 @@ public class CatalogService {
         }
         where.append(" AND (r.visibility = 'public' ");
         if (!scope.visibleNamespaceIds().isEmpty()) {
-            where.append(" OR r.namespace_id IN (:scopeNsIds) ");
+            // 组织 namespace 成员仅可见 public/organization 仓库，private 需显式协作者授权（02 §9）
+            where.append(" OR (r.namespace_id IN (:scopeNsIds) AND r.visibility IN ('public','organization')) ");
             qp.put("scopeNsIds", scope.visibleNamespaceIds());
         }
         if (!scope.collaboratorRepoIds().isEmpty()) {

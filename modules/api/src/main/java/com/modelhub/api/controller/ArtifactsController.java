@@ -41,7 +41,7 @@ import java.util.UUID;
 @RestController
 public class ArtifactsController {
 
-    private static final int DEFAULT_LIMIT = 20;
+    private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 100;
 
     private final BrowseService browse;
@@ -89,12 +89,13 @@ public class ArtifactsController {
     @GetMapping("/api/v1/repositories/{repoId}/files")
     public ResponseEntity<ApiEnvelope<Map<String, Object>>> files(@PathVariable UUID repoId,
                                                                   @RequestParam(required = false) String branch,
+                                                                  @RequestParam(required = false) String path,
                                                                   @RequestParam(required = false) String pathPrefix,
                                                                   @RequestParam(required = false) String cursor,
                                                                   @RequestParam(required = false) Integer limit,
                                                                   HttpServletRequest request) {
         FilePageData data = browse.listFiles(Principals.optionalCurrent(request), repoId,
-                branch, pathPrefix, cursor, limit(limit), Principals.clientIp(request, identityProps));
+                branch, path != null ? path : pathPrefix, cursor, limit(limit), Principals.clientIp(request, identityProps));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("resolvedCommitSha", data.resolvedCommitSha());
         body.put("nextCursor", data.nextCursor());
@@ -139,14 +140,14 @@ public class ArtifactsController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(objectMapper.writeValueAsString(ApiEnvelope.ok(job)));
         }
-        Acquired acq = idempotent.begin("file.delete", idempotencyKey, null);
+        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "file.delete" + "." + idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         JobView job = files.deleteFile(Principals.requireCurrent(request), repoId, fileId, ifMatch);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish("file.delete", idempotencyKey, 202, responseBody);
+        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "file.delete" + "." + idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

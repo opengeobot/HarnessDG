@@ -177,7 +177,7 @@ public class GatedAccessService {
         boolean applicant = actor.userId().equals(req.getUserId());
 
         if ("pending".equals(req.getStatus()) && applicant) {
-            req.setStatus("withdrawn");
+            req.setStatus("revoked");
         } else if ("approved".equals(req.getStatus()) && ctx.role().atLeast(RepoRole.MAINTAIN)) {
             req.setStatus("revoked");
             grants.findByRequestId(req.getId()).ifPresent(g -> {
@@ -190,7 +190,7 @@ public class GatedAccessService {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
                     "当前状态不可撤销/撤回: " + req.getStatus());
         }
-        req.setReviewedBy(applicant && "withdrawn".equals(req.getStatus()) ? null : actor.userId());
+        req.setReviewedBy(applicant && "revoked".equals(req.getStatus()) ? null : actor.userId());
         req.setUpdatedAt(now);
         requests.saveAndFlush(req);
         audit.appendSimple(String.valueOf(actor.userId()), "gated.revoke",
