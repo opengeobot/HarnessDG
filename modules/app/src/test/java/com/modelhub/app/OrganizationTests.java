@@ -41,14 +41,14 @@ class OrganizationTests extends BaseIntegrationTest {
 
     @BeforeAll
     void setupOrganization() throws Exception {
-        owner = register(unique("orgo"), "Passw0rd-x");
-        admin = register(unique("orga"), "Passw0rd-x");
-        member = register(unique("orgm"), "Passw0rd-x");
-        viewer = register(unique("orgv"), "Passw0rd-x");
-        outsider = register(unique("orgx"), "Passw0rd-x");
+        owner = register(unique("orgo"), "Passw0rd-x12");
+        admin = register(unique("orga"), "Passw0rd-x12");
+        member = register(unique("orgm"), "Passw0rd-x12");
+        viewer = register(unique("orgv"), "Passw0rd-x12");
+        outsider = register(unique("orgx"), "Passw0rd-x12");
         platformAdmin = login("platform-root", "Boot-Strap-1x");
 
-        orgId = createOrg(owner, unique("team")).path("publicId").asText();
+        orgId = createOrg(owner, unique("team")).path("id").asText();
         assertThat(addMember(owner, orgId, admin.userPublicId(), "admin").getStatusCode().value()).isEqualTo(201);
         assertThat(addMember(owner, orgId, member.userPublicId(), "member").getStatusCode().value()).isEqualTo(201);
         assertThat(addMember(owner, orgId, viewer.userPublicId(), "viewer").getStatusCode().value()).isEqualTo(201);
@@ -107,9 +107,9 @@ class OrganizationTests extends BaseIntegrationTest {
             }
             case "LIST_MEMBERS" -> rest.exchange("/api/v1/organizations/" + orgId + "/members", HttpMethod.GET,
                     new HttpEntity<>(bearer(actor.accessToken())), String.class).getStatusCode().value();
-            case "ADD_MEMBER" -> addMember(actor, orgId, register(unique("tmp"), "Passw0rd-x").userPublicId(),
+            case "ADD_MEMBER" -> addMember(actor, orgId, register(unique("tmp"), "Passw0rd-x12").userPublicId(),
                     "member").getStatusCode().value();
-            case "ADD_OWNER" -> addMember(actor, orgId, register(unique("tmpo"), "Passw0rd-x").userPublicId(),
+            case "ADD_OWNER" -> addMember(actor, orgId, register(unique("tmpo"), "Passw0rd-x12").userPublicId(),
                     "owner").getStatusCode().value();
             default -> throw new IllegalArgumentException(action);
         };
@@ -149,14 +149,14 @@ class OrganizationTests extends BaseIntegrationTest {
 
     @Test
     void only_owner_grants_or_revokes_owner_role() {
-        String tempId = register(unique("promo"), "Passw0rd-x").userPublicId();
+        String tempId = register(unique("promo"), "Passw0rd-x12").userPublicId();
         // owner 先加为 admin
         assertThat(addMember(owner, orgId, tempId, "admin").getStatusCode().value()).isEqualTo(201);
 
         // admin 不能把 member 提升为 owner
         HttpHeaders headers = bearer(admin.accessToken());
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setIfMatch(ETags.ofVersion(1)); // member rank=1
+        headers.setIfMatch(ETags.ofVersion(0)); // member 是新建 membership，version 起点=0（version 非 role rank）
         ResponseEntity<String> promote = rest.exchange(
                 "/api/v1/organizations/" + orgId + "/members/" + member.userPublicId(), HttpMethod.PATCH,
                 new HttpEntity<>(Map.of("role", "owner"), headers), String.class);
@@ -171,13 +171,13 @@ class OrganizationTests extends BaseIntegrationTest {
 
     @Test
     void last_active_owner_cannot_be_demoted_or_removed() {
-        Session soloOwner = register(unique("solo2"), "Passw0rd-x");
-        String orgSolo = createOrg(soloOwner, unique("soloorg2")).path("publicId").asText();
+        Session soloOwner = register(unique("solo2"), "Passw0rd-x12");
+        String orgSolo = createOrg(soloOwner, unique("soloorg2")).path("id").asText();
 
         // 降级最后 owner → 409
         HttpHeaders demote = bearer(soloOwner.accessToken());
         demote.setContentType(MediaType.APPLICATION_JSON);
-        demote.setIfMatch(ETags.ofVersion(3)); // owner rank=3
+        demote.setIfMatch(ETags.ofVersion(0)); // soloOwner 是新建 owner membership，version 起点=0
         ResponseEntity<String> demoted = rest.exchange(
                 "/api/v1/organizations/" + orgSolo + "/members/" + soloOwner.userPublicId(), HttpMethod.PATCH,
                 new HttpEntity<>(Map.of("role", "member"), demote), String.class);
@@ -192,7 +192,7 @@ class OrganizationTests extends BaseIntegrationTest {
 
     @Test
     void member_role_update_uses_role_rank_etag() {
-        String tempId = register(unique("etag"), "Passw0rd-x").userPublicId();
+        String tempId = register(unique("etag"), "Passw0rd-x12").userPublicId();
         assertThat(addMember(owner, orgId, tempId, "viewer").getStatusCode().value()).isEqualTo(201);
 
         HttpHeaders wrong = bearer(owner.accessToken());
@@ -214,7 +214,7 @@ class OrganizationTests extends BaseIntegrationTest {
 
     @Test
     void removed_member_can_be_reactivated() {
-        Session temp = register(unique("react"), "Passw0rd-x");
+        Session temp = register(unique("react"), "Passw0rd-x12");
         String tempId = temp.userPublicId();
         assertThat(addMember(owner, orgId, tempId, "viewer").getStatusCode().value()).isEqualTo(201);
         ResponseEntity<String> remove = rest.exchange(
@@ -235,12 +235,12 @@ class OrganizationTests extends BaseIntegrationTest {
 
     @Test
     void member_cursor_pagination_is_complete_and_distinct() throws Exception {
-        Session pagOwner = register(unique("pago"), "Passw0rd-x");
-        String pagOrg = createOrg(pagOwner, unique("pagorg")).path("publicId").asText();
+        Session pagOwner = register(unique("pago"), "Passw0rd-x12");
+        String pagOrg = createOrg(pagOwner, unique("pagorg")).path("id").asText();
         Set<String> expected = new HashSet<>();
         expected.add(pagOwner.username());
         for (int i = 0; i < 5; i++) {
-            Session u = register(unique("pagu"), "Passw0rd-x");
+            Session u = register(unique("pagu"), "Passw0rd-x12");
             expected.add(u.username());
             assertThat(addMember(pagOwner, pagOrg, u.userPublicId(), "member").getStatusCode().value())
                     .isEqualTo(201);
@@ -256,7 +256,7 @@ class OrganizationTests extends BaseIntegrationTest {
                     new HttpEntity<>(bearer(pagOwner.accessToken())), String.class);
             assertThat(resp.getStatusCode().value()).isEqualTo(200);
             JsonNode data = JSON.readTree(resp.getBody()).path("data");
-            data.path("items").forEach(n -> seen.add(n.path("username").asText()));
+            data.path("items").forEach(n -> seen.add(n.path("user").path("username").asText()));
             cursor = data.path("nextCursor").isNull() ? null : data.path("nextCursor").asText();
             assertThat(++pages).isLessThan(10);
         } while (cursor != null);

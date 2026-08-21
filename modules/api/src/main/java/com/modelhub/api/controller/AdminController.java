@@ -41,12 +41,13 @@ public class AdminController {
         this.auditQuery = auditQuery;
     }
 
-    @PostMapping("/users/{userId}:unlock")
+    @PostMapping("/users/{userId:[0-9a-fA-F-]{36}}:unlock")
     public ResponseEntity<Void> unlock(@PathVariable("userId") UUID userId,
                                   @RequestHeader("Idempotency-Key") String idempotencyKey,
                                                                    HttpServletRequest request) {
         authService.unlockUser(Principals.requireCurrent(request), userId);
         return ResponseEntity.noContent().header("Idempotency-Key", idempotencyKey).build();
+    }
 
     /** 审计查询（04 §4.1）：format=json（默认）返回 cursor 分页信封。 */
     @GetMapping("/audit-logs")
@@ -61,7 +62,8 @@ public class AdminController {
         CursorQuery cursor = CursorQuery.from(params);
         CursorResult<AuditLogView> result =
                 auditQuery.query(actor, cursor, params.get("actor"), params.get("action"), params.get("resource"));
-        return ResponseEntity.noContent().header("Idempotency-Key", idempotencyKey).build();
+        return ResponseEntity.ok(ApiEnvelope.ok(Map.of(
+                "items", result.items(),
                 "nextCursor", result.nextCursor() == null ? "" : result.nextCursor())));
     }
 

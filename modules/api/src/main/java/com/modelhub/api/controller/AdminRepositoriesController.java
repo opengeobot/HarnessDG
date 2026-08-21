@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import static com.modelhub.shared.idempotency.JdbcIdempotencyService.validateHeader;
+
 /**
  * 仓库管理面端点（04 §8，05 §8/§9.2）：仅 platform_admin；
  * retry 处理 provisioning 失败，delete 处理 failed/draft/provisioning 源状态。
@@ -41,14 +43,15 @@ public class AdminRepositoriesController {
     public ResponseEntity<String> retry(@PathVariable UUID repoId,
                                         @RequestHeader("Idempotency-Key") String idempotencyKey,
                                         HttpServletRequest request) throws Exception {
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "repository.admin_retry" + "." + idempotencyKey, null);
+        String key = validateHeader(idempotencyKey);
+        Acquired acq = idempotent.begin("repository.admin_retry:" + key, idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         JobView job = catalog.adminRetry(Principals.requireCurrent(request), repoId);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "repository.admin_retry" + "." + idempotencyKey, 202, responseBody);
+        idempotent.finish("repository.admin_retry:" + key, idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -57,14 +60,15 @@ public class AdminRepositoriesController {
     public ResponseEntity<String> delete(@PathVariable UUID repoId,
                                          @RequestHeader("Idempotency-Key") String idempotencyKey,
                                          HttpServletRequest request) throws Exception {
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "repository.admin_delete" + "." + idempotencyKey, null);
+        String key = validateHeader(idempotencyKey);
+        Acquired acq = idempotent.begin("repository.admin_delete:" + key, idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         JobView job = catalog.adminDelete(Principals.requireCurrent(request), repoId);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "repository.admin_delete" + "." + idempotencyKey, 202, responseBody);
+        idempotent.finish("repository.admin_delete:" + key, idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

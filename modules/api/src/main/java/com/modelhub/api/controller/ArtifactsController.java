@@ -140,14 +140,14 @@ public class ArtifactsController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(objectMapper.writeValueAsString(ApiEnvelope.ok(job)));
         }
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "file.delete" + "." + idempotencyKey, null);
+        Acquired acq = idempotent.begin("file.delete:" + fileId, idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         JobView job = files.deleteFile(Principals.requireCurrent(request), repoId, fileId, ifMatch);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "file.delete" + "." + idempotencyKey, 202, responseBody);
+        idempotent.finish("file.delete:" + fileId, idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

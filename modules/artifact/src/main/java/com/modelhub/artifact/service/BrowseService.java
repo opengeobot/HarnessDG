@@ -59,6 +59,7 @@ public class BrowseService {
 
     public BranchListData listBranches(CurrentPrincipal actor, UUID repoId, String cursor, int limit) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.READ);
+        requireGatedAccess(ctx);
         GitBindingEntity binding = requireBinding(ctx.repo().getId());
         List<GiteaClient.GiteaBranch> branches =
                 gitea.listBranches(binding.getExternalNamespace(), binding.getExternalName());
@@ -76,6 +77,7 @@ public class BrowseService {
     public CommitPageData listCommits(CurrentPrincipal actor, UUID repoId, String branch,
                                       String cursor, int limit) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.READ);
+        requireGatedAccess(ctx);
         GitBindingEntity binding = requireBinding(ctx.repo().getId());
         String target = branch == null || branch.isBlank() ? ctx.repo().getDefaultBranch() : branch;
         int page = Math.max(1, parseCursor(cursor) + 1);
@@ -93,6 +95,7 @@ public class BrowseService {
     public FilePageData listFiles(CurrentPrincipal actor, UUID repoId, String branch, String pathPrefix,
                                   String cursor, int limit, String requestIp) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.READ);
+        requireGatedAccess(ctx);
         visitRecorder.record(actor, ctx.repo().getId(), requestIp);
         GitBindingEntity binding = requireBinding(ctx.repo().getId());
         String target = branch == null || branch.isBlank() ? ctx.repo().getDefaultBranch() : branch;
@@ -123,6 +126,13 @@ public class BrowseService {
                     fv.getContentType(), fv.getContentSource(), fv.getCommitSha(), projectStatus(fv.getStatus())));
         }
         return new FilePageData(items, head, next);
+    }
+
+    /** gated 仓库：无有效 grant 禁止浏览（02 §4：public+gated → 文件/提交需已批准用户）。 */
+    private void requireGatedAccess(RepoContext ctx) {
+        if (ctx.gatedEnabled() && !ctx.hasActiveGrant()) {
+            throw new ApiException(ErrorCode.FORBIDDEN, "该仓库内容受 gated 策略保护，需先获得访问授权");
+        }
     }
 
     /** 解析 Gitea 绑定；未就绪返回 503（provisioning 未完成）。 */

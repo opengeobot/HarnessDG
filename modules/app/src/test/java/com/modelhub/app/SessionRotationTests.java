@@ -30,7 +30,7 @@ class SessionRotationTests extends BaseIntegrationTest {
     @Test
     @Order(1)
     void refresh_rotates_credentials() {
-        Session s = register(unique("rotate"), "Passw0rd-x");
+        Session s = register(unique("rotate"), "Passw0rd-x12");
         ResponseEntity<String> refreshed = refreshCall(s.refreshToken(), s.csrfToken(), ORIGIN, null);
         assertThat(refreshed.getStatusCode().value()).isEqualTo(200);
         Session next = parseSession(refreshed, null);
@@ -42,7 +42,7 @@ class SessionRotationTests extends BaseIntegrationTest {
     @Test
     @Order(2)
     void concurrent_refresh_within_grace_window_is_tolerated() {
-        Session s = register(unique("conc"), "Passw0rd-x");
+        Session s = register(unique("conc"), "Passw0rd-x12");
         // 同一旧 token 连续两次（并发客户端场景）：第二次在宽限窗内补发新会话，不吊销 family
         ResponseEntity<String> first = refreshCall(s.refreshToken(), s.csrfToken(), ORIGIN, null);
         ResponseEntity<String> second = refreshCall(s.refreshToken(), s.csrfToken(), ORIGIN, null);
@@ -55,7 +55,7 @@ class SessionRotationTests extends BaseIntegrationTest {
     @Test
     @Order(3)
     void refresh_requires_csrf_and_origin_match() {
-        Session s = register(unique("csrf"), "Passw0rd-x");
+        Session s = register(unique("csrf"), "Passw0rd-x12");
 
         ResponseEntity<String> badCsrf = refreshCall(s.refreshToken(), "wrong-csrf", ORIGIN, null);
         assertThat(badCsrf.getStatusCode().value()).isEqualTo(401);
@@ -77,7 +77,7 @@ class SessionRotationTests extends BaseIntegrationTest {
     @Test
     @Order(4)
     void replay_after_grace_window_revokes_entire_family() throws Exception {
-        Session s = register(unique("replay"), "Passw0rd-x");
+        Session s = register(unique("replay"), "Passw0rd-x12");
         ResponseEntity<String> rotated = refreshCall(s.refreshToken(), s.csrfToken(), ORIGIN, null);
         assertThat(rotated.getStatusCode().value()).isEqualTo(200);
         Session next = parseSession(rotated, null);
@@ -97,7 +97,7 @@ class SessionRotationTests extends BaseIntegrationTest {
     @Test
     @Order(5)
     void redis_flush_does_not_restore_revoked_sessions() throws Exception {
-        Session s = register(unique("flush"), "Passw0rd-x");
+        Session s = register(unique("flush"), "Passw0rd-x12");
         // 先正常轮换使旧会话 revoked
         assertThat(refreshCall(s.refreshToken(), s.csrfToken(), ORIGIN, null)
                 .getStatusCode().value()).isEqualTo(200);
@@ -118,8 +118,8 @@ class SessionRotationTests extends BaseIntegrationTest {
             // Redis 不可用时登录仍成功（本地保守限流接管）
             String username = unique("degrade");
             rest.postForEntity("/api/v1/auth/register",
-                    json(java.util.Map.of("username", username, "password", "Passw0rd-x")), String.class);
-            Session s = login(username, "Passw0rd-x");
+                    json(java.util.Map.of("username", username, "password", "Passw0rd-x12")), String.class);
+            Session s = login(username, "Passw0rd-x12");
             assertThat(meCall(s.accessToken()).getStatusCode().value()).isEqualTo(200);
         } finally {
             REDIS.getDockerClient().unpauseContainerCmd(REDIS.getContainerId()).exec();

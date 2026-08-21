@@ -1,4 +1,4 @@
-﻿package com.modelhub.catalog.service;
+package com.modelhub.catalog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -581,26 +581,42 @@ public class CatalogService {
         return PageResult.of(total, page, toViews(repos));
     }
 
-    /** 列表可见范围过滤（供 InteractionService.listMine 等复用，ME-001 不泄漏私有资源）。 */
-    public void appendScope(StringBuilder where, VisibleScope scope, Map<String, Object> qp) {
+    /**
+     * 列表可见范围过滤（ME-001 不泄漏私有资源）。
+     * @param includeSelfOwned 是否将当前用户自创仓库（created_by_user_id=:me）纳入可见范围。
+     *        供 /me/repositories（tab=likes/favorites/created）使用：用户自赞/收藏的
+     *        私有仓库不在 visibleNamespaceIds 中，必须按自创条件显式放行。
+     *        公共目录列表（匿名/他人视角）传 false，避免泄漏当前请求用户的私有仓库。
+     */
+    public void appendScope(StringBuilder where, VisibleScope scope, Map<String, Object> qp,
+                            boolean includeSelfOwned) {
         if (scope.seesAll()) {
             return;
         }
-        if (scope.visibleNamespaceIds().isEmpty() && scope.collaboratorRepoIds().isEmpty()) {
+        boolean hasNs = !scope.visibleNamespaceIds().isEmpty();
+        boolean hasRepo = !scope.collaboratorRepoIds().isEmpty();
+        if (!hasNs && !hasRepo && !includeSelfOwned) {
             where.append(" AND r.visibility = 'public' ");
             return;
         }
         where.append(" AND (r.visibility = 'public' ");
-        if (!scope.visibleNamespaceIds().isEmpty()) {
-            // 组织 namespace 成员仅可见 public/organization 仓库，private 需显式协作者授权（02 §9）
+        if (hasNs) {
             where.append(" OR (r.namespace_id IN (:scopeNsIds) AND r.visibility IN ('public','organization')) ");
             qp.put("scopeNsIds", scope.visibleNamespaceIds());
         }
-        if (!scope.collaboratorRepoIds().isEmpty()) {
+        if (hasRepo) {
             where.append(" OR r.id IN (:scopeRepoIds) ");
             qp.put("scopeRepoIds", scope.collaboratorRepoIds());
         }
+        if (includeSelfOwned) {
+            where.append(" OR r.created_by_user_id = :me ");
+        }
         where.append(") ");
+    }
+
+    /** 公共目录可见范围过滤（不含自创仓库，避免泄漏私有资源）。 */
+    public void appendScope(StringBuilder where, VisibleScope scope, Map<String, Object> qp) {
+        appendScope(where, scope, qp, false);
     }
 
     private void appendFilters(StringBuilder where, Map<String, Object> qp, MultiValueMap<String, String> params) {

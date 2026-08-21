@@ -192,9 +192,12 @@ class ArtifactFlowTest extends ArtifactTestSupport {
         // 匿名同样被拦
         ResponseEntity<String> anon = downloadSessionRaw(null, repoId, fileId);
         assertEquals(HttpStatus.FORBIDDEN, anon.getStatusCode());
-        // 目录浏览（匿名 GET）仍可达
+        // gated 仓库的文件清单（目录浏览）同样受 gated 策略保护：匿名/无 grant → 403（02 §4）
         ResponseEntity<String> files = filesList(null, repoId);
-        assertEquals(HttpStatus.OK, files.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, files.getStatusCode());
+        // owner 本人有 grant，可正常浏览
+        ResponseEntity<String> filesOwner = filesList(owner.accessToken(), repoId);
+        assertEquals(HttpStatus.OK, filesOwner.getStatusCode());
     }
 
     /** branches/commits 直读 Gitea 投影；匿名 GET 可达（目录只读白名单）。 */

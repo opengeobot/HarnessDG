@@ -167,7 +167,12 @@ public class GatedAccessService {
         return toView(req, null);
     }
 
-    /** 维护者撤销已批准 grant，或申请人撤回 pending 申请（契约 revoke 双语义）。 */
+    /**
+     * 维护者撤销已批准 grant（revoked）或申请人撤回 pending 申请（withdrawn）。
+     * 04 §4 规定两种语义共用同一 :revoke 端点，但状态迁移不同：
+     * - 申请人撤回自己的 pending 申请 → withdrawn（reviewed_by 留空，不是审批行为）
+     * - 维护者撤销已批准的 grant → revoked（同时吊销 grant，reviewed_by 记录维护者）
+     */
     @Transactional
     public AccessRequestView revoke(CurrentPrincipal actor, UUID repoId, UUID requestId, String ifMatch) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.NONE);
@@ -175,9 +180,10 @@ public class GatedAccessService {
         ETags.requireMatch(ifMatch, ETags.ofVersion(req.getVersion()), "访问申请");
         OffsetDateTime now = OffsetDateTime.now();
         boolean applicant = actor.userId().equals(req.getUserId());
+        boolean selfWithdraw = "pending".equals(req.getStatus()) && applicant;
 
-        if ("pending".equals(req.getStatus()) && applicant) {
-            req.setStatus("revoked");
+        if (selfWithdraw) {
+            req.setStatus("withdrawn");
         } else if ("approved".equals(req.getStatus()) && ctx.role().atLeast(RepoRole.MAINTAIN)) {
             req.setStatus("revoked");
             grants.findByRequestId(req.getId()).ifPresent(g -> {
@@ -186,14 +192,16 @@ public class GatedAccessService {
                     grants.save(g);
                 }
             });
+            req.setReviewedBy(actor.userId());
+            req.setReviewedAt(now);
         } else {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
                     "当前状态不可撤销/撤回: " + req.getStatus());
         }
-        req.setReviewedBy(applicant && "revoked".equals(req.getStatus()) ? null : actor.userId());
         req.setUpdatedAt(now);
         requests.saveAndFlush(req);
-        audit.appendSimple(String.valueOf(actor.userId()), "gated.revoke",
+        audit.appendSimple(String.valueOf(actor.userId()),
+                selfWithdraw ? "gated.withdraw" : "gated.revoke",
                 "repository:" + ctx.repo().getPublicId(), "success");
         return toView(req, null);
     }

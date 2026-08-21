@@ -2,9 +2,11 @@ package com.modelhub.catalog.access;
 
 import com.modelhub.catalog.domain.CollaboratorEntity;
 import com.modelhub.catalog.domain.GatedGrantEntity;
+import com.modelhub.catalog.domain.GatedPolicyEntity;
 import com.modelhub.catalog.domain.RepositoryEntity;
 import com.modelhub.catalog.repo.CollaboratorRepository;
 import com.modelhub.catalog.repo.GatedGrantRepository;
+import com.modelhub.catalog.repo.GatedPolicyRepository;
 import com.modelhub.catalog.repo.RepositoryRepository;
 import com.modelhub.identity.domain.NamespaceEntity;
 import com.modelhub.identity.domain.OrganizationMembershipEntity;
@@ -70,15 +72,18 @@ public class RepositoryAccessFacade {
     private final OrganizationMembershipRepository memberships;
     private final CollaboratorRepository collaborators;
     private final GatedGrantRepository grants;
+    private final GatedPolicyRepository policies;
 
     public RepositoryAccessFacade(RepositoryRepository repositories, NamespaceRepository namespaces,
                                   OrganizationMembershipRepository memberships,
-                                  CollaboratorRepository collaborators, GatedGrantRepository grants) {
+                                  CollaboratorRepository collaborators, GatedGrantRepository grants,
+                                  GatedPolicyRepository policies) {
         this.repositories = repositories;
         this.namespaces = namespaces;
         this.memberships = memberships;
         this.collaborators = collaborators;
         this.grants = grants;
+        this.policies = policies;
     }
 
     // ---------- 第 1 步：解析 ----------
@@ -259,17 +264,17 @@ public class RepositoryAccessFacade {
 
     // ---------- gated grant ----------
 
-    /** 当前主体是否持有 approved 且未过期未吊销的 grant（generation 与当前策略一致时有效）。 */
+    /** 当前主体是否持有 approved 且未过期未吊销、generation 与当前策略一致的 grant（02 §4：旧 generation 永不复活）。 */
     public boolean hasActiveGrant(RepositoryEntity repo, CurrentPrincipal principal) {
         if (principal == null || repo.getGatedPolicyId() == null) {
             return false;
         }
-        for (GatedGrantEntity g : grants.findActive(repo.getId(), principal.userId(), OffsetDateTime.now())) {
-            if (g.getRevokedAt() == null) {
-                return true;
-            }
+        GatedPolicyEntity policy = policies.findById(repo.getGatedPolicyId()).orElse(null);
+        if (policy == null || !policy.isEnabled()) {
+            return false;
         }
-        return false;
+        return !grants.findActive(repo.getId(), principal.userId(),
+                OffsetDateTime.now(), policy.getGeneration()).isEmpty();
     }
 
     // ---------- 列表可见范围 ----------

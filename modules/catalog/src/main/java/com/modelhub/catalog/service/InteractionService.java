@@ -188,7 +188,11 @@ public class InteractionService {
             default -> throw new IllegalStateException("unreachable tab: " + tab);
         }
         qp.put("me", actor.userId());
-        catalog.appendScope(where, scope, qp);
+        // includeSelfOwned=true：/me/repositories 以当前用户为主体，其自创私有仓库
+        // 不在 visibleNamespaceIds/collaboratorRepoIds 中（namespace 成员关系只包含
+        // 组织 namespace，个人 namespace 的私有仓库需按 created_by_user_id 显式可见），
+        // 否则用户自赞/收藏的私有仓库会被可见范围过滤掉（ME-001 反向缺陷）。
+        catalog.appendScope(where, scope, qp, true);
 
         long total = countMine(where.toString(), qp);
         String sql = "SELECT r.* FROM repositories r "

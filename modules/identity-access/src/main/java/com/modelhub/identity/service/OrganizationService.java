@@ -277,7 +277,6 @@ public class OrganizationService {
                 u.getPublicId().toString(), u.getUsername(), u.getNickname());
         return new MemberView(userInfo, m.getRole(), m.getStatus(), m.getVersion(), m.getCreatedAt());
     }
-    }
 
     private static void requireRoleValid(String role) {
         if (!ROLE_RANK.containsKey(role)) {

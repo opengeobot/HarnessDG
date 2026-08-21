@@ -160,7 +160,7 @@ public class RepositoriesController {
                                          @RequestHeader("Idempotency-Key") String idempotencyKey,
                                          HttpServletRequest request) throws Exception {
         JsonNode hashSource = objectMapper.valueToTree(body);
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "repository.create" + "." + idempotencyKey, hashSource);
+        Acquired acq = idempotent.begin("repository.create", idempotencyKey, hashSource);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
@@ -172,7 +172,7 @@ public class RepositoriesController {
                 metadataJson);
         RepoView view = catalog.create(Principals.requireCurrent(request), cmd);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.created(view));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "repository.create" + "." + idempotencyKey, 201, responseBody);
+        idempotent.finish("repository.create", idempotencyKey, 201, responseBody);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -231,14 +231,14 @@ public class RepositoriesController {
                                          @RequestHeader("Idempotency-Key") String idempotencyKey,
                                          @RequestHeader(value = "If-Match", required = false) String ifMatch,
                                          HttpServletRequest request) throws Exception {
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "repository.delete" + "." + idempotencyKey, null);
+        Acquired acq = idempotent.begin("repository.delete:" + repoId, idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         JobView job = catalog.delete(Principals.requireCurrent(request), repoId, ifMatch);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "repository.delete" + "." + idempotencyKey, 202, responseBody);
+        idempotent.finish("repository.delete:" + repoId, idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -247,14 +247,14 @@ public class RepositoriesController {
     public ResponseEntity<String> restore(@PathVariable UUID repoId,
                                           @RequestHeader("Idempotency-Key") String idempotencyKey,
                                           HttpServletRequest request) throws Exception {
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "repository.restore" + "." + idempotencyKey, null);
+        Acquired acq = idempotent.begin("repository.restore:" + repoId, idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         JobView job = catalog.restore(Principals.requireCurrent(request), repoId);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "repository.restore" + "." + idempotencyKey, 202, responseBody);
+        idempotent.finish("repository.restore:" + repoId, idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

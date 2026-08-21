@@ -40,7 +40,7 @@ class HealthContractTests extends BaseIntegrationTest {
 
     @Test
     void pagination_modes_are_mutually_exclusive() {
-        Session s = register(unique("paging"), "Passw0rd-x");
+        Session s = register(unique("paging"), "Passw0rd-x12");
         ResponseEntity<String> mixed = rest.exchange(
                 "/api/v1/organizations?page=1&pageSize=5&cursor=MSUzQWFi", HttpMethod.GET,
                 new HttpEntity<>(bearer(s.accessToken())), String.class);
@@ -50,7 +50,7 @@ class HealthContractTests extends BaseIntegrationTest {
 
     @Test
     void pagination_bounds_are_enforced() {
-        Session s = register(unique("bounds"), "Passw0rd-x");
+        Session s = register(unique("bounds"), "Passw0rd-x12");
 
         assertThat(status(s, "/api/v1/organizations?page=0")).isEqualTo(400);
         assertThat(status(s, "/api/v1/organizations?pageSize=101")).isEqualTo(400);
@@ -65,7 +65,7 @@ class HealthContractTests extends BaseIntegrationTest {
 
     @Test
     void success_and_error_bodies_carry_trace_id() throws Exception {
-        Session s = register(unique("trace"), "Passw0rd-x");
+        Session s = register(unique("trace"), "Passw0rd-x12");
         ResponseEntity<String> ok = meCall(s.accessToken());
         assertThat(JSON.readTree(ok.getBody()).path("traceId").asText()).isNotBlank();
 

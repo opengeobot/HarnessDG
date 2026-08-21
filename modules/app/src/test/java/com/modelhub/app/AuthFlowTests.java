@@ -24,7 +24,7 @@ class AuthFlowTests extends BaseIntegrationTest {
         HttpHeaders headers = ipHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> resp = rest.postForEntity("/api/v1/auth/register",
-                new HttpEntity<>(Map.of("username", username, "password", "Passw0rd-x"), headers),
+                new HttpEntity<>(Map.of("username", username, "password", "Passw0rd-x12"), headers),
                 String.class);
 
         assertThat(resp.getStatusCode().value()).isEqualTo(201);
@@ -49,11 +49,11 @@ class AuthFlowTests extends BaseIntegrationTest {
     @Test
     void register_duplicate_username_conflicts_case_insensitively() {
         String username = unique("bob");
-        register(username, "Passw0rd-x");
+        register(username, "Passw0rd-x12");
         HttpHeaders headers = ipHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> resp = rest.postForEntity("/api/v1/auth/register",
-                new HttpEntity<>(Map.of("username", username.toUpperCase(), "password", "Passw0rd-x"), headers),
+                new HttpEntity<>(Map.of("username", username.toUpperCase(), "password", "Passw0rd-x12"), headers),
                 String.class);
         assertThat(resp.getStatusCode().value()).isEqualTo(409);
         assertThat(errorCode(resp)).isEqualTo("CONFLICT");
@@ -64,7 +64,7 @@ class AuthFlowTests extends BaseIntegrationTest {
         HttpHeaders headers = ipHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> resp = rest.postForEntity("/api/v1/auth/register",
-                new HttpEntity<>(Map.of("username", "ab", "password", "Passw0rd-x"), headers), String.class);
+                new HttpEntity<>(Map.of("username", "ab", "password", "Passw0rd-x12"), headers), String.class);
         assertThat(resp.getStatusCode().value()).isEqualTo(422);
         assertThat(errorCode(resp)).isEqualTo("VALIDATION_FAILED");
     }
@@ -74,7 +74,7 @@ class AuthFlowTests extends BaseIntegrationTest {
         HttpHeaders headers = ipHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> resp = rest.postForEntity("/api/v1/auth/register",
-                new HttpEntity<>(Map.of("username", unique("carol"), "password", "Passw0rd-x",
+                new HttpEntity<>(Map.of("username", unique("carol"), "password", "Passw0rd-x12",
                         "evilField", "1"), headers), String.class);
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
     }
@@ -82,7 +82,7 @@ class AuthFlowTests extends BaseIntegrationTest {
     @Test
     void login_failure_never_reveals_which_part_is_wrong() {
         String username = unique("dave");
-        register(username, "Passw0rd-x");
+        register(username, "Passw0rd-x12");
 
         HttpHeaders headers = ipHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -102,7 +102,7 @@ class AuthFlowTests extends BaseIntegrationTest {
     void me_requires_auth_and_supports_etag_conditional_update() throws Exception {
         assertThat(meCall(null).getStatusCode().value()).isEqualTo(401);
 
-        Session s = register(unique("erin"), "Passw0rd-x");
+        Session s = register(unique("erin"), "Passw0rd-x12");
         ResponseEntity<String> me = meCall(s.accessToken());
         assertThat(me.getStatusCode().value()).isEqualTo(200);
         String etag = me.getHeaders().getETag();
@@ -137,7 +137,7 @@ class AuthFlowTests extends BaseIntegrationTest {
 
     @Test
     void logout_immediately_invalidates_refresh_session() {
-        Session s = register(unique("frank"), "Passw0rd-x");
+        Session s = register(unique("frank"), "Passw0rd-x12");
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("Cookie", "mh_refresh=" + s.refreshToken());
@@ -154,7 +154,7 @@ class AuthFlowTests extends BaseIntegrationTest {
 
     @Test
     void logout_requires_origin_and_csrf_triple_match() {
-        Session s = register(unique("gina"), "Passw0rd-x");
+        Session s = register(unique("gina"), "Passw0rd-x12");
 
         HttpHeaders evilOrigin = new HttpHeaders();
         evilOrigin.add("Cookie", "mh_refresh=" + s.refreshToken());
@@ -176,13 +176,13 @@ class AuthFlowTests extends BaseIntegrationTest {
 
     @Test
     void change_password_revokes_all_sessions_and_bumps_auth_version() {
-        Session s = register(unique("henry"), "Passw0rd-x");
-        Session second = login(s.username(), "Passw0rd-x");
+        Session s = register(unique("henry"), "Passw0rd-x12");
+        Session second = login(s.username(), "Passw0rd-x12");
 
         HttpHeaders headers = bearer(s.accessToken());
         headers.setContentType(MediaType.APPLICATION_JSON);
         ResponseEntity<String> change = rest.exchange("/api/v1/auth/change-password", HttpMethod.POST,
-                new HttpEntity<>(Map.of("currentPassword", "Passw0rd-x", "newPassword", "NewPassw0rd-y"), headers),
+                new HttpEntity<>(Map.of("currentPassword", "Passw0rd-x12", "newPassword", "NewPassw0rd-xy"), headers),
                 String.class);
         assertThat(change.getStatusCode().value()).isEqualTo(204);
 
@@ -193,14 +193,14 @@ class AuthFlowTests extends BaseIntegrationTest {
         assertThat(refreshCall(second.refreshToken(), second.csrfToken(), ORIGIN, null)
                 .getStatusCode().value()).isEqualTo(401);
         // 新密码可登录
-        assertThat(login(s.username(), "NewPassw0rd-y").accessToken()).isNotBlank();
+        assertThat(login(s.username(), "NewPassw0rd-xy").accessToken()).isNotBlank();
     }
 
     @Test
     void logout_all_invalidates_every_session() {
         String username = unique("iris");
-        Session a = register(username, "Passw0rd-x");
-        Session b = login(username, "Passw0rd-x");
+        Session a = register(username, "Passw0rd-x12");
+        Session b = login(username, "Passw0rd-x12");
 
         ResponseEntity<String> resp = rest.exchange("/api/v1/auth/logout-all", HttpMethod.POST,
                 new HttpEntity<>(bearer(a.accessToken())), String.class);
@@ -214,7 +214,7 @@ class AuthFlowTests extends BaseIntegrationTest {
     @Test
     void locked_account_can_only_be_unlocked_by_platform_admin() throws Exception {
         String username = unique("jack");
-        String publicId = register(username, "Passw0rd-x").userPublicId();
+        String publicId = register(username, "Passw0rd-x12").userPublicId();
 
         HttpHeaders headers = ipHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -228,12 +228,13 @@ class AuthFlowTests extends BaseIntegrationTest {
 
         // 锁定后即使密码正确也拒绝
         ResponseEntity<String> locked = rest.postForEntity("/api/v1/auth/login",
-                new HttpEntity<>(Map.of("username", username, "password", "Passw0rd-x"), headers), String.class);
+                new HttpEntity<>(Map.of("username", username, "password", "Passw0rd-x12"), headers), String.class);
         assertThat(locked.getStatusCode().value()).isEqualTo(401);
 
         // 普通用户解锁 → 403
-        Session nobody = register(unique("kate"), "Passw0rd-x");
+        Session nobody = register(unique("kate"), "Passw0rd-x12");
         HttpHeaders forbidden = bearer(nobody.accessToken());
+        forbidden.add("Idempotency-Key", java.util.UUID.randomUUID().toString());
         ResponseEntity<String> denied = rest.exchange("/api/v1/admin/users/" + publicId + ":unlock",
                 HttpMethod.POST, new HttpEntity<>(forbidden), String.class);
         assertThat(denied.getStatusCode().value()).isEqualTo(403);
@@ -242,15 +243,17 @@ class AuthFlowTests extends BaseIntegrationTest {
         // bootstrap platform_admin 解锁 → 200
         Session admin = login("platform-root", "Boot-Strap-1x");
         HttpHeaders ok = bearer(admin.accessToken());
+        ok.add("Idempotency-Key", java.util.UUID.randomUUID().toString());
         ResponseEntity<String> unlock = rest.exchange("/api/v1/admin/users/" + publicId + ":unlock",
                 HttpMethod.POST, new HttpEntity<>(ok), String.class);
-        assertThat(unlock.getStatusCode().value()).isEqualTo(200);
+        assertThat(unlock.getStatusCode().value()).isEqualTo(204);
 
         waitNextRateLimitWindow();
-        assertThat(login(username, "Passw0rd-x").accessToken()).isNotBlank();
+        assertThat(login(username, "Passw0rd-x12").accessToken()).isNotBlank();
 
         // 不存在的用户 → 404
         HttpHeaders notFound = bearer(admin.accessToken());
+        notFound.add("Idempotency-Key", java.util.UUID.randomUUID().toString());
         ResponseEntity<String> missing = rest.exchange(
                 "/api/v1/admin/users/00000000-0000-0000-0000-000000000000:unlock",
                 HttpMethod.POST, new HttpEntity<>(notFound), String.class);

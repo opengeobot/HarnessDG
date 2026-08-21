@@ -127,7 +127,7 @@ class CatalogAuthzTest extends CatalogTestSupport {
         if (resp.getStatusCode().value() != 201) {
             throw new IllegalStateException("create org failed: " + resp.getBody());
         }
-        return dataNode(resp).path("publicId").asText();
+        return dataNode(resp).path("id").asText();
     }
 
     private ResponseEntity<String> addMember(Session actor, String orgId, String userPublicId, String role) {

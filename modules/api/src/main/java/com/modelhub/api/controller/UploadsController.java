@@ -54,7 +54,7 @@ public class UploadsController {
                                            @RequestHeader("Idempotency-Key") String idempotencyKey,
                                            HttpServletRequest request) throws Exception {
         JsonNode hashSource = objectMapper.valueToTree(body);
-        Acquired acq = idempotent.begin(Principals.requireCurrent(request).userId() + ":" + "upload.initiate" + "." + idempotencyKey, hashSource);
+        Acquired acq = idempotent.begin("upload.initiate", idempotencyKey, hashSource);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
@@ -64,7 +64,7 @@ public class UploadsController {
                         body.sha256(), body.contentType()),
                 idempotencyKey);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.created(view));
-        idempotent.finish(Principals.requireCurrent(request).userId() + ":" + "upload.initiate" + "." + idempotencyKey, 201, responseBody);
+        idempotent.finish("upload.initiate", idempotencyKey, 201, responseBody);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

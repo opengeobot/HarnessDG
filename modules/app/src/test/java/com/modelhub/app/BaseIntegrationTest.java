@@ -2,11 +2,15 @@ package com.modelhub.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.modelhub.artifact.scan.ContentScanner;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -31,7 +35,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * bootstrap 在首个上下文启用，创建 platform-root 管理员；限流阈值取默认 5/60s。
  * Gitea 管理员凭据 modelhub/ModelHub-Root-1x，供 catalog provisioning Saga 使用。
  */
-@SpringBootTest(classes = ModelHubApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(classes = {ModelHubApplication.class, BaseIntegrationTest.TestContentScannerConfig.class},
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
 public abstract class BaseIntegrationTest {
 
@@ -233,9 +238,12 @@ public abstract class BaseIntegrationTest {
         try {
             JsonNode data = JSON.readTree(resp.getBody()).path("data");
             String refresh = cookieValue(resp.getHeaders().get("Set-Cookie"), "mh_refresh");
+            // 注意：UserView 的 publicId 字段用 @JsonProperty("id") 序列化，
+            // 故用户 publicId 在响应里是 user.id（非 user.publicId），取错会得到空串导致
+            // /admin/users/{publicId} 路由失配（publicId 为空 → NoResourceFoundException 500）。
             return new Session(data.path("accessToken").asText(), refresh,
                     data.path("csrfToken").asText(), data.path("user").path("username").asText(),
-                    data.path("user").path("publicId").asText());
+                    data.path("user").path("id").asText());
         } catch (Exception e) {
             throw new IllegalStateException("parse session failed: " + resp.getBody(), e);
         }
@@ -263,5 +271,21 @@ public abstract class BaseIntegrationTest {
         long now = System.currentTimeMillis() / 1000;
         long sleep = (5 - now % 5) * 1000 + 200;
         Thread.sleep(sleep);
+    }
+
+    /**
+     * 集成测试用内容扫描器：固定返回 clean，让上传状态机扫过 scanning 阶段（05 §6.3）。
+     * 生产环境 DefaultContentScanner 为 fail-closed（未配置真实扫描器即拒绝发布），
+     * 若测试沿用它会抛异常触发 Job 无限重试，导致上传永远停在 scanning 态而超时。
+     * 真实扫描（ClamAV 等）的 rejected/error 分支由 artifact 模块单元测试覆盖，
+     * 集成测试关注的是上传/发布/下载链路本身，故此处以 clean 直通。
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class TestContentScannerConfig {
+        @Bean
+        @Primary
+        ContentScanner testContentScanner() {
+            return (objectKey, sizeBytes) -> new ContentScanner.ScanResult("clean", 1);
+        }
     }
 }

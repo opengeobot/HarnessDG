@@ -100,7 +100,7 @@ class RateLimitTests extends BaseIntegrationTest {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.add("X-Test-Client-Ip", ip);
         return rest.postForEntity("/api/v1/auth/register",
-                new HttpEntity<>(Map.of("username", username, "password", "Passw0rd-x"), headers),
+                new HttpEntity<>(Map.of("username", username, "password", "Passw0rd-x12"), headers),
                 String.class);
     }
 }

@@ -38,7 +38,7 @@ public abstract class CatalogTestSupport extends BaseIntegrationTest {
     protected RepositoryRepository repositoryRepo;
 
     protected Session newUser(String prefix) {
-        return register(unique(prefix), "Passw0rd-9x");
+        return register(unique(prefix), "Passw0rd-9x1");
     }
 
     /** 注册用户即拥有同名个人 namespace（阶段 1 语义）。 */
