@@ -298,7 +298,7 @@ export const api = {
     }),
 
   // Resource Types & Metadata
-  resourceTypes: () => rawRequest<ResourceType[]>('/resource-types', {}),
+  resourceTypes: () => rawRequest<{ items: ResourceType[] }>('/resource-types', {}),
   metadataOptions: () => rawRequest<MetadataOptions>('/metadata/options', {}),
 
   // Organizations

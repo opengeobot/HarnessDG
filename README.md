@@ -31,3 +31,15 @@ mvn verify          # 单元 + 集成测试（Testcontainers：PostgreSQL/Redis/
 ```
 
 环境要求：JDK 21、Maven 3.9+、Docker、Node ≥ 20。
+
+## 部署
+
+`deploy/` 提供 Docker Compose 一键部署（PostgreSQL 16 + Redis 7 + MinIO + Gitea 1.24 + app + Nginx 唯一业务入口），详见 `deploy/README.md`：
+
+```powershell
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+- API 入口：`http://localhost:8081/api/v1/...`；MinIO 控制台 `:9001`；Gitea `:3000`。
+- FILE-002 自检（预签名对象 URL 对客户端可达）：`deploy/presign-selfcheck.ps1` / `presign-selfcheck.sh`。
+- 凭据/端点覆盖：复制 `deploy/.env.example` 为 `deploy/.env`。

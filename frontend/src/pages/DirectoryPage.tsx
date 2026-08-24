@@ -20,7 +20,7 @@ export default function DirectoryPage() {
   // 资源类型（下拉筛选）
   const [typeKeys, setTypeKeys] = useState<string[]>([]);
   useEffect(() => {
-    api.resourceTypes().then((ts) => setTypeKeys(ts.map((t) => t.typeKey))).catch(() => {});
+    api.resourceTypes().then((res) => setTypeKeys(res.items.map((t) => t.typeKey))).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
