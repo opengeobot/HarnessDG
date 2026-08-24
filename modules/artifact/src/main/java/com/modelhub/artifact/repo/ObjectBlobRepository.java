@@ -10,6 +10,7 @@ public interface ObjectBlobRepository extends JpaRepository<ObjectBlobEntity, Lo
 
     Optional<ObjectBlobEntity> findByPublicId(UUID publicId);
 
-    /** 租户内 sha256 去重（05 §7）：同一 namespace 下同 hash 只保留一个 blob。 */
-    Optional<ObjectBlobEntity> findByNamespaceIdAndSha256(Long namespaceId, String sha256);
+    /** 租户内去重（05 §7 / 03 §5.4）：去重键为 (namespace, sha256, size_bytes)，同 sha 不同大小不共享 blob。 */
+    Optional<ObjectBlobEntity> findByNamespaceIdAndSha256AndSizeBytes(
+            Long namespaceId, String sha256, long sizeBytes);
 }

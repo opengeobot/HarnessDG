@@ -20,18 +20,22 @@ import com.modelhub.shared.id.PublicIds;
 import com.modelhub.shared.paging.CursorQuery;
 import com.modelhub.shared.paging.CursorResult;
 import com.modelhub.shared.web.ETags;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * gated 访问控制（02 §4、03 §7）：
- * - 申请/批准/拒绝/撤销/撤回全流程，完整保存审批历史；
+ * - 状态机 pending/approved/rejected/revoked/expired（契约 AccessRequest.status enum，
+ *   02 §4；无 withdrawn 状态——申请人撤回与维护者撤销统一落到 revoked）；
+ * - 申请/批准/拒绝/撤销全流程，完整保存审批历史；
  * - 批准建立可过期 grant；撤销/过期立即阻止签发新凭据；
+ * - {@link #expireOverdue()} 将 grant 已到期的 approved 申请收敛为 expired；
  * - generation 递增使旧 grant 永不自动复活。
  */
 @Service
@@ -93,22 +97,45 @@ public class GatedAccessService {
         return toView(req, null);
     }
 
-    /** 维护者查看申请（cursor 模式，04 §6.2）。 */
+    /**
+     * 维护者查看申请（cursor 模式，04 §6.2）：DB 层 keyset 分页，
+     * 排序 id DESC 与续读键（id < lastId）一致，并发写入下不重复、不遗漏。
+     */
     @Transactional(readOnly = true)
     public CursorResult<AccessRequestView> listForRepo(CurrentPrincipal actor, UUID repoId, CursorQuery cursor) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.MAINTAIN);
-        List<GatedRequestEntity> all = requests.findByRepositoryIdOrderByCreatedAtDesc(ctx.repo().getId());
-        return page(all, cursor);
+        Pageable pageable = PageRequest.of(0, cursor.limit() + 1);
+        List<GatedRequestEntity> rows = cursor.lastKey() == Long.MIN_VALUE
+                ? requests.findByRepositoryIdOrderByIdDesc(ctx.repo().getId(), pageable)
+                : requests.findByRepositoryIdAndIdLessThanOrderByIdDesc(
+                        ctx.repo().getId(), cursor.lastKey(), pageable);
+        return keysetPage(rows, cursor.limit());
     }
 
-    /** 申请人查看自己的申请（/me/access-requests）。 */
+    /**
+     * 申请人查看自己的申请（/me/access-requests）：同 keyset 语义 + 可选 status 过滤。
+     * 有/无 status 走不同查询：PostgreSQL 无法推断 null 绑定参数类型（42P18），
+     * 不能用 (:status is null OR ...) 合并单条 JPQL。
+     */
     @Transactional(readOnly = true)
     public CursorResult<AccessRequestView> listMine(CurrentPrincipal actor, CursorQuery cursor, String status) {
-        List<GatedRequestEntity> all = requests.findByUserIdOrderByCreatedAtDesc(actor.userId());
-        if (status != null && !status.isBlank()) {
-            all = all.stream().filter(r -> status.equals(r.getStatus())).toList();
+        String statusFilter = status == null || status.isBlank() ? null : status;
+        boolean firstPage = cursor.lastKey() == Long.MIN_VALUE;
+        Long userId = actor.userId();
+        Long lastId = cursor.lastKey();
+        Pageable pageable = PageRequest.of(0, cursor.limit() + 1);
+        List<GatedRequestEntity> rows;
+        if (statusFilter == null) {
+            rows = firstPage
+                    ? requests.findByUserIdOrderByIdDesc(userId, pageable)
+                    : requests.findByUserIdAndIdLessThanOrderByIdDesc(userId, lastId, pageable);
+        } else {
+            rows = firstPage
+                    ? requests.findByUserIdAndStatusOrderByIdDesc(userId, statusFilter, pageable)
+                    : requests.findByUserIdAndIdLessThanAndStatusOrderByIdDesc(
+                            userId, lastId, statusFilter, pageable);
         }
-        return page(all, cursor);
+        return keysetPage(rows, cursor.limit());
     }
 
     @Transactional
@@ -168,23 +195,43 @@ public class GatedAccessService {
     }
 
     /**
-     * 维护者撤销已批准 grant（revoked）或申请人撤回 pending 申请（withdrawn）。
-     * 04 §4 规定两种语义共用同一 :revoke 端点，但状态迁移不同：
-     * - 申请人撤回自己的 pending 申请 → withdrawn（reviewed_by 留空，不是审批行为）
+     * 维护者撤销已批准 grant，或申请人撤回 pending 申请（04 §4）。
+     * 两种语义共用同一 :revoke 端点，契约状态统一为 revoked：
+     * - 申请人撤回自己的 pending 申请 → revoked（reviewed_by 留空，不是审批行为；
+     *   审计动作仍为 gated.withdraw 以区分主动撤销）
      * - 维护者撤销已批准的 grant → revoked（同时吊销 grant，reviewed_by 记录维护者）
+     * 终态幂等（04 §10「revoke 重复调用返回相同最终语义」）：申请已处于
+     * revoked/rejected/expired 时重复调用直接返回当前视图，不产生变更也不报错。
      */
     @Transactional
     public AccessRequestView revoke(CurrentPrincipal actor, UUID repoId, UUID requestId, String ifMatch) {
         RepoContext ctx = access.authorize(repoId, actor, RepoRole.NONE);
         GatedRequestEntity req = loadRequest(ctx.repo().getId(), requestId);
-        ETags.requireMatch(ifMatch, ETags.ofVersion(req.getVersion()), "访问申请");
         OffsetDateTime now = OffsetDateTime.now();
         boolean applicant = actor.userId().equals(req.getUserId());
-        boolean selfWithdraw = "pending".equals(req.getStatus()) && applicant;
+        boolean maintainer = ctx.role().atLeast(RepoRole.MAINTAIN);
+        String status = req.getStatus();
+
+        // 终态幂等：重复 revoke 返回相同终态。rejected/expired 与本操作无竞态，
+        // 一律幂等返回；revoked 要求申请本人（撤回重放）或维护者（撤销重放），
+        // 其余主体对他人申请无任何撤销权限。重放可携带过期 If-Match（首次调用
+        // 已推进 version），故终态判定先于条件更新校验。
+        if ("rejected".equals(status) || "expired".equals(status)
+                || ("revoked".equals(status) && (applicant || maintainer))) {
+            return toView(req, null);
+        }
+        if ("revoked".equals(status)) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
+                    "当前状态不可撤销/撤回: " + status);
+        }
+
+        ETags.requireMatch(ifMatch, ETags.ofVersion(req.getVersion()), "访问申请");
+        boolean selfWithdraw = "pending".equals(status) && applicant;
 
         if (selfWithdraw) {
-            req.setStatus("withdrawn");
-        } else if ("approved".equals(req.getStatus()) && ctx.role().atLeast(RepoRole.MAINTAIN)) {
+            // 申请人撤回：契约无 withdrawn 状态，语义归入 revoked（reviewed_by 留空）
+            req.setStatus("revoked");
+        } else if ("approved".equals(status) && maintainer) {
             req.setStatus("revoked");
             grants.findByRequestId(req.getId()).ifPresent(g -> {
                 if (g.getRevokedAt() == null) {
@@ -196,7 +243,7 @@ public class GatedAccessService {
             req.setReviewedAt(now);
         } else {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
-                    "当前状态不可撤销/撤回: " + req.getStatus());
+                    "当前状态不可撤销/撤回: " + status);
         }
         req.setUpdatedAt(now);
         requests.saveAndFlush(req);
@@ -204,6 +251,29 @@ public class GatedAccessService {
                 selfWithdraw ? "gated.withdraw" : "gated.revoke",
                 "repository:" + ctx.repo().getPublicId(), "success");
         return toView(req, null);
+    }
+
+    /**
+     * grant 到期收敛（02 §4、04 §4）：grant 已过期且未吊销的 approved 申请
+     * 转为 expired 终态。由 {@link com.modelhub.catalog.worker.GatedGrantExpiryWorker}
+     * 定时驱动；仅推进 approved 申请，重复执行幂等无副作用。expired 与 revoked
+     * 一样是终态：此后申请与 grant 均不再允许签发新凭据（hasActiveGrant 已过滤）。
+     */
+    @Transactional
+    public void expireOverdue() {
+        OffsetDateTime now = OffsetDateTime.now();
+        for (GatedGrantEntity grant : grants.findByExpiresAtBeforeAndRevokedAtIsNull(now)) {
+            if (grant.getRequestId() == null) {
+                continue;
+            }
+            requests.findById(grant.getRequestId()).ifPresent(req -> {
+                if ("approved".equals(req.getStatus())) {
+                    req.setStatus("expired");
+                    req.setUpdatedAt(now);
+                    requests.save(req);
+                }
+            });
+        }
     }
 
     private GatedRequestEntity loadRequest(Long repoId, UUID requestId) {
@@ -222,20 +292,17 @@ public class GatedAccessService {
         return policies.findById(policyId).map(GatedPolicyEntity::isEnabled).orElse(false);
     }
 
-    private CursorResult<AccessRequestView> page(List<GatedRequestEntity> all, CursorQuery cursor) {
-        // 简化：id 倒序集合按 cursor(lastKey=id) 过滤后取 limit+1 判定 nextCursor
-        List<GatedRequestEntity> filtered = new ArrayList<>();
-        for (GatedRequestEntity r : all) {
-            if (r.getId() < -cursor.lastKey() || cursor.lastKey() == Long.MIN_VALUE) {
-                filtered.add(r);
-            }
-        }
-        boolean hasMore = filtered.size() > cursor.limit();
-        List<AccessRequestView> items = filtered.stream().limit(cursor.limit())
+    /**
+     * keyset 分页装配：查询已取 limit+1 行，多出一行即 hasMore；
+     * nextCursor 为本页末条 id（CursorQuery 单键 lastKey），末页为 null。
+     */
+    private CursorResult<AccessRequestView> keysetPage(List<GatedRequestEntity> rows, int limit) {
+        boolean hasMore = rows.size() > limit;
+        List<AccessRequestView> items = rows.stream().limit(limit)
                 .map(r -> toView(r, grantExpiry(r)))
                 .toList();
         String next = hasMore && !items.isEmpty()
-                ? CursorQuery.encode(-filtered.get(cursor.limit() - 1).getId()) : null;
+                ? CursorQuery.encode(rows.get(limit - 1).getId()) : null;
         return new CursorResult<>(items, next);
     }
 

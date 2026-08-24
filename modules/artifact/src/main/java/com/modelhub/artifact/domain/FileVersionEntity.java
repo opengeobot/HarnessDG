@@ -13,7 +13,8 @@ import java.util.UUID;
 
 /**
  * 文件版本（05 §6.3）：content_source 二选一——git 只有 gitBlobSha，object 只有 objectBlobId。
- * 同一 (repo, branch, path) 至多一个 staging/active 版本（部分唯一索引 uq_file_version_head）。
+ * 同一 (repo, branch, path, commit_sha) 至多一个 staging/active 版本
+ * （部分唯一索引 uq_file_version_head，03 §5.5；跨提交覆盖由旧版本转 deleted 保证唯一）。
  */
 @Entity
 @Table(name = "file_versions")

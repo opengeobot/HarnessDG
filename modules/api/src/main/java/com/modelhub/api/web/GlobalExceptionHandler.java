@@ -11,10 +11,12 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
 
@@ -49,7 +51,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class,
-            MethodArgumentTypeMismatchException.class})
+            MissingRequestHeaderException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ErrorBody> handleBadRequest(Exception ex) {
         return ResponseEntity.badRequest()
                 .body(body(ErrorCode.VALIDATION_FAILED.name(), "请求格式错误或包含未定义字段", List.of()));
@@ -59,6 +61,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorBody> handleMethod(HttpRequestMethodNotSupportedException ex) {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
                 .body(body(ErrorCode.VALIDATION_FAILED.name(), "不支持的请求方法", List.of()));
+    }
+
+    /** 未匹配路由（含已下线的未声明端点）：404 而非落入兜底 500。 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorBody> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(body(ErrorCode.RESOURCE_NOT_FOUND.name(), "资源不存在", List.of()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

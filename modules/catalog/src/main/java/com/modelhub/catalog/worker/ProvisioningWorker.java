@@ -3,12 +3,14 @@ package com.modelhub.catalog.worker;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.modelhub.catalog.config.CatalogProperties;
 import com.modelhub.catalog.domain.GitBindingEntity;
+import com.modelhub.catalog.domain.JobEntity;
 import com.modelhub.catalog.domain.RepositoryEntity;
 import com.modelhub.catalog.repo.GitBindingRepository;
 import com.modelhub.catalog.repo.JobRepository;
 import com.modelhub.catalog.repo.RepositoryRepository;
 import com.modelhub.catalog.service.GiteaClient;
 import com.modelhub.catalog.service.GiteaClient.GiteaRepo;
+import com.modelhub.catalog.service.JobEventService;
 import com.modelhub.identity.domain.NamespaceEntity;
 import com.modelhub.identity.repo.NamespaceRepository;
 import org.slf4j.Logger;
@@ -18,6 +20,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Outbox 事件处理器（05 §8/§9.2/§10）：
@@ -39,10 +42,11 @@ public class ProvisioningWorker {
     private final GiteaClient gitea;
     private final TransactionTemplate tx;
     private final CatalogProperties props;
+    private final JobEventService jobEvents;
 
     public ProvisioningWorker(RepositoryRepository repositories, NamespaceRepository namespaces,
                               GitBindingRepository gitBindings, JobRepository jobs, GiteaClient gitea,
-                              TransactionTemplate tx, CatalogProperties props) {
+                              TransactionTemplate tx, CatalogProperties props, JobEventService jobEvents) {
         this.repositories = repositories;
         this.namespaces = namespaces;
         this.gitBindings = gitBindings;
@@ -50,6 +54,7 @@ public class ProvisioningWorker {
         this.gitea = gitea;
         this.tx = tx;
         this.props = props;
+        this.jobEvents = jobEvents;
     }
 
     // ---------- provisioning Saga（05 §8） ----------
@@ -73,6 +78,7 @@ public class ProvisioningWorker {
         if (target == null) {
             return;
         }
+        startJob(target.publicId());
 
         // 事务外执行 Gitea 幂等动作
         gitea.ensureOrganization(target.nsSlug(), target.nsDisplayName());
@@ -172,6 +178,7 @@ public class ProvisioningWorker {
         if (target == null) {
             return;
         }
+        startJob(target.publicId());
 
         // 未完成 provisioning（无 git_bindings）的仓库无需外部归档，直接 DB 收口（05 §9.2 容错）
         if (target.bound()) {
@@ -218,6 +225,7 @@ public class ProvisioningWorker {
         if (target == null) {
             return;
         }
+        startJob(target.publicId());
         boolean isPrivate = !"public".equals(payload.path("visibility").asText("public"));
         gitea.unarchiveRepository(target.nsSlug(), target.name(), isPrivate);
         tx.executeWithoutResult(s -> completeJob(target.publicId(), "repository.restore"));
@@ -225,12 +233,38 @@ public class ProvisioningWorker {
     }
 
     private void completeJob(String publicId, String preferredType) {
+        transitionJob(publicId, "succeeded");
+    }
+
+    /** Job 首次被处理时置 running 并记录事件（幂等：重复投递不重复记录）。 */
+    private void startJob(String publicId) {
+        tx.executeWithoutResult(s -> transitionJob(publicId, "running"));
+    }
+
+    /** 状态迁移 + startedAt/finishedAt 维护 + job_events 记录（与调用方同事务）。 */
+    private void transitionJob(String publicId, String toStatus) {
         jobs.findFirstByAggregateTypeAndAggregateIdAndStatusInOrderByCreatedAtDesc(
                         "repository", publicId, List.of("queued", "running"))
                 .ifPresent(job -> {
-                    job.setStatus("succeeded");
-                    job.setUpdatedAt(OffsetDateTime.now());
+                    if (toStatus.equals(job.getStatus())) {
+                        return;
+                    }
+                    OffsetDateTime now = OffsetDateTime.now();
+                    job.setStatus(toStatus);
+                    if ("running".equals(toStatus) && job.getStartedAt() == null) {
+                        job.setStartedAt(now);
+                    }
+                    if (isTerminal(toStatus) && job.getFinishedAt() == null) {
+                        job.setFinishedAt(now);
+                    }
+                    job.setUpdatedAt(now);
                     jobs.save(job);
+                    jobEvents.record(job.getId(), "status_changed", Map.of("status", toStatus));
                 });
+    }
+
+    private static boolean isTerminal(String status) {
+        return "succeeded".equals(status) || "failed".equals(status)
+                || "cancelled".equals(status) || "dead_letter".equals(status);
     }
 }

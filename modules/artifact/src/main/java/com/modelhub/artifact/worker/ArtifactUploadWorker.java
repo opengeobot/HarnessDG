@@ -18,6 +18,7 @@ import com.modelhub.catalog.repo.GitBindingRepository;
 import com.modelhub.catalog.repo.JobRepository;
 import com.modelhub.catalog.repo.RepositoryRepository;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.JobEventService;
 import com.modelhub.catalog.service.OutboxService;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
@@ -58,12 +59,13 @@ public class ArtifactUploadWorker {
     private final ContentScanner scanner;
     private final ArtifactProperties props;
     private final TransactionTemplate tx;
+    private final JobEventService jobEvents;
 
     public ArtifactUploadWorker(UploadSessionRepository sessions, FileVersionRepository fileVersions,
                                 ObjectBlobRepository blobs, RepositoryRepository repositories,
                                 GitBindingRepository gitBindings, JobRepository jobs, OutboxService outbox,
                                 GiteaClient gitea, ObjectStorageService storage, ContentScanner scanner,
-                                ArtifactProperties props, TransactionTemplate tx) {
+                                ArtifactProperties props, TransactionTemplate tx, JobEventService jobEvents) {
         this.sessions = sessions;
         this.fileVersions = fileVersions;
         this.blobs = blobs;
@@ -76,6 +78,7 @@ public class ArtifactUploadWorker {
         this.scanner = scanner;
         this.props = props;
         this.tx = tx;
+        this.jobEvents = jobEvents;
     }
 
     // ---------- UploadInitializationRequested（05 §6.1 第 6 步） ----------
@@ -213,13 +216,23 @@ public class ArtifactUploadWorker {
         if (head == null) {
             throw new IllegalStateException("分支不存在或 Gitea 不可达: " + s.getBranch());
         }
-        if (!head.equalsIgnoreCase(s.getBaseCommitSha())) {
-            markConflict(s, head);
-            return;
-        }
-
         GiteaClient.PutFileResult committed;
-        if ("git".equals(s.getContentSource())) {
+        if (!head.equalsIgnoreCase(s.getBaseCommitSha())) {
+            // 至少一次投递恢复（05 §10.2）：putFile 成功但收口事务失败后事件重试时，
+            // 分支 head 已被本会话先前的提交推进——按 EventId 标记认领既有提交，
+            // 幂等补齐收口，而不是误报分支冲突
+            String headMessage = gitea.headCommitMessage(org, repo, s.getBranch());
+            if (headMessage != null
+                    && headMessage.contains("EventId: UploadCommitRequested/" + s.getPublicId())) {
+                committed = new GiteaClient.PutFileResult(head,
+                        gitea.fileSha(org, repo, s.getPath(), head));
+                log.info("认领本会话既有提交（收口事务重试） uploadId={} commit={}",
+                        s.getPublicId(), head);
+            } else {
+                markConflict(s, head);
+                return;
+            }
+        } else if ("git".equals(s.getContentSource())) {
             // git source：从临时 staging 对象读已扫描文本写入 Gitea（05 §6.3 第 9 步）
             byte[] content = storage.getObjectBytes(s.getObjectKey());
             if (content.length > props.getGitSourceMaxBytes()) {
@@ -271,8 +284,10 @@ public class ArtifactUploadWorker {
             } else {
                 // 二选一约束：object 只有 object_blob_id，绝不保留 git_blob_sha（05 §6.3）；
                 // blob 已在扫描 clean 后创建/复用，这里直接按租户去重键定位
-                ObjectBlobEntity blob = blobs.findByNamespaceIdAndSha256(
-                        namespaceIdOf(s), locked.getVerifiedSha256()).orElseThrow();
+                // （去重键含 size_bytes，03 §5.4）
+                ObjectBlobEntity blob = blobs.findByNamespaceIdAndSha256AndSizeBytes(
+                        namespaceIdOf(s), locked.getVerifiedSha256(),
+                        locked.getSizeBytes()).orElseThrow();
                 fv.setObjectBlobId(blob.getId());
             }
             fv.setCommitSha(fc.commitSha());
@@ -377,12 +392,13 @@ public class ArtifactUploadWorker {
         log.error("上传失败 uploadId={}: {}", uploadId, error);
     }
 
-    /** object source 的 blob 创建/复用（租户内 sha256 去重，05 §7）。rejected=true 时建隔离记录。 */
+    /** object source 的 blob 创建/复用（租户内 (sha256, size_bytes) 去重，05 §7 / 03 §5.4）。
+     *  rejected=true 时建隔离记录。 */
     private ObjectBlobEntity ensureBlob(UploadSessionEntity s, boolean rejected, int policyVersion) {
         Long nsId = namespaceIdOf(s);
         String sha = s.getVerifiedSha256();
         Optional<ObjectBlobEntity> existing = sha == null
-                ? Optional.empty() : blobs.findByNamespaceIdAndSha256(nsId, sha);
+                ? Optional.empty() : blobs.findByNamespaceIdAndSha256AndSizeBytes(nsId, sha, s.getSizeBytes());
         if (existing.isPresent() && !rejected) {
             ObjectBlobEntity blob = existing.get();
             blob.setRefCount(blob.getRefCount() + 1);
@@ -431,13 +447,29 @@ public class ArtifactUploadWorker {
                     .findFirstByAggregateTypeAndAggregateIdAndStatusInOrderByCreatedAtDesc(
                             "upload", uploadId.toString(), List.of("queued", "running"))
                     .ifPresent(job -> {
+                        if (status.equals(job.getStatus())) {
+                            return;
+                        }
+                        OffsetDateTime now = OffsetDateTime.now();
                         job.setStatus(status);
                         job.setErrorMessage(error);
-                        job.setUpdatedAt(OffsetDateTime.now());
+                        if ("running".equals(status) && job.getStartedAt() == null) {
+                            job.setStartedAt(now);
+                        }
+                        if (isTerminalStatus(status) && job.getFinishedAt() == null) {
+                            job.setFinishedAt(now);
+                        }
+                        job.setUpdatedAt(now);
                         jobs.save(job);
+                        jobEvents.record(job.getId(), "status_changed", Map.of("status", status));
                     }));
         } catch (Exception e) {
             log.warn("Job 状态回写失败 uploadId={}: {}", uploadId, e.getMessage());
         }
+    }
+
+    private static boolean isTerminalStatus(String status) {
+        return "succeeded".equals(status) || "failed".equals(status)
+                || "cancelled".equals(status) || "dead_letter".equals(status);
     }
 }

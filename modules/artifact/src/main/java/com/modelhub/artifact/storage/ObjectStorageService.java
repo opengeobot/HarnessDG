@@ -4,6 +4,7 @@ import com.modelhub.artifact.config.ArtifactProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.ListPartsRequest;
@@ -247,6 +248,13 @@ public class ObjectStorageService {
     /** 读取整对象字节（仅限 git source 小文件，上限由调用方保证）。 */
     public byte[] getObjectBytes(String objectKey) {
         return s3.getObjectAsBytes(b -> b.bucket(props.getBucket()).key(objectKey)).asByteArray();
+    }
+
+    /** 写入小对象（预览采样快照等；大小上限由调用方保证）。 */
+    public void putObject(String objectKey, byte[] bytes, String contentType) {
+        s3.putObject(b -> b.bucket(props.getBucket()).key(objectKey)
+                        .contentType(contentType == null ? "application/octet-stream" : contentType),
+                RequestBody.fromBytes(bytes));
     }
 
     /** 删除对象（幂等：不存在不报错）。 */

@@ -88,19 +88,29 @@ public class DownloadService {
             throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
                     "文件当前状态不可下载: " + fv.getStatus());
         }
-        // 幂等：同 repository 同键复用既有会话（04 §10）
+        // 幂等：同 repository 同键复用既有会话（04 §10）；重放视图必须回放既有会话的文件
         if (idempotencyKey != null) {
             var existing = downloadSessions
                     .findByRepositoryIdAndIdempotencyKey(ctx.repo().getId(), idempotencyKey);
             if (existing.isPresent()) {
-                return toView(existing.get(), fileId);
+                FileVersionEntity boundFv = fileVersions.findById(existing.get().getFileVersionId())
+                        .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "文件不存在"));
+                if (!boundFv.getPublicId().equals(fileId)) {
+                    throw new ApiException(ErrorCode.CONFLICT, "Idempotency-Key 已绑定其他文件");
+                }
+                return toView(existing.get(), boundFv.getPublicId());
             }
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime expires = now.plusSeconds(props.getDownloadUrlTtlSeconds());
+        // TTL 分支（05 §11 / 07 §2 SEC-02）：public 走 downloadUrlTtlSeconds；
+        // private/organization/gated 走更短的 downloadUrlTtlSecondsPrivate（setter 已钳制 <= 600s）
+        boolean publicRepo = "public".equals(ctx.repo().getVisibility());
+        int ttlSeconds = publicRepo ? props.getDownloadUrlTtlSeconds()
+                : props.getDownloadUrlTtlSecondsPrivate();
+        OffsetDateTime expires = now.plusSeconds(ttlSeconds);
         UUID sessionId = PublicIds.next();
-        String url = resolveDownloadUrl(fv, sessionId);
+        String url = resolveDownloadUrl(fv, sessionId, ttlSeconds);
 
         DownloadSessionEntity ds = new DownloadSessionEntity();
         ds.setPublicId(sessionId);
@@ -123,8 +133,8 @@ public class DownloadService {
         return new DownloadSessionView(sessionId, fileId, url, now, expires);
     }
 
-    /** object → MinIO 预签名 GET（scan clean 校验）；git → 自建内容端点。 */
-    private String resolveDownloadUrl(FileVersionEntity fv, UUID sessionId) {
+    /** object → MinIO 预签名 GET（scan clean 校验，TTL 与会话一致）；git → 自建内容端点。 */
+    private String resolveDownloadUrl(FileVersionEntity fv, UUID sessionId, int ttlSeconds) {
         if ("object".equals(fv.getContentSource())) {
             ObjectBlobEntity blob = fv.getObjectBlobId() == null ? null
                     : blobs.findById(fv.getObjectBlobId()).orElse(null);
@@ -132,8 +142,7 @@ public class DownloadService {
                     || !"available".equals(blob.getStatus())) {
                 throw new ApiException(ErrorCode.CONTENT_REJECTED, "对象尚未通过扫描或已隔离，暂不可下载");
             }
-            return storage.presignGetObject(blob.getObjectKey(),
-                    Duration.ofSeconds(props.getDownloadUrlTtlSeconds()));
+            return storage.presignGetObject(blob.getObjectKey(), Duration.ofSeconds(ttlSeconds));
         }
         // git source：业务 API 自建内容端点（Gitea 不经公网直连），鉴权在交付时再校验
         return props.getApiBaseUrl() + "/api/v1/downloads/" + sessionId + "/content";

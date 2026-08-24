@@ -29,6 +29,7 @@ import com.modelhub.identity.service.AuditService;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.id.PublicIds;
+import com.modelhub.shared.paging.CursorQuery;
 import com.modelhub.shared.paging.PageQuery;
 import com.modelhub.shared.paging.PageResult;
 import com.modelhub.shared.web.ETags;
@@ -40,6 +41,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.MultiValueMap;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -111,6 +113,7 @@ public class CatalogService {
     private final ObjectMapper objectMapper;
     private final CatalogProperties props;
     private final VisitRecorder visitRecorder;
+    private final JobEventService jobEvents;
 
     @PersistenceContext
     private EntityManager em;
@@ -121,7 +124,8 @@ public class CatalogService {
                           OrganizationMembershipRepository memberships, RepositoryAccessFacade access,
                           MetadataValidator metadataValidator, ProfileProjector projector,
                           OutboxService outbox, AuditService audit, ObjectMapper objectMapper,
-                          CatalogProperties props, VisitRecorder visitRecorder) {
+                          CatalogProperties props, VisitRecorder visitRecorder,
+                          JobEventService jobEvents) {
         this.repositories = repositories;
         this.resourceTypes = resourceTypes;
         this.schemaVersions = schemaVersions;
@@ -138,6 +142,7 @@ public class CatalogService {
         this.objectMapper = objectMapper;
         this.props = props;
         this.visitRecorder = visitRecorder;
+        this.jobEvents = jobEvents;
     }
 
     // ---------- 创建（05 §8 Saga 入口） ----------
@@ -519,22 +524,51 @@ public class CatalogService {
         job.setCreatedBy(actor == null ? null : actor.userId());
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
-        return jobs.save(job);
+        JobEntity saved = jobs.save(job);
+        jobEvents.record(saved.getId(), "created", Map.of("status", "queued"));
+        return saved;
     }
 
-    // ---------- 列表搜索（04 §6） ----------
+    // ---------- 列表搜索（04 §6，ADR-003 双模式：page / cursor） ----------
 
+    /**
+     * 列表双模式结果（ADR-003）：page 模式（page/pageSize）填 total/page/pageSize，
+     * cursor 模式（cursor/limit）填 nextCursor（翻尽为 null）；未用模式的字段为 null。
+     */
+    public record RepoListResult(List<RepoView> items, String nextCursor, Long total,
+                                 Integer page, Integer pageSize) {
+
+        static RepoListResult ofPage(List<RepoView> items, long total, int page, int pageSize) {
+            return new RepoListResult(items, null, total, page, pageSize);
+        }
+
+        static RepoListResult ofCursor(List<RepoView> items, String nextCursor) {
+            return new RepoListResult(items, nextCursor, null, null, null);
+        }
+
+        public boolean isCursorMode() {
+            return page == null;
+        }
+    }
+
+    /**
+     * 列表搜索（04 §6）：携带 cursor/limit 参数即进入 cursor 模式（不再静默退化为
+     * page 1 size 12）；否则 page 模式行为不变。两组参数混用仍 400（PageQuery.from）。
+     */
     @Transactional(readOnly = true)
-    public PageResult<RepoView> list(CurrentPrincipal actor, MultiValueMap<String, String> params) {
-        PageQuery page = PageQuery.from(firstValueMap(params));
-        String sort = params.getFirst("sort");
-        if (sort == null || sort.isBlank()) {
-            sort = "relevance-v1";
+    public RepoListResult list(CurrentPrincipal actor, MultiValueMap<String, String> params) {
+        Map<String, String> first = firstValueMap(params);
+        boolean hasPageParams = first.containsKey("page") || first.containsKey("pageSize");
+        boolean hasCursorParams = first.containsKey("cursor") || first.containsKey("limit");
+        if (hasCursorParams) {
+            if (hasPageParams) {
+                // 混用两组分页参数：复用 PageQuery.from 的既有 400 行为（ADR-003 互斥）
+                PageQuery.from(first);
+            }
+            return listByCursor(actor, params, first);
         }
-        if (!SORT_KEYS.contains(sort)) {
-            throw ApiException.badRequest("未知 sort 值: " + sort,
-                    List.of(new ApiException.Detail("sort", "unknown_value")));
-        }
+        PageQuery page = PageQuery.from(first);
+        String sort = validatedSort(params);
 
         VisibleScope scope = access.computeVisibleScope(actor);
         StringBuilder where = new StringBuilder(" WHERE r.lifecycle_status IN ('active','archived') ");
@@ -552,7 +586,123 @@ public class CatalogService {
         query.setParameter("offset", page.offset());
         @SuppressWarnings("unchecked")
         List<RepositoryEntity> repos = query.getResultList();
-        return PageResult.of(total, page, toViews(repos));
+        return RepoListResult.ofPage(toViews(repos), total, page.page(), page.pageSize());
+    }
+
+    /**
+     * cursor 模式（ADR-003）：keyset 续读，LIMIT +1 探测 hasMore；
+     * nextCursor 编码末行 (score, updated_at, publicId)（{@link RepoListCursor}）。
+     */
+    private RepoListResult listByCursor(CurrentPrincipal actor, MultiValueMap<String, String> params,
+                                        Map<String, String> first) {
+        int limit = parseLimit(first);
+        String sort = validatedSort(params);
+        RepoListCursor.State state = null;
+        String cursor = first.get("cursor");
+        if (cursor != null && !cursor.isBlank()) {
+            state = RepoListCursor.decode(cursor);
+        }
+
+        VisibleScope scope = access.computeVisibleScope(actor);
+        StringBuilder where = new StringBuilder(" WHERE r.lifecycle_status IN ('active','archived') ");
+        Map<String, Object> qp = new HashMap<>();
+        appendScope(where, scope, qp);
+        appendFilters(where, qp, params);
+        if (state != null) {
+            appendKeyset(where, qp, sort, state);
+        }
+
+        String sql = "SELECT r.* FROM repositories r LEFT JOIN repository_stats s ON s.repository_id = r.id "
+                + where + " ORDER BY " + SORT_ORDER_SQL.get(sort) + " LIMIT :limit";
+        Query query = em.createNativeQuery(sql, RepositoryEntity.class);
+        bindParams(query, qp);
+        query.setParameter("limit", limit + 1);
+        @SuppressWarnings("unchecked")
+        List<RepositoryEntity> rows = query.getResultList();
+        boolean hasMore = rows.size() > limit;
+        List<RepositoryEntity> page = hasMore ? rows.subList(0, limit) : rows;
+        if (!hasMore || page.isEmpty()) {
+            return RepoListResult.ofCursor(toViews(page), null);
+        }
+        RepositoryEntity last = page.get(page.size() - 1);
+        String next = RepoListCursor.encode(sortKeyOf(sort, last), last.getUpdatedAt(),
+                last.getPublicId());
+        return RepoListResult.ofCursor(toViews(page), next);
+    }
+
+    /**
+     * keyset 谓词：行值比较 (scoreExpr, r.updated_at, r.public_id) &lt; (:lastScore,
+     * :lastUpdatedAt, :lastPublicId)，与 ORDER BY（score DESC, r.updated_at DESC,
+     * r.public_id DESC）严格同序（ADR-003 稳定 tie-breaker）；updatedAt-desc 无独立
+     * 打分，使用 (r.updated_at, r.public_id) 二元组。参数以字符串绑定并显式 CAST，
+     * 规避行值比较中的参数类型推断歧义。
+     */
+    private void appendKeyset(StringBuilder where, Map<String, Object> qp, String sort,
+                              RepoListCursor.State state) {
+        qp.put("lastUpdatedAt", state.updatedAt().toInstant().toString());
+        qp.put("lastPublicId", state.publicId().toString());
+        if ("updatedAt-desc".equals(sort)) {
+            where.append(" AND (r.updated_at, r.public_id) < (CAST(:lastUpdatedAt AS timestamptz), ")
+                    .append("CAST(:lastPublicId AS uuid)) ");
+            return;
+        }
+        where.append(" AND (CAST(").append(leadingSortExpr(sort)).append(" AS numeric)")
+                .append(", r.updated_at, r.public_id) < (CAST(:lastScore AS numeric), ")
+                .append("CAST(:lastUpdatedAt AS timestamptz), CAST(:lastPublicId AS uuid)) ");
+        qp.put("lastScore", state.score().toPlainString());
+    }
+
+    /**
+     * 末行排序分（nextCursor 编码用）：updatedAt-desc 与 updated_at 微秒值一致以保持
+     * 游标格式统一；其余排序按 id 回查打分表达式（与 ORDER BY 首键同一表达式）。
+     */
+    private BigDecimal sortKeyOf(String sort, RepositoryEntity last) {
+        if ("updatedAt-desc".equals(sort)) {
+            return BigDecimal.valueOf(RepoListCursor.toEpochMicros(last.getUpdatedAt().toInstant()));
+        }
+        Query query = em.createNativeQuery("SELECT " + leadingSortExpr(sort)
+                + " FROM repositories r LEFT JOIN repository_stats s ON s.repository_id = r.id "
+                + "WHERE r.id = :scoreRepoId");
+        query.setParameter("scoreRepoId", last.getId());
+        Object value = query.getSingleResult();
+        return value instanceof BigDecimal bd ? bd : new BigDecimal(String.valueOf(value));
+    }
+
+    /** 排序首键表达式：截取 SORT_ORDER_SQL 中首个 " DESC" 之前的片段（与 ORDER BY 复用同一表达式）。 */
+    private static String leadingSortExpr(String sort) {
+        String order = SORT_ORDER_SQL.get(sort);
+        return order.substring(0, order.indexOf(" DESC"));
+    }
+
+    /** limit 语义与 shared CursorQuery 一致：默认 50，1..100，非法 400。 */
+    private static int parseLimit(Map<String, String> params) {
+        if (!params.containsKey("limit")) {
+            return CursorQuery.DEFAULT_LIMIT;
+        }
+        int limit;
+        try {
+            limit = Integer.parseInt(params.get("limit").trim());
+        } catch (NumberFormatException e) {
+            throw ApiException.badRequest("limit 必须是整数",
+                    List.of(new ApiException.Detail("limit", "invalid_format")));
+        }
+        if (limit < 1 || limit > CursorQuery.MAX_LIMIT) {
+            throw ApiException.badRequest("limit 必须在 1..100",
+                    List.of(new ApiException.Detail("limit", "out_of_range")));
+        }
+        return limit;
+    }
+
+    private static String validatedSort(MultiValueMap<String, String> params) {
+        String sort = params.getFirst("sort");
+        if (sort == null || sort.isBlank()) {
+            return "relevance-v1";
+        }
+        if (!SORT_KEYS.contains(sort)) {
+            throw ApiException.badRequest("未知 sort 值: " + sort,
+                    List.of(new ApiException.Detail("sort", "unknown_value")));
+        }
+        return sort;
     }
 
     /** 相关推荐：同类型、同一授权过滤、排除自身。 */

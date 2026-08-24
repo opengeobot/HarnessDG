@@ -12,6 +12,7 @@ import com.modelhub.identity.service.ratelimit.RateLimiter;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.id.PublicIds;
+import com.modelhub.shared.metrics.BusinessCounters;
 import com.modelhub.shared.web.ETags;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -57,11 +58,13 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final IdentityProperties props;
     private final LoginGuard loginGuard;
+    private final BusinessCounters counters;
 
     public AuthService(UserRepository users, NamespaceRepository namespaces,
                        PlatformRoleAssignmentRepository platformRoles, SessionService sessionService,
                        JwtService jwtService, AuditService auditService, RateLimiter rateLimiter,
-                       PasswordEncoder passwordEncoder, IdentityProperties props, LoginGuard loginGuard) {
+                       PasswordEncoder passwordEncoder, IdentityProperties props, LoginGuard loginGuard,
+                       BusinessCounters counters) {
         this.users = users;
         this.namespaces = namespaces;
         this.platformRoles = platformRoles;
@@ -72,6 +75,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.props = props;
         this.loginGuard = loginGuard;
+        this.counters = counters;
     }
 
     @Transactional
@@ -111,11 +115,13 @@ public class AuthService {
         if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
             // 失败计数/锁定/失败审计走独立事务提交：随后抛出的异常会回滚本事务，但不能丢失这些事实
             loginGuard.recordLoginFailure(normalized, user, ip, userAgent);
+            counters.loginFailure();
             throw new ApiException(ErrorCode.UNAUTHENTICATED, GENERIC_LOGIN_FAILURE);
         }
         if (!"active".equals(user.getStatus())) {
             auditService.append(normalized, "auth.login_fail", "user:" + user.getPublicId(),
                     "status_" + user.getStatus(), ip, userAgent, null);
+            counters.loginFailure();
             throw new ApiException(ErrorCode.UNAUTHENTICATED, GENERIC_LOGIN_FAILURE);
         }
         users.resetFailedAttempts(user.getId());

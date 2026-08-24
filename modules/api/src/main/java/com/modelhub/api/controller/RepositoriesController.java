@@ -15,6 +15,7 @@ import com.modelhub.catalog.service.InteractionService;
 import com.modelhub.catalog.service.InteractionService.FeedbackView;
 import com.modelhub.catalog.service.InteractionService.RelationshipState;
 import com.modelhub.identity.config.IdentityProperties;
+import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService.Acquired;
@@ -61,6 +62,9 @@ public class RepositoriesController {
     /** 契约 FeedbackPageEnvelope.data：items + nextCursor。 */
     public record FeedbackPageData(List<FeedbackView> items, String nextCursor) {}
 
+    /** 契约 RepositoryPage（cursor 模式 data）：items + nextCursor（翻尽为 null）。 */
+    public record RepoCursorPageData(List<RepoView> items, String nextCursor) {}
+
     private final CatalogService catalog;
     private final InteractionService interactions;
     private final IdempotentOps idempotent;
@@ -79,10 +83,17 @@ public class RepositoriesController {
 
     // ---------- 查询 ----------
 
+    /** 列表（ADR-003 双模式）：cursor/limit → data.items + data.nextCursor；
+     *  page/pageSize（及无分页参数）→ data.items/total/page/pageSize（形状与旧版完全一致）。 */
     @GetMapping
-    public ApiEnvelope<PageResult<RepoView>> list(@RequestParam MultiValueMap<String, String> params,
-                                                  HttpServletRequest request) {
-        return ApiEnvelope.ok(catalog.list(Principals.optionalCurrent(request), params));
+    public ApiEnvelope<?> list(@RequestParam MultiValueMap<String, String> params,
+                               HttpServletRequest request) {
+        CatalogService.RepoListResult result = catalog.list(Principals.optionalCurrent(request), params);
+        if (result.isCursorMode()) {
+            return ApiEnvelope.ok(new RepoCursorPageData(result.items(), result.nextCursor()));
+        }
+        return ApiEnvelope.ok(new PageResult<RepoView>(result.total(), result.page(),
+                result.pageSize(), result.items()));
     }
 
     @GetMapping("/{repoId}")
@@ -159,8 +170,10 @@ public class RepositoriesController {
     public ResponseEntity<String> create(@Valid @RequestBody CreateRepositoryRequest body,
                                          @RequestHeader("Idempotency-Key") String idempotencyKey,
                                          HttpServletRequest request) throws Exception {
+        CurrentPrincipal principal = Principals.requireCurrent(request);
         JsonNode hashSource = objectMapper.valueToTree(body);
-        Acquired acq = idempotent.begin("repository.create", idempotencyKey, hashSource);
+        Acquired acq = idempotent.begin(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, hashSource);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
@@ -170,9 +183,10 @@ public class RepositoriesController {
         CreateRepoCmd cmd = new CreateRepoCmd(body.namespaceId(), body.type(), body.metadataSchemaVersion(),
                 body.name(), body.displayName(), body.description(), body.visibility(), body.gated(),
                 metadataJson);
-        RepoView view = catalog.create(Principals.requireCurrent(request), cmd);
+        RepoView view = catalog.create(principal, cmd);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.created(view));
-        idempotent.finish("repository.create", idempotencyKey, 201, responseBody);
+        idempotent.finish(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, 201, responseBody);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -231,14 +245,17 @@ public class RepositoriesController {
                                          @RequestHeader("Idempotency-Key") String idempotencyKey,
                                          @RequestHeader(value = "If-Match", required = false) String ifMatch,
                                          HttpServletRequest request) throws Exception {
-        Acquired acq = idempotent.begin("repository.delete:" + repoId, idempotencyKey, null);
+        CurrentPrincipal principal = Principals.requireCurrent(request);
+        Acquired acq = idempotent.begin(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
-        JobView job = catalog.delete(Principals.requireCurrent(request), repoId, ifMatch);
+        JobView job = catalog.delete(principal, repoId, ifMatch);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish("repository.delete:" + repoId, idempotencyKey, 202, responseBody);
+        idempotent.finish(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -247,14 +264,17 @@ public class RepositoriesController {
     public ResponseEntity<String> restore(@PathVariable UUID repoId,
                                           @RequestHeader("Idempotency-Key") String idempotencyKey,
                                           HttpServletRequest request) throws Exception {
-        Acquired acq = idempotent.begin("repository.restore:" + repoId, idempotencyKey, null);
+        CurrentPrincipal principal = Principals.requireCurrent(request);
+        Acquired acq = idempotent.begin(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
-        JobView job = catalog.restore(Principals.requireCurrent(request), repoId);
+        JobView job = catalog.restore(principal, repoId);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish("repository.restore:" + repoId, idempotencyKey, 202, responseBody);
+        idempotent.finish(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

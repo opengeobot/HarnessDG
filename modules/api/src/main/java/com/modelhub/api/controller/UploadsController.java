@@ -13,6 +13,7 @@ import com.modelhub.artifact.service.UploadService.PartUrlView;
 import com.modelhub.artifact.service.UploadService.PublishCmd;
 import com.modelhub.artifact.service.UploadService.UploadView;
 import com.modelhub.catalog.service.CatalogService.JobView;
+import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService.Acquired;
 import com.modelhub.shared.web.ApiEnvelope;
 import jakarta.servlet.http.HttpServletRequest;
@@ -53,18 +54,21 @@ public class UploadsController {
                                            @Valid @RequestBody InitiateUploadRequest body,
                                            @RequestHeader("Idempotency-Key") String idempotencyKey,
                                            HttpServletRequest request) throws Exception {
+        CurrentPrincipal principal = Principals.requireCurrent(request);
         JsonNode hashSource = objectMapper.valueToTree(body);
-        Acquired acq = idempotent.begin("upload.initiate", idempotencyKey, hashSource);
+        Acquired acq = idempotent.begin(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, hashSource);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
-        UploadView view = uploads.initiate(Principals.requireCurrent(request), repoId,
+        UploadView view = uploads.initiate(principal, repoId,
                 new InitiateCmd(body.branch(), body.baseCommitSha(), body.path(), body.sizeBytes(),
                         body.sha256(), body.contentType()),
                 idempotencyKey);
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.created(view));
-        idempotent.finish("upload.initiate", idempotencyKey, 201, responseBody);
+        idempotent.finish(principal, request.getMethod(), request.getRequestURI(),
+                idempotencyKey, 201, responseBody);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -87,8 +91,9 @@ public class UploadsController {
     public ResponseEntity<String> complete(@PathVariable UUID uploadId,
                                            @RequestHeader("Idempotency-Key") String idempotencyKey,
                                            HttpServletRequest request) throws Exception {
-        return acceptJob("upload.complete", idempotencyKey,
-                uploads.complete(Principals.requireCurrent(request), uploadId));
+        CurrentPrincipal principal = Principals.requireCurrent(request);
+        return acceptJob(principal, request.getMethod(), request.getRequestURI(), idempotencyKey,
+                uploads.complete(principal, uploadId));
     }
 
     @PostMapping("/api/v1/uploads/{uploadId}:publish")
@@ -96,8 +101,9 @@ public class UploadsController {
                                           @Valid @RequestBody PublishUploadRequest body,
                                           @RequestHeader("Idempotency-Key") String idempotencyKey,
                                           HttpServletRequest request) throws Exception {
-        return acceptJob("upload.publish", idempotencyKey,
-                uploads.publish(Principals.requireCurrent(request), uploadId,
+        CurrentPrincipal principal = Principals.requireCurrent(request);
+        return acceptJob(principal, request.getMethod(), request.getRequestURI(), idempotencyKey,
+                uploads.publish(principal, uploadId,
                         new PublishCmd(body.baseCommitSha(), body.conflictResolution(), body.commitMessage())));
     }
 
@@ -105,25 +111,27 @@ public class UploadsController {
     public ResponseEntity<String> abort(@PathVariable UUID uploadId,
                                         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
                                         HttpServletRequest request) throws Exception {
+        CurrentPrincipal principal = Principals.requireCurrent(request);
         if (idempotencyKey == null) {
-            JobView job = uploads.abort(Principals.requireCurrent(request), uploadId);
+            JobView job = uploads.abort(principal, uploadId);
             return ResponseEntity.status(HttpStatus.ACCEPTED)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(objectMapper.writeValueAsString(ApiEnvelope.ok(job)));
         }
-        return acceptJob("upload.abort", idempotencyKey,
-                uploads.abort(Principals.requireCurrent(request), uploadId));
+        return acceptJob(principal, request.getMethod(), request.getRequestURI(), idempotencyKey,
+                uploads.abort(principal, uploadId));
     }
 
-    /** 202 JobEnvelope + Idempotency 重放（04 §10）。 */
-    private ResponseEntity<String> acceptJob(String scope, String idempotencyKey, JobView job) throws Exception {
-        Acquired acq = idempotent.begin(scope, idempotencyKey, null);
+    /** 202 JobEnvelope + Idempotency 重放（04 §10）；scope = 主体+方法+路径。 */
+    private ResponseEntity<String> acceptJob(CurrentPrincipal principal, String method, String path,
+                                             String idempotencyKey, JobView job) throws Exception {
+        Acquired acq = idempotent.begin(principal, method, path, idempotencyKey, null);
         if (acq.replay()) {
             return ResponseEntity.status(acq.recordedStatus())
                     .contentType(MediaType.APPLICATION_JSON).body(acq.recordedBody());
         }
         String responseBody = objectMapper.writeValueAsString(ApiEnvelope.ok(job));
-        idempotent.finish(scope, idempotencyKey, 202, responseBody);
+        idempotent.finish(principal, method, path, idempotencyKey, 202, responseBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }

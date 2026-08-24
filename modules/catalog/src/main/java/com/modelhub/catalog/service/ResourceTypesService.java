@@ -54,11 +54,6 @@ public class ResourceTypesService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
-    public ResourceTypeView get(String typeKey) {
-        return toView(loadType(typeKey));
-    }
-
     /** schema 详情：version 缺省取 currentSchemaVersion。 */
     @Transactional(readOnly = true)
     public ResourceTypeSchemaView schema(String typeKey, Integer version) {

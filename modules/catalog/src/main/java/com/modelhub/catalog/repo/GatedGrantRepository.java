@@ -23,4 +23,7 @@ public interface GatedGrantRepository extends JpaRepository<GatedGrantEntity, Lo
     Optional<GatedGrantEntity> findByRequestId(Long requestId);
 
     List<GatedGrantEntity> findByRepositoryId(Long repositoryId);
+
+    /** 已到期且未吊销的 grant：GatedAccessService.expireOverdue 据此将对应 approved 申请收敛为 expired。 */
+    List<GatedGrantEntity> findByExpiresAtBeforeAndRevokedAtIsNull(OffsetDateTime now);
 }

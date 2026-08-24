@@ -43,6 +43,28 @@ public class JobEntity {
     @Column(name = "error_message")
     private String errorMessage;
 
+    @Column(name = "progress_current")
+    private Long progressCurrent;
+
+    @Column(name = "progress_total")
+    private Long progressTotal;
+
+    @Column(name = "progress_message")
+    private String progressMessage;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "result_summary")
+    private String resultSummary;
+
+    @Column(name = "error_code")
+    private String errorCode;
+
+    @Column(name = "started_at")
+    private OffsetDateTime startedAt;
+
+    @Column(name = "finished_at")
+    private OffsetDateTime finishedAt;
+
     @Column(name = "created_by")
     private Long createdBy;
 
@@ -67,6 +89,20 @@ public class JobEntity {
     public void setPayload(String payload) { this.payload = payload; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public Long getProgressCurrent() { return progressCurrent; }
+    public void setProgressCurrent(Long progressCurrent) { this.progressCurrent = progressCurrent; }
+    public Long getProgressTotal() { return progressTotal; }
+    public void setProgressTotal(Long progressTotal) { this.progressTotal = progressTotal; }
+    public String getProgressMessage() { return progressMessage; }
+    public void setProgressMessage(String progressMessage) { this.progressMessage = progressMessage; }
+    public String getResultSummary() { return resultSummary; }
+    public void setResultSummary(String resultSummary) { this.resultSummary = resultSummary; }
+    public String getErrorCode() { return errorCode; }
+    public void setErrorCode(String errorCode) { this.errorCode = errorCode; }
+    public OffsetDateTime getStartedAt() { return startedAt; }
+    public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }
+    public OffsetDateTime getFinishedAt() { return finishedAt; }
+    public void setFinishedAt(OffsetDateTime finishedAt) { this.finishedAt = finishedAt; }
     public Long getCreatedBy() { return createdBy; }
     public void setCreatedBy(Long createdBy) { this.createdBy = createdBy; }
     public OffsetDateTime getCreatedAt() { return createdAt; }

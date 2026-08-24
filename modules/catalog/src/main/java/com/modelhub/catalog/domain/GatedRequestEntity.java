@@ -11,7 +11,7 @@ import jakarta.persistence.Version;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/** gated 访问申请（02 §4/03 §7）：状态 pending/approved/rejected/revoked/expired/withdrawn。 */
+/** gated 访问申请（02 §4/03 §7）：状态 pending/approved/rejected/revoked/expired（契约 enum，无 withdrawn）。 */
 @Entity
 @Table(name = "gated_access_requests")
 public class GatedRequestEntity {

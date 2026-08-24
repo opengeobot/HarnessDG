@@ -15,6 +15,7 @@ import com.modelhub.identity.repo.OrganizationMembershipRepository;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
+import com.modelhub.shared.metrics.BusinessCounters;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
@@ -73,17 +74,19 @@ public class RepositoryAccessFacade {
     private final CollaboratorRepository collaborators;
     private final GatedGrantRepository grants;
     private final GatedPolicyRepository policies;
+    private final BusinessCounters counters;
 
     public RepositoryAccessFacade(RepositoryRepository repositories, NamespaceRepository namespaces,
                                   OrganizationMembershipRepository memberships,
                                   CollaboratorRepository collaborators, GatedGrantRepository grants,
-                                  GatedPolicyRepository policies) {
+                                  GatedPolicyRepository policies, BusinessCounters counters) {
         this.repositories = repositories;
         this.namespaces = namespaces;
         this.memberships = memberships;
         this.collaborators = collaborators;
         this.grants = grants;
         this.policies = policies;
+        this.counters = counters;
     }
 
     // ---------- 第 1 步：解析 ----------
@@ -236,12 +239,13 @@ public class RepositoryAccessFacade {
         }
     }
 
-    /** 防枚举拒绝（02 §4）：有关系 → 403，无关系/匿名 → 404。 */
+    /** 防枚举拒绝（02 §4）：有关系 → 403，无关系/匿名 → 404。仅 403 拒绝计入鉴权拒绝指标（07 §5.2）。 */
     private ApiException deny(RepositoryEntity repo, NamespaceEntity ns, CurrentPrincipal principal) {
         if (principal == null) {
             return new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "仓库不存在");
         }
         if (principal.isPlatformAdmin()) {
+            counters.authzDenial();
             return new ApiException(ErrorCode.FORBIDDEN, "权限不足");
         }
         boolean related = false;
@@ -257,6 +261,7 @@ public class RepositoryAccessFacade {
                     ? false : true;
         }
         if (related) {
+            counters.authzDenial();
             return new ApiException(ErrorCode.FORBIDDEN, "权限不足");
         }
         return new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "仓库不存在");

@@ -103,6 +103,7 @@ public class GiteaClient {
     public GiteaRepo ensureRepository(String org, String name, boolean isPrivate) {
         GiteaRepo existing = getRepository(org, name);
         if (existing != null) {
+            awaitBranchReady(org, name, existing.defaultBranch());
             return existing;
         }
         try {
@@ -113,16 +114,44 @@ public class GiteaClient {
                     .body(Map.of("name", name, "private", isPrivate,
                             "auto_init", true, "default_branch", "main"))
                     .retrieve().body(Map.class);
-            return toRepo(resp);
+            GiteaRepo created = toRepo(resp);
+            awaitBranchReady(org, name, created.defaultBranch());
+            return created;
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             if (e.getStatusCode().value() == 409) {
                 GiteaRepo raced = getRepository(org, name);
                 if (raced != null) {
+                    awaitBranchReady(org, name, raced.defaultBranch());
                     return raced;
                 }
             }
             throw new GiteaException(e.getStatusCode().value(), "创建 Gitea 仓库失败: " + org + "/" + name);
         }
+    }
+
+    /**
+     * auto_init 的初始 commit 在 Gitea 内部异步落盘：repo 创建 API 返回后默认分支
+     * 可能短暂不存在，紧随其后的 putFile 会 404 "branch does not exist"，触发整条
+     * provisioning 退避重试链（重复副作用窗口）。创建后显式等待分支就绪。
+     */
+    private void awaitBranchReady(String org, String repo, String branch) {
+        if (branch == null || headCommitSha(org, repo, branch) != null) {
+            return;
+        }
+        long deadline = System.currentTimeMillis() + 5000;
+        log.info("等待 Gitea 初始分支就绪 {}/{} branch={}", org, repo, branch);
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (headCommitSha(org, repo, branch) != null) {
+                return;
+            }
+        }
+        log.warn("等待 Gitea 初始分支就绪超时 {}/{} branch={}", org, repo, branch);
     }
 
     public GiteaRepo getRepository(String org, String name) {
@@ -162,7 +191,7 @@ public class GiteaClient {
     /** 写入 base64 内容并返回提交结果（commit sha + 新 blob sha）；幂等携既有 sha 更新。 */
     public PutFileResult putFileBase64(String org, String repo, String path, String contentBase64,
                                        String message, String branch) {
-        String existingSha = fileSha(org, repo, path);
+        String existingSha = fileSha(org, repo, path, branch);
         try {
             java.util.HashMap<String, Object> body = new java.util.HashMap<>();
             body.put("message", message);
@@ -199,7 +228,7 @@ public class GiteaClient {
 
     /** 幂等删除文件：不存在视为已删除返回 false；存在则提交删除 commit 返回 true。 */
     public boolean deleteFile(String org, String repo, String path, String message, String branch) {
-        String existingSha = fileSha(org, repo, path);
+        String existingSha = fileSha(org, repo, path, branch);
         if (existingSha == null) {
             return false;
         }
@@ -301,10 +330,14 @@ public class GiteaClient {
         }
     }
 
-    /** 返回既有文件 sha；不存在返回 null。 */
-    private String fileSha(String org, String repo, String path) {
+    /** 返回既有文件 sha；不存在返回 null（ref 缺省用默认分支）。 */
+    public String fileSha(String org, String repo, String path, String ref) {
         try {
-            Map<String, Object> resp = rest.get().uri("/api/v1/repos/{org}/{repo}/contents/{path}", org, repo, path)
+            Map<String, Object> resp = rest.get()
+                    .uri(ref == null
+                            ? "/api/v1/repos/{org}/{repo}/contents/{path}"
+                            : "/api/v1/repos/{org}/{repo}/contents/{path}?ref={ref}",
+                            ref == null ? new Object[] {org, repo, path} : new Object[] {org, repo, path, ref})
                     .retrieve().body(Map.class);
             if (resp != null && resp.get("sha") != null) {
                 return resp.get("sha").toString();
@@ -316,6 +349,12 @@ public class GiteaClient {
             }
             throw new GiteaException(e.getStatusCode().value(), "查询 Gitea 文件失败: " + path);
         }
+    }
+
+    /** 分支 head 提交的 message（至少一次投递的认领恢复用）；无提交返回 null。 */
+    public String headCommitMessage(String org, String repo, String branch) {
+        List<GiteaCommit> commits = listCommits(org, repo, branch, 1, 1);
+        return commits.isEmpty() ? null : commits.get(0).message();
     }
 
     /** 仓库删除 Saga：先置 private 再 archive（05 §9.2 第 2 步），保留 Git 历史。 */

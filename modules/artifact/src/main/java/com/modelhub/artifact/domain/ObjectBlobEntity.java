@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-/** 对象 blob（05 §4/§7）：MinIO 长期真相引用；租户内按 sha256 去重，scan 未 clean 保持隔离。 */
+/** 对象 blob（05 §4/§7）：MinIO 长期真相引用；租户内按 (sha256, size_bytes) 去重（03 §5.4），scan 未 clean 保持隔离。 */
 @Entity
 @Table(name = "object_blobs")
 public class ObjectBlobEntity {

@@ -10,6 +10,7 @@ import com.modelhub.catalog.domain.JobEntity;
 import com.modelhub.catalog.repo.JobRepository;
 import com.modelhub.catalog.service.CatalogService.JobView;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.JobEventService;
 import com.modelhub.catalog.service.OutboxService;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.error.ApiException;
@@ -35,15 +36,18 @@ public class FilesService {
     private final OutboxService outbox;
     private final GiteaClient gitea;
     private final BrowseService browse;
+    private final JobEventService jobEvents;
 
     public FilesService(RepositoryAccessFacade access, FileVersionRepository fileVersions,
-                        JobRepository jobs, OutboxService outbox, GiteaClient gitea, BrowseService browse) {
+                        JobRepository jobs, OutboxService outbox, GiteaClient gitea, BrowseService browse,
+                        JobEventService jobEvents) {
         this.access = access;
         this.fileVersions = fileVersions;
         this.jobs = jobs;
         this.outbox = outbox;
         this.gitea = gitea;
         this.browse = browse;
+        this.jobEvents = jobEvents;
     }
 
     @Transactional
@@ -103,7 +107,9 @@ public class FilesService {
         job.setCreatedBy(actor == null ? null : actor.userId());
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
-        return jobs.save(job);
+        JobEntity saved = jobs.save(job);
+        jobEvents.record(saved.getId(), "created", Map.of("status", "queued"));
+        return saved;
     }
 
     private JobView toJobView(JobEntity job) {

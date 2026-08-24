@@ -10,6 +10,7 @@ import com.modelhub.catalog.domain.GitBindingEntity;
 import com.modelhub.catalog.repo.GitBindingRepository;
 import com.modelhub.catalog.repo.JobRepository;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.JobEventService;
 import com.modelhub.catalog.service.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +40,13 @@ public class ArtifactFileDeletionWorker {
     private final ObjectStorageService storage;
     private final OutboxService outbox;
     private final TransactionTemplate tx;
+    private final JobEventService jobEvents;
 
     public ArtifactFileDeletionWorker(FileVersionRepository fileVersions, ObjectBlobRepository blobs,
                                       GitBindingRepository gitBindings, JobRepository jobs,
                                       GiteaClient gitea, ObjectStorageService storage,
-                                      OutboxService outbox, TransactionTemplate tx) {
+                                      OutboxService outbox, TransactionTemplate tx,
+                                      JobEventService jobEvents) {
         this.fileVersions = fileVersions;
         this.blobs = blobs;
         this.gitBindings = gitBindings;
@@ -52,6 +55,7 @@ public class ArtifactFileDeletionWorker {
         this.storage = storage;
         this.outbox = outbox;
         this.tx = tx;
+        this.jobEvents = jobEvents;
     }
 
     public void handleDeletion(JsonNode payload) {
@@ -130,13 +134,29 @@ public class ArtifactFileDeletionWorker {
                     .findFirstByAggregateTypeAndAggregateIdAndStatusInOrderByCreatedAtDesc(
                             "file", fileId.toString(), List.of("queued", "running"))
                     .ifPresent(job -> {
+                        if (status.equals(job.getStatus())) {
+                            return;
+                        }
+                        OffsetDateTime now = OffsetDateTime.now();
                         job.setStatus(status);
                         job.setErrorMessage(error);
-                        job.setUpdatedAt(OffsetDateTime.now());
+                        if ("running".equals(status) && job.getStartedAt() == null) {
+                            job.setStartedAt(now);
+                        }
+                        if (isTerminalStatus(status) && job.getFinishedAt() == null) {
+                            job.setFinishedAt(now);
+                        }
+                        job.setUpdatedAt(now);
                         jobs.save(job);
+                        jobEvents.record(job.getId(), "status_changed", Map.of("status", status));
                     }));
         } catch (Exception e) {
             log.warn("Job 状态回写失败 fileId={}: {}", fileId, e.getMessage());
         }
+    }
+
+    private static boolean isTerminalStatus(String status) {
+        return "succeeded".equals(status) || "failed".equals(status)
+                || "cancelled".equals(status) || "dead_letter".equals(status);
     }
 }

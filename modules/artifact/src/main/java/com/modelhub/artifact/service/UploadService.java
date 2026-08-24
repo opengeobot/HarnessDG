@@ -20,6 +20,7 @@ import com.modelhub.catalog.repo.RepositoryRepository;
 import com.modelhub.catalog.repo.SchemaVersionRepository;
 import com.modelhub.catalog.service.CatalogService.JobView;
 import com.modelhub.catalog.service.GiteaClient;
+import com.modelhub.catalog.service.JobEventService;
 import com.modelhub.catalog.service.OutboxService;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.error.ApiException;
@@ -83,12 +84,14 @@ public class UploadService {
     private final ObjectStorageService storage;
     private final ArtifactProperties props;
     private final ObjectMapper objectMapper;
+    private final JobEventService jobEvents;
 
     public UploadService(RepositoryAccessFacade access, RepositoryRepository repositories,
                          GitBindingRepository gitBindings, SchemaVersionRepository schemaVersions,
                          UploadSessionRepository sessions, FileVersionRepository fileVersions,
                          JobRepository jobs, OutboxService outbox, GiteaClient gitea,
-                         ObjectStorageService storage, ArtifactProperties props, ObjectMapper objectMapper) {
+                         ObjectStorageService storage, ArtifactProperties props, ObjectMapper objectMapper,
+                         JobEventService jobEvents) {
         this.access = access;
         this.repositories = repositories;
         this.gitBindings = gitBindings;
@@ -101,6 +104,7 @@ public class UploadService {
         this.storage = storage;
         this.props = props;
         this.objectMapper = objectMapper;
+        this.jobEvents = jobEvents;
     }
 
     // ---------- initiate（05 §6.1） ----------
@@ -150,6 +154,38 @@ public class UploadService {
             throw new ApiException(ErrorCode.VALIDATION_FAILED,
                     "内容类型不在类型策略允许列表内: " + contentType,
                     List.of(new ApiException.Detail("contentType", "not allowed")));
+        }
+
+        // 配额检查（05 §11，配置驱动 modelhub.artifact.quota.*）
+        ArtifactProperties.Quota quota = props.getQuota();
+        if (cmd.sizeBytes() > quota.getMaxFileSizeBytes()) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED,
+                    "文件超过配额单文件上限 " + quota.getMaxFileSizeBytes() + " bytes",
+                    List.of(new ApiException.Detail("sizeBytes", "exceeds quota.maxFileSizeBytes")),
+                    Map.of(), 413);
+        }
+        if (quota.getMaxRepoTotalBytes() > 0) {
+            long existingBytes = fileVersions.sumSizeBytesByRepositoryIdAndStatusIn(
+                    repo.getId(), List.of("staging", "active"));
+            if (existingBytes + cmd.sizeBytes() > quota.getMaxRepoTotalBytes()) {
+                throw new ApiException(ErrorCode.VALIDATION_FAILED,
+                        "仓库已发布总量 " + existingBytes + " bytes + 本次 " + cmd.sizeBytes()
+                                + " bytes 超过配额上限 " + quota.getMaxRepoTotalBytes() + " bytes",
+                        List.of(new ApiException.Detail("sizeBytes", "exceeds quota.maxRepoTotalBytes")),
+                        Map.of(), 413);
+            }
+        }
+        if (quota.getMaxConcurrentUploads() > 0) {
+            // ErrorCode.RATE_LIMITED 映射 429（04 §2.2），与契约 initiateUpload 429 RateLimited 对齐
+            long active = sessions.countByRepositoryIdAndStatusIn(repo.getId(),
+                    List.of("initiated", "uploading", "verifying", "scanning", "committing"));
+            if (active >= quota.getMaxConcurrentUploads()) {
+                throw new ApiException(ErrorCode.RATE_LIMITED,
+                        "仓库并发上传会话已达上限 " + quota.getMaxConcurrentUploads()
+                                + "（当前活跃 " + active + "）",
+                        List.of(new ApiException.Detail("concurrentUploads",
+                                "exceeds quota.maxConcurrentUploads")));
+            }
         }
 
         // content_source 由服务端冻结（05 §3）：小文本走 Git，其余走对象存储
@@ -379,7 +415,9 @@ public class UploadService {
         job.setCreatedBy(actor == null ? null : actor.userId());
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
-        return jobs.save(job);
+        JobEntity saved = jobs.save(job);
+        jobEvents.record(saved.getId(), "created", Map.of("status", "queued"));
+        return saved;
     }
 
     private JobView toJobView(JobEntity job) {

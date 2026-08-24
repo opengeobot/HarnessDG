@@ -5,6 +5,8 @@ import com.modelhub.catalog.service.CatalogService;
 import com.modelhub.catalog.service.GatedAccessService;
 import com.modelhub.catalog.service.GatedAccessService.AccessRequestView;
 import com.modelhub.catalog.service.InteractionService;
+import com.modelhub.shared.error.ApiException;
+import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.paging.CursorQuery;
 import com.modelhub.shared.paging.CursorResult;
 import com.modelhub.shared.paging.PageQuery;
@@ -19,11 +21,16 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** 个人中心端点（04 §7/§5）：gated 申请列表与 /me/repositories 个人仓库 tab 列表。 */
 @RestController
 @RequestMapping("/api/v1/me")
 public class MeController {
+
+    /** 契约 /me/access-requests status 过滤枚举（AccessRequest.status；withdrawn 已移除）。 */
+    private static final Set<String> ACCESS_REQUEST_STATUSES =
+            Set.of("pending", "approved", "rejected", "revoked", "expired");
 
     /** cursor 响应 data：items + nextCursor。 */
     public record MyAccessRequestPageData(List<AccessRequestView> items, String nextCursor) {}
@@ -39,9 +46,14 @@ public class MeController {
     @GetMapping("/access-requests")
     public ApiEnvelope<MyAccessRequestPageData> myAccessRequests(@RequestParam Map<String, String> params,
                                                                  HttpServletRequest request) {
+        String status = params.get("status");
+        if (status != null && !status.isBlank() && !ACCESS_REQUEST_STATUSES.contains(status)) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "非法 status 过滤值: " + status,
+                    List.of(new ApiException.Detail("status", "invalid_value")));
+        }
         CursorQuery cursor = CursorQuery.from(new HashMap<>(params));
         CursorResult<AccessRequestView> result =
-                gated.listMine(Principals.requireCurrent(request), cursor, params.get("status"));
+                gated.listMine(Principals.requireCurrent(request), cursor, status);
         return ApiEnvelope.ok(new MyAccessRequestPageData(result.items(), result.nextCursor()));
     }
 
