@@ -176,12 +176,11 @@ public abstract class ArtifactTestSupport extends CatalogTestSupport {
 
     // ---------- 下载/删除链路助手 ----------
 
-    /** 签发下载会话；断言 201 后返回 data（DownloadSession 视图）。 */
+    /** 签发下载会话；断言 201 后返回 data（DownloadSession 视图）。
+     *  Idempotency-Key 为必填头（04 §6.5/契约）：key 为 null 时补随机键。 */
     protected JsonNode createDownloadSession(String token, String repoId, String fileId, String idempotencyKey) {
         HttpHeaders h = token == null ? ipHeaders() : bearer(token);
-        if (idempotencyKey != null) {
-            h.add("Idempotency-Key", idempotencyKey);
-        }
+        h.add("Idempotency-Key", idempotencyKey != null ? idempotencyKey : UUID.randomUUID().toString());
         ResponseEntity<String> resp = rest.exchange(
                 "/api/v1/repositories/" + repoId + "/files/" + fileId + "/download-sessions",
                 HttpMethod.POST, new HttpEntity<>(h), String.class);
@@ -193,6 +192,7 @@ public abstract class ArtifactTestSupport extends CatalogTestSupport {
 
     protected ResponseEntity<String> downloadSessionRaw(String token, String repoId, String fileId) {
         HttpHeaders h = token == null ? ipHeaders() : bearer(token);
+        h.add("Idempotency-Key", UUID.randomUUID().toString());
         return rest.exchange("/api/v1/repositories/" + repoId + "/files/" + fileId + "/download-sessions",
                 HttpMethod.POST, new HttpEntity<>(h), String.class);
     }
