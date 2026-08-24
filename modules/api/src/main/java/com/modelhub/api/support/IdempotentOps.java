@@ -1,6 +1,7 @@
 package com.modelhub.api.support;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService.Acquired;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,26 @@ public class IdempotentOps {
     public void finish(String scope, String keyHeader, int status, String body) {
         String key = JdbcIdempotencyService.validateHeader(keyHeader);
         idempotency.complete(scope, key, status, body);
+    }
+
+    /**
+     * 幂等域 = 主体 + HTTP 方法 + 归一化路径（04 §10）：不同主体/不同端点复用
+     * 同一 Idempotency-Key 不会互相污染。principal 为 null 时按 "anonymous" 计。
+     */
+    public static String scopeOf(CurrentPrincipal principal, String method, String path) {
+        String principalId = principal == null ? "anonymous" : String.valueOf(principal.userId());
+        return principalId + ":" + method + ":" + path;
+    }
+
+    /** 推荐入口：scope 由 主体+方法+路径 自动构造（04 §10）。 */
+    public Acquired begin(CurrentPrincipal principal, String method, String path,
+                          String keyHeader, JsonNode body) {
+        return begin(scopeOf(principal, method, path), keyHeader, body);
+    }
+
+    public void finish(CurrentPrincipal principal, String method, String path,
+                       String keyHeader, int status, String body) {
+        finish(scopeOf(principal, method, path), keyHeader, status, body);
     }
 
     public static String sha256(String input) {

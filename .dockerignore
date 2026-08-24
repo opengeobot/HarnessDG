@@ -1,0 +1,14 @@
+# 构建上下文裁剪：与镜像无关的目录/文件不进入 context（加速构建、避免泄漏）
+.git
+.gitignore
+.gitattributes
+**/target
+frontend
+docs
+deploy
+.idea
+*.iml
+*.md
+*.ps1
+*.js
+docker-java.properties

@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # GitHub 托管 runner 预装 Docker，Testcontainers（PostgreSQL/Redis/MinIO/Gitea，reuse 开启）可直接运行；
+      # 契约一致性测试在契约 yaml 缺失时（prd/ 位于本仓库之外）经 JUnit assumption 跳过。
+      # arch-tests 是 reactor 叶子模块（仅依赖 api），不会被 -am 连带，故显式列入 -pl。
+      - name: Build and verify (app + arch-tests with dependencies)
+        run: mvn -B -ntp -pl modules/app,modules/arch-tests -am verify
+
+  # 契约 lint：HarnessDG 为独立 git 仓库，CI 检出内通常没有 ../prd；
+  # 存在时才做 YAML 可解析性校验，否则输出说明并放行。
+  contract-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate OpenAPI contract YAML (when present)
+        run: |
+          CONTRACT=../prd/v1/contracts/openapi-v1.yaml
+          if [ -f "$CONTRACT" ]; then
+            python3 -c "import yaml; yaml.safe_load(open('$CONTRACT', encoding='utf-8')); print('contract yaml parses OK')"
+          else
+            echo "contract $CONTRACT not present in this checkout (prd/ lives outside the HarnessDG repo) - nothing to lint"
+          fi

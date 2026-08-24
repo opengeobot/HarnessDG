@@ -5,6 +5,7 @@ import com.modelhub.identity.service.ratelimit.RateLimiter;
 import com.modelhub.identity.service.ratelimit.RedisRateLimiter;
 import com.modelhub.identity.service.ratelimit.ResilientRateLimiter;
 import com.modelhub.shared.idempotency.JdbcIdempotencyService;
+import com.modelhub.shared.metrics.BusinessCounters;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,8 +27,9 @@ public class IdentityConfiguration {
     }
 
     @Bean
-    public RateLimiter rateLimiter(StringRedisTemplate redis, IdentityProperties props) {
-        return new ResilientRateLimiter(new RedisRateLimiter(redis, props), new LocalRateLimiter(props));
+    public RateLimiter rateLimiter(StringRedisTemplate redis, IdentityProperties props,
+                                   BusinessCounters counters) {
+        return new ResilientRateLimiter(new RedisRateLimiter(redis, props), new LocalRateLimiter(props), counters);
     }
 
     @Bean

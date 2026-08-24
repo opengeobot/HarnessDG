@@ -26,12 +26,18 @@ public class ArtifactProperties {
     private int downloadUrlTtlSeconds = 600;
     /** private/gated repo download URL TTL (shorter, <= 600). */
     private int downloadUrlTtlSecondsPrivate = 300;
+    /** SEC-02（07 §2）：private/gated 下载 URL 最长 10 分钟，超限配置一律钳制到 600s。 */
+    private static final int MAX_PRIVATE_DOWNLOAD_TTL_SECONDS = 600;
     /** git source 阈值：小于该字节数且为文本类的文件走 Gitea Git 对象（05 §3 部署配置）。 */
     private long gitSourceMaxBytes = 10L * 1024 * 1024;
     /** 业务 API 公网基址：git source 自建下载端点的绝对 URL 前缀。 */
     private String apiBaseUrl = "http://localhost:8080";
     /** 默认客户端并发（05 §6.1）。 */
     private int defaultMaxConcurrency = 3;
+    /** 预览 Worker 轮询间隔（05 §5；测试可调小加速收敛）。 */
+    private long previewIntervalMs = 1000;
+    /** 配额（05 §11）：单文件/单仓库总量/并发上传会话，配置驱动（modelhub.artifact.quota.*）。 */
+    private Quota quota = new Quota();
 
     public String getInternalEndpoint() { return internalEndpoint; }
     public void setInternalEndpoint(String internalEndpoint) { this.internalEndpoint = internalEndpoint; }
@@ -52,11 +58,37 @@ public class ArtifactProperties {
     public int getDownloadUrlTtlSeconds() { return downloadUrlTtlSeconds; }
     public void setDownloadUrlTtlSeconds(int downloadUrlTtlSeconds) { this.downloadUrlTtlSeconds = downloadUrlTtlSeconds; }
     public int getDownloadUrlTtlSecondsPrivate() { return downloadUrlTtlSecondsPrivate; }
-    public void setDownloadUrlTtlSecondsPrivate(int downloadUrlTtlSecondsPrivate) { this.downloadUrlTtlSecondsPrivate = downloadUrlTtlSecondsPrivate; }
+    /** SEC-02：写入即钳制到 [1, 600]，读取方无需再次校验（07 §2 最长 10 分钟）。 */
+    public void setDownloadUrlTtlSecondsPrivate(int downloadUrlTtlSecondsPrivate) {
+        this.downloadUrlTtlSecondsPrivate = Math.max(1,
+                Math.min(downloadUrlTtlSecondsPrivate, MAX_PRIVATE_DOWNLOAD_TTL_SECONDS));
+    }
     public long getGitSourceMaxBytes() { return gitSourceMaxBytes; }
     public void setGitSourceMaxBytes(long gitSourceMaxBytes) { this.gitSourceMaxBytes = gitSourceMaxBytes; }
     public String getApiBaseUrl() { return apiBaseUrl; }
     public void setApiBaseUrl(String apiBaseUrl) { this.apiBaseUrl = apiBaseUrl; }
     public int getDefaultMaxConcurrency() { return defaultMaxConcurrency; }
     public void setDefaultMaxConcurrency(int defaultMaxConcurrency) { this.defaultMaxConcurrency = defaultMaxConcurrency; }
+    public long getPreviewIntervalMs() { return previewIntervalMs; }
+    public void setPreviewIntervalMs(long previewIntervalMs) { this.previewIntervalMs = previewIntervalMs; }
+    public Quota getQuota() { return quota; }
+    public void setQuota(Quota quota) { this.quota = quota; }
+
+    /** 上传配额（05 §11）：单文件、单仓库总量与并发上传会话上限。 */
+    public static class Quota {
+
+        /** 单文件大小上限（FILE-003：默认 50GiB = 53687091200 bytes）。 */
+        private long maxFileSizeBytes = 53687091200L;
+        /** 单仓库已发布（staging/active）文件总量上限；0 = 不限制。 */
+        private long maxRepoTotalBytes = 0;
+        /** 单仓库非终态上传会话并发上限（05 §11 并发上传数）。 */
+        private int maxConcurrentUploads = 5;
+
+        public long getMaxFileSizeBytes() { return maxFileSizeBytes; }
+        public void setMaxFileSizeBytes(long maxFileSizeBytes) { this.maxFileSizeBytes = maxFileSizeBytes; }
+        public long getMaxRepoTotalBytes() { return maxRepoTotalBytes; }
+        public void setMaxRepoTotalBytes(long maxRepoTotalBytes) { this.maxRepoTotalBytes = maxRepoTotalBytes; }
+        public int getMaxConcurrentUploads() { return maxConcurrentUploads; }
+        public void setMaxConcurrentUploads(int maxConcurrentUploads) { this.maxConcurrentUploads = maxConcurrentUploads; }
+    }
 }

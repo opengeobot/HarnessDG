@@ -2,9 +2,9 @@ spring:
   application:
     name: modelhub
   datasource:
-    url: ${MODEHUB_DB_URL:jdbc:postgresql://localhost:5432/modelhub?stringtype=unspecified}
-    username: ${MODEHUB_DB_USER:modelhub}
-    password: ${MODEHUB_DB_PASSWORD:}
+    url: ${MODELHUB_DB_URL:jdbc:postgresql://localhost:5432/modelhub?stringtype=unspecified}
+    username: ${MODELHUB_DB_USER:modelhub}
+    password: ${MODELHUB_DB_PASSWORD:}
     hikari:
       maximum-pool-size: 20
   flyway:
@@ -19,21 +19,21 @@ spring:
       hibernate.jdbc.time_zone: UTC
   data:
     redis:
-      host: ${MODEHUB_REDIS_HOST:localhost}
-      port: ${MODEHUB_REDIS_PORT:6379}
-      password: ${MODEHUB_REDIS_PASSWORD:}
+      host: ${MODELHUB_REDIS_HOST:localhost}
+      port: ${MODELHUB_REDIS_PORT:6379}
+      password: ${MODELHUB_REDIS_PASSWORD:}
       timeout: 2s
 
 server:
-  port: ${MODEHUB_HTTP_PORT:8080}
+  port: ${MODELHUB_HTTP_PORT:8080}
   shutdown: graceful
 
 modelhub:
   identity:
     jwt:
       # 私钥 PEM 由部署环境注入；为空时启动生成临时密钥（仅限非生产，02 §6）
-      private-key-pem: ${MODEHUB_JWT_PRIVATE_KEY_PEM:}
-      kid: ${MODEHUB_JWT_KID:modelhub-1}
+      private-key-pem: ${MODELHUB_JWT_PRIVATE_KEY_PEM:}
+      kid: ${MODELHUB_JWT_KID:modelhub-1}
       access-token-ttl-seconds: 900
       clock-skew-seconds: 60
     session:
@@ -41,16 +41,38 @@ modelhub:
       replay-grace-seconds: 10
       max-failed-attempts: 5
     rate-limit:
-      max-attempts: ${MODEHUB_RATE_LIMIT_MAX:5}
-      window-seconds: ${MODEHUB_RATE_LIMIT_WINDOW:60}
+      max-attempts: ${MODELHUB_RATE_LIMIT_MAX:5}
+      window-seconds: ${MODELHUB_RATE_LIMIT_WINDOW:60}
     # fail-closed：未配置 Origin 时 refresh/logout 一律拒绝（02 §6.1）
-    allowed-origins: ${MODEHUB_ALLOWED_ORIGINS:}
+    allowed-origins: ${MODELHUB_ALLOWED_ORIGINS:}
     # 限流/审计客户端 IP 头：仅在可信反向代理后配置，默认关闭
-    client-ip-header: ${MODEHUB_CLIENT_IP_HEADER:}
+    client-ip-header: ${MODELHUB_CLIENT_IP_HEADER:}
   bootstrap:
-    enabled: ${MODEHUB_BOOTSTRAP_ENABLED:false}
-    username: ${MODEHUB_BOOTSTRAP_USERNAME:}
-    password: ${MODEHUB_BOOTSTRAP_PASSWORD:}
+    enabled: ${MODELHUB_BOOTSTRAP_ENABLED:false}
+    username: ${MODELHUB_BOOTSTRAP_USERNAME:}
+    password: ${MODELHUB_BOOTSTRAP_PASSWORD:}
+  governance:
+    # SEC-05：审计日志默认保留 180 天，默认每日清理一次
+    audit-retention-days: ${MODELHUB_AUDIT_RETENTION_DAYS:180}
+    audit-retention-interval-ms: ${MODELHUB_AUDIT_RETENTION_INTERVAL_MS:86400000}
+  artifact:
+    quota:
+      # 上传配额（05 §11），与 ArtifactProperties.Quota 代码默认保持一致
+      max-file-size-bytes: ${MODELHUB_QUOTA_MAX_FILE_SIZE_BYTES:53687091200}   # 50GiB（FILE-003）
+      max-repo-total-bytes: ${MODELHUB_QUOTA_MAX_REPO_TOTAL_BYTES:0}            # 0 = 不限制
+      max-concurrent-uploads: ${MODELHUB_QUOTA_MAX_CONCURRENT_UPLOADS:5}
+    # === 以下属性不在 artifact.quota 层级，直接绑定到 ArtifactProperties 顶层字段（MODELHUB_ARTIFACT_ 前缀）===
+    internal-endpoint: ${MODELHUB_ARTIFACT_INTERNAL_ENDPOINT:http://localhost:9000}
+    public-base-url: ${MODELHUB_ARTIFACT_PUBLIC_BASE_URL:http://localhost:9000}
+    access-key: ${MODELHUB_ARTIFACT_ACCESS_KEY:modelhub}
+    secret-key: ${MODELHUB_ARTIFACT_SECRET_KEY:}
+    region: ${MODELHUB_ARTIFACT_REGION:us-east-1}
+    bucket: ${MODELHUB_ARTIFACT_BUCKET:artifacts}
+    api-base-url: ${MODELHUB_ARTIFACT_API_BASE_URL:http://localhost:8080}
+  gitea:
+    base-url: ${MODELHUB_GITEA_BASE_URL:http://localhost:3000}
+    username: ${MODELHUB_GITEA_USERNAME:}
+    password: ${MODELHUB_GITEA_PASSWORD:}
 
 management:
   endpoints:
@@ -64,12 +86,15 @@ management:
         enabled: true
   tracing:
     sampling:
-      probability: ${MODEHUB_TRACE_SAMPLE:1.0}
+      probability: ${MODELHUB_TRACE_SAMPLE:1.0}
   metrics:
     tags:
       application: modelhub
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
+        # Boot 3 属性位（旧 management.metrics.export.prometheus.enabled 已失效）；
+        # 缺失时测试上下文的 MetricsExportContextCustomizer 会以 defaults.enabled=false 关闭导出
         enabled: true
 
 logging:

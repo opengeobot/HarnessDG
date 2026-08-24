@@ -32,7 +32,11 @@ logs/
 *.log
 *.tmp
 .mvn-run.ps1
-
+compose-*.log
+# ---- 临时诊断脚本（不需要入库）----
+deploy/debug-auth.ps1
+deploy/features-check.py
+deploy/file002-quick.ps1
 # ---- 密钥与本地环境 ----
 .env
 .env.*
