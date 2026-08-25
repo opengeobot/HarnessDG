@@ -1,6 +1,7 @@
 package com.modelhub.api.controller;
 
 import com.modelhub.api.support.Principals;
+import com.modelhub.catalog.service.SystemOverviewService;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.identity.service.AuditQueryService;
 import com.modelhub.identity.service.AuditQueryService.AuditLogView;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,10 +38,13 @@ public class AdminController {
 
     private final AuthService authService;
     private final AuditQueryService auditQuery;
+    private final SystemOverviewService systemOverview;
 
-    public AdminController(AuthService authService, AuditQueryService auditQuery) {
+    public AdminController(AuthService authService, AuditQueryService auditQuery,
+                           SystemOverviewService systemOverview) {
         this.authService = authService;
         this.auditQuery = auditQuery;
+        this.systemOverview = systemOverview;
     }
 
     @PostMapping("/users/{userId:[0-9a-fA-F-]{36}}:unlock")
@@ -61,7 +67,9 @@ public class AdminController {
         }
         CursorQuery cursor = CursorQuery.from(params);
         CursorResult<AuditLogView> result =
-                auditQuery.query(actor, cursor, params.get("actor"), params.get("action"), params.get("resource"));
+                auditQuery.query(actor, cursor, params.get("actor"), params.get("action"),
+                        params.get("resource"), parseTime(params.get("from"), "from"),
+                        parseTime(params.get("to"), "to"));
         return ResponseEntity.ok(ApiEnvelope.ok(Map.of(
                 "items", result.items(),
                 "nextCursor", result.nextCursor() == null ? "" : result.nextCursor())));
@@ -78,9 +86,31 @@ public class AdminController {
         CurrentPrincipal actor = Principals.requireCurrent(request);
         StreamingResponseBody body = out ->
                 auditQuery.exportNdjson(actor, params.get("actor"), params.get("action"),
-                        params.get("resource"), out);
+                        params.get("resource"), parseTime(params.get("from"), "from"),
+                        parseTime(params.get("to"), "to"), out);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/x-ndjson"))
                 .body(body);
+    }
+
+    /** 系统概览（管理后台 §五）：平台计数 + 健康检查，admin/auditor 可读。 */
+    @GetMapping("/system/overview")
+    public ResponseEntity<ApiEnvelope<SystemOverviewService.OverviewView>> systemOverview(
+            HttpServletRequest request) {
+        CurrentPrincipal actor = Principals.requireCurrent(request);
+        return ResponseEntity.ok(ApiEnvelope.ok(systemOverview.overview(actor)));
+    }
+
+    /** from/to 参数解析：RFC-3339（如 2026-08-25T00:00:00Z），缺失返回 null。 */
+    private static OffsetDateTime parseTime(String raw, String name) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(raw.trim());
+        } catch (DateTimeParseException e) {
+            throw ApiException.badRequest(name + " 必须为 RFC-3339 时间（如 2026-08-25T00:00:00Z）",
+                    List.of(new ApiException.Detail(name, "invalid_format")));
+        }
     }
 }

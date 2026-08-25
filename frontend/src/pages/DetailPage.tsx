@@ -2,22 +2,33 @@
 // 时间：2026-08-21  作者：AxeXie
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api, type AccessRequest, type Feedback, type FileNode, type Page, type Repository } from '../api/client';
 import { errMsg } from '../App';
 import { useAuth } from '../context/AuthContext';
 import { useToast, DataState } from '../components/ui';
 import DownloadModal from '../components/DownloadModal';
 
-const VIS_LABEL: Record<string, string> = { public: '公开', organization: '组织', private: '私有' };
-const TYPE_LABEL: Record<string, string> = { model: '模型市场', dataset: '数据市场', studio: '工作空间' };
-const TYPE_PATH: Record<string, string> = { model: '/models', dataset: '/datasets', studio: '/studios' };
-const META_LABEL: Record<string, string> = {
-  task: '任务', framework: '框架', license: '开源协议', architecture: '结构', language: '语种',
-  tags: '标签', capabilities: '能力', apiStatus: '推理 Api 状态', parameterCount: '参数量',
-  parameterUnit: '参数单位', deployable: '支持部署', mcpCompatible: 'MCP 兼容',
-  estimatedRows: '预估行数', dataFormats: '数据格式', sensitivityLevel: '敏感级别',
-  previewPolicy: '预览策略', scenes: '场景', runtimeType: '运行时',
+const VIS_KEY: Record<string, string> = {
+  public: 'card.visPublic', organization: 'card.visOrganization', private: 'card.visPrivate',
 };
+const TYPE_KEY: Record<string, string> = {
+  model: 'detail.typeModel', dataset: 'detail.typeDataset', studio: 'detail.typeStudio',
+};
+const TYPE_PATH: Record<string, string> = { model: '/models', dataset: '/datasets', studio: '/studios' };
+const META_KEY: Record<string, string> = {
+  task: 'detail.metaTask', framework: 'detail.metaFramework', license: 'detail.metaLicense',
+  architecture: 'detail.metaArchitecture', language: 'detail.metaLanguage',
+  tags: 'detail.metaTags', capabilities: 'detail.metaCapabilities', apiStatus: 'detail.metaApiStatus',
+  parameterCount: 'detail.metaParameterCount', parameterUnit: 'detail.metaParameterUnit',
+  deployable: 'detail.metaDeployable', mcpCompatible: 'detail.metaMcpCompatible',
+  estimatedRows: 'detail.metaEstimatedRows', dataFormats: 'detail.metaDataFormats',
+  sensitivityLevel: 'detail.metaSensitivityLevel', previewPolicy: 'detail.metaPreviewPolicy',
+  scenes: 'detail.metaScenes', runtimeType: 'detail.metaRuntimeType',
+};
+
+/** 日期本地化：随当前语言切换 locale。 */
+const dateLocale = (lang: string) => (lang === 'zh' ? 'zh-CN' : 'en-US');
 
 /** 客户端重算 ETag（与 shared ETags.ofVersion 同规则，04 §10）。 */
 const etagOfVersion = (v: number) => '"' + (v + 0x5f000000).toString(16) + '"';
@@ -25,6 +36,7 @@ const etagOfVersion = (v: number) => '"' + (v + 0x5f000000).toString(16) + '"';
 export default function DetailPage() {
   const { typeKey, namespace, name, id } = useParams();
   const nav = useNavigate();
+  const { t, i18n } = useTranslation();
   const { user, requireLogin } = useAuth();
   const toast = useToast();
 
@@ -151,7 +163,7 @@ export default function DetailPage() {
       await api.createFeedback(repo!.id, fbText.trim());
       setFbText('');
       await loadFeedbacks();
-      toast.show('反馈已发布');
+      toast.show(t('detail.feedbackPublished'));
     } catch (e) {
       toast.show(errMsg(e), 'err');
     } finally {
@@ -164,12 +176,12 @@ export default function DetailPage() {
       const session = await api.createDownloadSession(repo!.id, f.id);
       window.open(session.url, '_blank');
     } catch (e) {
-      toast.show('下载失败：' + errMsg(e), 'err');
+      toast.show(t('detail.downloadFailed', { msg: errMsg(e) }), 'err');
     }
   }
 
   if (err) return <div className="form-error">{err}</div>;
-  if (!repo) return <div className="loading">加载中…</div>;
+  if (!repo) return <div className="loading">{t('common.loading')}</div>;
 
   const metaEntries = Object.entries(repo.metadata ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '');
 
@@ -178,8 +190,8 @@ export default function DetailPage() {
       <div className="detail-main">
         {/* 面包屑 */}
         <div className="breadcrumb">
-          <Link to="/">首页</Link> /
-          <Link to={TYPE_PATH[repo.type] ?? '/'}>{TYPE_LABEL[repo.type] ?? repo.type}</Link> /
+          <Link to="/">{t('nav.home')}</Link> /
+          <Link to={TYPE_PATH[repo.type] ?? '/'}>{TYPE_KEY[repo.type] ? t(TYPE_KEY[repo.type]) : repo.type}</Link> /
           <span>{repo.namespace}/{repo.name}</span>
         </div>
 
@@ -190,11 +202,11 @@ export default function DetailPage() {
               <div className="detail-ns">
                 {repo.namespace}/{repo.name}
                 <span className={`badge badge-${repo.visibility}`} style={{ marginLeft: 10 }}>
-                  {VIS_LABEL[repo.visibility]}
+                  {VIS_KEY[repo.visibility] ? t(VIS_KEY[repo.visibility]) : repo.visibility}
                 </span>
-                {repo.gated && <span className="badge badge-gated" style={{ marginLeft: 6 }}>申请制</span>}
+                {repo.gated && <span className="badge badge-gated" style={{ marginLeft: 6 }}>{t('card.gated')}</span>}
                 {repo.lifecycleStatus === 'provisioning' && (
-                  <span className="badge badge-pending" style={{ marginLeft: 6 }}>资源准备中</span>
+                  <span className="badge badge-pending" style={{ marginLeft: 6 }}>{t('my.provisioning')}</span>
                 )}
               </div>
             </div>
@@ -202,23 +214,23 @@ export default function DetailPage() {
 
           {/* 按钮组：下载 / 点赞 / 收藏 / 分享 + 规划中按钮（保留位置，禁用态 + 角标，禁止 Toast 冒充成功，09 §8.2） */}
           <div className="detail-actions">
-            <button className="btn btn-primary" onClick={() => setDlOpen(true)}>⬇ 下载</button>
+            <button className="btn btn-primary" onClick={() => setDlOpen(true)}>{t('detail.download')}</button>
             <button className={`btn btn-ghost ${liked ? 'btn-active' : ''}`} onClick={doLike}>
-              ♥ 点赞 {repo.stats.likes}
+              {t('detail.like', { n: repo.stats.likes })}
             </button>
             <button className={`btn btn-ghost ${favorited ? 'btn-active' : ''}`} onClick={doFavorite}>
-              ★ 收藏 {repo.stats.favorites}
+              {t('detail.favorite', { n: repo.stats.favorites })}
             </button>
             {repo.type === 'studio' && (
-              <PlannedButton label="🚀 在线体验" note="v1 不交付真实运行时（publish_status 仅 draft/metadata_only），在线体验规划中。" />
+              <PlannedButton label={t('detail.planTryStudio')} note={t('detail.planTryStudioNote')} />
             )}
             {repo.type === 'studio' && repo.metadata?.['deployable'] === true && (
-              <PlannedButton label="部署" note="部署运行时门禁未就绪，该能力规划中。" />
+              <PlannedButton label={t('detail.planDeploy')} note={t('detail.planDeployNote')} />
             )}
-            {repo.type === 'model' && <PlannedButton label="Notebook 快速开发" note="Notebook 开发环境规划中，v1 未交付。" />}
-            {repo.type === 'model' && <PlannedButton label="训练" note="训练任务规划中，v1 未交付。" />}
-            {repo.type === 'model' && <PlannedButton label="评测" note="评测任务规划中，v1 未交付。" />}
-            <PlannedButton label="分享" note="分享能力规划中，可先复制浏览器地址栏链接。" />
+            {repo.type === 'model' && <PlannedButton label={t('detail.planNotebook')} note={t('detail.planNotebookNote')} />}
+            {repo.type === 'model' && <PlannedButton label={t('detail.planTrain')} note={t('detail.planTrainNote')} />}
+            {repo.type === 'model' && <PlannedButton label={t('detail.planEval')} note={t('detail.planEvalNote')} />}
+            <PlannedButton label={t('detail.planShare')} note={t('detail.planShareNote')} />
           </div>
 
           {repo.description && <p className="detail-desc">{repo.description}</p>}
@@ -226,48 +238,49 @@ export default function DetailPage() {
           {/* 标签行 + 统计行 */}
           {Array.isArray(repo.metadata?.['tags']) && (repo.metadata!['tags'] as string[]).length > 0 && (
             <div className="repo-tags" style={{ marginBottom: 8 }}>
-              {(repo.metadata!['tags'] as string[]).slice(0, 8).map((t) => (
-                <span key={t} className="tag-chip">{t}</span>
+              {(repo.metadata!['tags'] as string[]).slice(0, 8).map((tag) => (
+                <span key={tag} className="tag-chip">{tag}</span>
               ))}
             </div>
           )}
           <div className="stat-row">
-            <span>浏览 <b>{repo.stats.visits}</b></span>
-            <span>下载 <b>{repo.stats.downloads}</b></span>
-            <span>点赞 <b>{repo.stats.likes}</b></span>
-            <span>收藏 <b>{repo.stats.favorites}</b></span>
-            <span>文件 <b>{repo.stats.fileCount}</b></span>
+            <span>{t('detail.statVisits')} <b>{repo.stats.visits}</b></span>
+            <span>{t('detail.statDownloads')} <b>{repo.stats.downloads}</b></span>
+            <span>{t('detail.statLikes')} <b>{repo.stats.likes}</b></span>
+            <span>{t('detail.statFavorites')} <b>{repo.stats.favorites}</b></span>
+            <span>{t('detail.statFiles')} <b>{repo.stats.fileCount}</b></span>
           </div>
         </div>
 
         {/* 三 Tab */}
         <div className="tabs">
-          <div className={`tab ${tab === 'intro' ? 'active' : ''}`} onClick={() => setTab('intro')}>介绍</div>
-          <div className={`tab ${tab === 'files' ? 'active' : ''}`} onClick={() => setTab('files')}>文件</div>
-          <div className={`tab ${tab === 'feedback' ? 'active' : ''}`} onClick={() => setTab('feedback')}>交流反馈</div>
+          <div className={`tab ${tab === 'intro' ? 'active' : ''}`} onClick={() => setTab('intro')}>{t('detail.tabIntro')}</div>
+          <div className={`tab ${tab === 'files' ? 'active' : ''}`} onClick={() => setTab('files')}>{t('detail.tabFiles')}</div>
+          <div className={`tab ${tab === 'feedback' ? 'active' : ''}`} onClick={() => setTab('feedback')}>{t('detail.tabFeedback')}</div>
         </div>
 
         {tab === 'intro' && (
           <div className="card card-pad">
-            <h3 style={{ marginTop: 0 }}>元数据</h3>
+            <h3 style={{ marginTop: 0 }}>{t('detail.metadata')}</h3>
             {metaEntries.length > 0 ? (
               <div className="meta-grid">
                 {metaEntries.map(([k, v]) => (
                   <div key={k} className="meta-item">
-                    <span className="meta-key">{META_LABEL[k] ?? k}</span>
+                    <span className="meta-key">{META_KEY[k] ? t(META_KEY[k]) : k}</span>
                     <span className="meta-val">
-                      {Array.isArray(v) ? v.join('、') : typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}
+                      {Array.isArray(v) ? v.join(t('detail.sep'))
+                        : typeof v === 'boolean' ? (v ? t('detail.yes') : t('detail.no')) : String(v)}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="empty-state" style={{ padding: 24 }}>暂无元数据</div>
+              <div className="empty-state" style={{ padding: 24 }}>{t('detail.noMetadata')}</div>
             )}
 
             <h3>README</h3>
             {readme === null ? (
-              <div className="empty-state" style={{ padding: 24 }}>暂无 README</div>
+              <div className="empty-state" style={{ padding: 24 }}>{t('detail.noReadme')}</div>
             ) : (
               <pre className="readme-text">{readme}</pre>
             )}
@@ -282,7 +295,7 @@ export default function DetailPage() {
               <>
                 {curPath && (
                   <a style={{ cursor: 'pointer' }} onClick={() => setCurPath(curPath.split('/').slice(0, -1).join('/'))}>
-                    ← 返回上级
+                    {t('detail.backUp')}
                   </a>
                 )}
                 <div className="file-list" style={{ marginTop: 8 }}>
@@ -294,11 +307,11 @@ export default function DetailPage() {
                       {f.type === 'file' && f.size != null && (
                         <span className="file-size">{f.size > 1048576 ? (f.size / 1048576).toFixed(1) + ' MB' : (f.size / 1024).toFixed(1) + ' KB'}</span>
                       )}
-                      {f.type === 'file' && <span className="btn btn-ghost btn-sm">下载</span>}
+                      {f.type === 'file' && <span className="btn btn-ghost btn-sm">{t('detail.fileDownload')}</span>}
                     </div>
                   ))}
                   {files.length === 0 && (
-                    <div className="empty-state" style={{ padding: 24 }}>该分支下暂无文件</div>
+                    <div className="empty-state" style={{ padding: 24 }}>{t('detail.noFiles')}</div>
                   )}
                 </div>
               </>
@@ -310,18 +323,18 @@ export default function DetailPage() {
           <div className="card card-pad">
             {user ? (
               <>
-                <textarea className="reason-input" placeholder="发表你的看法或问题…"
+                <textarea className="reason-input" placeholder={t('detail.fbPlaceholder')}
                           value={fbText} onChange={(e) => setFbText(e.target.value)} />
                 <div style={{ margin: '10px 0 16px' }}>
                   <button className="btn btn-primary btn-sm" disabled={fbBusy || !fbText.trim()}
                           onClick={submitFeedback}>
-                    {fbBusy ? '发布中…' : '发布反馈'}
+                    {fbBusy ? t('detail.fbPublishing') : t('detail.fbPublish')}
                   </button>
                 </div>
               </>
             ) : (
               <div className="empty-state" style={{ padding: 16 }}>
-                登录后参与交流 <a onClick={() => requireLogin(() => {})} style={{ cursor: 'pointer' }}>去登录</a>
+                {t('detail.fbLoginPrompt')} <a onClick={() => requireLogin(() => {})} style={{ cursor: 'pointer' }}>{t('detail.fbGoLogin')}</a>
               </div>
             )}
             <DataState state={feedbacks.length === 0 ? 'empty' : 'ready'}>
@@ -333,7 +346,7 @@ export default function DetailPage() {
                         {f.author.slice(0, 1).toUpperCase()}
                       </span>
                       <b>{f.author}</b>
-                      <span className="req-meta">{new Date(f.createdAt).toLocaleString('zh-CN')}</span>
+                      <span className="req-meta">{new Date(f.createdAt).toLocaleString(dateLocale(i18n.language))}</span>
                     </div>
                     <div className="fb-content">{f.content}</div>
                   </div>
@@ -341,7 +354,7 @@ export default function DetailPage() {
               </div>
               {fbCursor && (
                 <div style={{ textAlign: 'center', marginTop: 12 }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => loadFeedbacks(fbCursor)}>加载更多</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => loadFeedbacks(fbCursor)}>{t('detail.fbLoadMore')}</button>
                 </div>
               )}
             </DataState>
@@ -351,9 +364,9 @@ export default function DetailPage() {
         {/* gated 申请入口 + 所有者/维护者审批管理（09 §6.3） */}
         {repo.gated && (
           <div className="card card-pad" style={{ marginTop: 16 }}>
-            <h3 style={{ marginTop: 0 }}>申请制资源</h3>
+            <h3 style={{ marginTop: 0 }}>{t('detail.gatedTitle')}</h3>
             <p className="detail-desc" style={{ margin: '0 0 10px' }}>
-              该资源需维护者审批后方可下载/访问。
+              {t('detail.gatedDesc')}
             </p>
             <GatedAdmin repoId={repo.id} />
             <GatedApply repoId={repo.id} />
@@ -364,20 +377,20 @@ export default function DetailPage() {
       {/* 右侧信息卡 */}
       <aside className="detail-side">
         <div className="card card-pad">
-          <h3 style={{ marginTop: 0 }}>资源信息</h3>
+          <h3 style={{ marginTop: 0 }}>{t('detail.sideTitle')}</h3>
           <div className="info-rows">
-            <div><span>类型</span><b>{repo.type}</b></div>
-            <div><span>可见性</span><b>{VIS_LABEL[repo.visibility]}</b></div>
+            <div><span>{t('detail.sideType')}</span><b>{repo.type}</b></div>
+            <div><span>{t('detail.sideVisibility')}</span><b>{VIS_KEY[repo.visibility] ? t(VIS_KEY[repo.visibility]) : repo.visibility}</b></div>
             {typeof repo.metadata?.['license'] === 'string' && (
-              <div><span>协议</span><b>{repo.metadata!['license'] as string}</b></div>
+              <div><span>{t('detail.sideLicense')}</span><b>{repo.metadata!['license'] as string}</b></div>
             )}
-            <div><span>创建时间</span><b>{new Date(repo.createdAt).toLocaleDateString('zh-CN')}</b></div>
-            <div><span>更新时间</span><b>{new Date(repo.updatedAt).toLocaleDateString('zh-CN')}</b></div>
+            <div><span>{t('detail.sideCreated')}</span><b>{new Date(repo.createdAt).toLocaleDateString(dateLocale(i18n.language))}</b></div>
+            <div><span>{t('detail.sideUpdated')}</span><b>{new Date(repo.updatedAt).toLocaleDateString(dateLocale(i18n.language))}</b></div>
           </div>
         </div>
         {related && related.items.length > 0 && (
           <div className="card card-pad" style={{ marginTop: 16 }}>
-            <h3 style={{ marginTop: 0 }}>相关工作空间</h3>
+            <h3 style={{ marginTop: 0 }}>{t('detail.relatedTitle')}</h3>
             <div className="related-list">
               {related.items.map((r) => (
                 <div key={r.id} className="related-item"
@@ -398,19 +411,20 @@ export default function DetailPage() {
 
 /** 规划中能力按钮（09 §8.2 / UX-001）：保留位置，点击展示说明面板，禁止成功语气 Toast。 */
 function PlannedButton({ label, note }: { label: string; note: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
       <button className="btn btn-ghost" onClick={() => setOpen(true)}>
-        {label}<span className="badge badge-pending" style={{ marginLeft: 4 }}>规划中</span>
+        {label}<span className="badge badge-pending" style={{ marginLeft: 4 }}>{t('detail.plannedBadge')}</span>
       </button>
       {open && (
         <div className="modal-mask" onClick={() => setOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>{label} · 规划中</h3>
+            <h3 style={{ marginTop: 0 }}>{t('detail.plannedTitle', { label })}</h3>
             <p className="detail-desc">{note}</p>
             <div style={{ textAlign: 'right' }}>
-              <button className="btn btn-primary btn-sm" onClick={() => setOpen(false)}>知道了</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setOpen(false)}>{t('detail.gotIt')}</button>
             </div>
           </div>
         </div>
@@ -419,13 +433,14 @@ function PlannedButton({ label, note }: { label: string; note: string }) {
   );
 }
 
-const REQ_STATUS_LABEL: Record<string, string> = {
-  pending: '待审批', approved: '已批准', rejected: '已拒绝',
-  revoked: '已吊销', expired: '已过期', withdrawn: '已撤回',
+const REQ_KEY: Record<string, string> = {
+  pending: 'detail.reqPending', approved: 'detail.reqApproved', rejected: 'detail.reqRejected',
+  revoked: 'detail.reqRevoked', expired: 'detail.reqExpired', withdrawn: 'detail.reqWithdrawn',
 };
 
 /** 所有者/维护者审批面板（09 §6.3）：非维护者 GET 403 时整体隐藏（服务端判定，不特判用户名）。 */
 function GatedAdmin({ repoId }: { repoId: string }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
   const [requests, setRequests] = useState<AccessRequest[] | null>(null);
@@ -444,7 +459,8 @@ function GatedAdmin({ repoId }: { repoId: string }) {
       if (action === 'approve') await api.approveAccess(repoId, req.id, etag);
       else if (action === 'reject') await api.rejectAccess(repoId, req.id, etag);
       else await api.revokeAccess(repoId, req.id, etag);
-      toast.show(action === 'approve' ? '已批准访问申请' : action === 'reject' ? '已拒绝访问申请' : '已吊销访问授权');
+      toast.show(action === 'approve' ? t('detail.gateApproved')
+        : action === 'reject' ? t('detail.gateRejected') : t('detail.gateRevoked'));
       load();
     } catch (e) {
       toast.show(errMsg(e), 'err');
@@ -456,16 +472,16 @@ function GatedAdmin({ repoId }: { repoId: string }) {
   if (!user || requests === null) return null;
   return (
     <div style={{ marginBottom: 14 }}>
-      <h4 style={{ margin: '0 0 8px' }}>待审批与授权管理（维护者）</h4>
+      <h4 style={{ margin: '0 0 8px' }}>{t('detail.gateAdminTitle')}</h4>
       {requests.length === 0 ? (
-        <div className="empty-state" style={{ padding: 12 }}>暂无访问申请</div>
+        <div className="empty-state" style={{ padding: 12 }}>{t('detail.gateNoRequests')}</div>
       ) : (
         requests.map((r) => (
           <div key={r.id} className="fb-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <span className="req-meta">申请人 {r.requesterId.slice(0, 8)}…</span>
+              <span className="req-meta">{t('detail.gateRequester', { id: r.requesterId.slice(0, 8) })}</span>
               <span className={`badge ${r.status === 'pending' ? 'badge-pending' : r.status === 'approved' ? 'badge-public' : 'badge-private'}`} style={{ marginLeft: 8 }}>
-                {REQ_STATUS_LABEL[r.status] ?? r.status}
+                {REQ_KEY[r.status] ? t(REQ_KEY[r.status]) : r.status}
               </span>
               {r.reason && <div className="fb-content">{r.reason}</div>}
             </div>
@@ -473,14 +489,14 @@ function GatedAdmin({ repoId }: { repoId: string }) {
               {r.status === 'pending' && (
                 <>
                   <button className="btn btn-primary btn-sm" disabled={busyId === r.id + 'approve'}
-                          onClick={() => act(r, 'approve')}>批准</button>
+                          onClick={() => act(r, 'approve')}>{t('detail.gateApprove')}</button>
                   <button className="btn btn-danger btn-sm" disabled={busyId === r.id + 'reject'}
-                          onClick={() => act(r, 'reject')}>拒绝</button>
+                          onClick={() => act(r, 'reject')}>{t('detail.gateReject')}</button>
                 </>
               )}
               {r.status === 'approved' && (
                 <button className="btn btn-ghost btn-sm" disabled={busyId === r.id + 'revoke'}
-                        onClick={() => act(r, 'revoke')}>吊销</button>
+                        onClick={() => act(r, 'revoke')}>{t('detail.gateRevoke')}</button>
               )}
             </div>
           </div>
@@ -492,6 +508,7 @@ function GatedAdmin({ repoId }: { repoId: string }) {
 
 /** gated 访问申请（requireLogin 拦截）；已申请过则展示自身申请状态（09 §6.3）。 */
 function GatedApply({ repoId }: { repoId: string }) {
+  const { t } = useTranslation();
   const { user, requireLogin } = useAuth();
   const toast = useToast();
   const [reason, setReason] = useState('');
@@ -511,8 +528,8 @@ function GatedApply({ repoId }: { repoId: string }) {
       (async () => {
         setBusy(true);
         try {
-          const created = await api.requestAccess(repoId, reason.trim() || '申请访问该资源');
-          toast.show('申请已提交，等待维护者审批');
+          const created = await api.requestAccess(repoId, reason.trim() || t('detail.applyDefaultReason'));
+          toast.show(t('detail.applySubmitted'));
           setReason('');
           setMine(created);
         } catch (e) {
@@ -525,32 +542,32 @@ function GatedApply({ repoId }: { repoId: string }) {
   }
 
   if (!user) {
-    return <button className="btn btn-primary" onClick={() => requireLogin(() => {})}>登录后申请访问</button>;
+    return <button className="btn btn-primary" onClick={() => requireLogin(() => {})}>{t('detail.applyLogin')}</button>;
   }
   if (mine) {
     const canReapply = mine.status === 'rejected' || mine.status === 'revoked'
       || mine.status === 'expired' || mine.status === 'withdrawn';
     return (
       <div className="empty-state" style={{ padding: 12, textAlign: 'left' }}>
-        我的申请状态：
+        {t('detail.myApplyStatus')}
         <span className={`badge ${mine.status === 'pending' ? 'badge-pending' : mine.status === 'approved' ? 'badge-public' : 'badge-private'}`} style={{ margin: '0 8px' }}>
-          {REQ_STATUS_LABEL[mine.status] ?? mine.status}
+          {REQ_KEY[mine.status] ? t(REQ_KEY[mine.status]) : mine.status}
         </span>
-        {mine.status === 'pending' && '等待维护者审批中'}
-        {mine.status === 'approved' && '已获批，可查看与下载文件'}
+        {mine.status === 'pending' && t('detail.applyWait')}
+        {mine.status === 'approved' && t('detail.applyGranted')}
         {canReapply && (
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setMine(null)}>重新申请</button>
+          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setMine(null)}>{t('detail.applyReapply')}</button>
         )}
       </div>
     );
   }
   return (
     <>
-      <textarea className="reason-input" placeholder="简述访问用途（可选）"
+      <textarea className="reason-input" placeholder={t('detail.applyPlaceholder')}
                 value={reason} onChange={(e) => setReason(e.target.value)} />
       <div style={{ marginTop: 12 }}>
         <button className="btn btn-primary" disabled={busy} onClick={submit}>
-          {busy ? '提交中…' : '提交申请'}
+          {busy ? t('detail.applySubmitting') : t('detail.applySubmit')}
         </button>
       </div>
     </>

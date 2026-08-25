@@ -2,27 +2,36 @@
 // 时间：2026-08-21  作者：AxeXie
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api, type Page, type Repository } from '../api/client';
 import { errMsg } from '../App';
 import { useAuth } from '../context/AuthContext';
 import { Pagination, ConfirmDialog, DataState, useToast } from '../components/ui';
 import RepoFormModal from '../components/RepoFormModal';
 
-const TYPE_LABEL: Record<string, string> = { model: '模型', dataset: '数据集', studio: '工作空间' };
+const TYPE_KEY: Record<string, string> = {
+  model: 'my.typeModel', dataset: 'my.typeDataset', studio: 'my.typeStudio',
+};
 
 type SubPage = 'overview' | 'model' | 'dataset' | 'studio' | 'favorites' | 'likes';
 
-const MENU: Array<{ key: SubPage; label: string; icon: string }> = [
-  { key: 'overview', label: '概览', icon: '📊' },
-  { key: 'model', label: '我的模型', icon: '🧠' },
-  { key: 'dataset', label: '我的数据集', icon: '🗃️' },
-  { key: 'studio', label: '我的工作空间', icon: '🎨' },
-  { key: 'favorites', label: '我的收藏', icon: '★' },
-  { key: 'likes', label: '我的点赞', icon: '♥' },
+const MENU: Array<{ key: SubPage; labelKey: string; icon: string }> = [
+  { key: 'overview', labelKey: 'my.menuOverview', icon: '📊' },
+  { key: 'model', labelKey: 'my.menuModel', icon: '🧠' },
+  { key: 'dataset', labelKey: 'my.menuDataset', icon: '🗃️' },
+  { key: 'studio', labelKey: 'my.menuStudio', icon: '🎨' },
+  { key: 'favorites', labelKey: 'my.menuFavorites', icon: '★' },
+  { key: 'likes', labelKey: 'my.menuLikes', icon: '♥' },
 ];
+
+/** 日期本地化：随当前语言切换 locale。 */
+function fmtDate(iso: string, lang: string) {
+  return new Date(iso).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US');
+}
 
 export default function MyPage() {
   const nav = useNavigate();
+  const { t } = useTranslation();
   const { user, loading, openLogin } = useAuth();
   const [sub, setSub] = useState<SubPage>('overview');
 
@@ -34,7 +43,7 @@ export default function MyPage() {
     }
   }, [loading, user, nav, openLogin]);
 
-  if (loading) return <div className="page-loading">加载中…</div>;
+  if (loading) return <div className="page-loading">{t('common.loading')}</div>;
   if (!user) return null;
 
   return (
@@ -51,7 +60,7 @@ export default function MyPage() {
           {MENU.map((m) => (
             <div key={m.key} className={`my-menu-item ${sub === m.key ? 'active' : ''}`}
                  onClick={() => setSub(m.key)}>
-              <span>{m.icon}</span>{m.label}
+              <span>{m.icon}</span>{t(m.labelKey)}
             </div>
           ))}
         </nav>
@@ -65,6 +74,7 @@ export default function MyPage() {
 
 /** 概览：5 统计卡（tab+type pageSize=1 取 total 组装）+ 最近更新 6 条（09 §9.2）。 */
 function Overview({ onGoto }: { onGoto: (s: SubPage) => void }) {
+  const { t } = useTranslation();
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [recent, setRecent] = useState<Repository[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -91,12 +101,12 @@ function Overview({ onGoto }: { onGoto: (s: SubPage) => void }) {
     })();
   }, []);
 
-  const cards: Array<{ key: SubPage; label: string; count: number }> = [
-    { key: 'model', label: '我的模型', count: counts['model'] ?? 0 },
-    { key: 'dataset', label: '我的数据集', count: counts['dataset'] ?? 0 },
-    { key: 'studio', label: '我的工作空间', count: counts['studio'] ?? 0 },
-    { key: 'favorites', label: '我的收藏', count: counts['favorites'] ?? 0 },
-    { key: 'likes', label: '我的点赞', count: counts['likes'] ?? 0 },
+  const cards: Array<{ key: SubPage; labelKey: string; count: number }> = [
+    { key: 'model', labelKey: 'my.menuModel', count: counts['model'] ?? 0 },
+    { key: 'dataset', labelKey: 'my.menuDataset', count: counts['dataset'] ?? 0 },
+    { key: 'studio', labelKey: 'my.menuStudio', count: counts['studio'] ?? 0 },
+    { key: 'favorites', labelKey: 'my.menuFavorites', count: counts['favorites'] ?? 0 },
+    { key: 'likes', labelKey: 'my.menuLikes', count: counts['likes'] ?? 0 },
   ];
 
   return (
@@ -105,18 +115,18 @@ function Overview({ onGoto }: { onGoto: (s: SubPage) => void }) {
         {cards.map((c) => (
           <div key={c.key} className="card card-pad stat-card" onClick={() => onGoto(c.key)}>
             <div className="stat-card-num">{c.count}</div>
-            <div className="stat-card-label">{c.label}</div>
+            <div className="stat-card-label">{t(c.labelKey)}</div>
           </div>
         ))}
       </div>
       <div className="card card-pad" style={{ marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>最近更新</h3>
+        <h3 style={{ marginTop: 0 }}>{t('my.recentUpdated')}</h3>
         {recent.length === 0 ? (
-          <div className="empty-state" style={{ padding: 24 }}>还没有创建过仓库</div>
+          <div className="empty-state" style={{ padding: 24 }}>{t('my.noRepo')}</div>
         ) : (
           <table className="repo-table">
             <thead>
-              <tr><th>仓库</th><th>类型</th><th>下载/访问</th><th>点赞</th><th>更新时间</th></tr>
+              <tr><th>{t('my.thRepo')}</th><th>{t('my.thType')}</th><th>{t('my.thDownloads')}</th><th>{t('my.thLikes')}</th><th>{t('my.thUpdated')}</th></tr>
             </thead>
             <tbody>
               {recent.map((r) => <RepoRow key={r.id} repo={r} />)}
@@ -130,22 +140,24 @@ function Overview({ onGoto }: { onGoto: (s: SubPage) => void }) {
 
 function RepoRow({ repo }: { repo: Repository }) {
   const nav = useNavigate();
+  const { t, i18n } = useTranslation();
   return (
     <tr className="repo-row" onClick={() => nav(`/resources/${repo.type}/${repo.namespace}/${repo.name}`)}>
       <td>
         <b>{repo.displayName || repo.name}</b>
         <span className="repo-ns" style={{ marginLeft: 8 }}>@{repo.namespace}/{repo.name}</span>
       </td>
-      <td>{TYPE_LABEL[repo.type] ?? repo.type}</td>
+      <td>{TYPE_KEY[repo.type] ? t(TYPE_KEY[repo.type]) : repo.type}</td>
       <td>{repo.type === 'studio' ? repo.stats.visits : repo.stats.downloads}</td>
       <td>{repo.stats.likes}</td>
-      <td className="req-meta">{new Date(repo.updatedAt).toLocaleDateString('zh-CN')}</td>
+      <td className="req-meta">{fmtDate(repo.updatedAt, i18n.language)}</td>
     </tr>
   );
 }
 
 /** 仓库子页：表格 10 条/页 + 创建 + 编辑（PATCH+If-Match）+ 删除（ConfirmDialog）。 */
 function RepoSubPage({ sub }: { sub: SubPage }) {
+  const { t } = useTranslation();
   const toast = useToast();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Repository> | null>(null);
@@ -174,7 +186,7 @@ function RepoSubPage({ sub }: { sub: SubPage }) {
     setDelBusy(true);
     try {
       await api.deleteRepo(deleting.id, deleting.etag ?? `W/"${deleting.version}"`);
-      toast.show('删除请求已受理，正在异步清理');
+      toast.show(t('my.deleteAccepted'));
       setDeleting(null);
       load();
     } catch (e) {
@@ -185,15 +197,15 @@ function RepoSubPage({ sub }: { sub: SubPage }) {
   }
 
   const createType = type ?? 'model';
-  const title = MENU.find((m) => m.key === sub)?.label ?? '';
+  const title = MENU.find((m) => m.key === sub)?.labelKey ?? '';
 
   return (
     <>
       <div className="dir-head">
-        <span className="dir-title">{title}</span>
+        <span className="dir-title">{t(title)}</span>
         {tab === 'created' && (
           <button className="btn btn-primary btn-sm" onClick={() => setFormOpen(true)}>
-            + 创建{TYPE_LABEL[createType]}
+            {t('my.createBtn', { unit: t(TYPE_KEY[createType]) })}
           </button>
         )}
       </div>
@@ -202,8 +214,8 @@ function RepoSubPage({ sub }: { sub: SubPage }) {
           <table className="repo-table">
             <thead>
               <tr>
-                <th>仓库</th><th>类型</th><th>可见性</th><th>下载/访问</th><th>点赞</th><th>更新时间</th>
-                {tab === 'created' && <th style={{ width: 140 }}>操作</th>}
+                <th>{t('my.thRepo')}</th><th>{t('my.thType')}</th><th>{t('my.thVisibility')}</th><th>{t('my.thDownloads')}</th><th>{t('my.thLikes')}</th><th>{t('my.thUpdated')}</th>
+                {tab === 'created' && <th style={{ width: 140 }}>{t('my.thActions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -224,20 +236,20 @@ function RepoSubPage({ sub }: { sub: SubPage }) {
                          onSaved={(saved, created) => {
                            setFormOpen(false);
                            toast.show(created
-                             ? (saved.lifecycleStatus === 'provisioning' ? '创建受理，资源准备中' : '创建成功')
-                             : '保存成功');
+                             ? (saved.lifecycleStatus === 'provisioning' ? t('my.createProvisioning') : t('my.createOk'))
+                             : t('my.saveOk'));
                            load();
                          }} />
       )}
       {editing && (
         <RepoFormModal typeKey={editing.type} initial={editing}
                         onClose={() => setEditing(null)}
-                        onSaved={() => { setEditing(null); toast.show('保存成功'); load(); }} />
+                        onSaved={() => { setEditing(null); toast.show(t('my.saveOk')); load(); }} />
       )}
       {deleting && (
-        <ConfirmDialog title="删除仓库"
-                        message={`确认删除 ${deleting.namespace}/${deleting.name}？删除为异步流程，进入清理状态后不可恢复。`}
-                        confirmText="删除" busy={delBusy}
+        <ConfirmDialog title={t('my.deleteTitle')}
+                        message={t('my.deleteMessage', { ns: deleting.namespace, name: deleting.name })}
+                        confirmText={t('my.deleteBtn')} busy={delBusy}
                         onConfirm={confirmDelete} onCancel={() => setDeleting(null)} />
       )}
     </>
@@ -248,6 +260,7 @@ function EditableRow({ repo, tab, onEdit, onDelete }: {
   repo: Repository; tab: string; onEdit: () => void; onDelete: () => void;
 }) {
   const nav = useNavigate();
+  const { t, i18n } = useTranslation();
   const goto = () => nav(`/resources/${repo.type}/${repo.namespace}/${repo.name}`);
   return (
     <tr>
@@ -255,24 +268,25 @@ function EditableRow({ repo, tab, onEdit, onDelete }: {
         <b>{repo.displayName || repo.name}</b>
         <span className="repo-ns" style={{ marginLeft: 8 }}>@{repo.namespace}/{repo.name}</span>
         {repo.lifecycleStatus === 'provisioning' && (
-          <span className="badge badge-pending" style={{ marginLeft: 6 }}>资源准备中</span>
+          <span className="badge badge-pending" style={{ marginLeft: 6 }}>{t('my.provisioning')}</span>
         )}
       </td>
-      <td onClick={goto}>{TYPE_LABEL[repo.type] ?? repo.type}</td>
+      <td onClick={goto}>{TYPE_KEY[repo.type] ? t(TYPE_KEY[repo.type]) : repo.type}</td>
       <td onClick={goto}>
         <span className={`badge badge-${repo.visibility}`}>
-          {repo.visibility === 'public' ? '公开' : repo.visibility === 'organization' ? '组织' : '私有'}
+          {repo.visibility === 'public' ? t('card.visPublic')
+            : repo.visibility === 'organization' ? t('card.visOrganization') : t('card.visPrivate')}
         </span>
-        {repo.gated && <span className="badge badge-gated" style={{ marginLeft: 4 }}>申请制</span>}
+        {repo.gated && <span className="badge badge-gated" style={{ marginLeft: 4 }}>{t('card.gated')}</span>}
       </td>
       <td className="req-meta" onClick={goto}>{repo.type === 'studio' ? repo.stats.visits : repo.stats.downloads}</td>
       <td className="req-meta" onClick={goto}>{repo.stats.likes}</td>
-      <td className="req-meta" onClick={goto}>{new Date(repo.updatedAt).toLocaleDateString('zh-CN')}</td>
+      <td className="req-meta" onClick={goto}>{fmtDate(repo.updatedAt, i18n.language)}</td>
       {tab === 'created' && (
         <td>
           <div className="req-actions">
-            <button className="btn btn-ghost btn-sm" onClick={onEdit}>编辑</button>
-            <button className="btn btn-danger btn-sm" onClick={onDelete}>删除</button>
+            <button className="btn btn-ghost btn-sm" onClick={onEdit}>{t('my.edit')}</button>
+            <button className="btn btn-danger btn-sm" onClick={onDelete}>{t('my.deleteBtn')}</button>
           </div>
         </td>
       )}

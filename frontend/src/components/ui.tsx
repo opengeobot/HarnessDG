@@ -1,11 +1,13 @@
 // 通用展示组件 — 页码分页（09 §2.4）/ 确认对话框 / Toast（09 §2.5）
 // 时间：2026-08-21  作者：AxeXie
 import React, { createContext, useCallback, useContext, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /** 页码分页（09 §2.4）：≤7 页全展；否则首页 + 当前邻域 + 省略号 + 末页 + 跳页输入。 */
 export function Pagination({ page, pageSize, total, onChange }: {
   page: number; pageSize: number; total: number; onChange: (p: number) => void;
 }) {
+  const { t } = useTranslation();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const [jump, setJump] = useState('');
   if (totalPages <= 1) return null;
@@ -34,7 +36,7 @@ export function Pagination({ page, pageSize, total, onChange }: {
   return (
     <div className="pager pager-nums">
       <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-        上一页
+        {t('common.prevPage')}
       </button>
       {pages.map((p) => p === 'gap-l' || p === 'gap-r' ? (
         <span key={p} className="pager-gap">…</span>
@@ -43,14 +45,14 @@ export function Pagination({ page, pageSize, total, onChange }: {
                 onClick={() => p !== page && onChange(p)}>{p}</button>
       ))}
       <button className="btn btn-ghost btn-sm" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
-        下一页
+        {t('common.nextPage')}
       </button>
       <span className="pager-jump">
-        跳至
+        {t('common.jumpTo')}
         <input value={jump} onChange={(e) => setJump(e.target.value)}
                onKeyDown={(e) => { if (e.key === 'Enter') doJump(); }} />
-        页
-        <button className="btn btn-ghost btn-sm" onClick={doJump}>确定</button>
+        {t('common.pageUnit')}
+        <button className="btn btn-ghost btn-sm" onClick={doJump}>{t('common.ok')}</button>
       </span>
     </div>
   );
@@ -61,6 +63,7 @@ export function ConfirmDialog({ title, message, confirmText, busy, onConfirm, on
   title: string; message: string; confirmText?: string; busy?: boolean;
   onConfirm: () => void; onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="modal-mask" onClick={onCancel}>
       <div className="modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
@@ -69,9 +72,9 @@ export function ConfirmDialog({ title, message, confirmText, busy, onConfirm, on
         </div>
         <div className="modal-body">{message}</div>
         <div className="modal-foot">
-          <button className="btn btn-ghost" onClick={onCancel}>取消</button>
+          <button className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
           <button className="btn btn-danger" disabled={busy} onClick={onConfirm}>
-            {busy ? '处理中…' : (confirmText ?? '确认')}
+            {busy ? t('common.processing') : (confirmText ?? t('common.confirm'))}
           </button>
         </div>
       </div>
@@ -108,18 +111,19 @@ export function DataState({ state, errMsg, onRetry, children }: {
   state: 'loading' | 'ready' | 'empty' | 'error' | 'forbidden';
   errMsg?: string; onRetry?: () => void; children?: React.ReactNode;
 }) {
-  if (state === 'loading') return <div className="loading">加载中…</div>;
-  if (state === 'empty') return <div className="empty-state">暂无数据</div>;
+  const { t } = useTranslation();
+  if (state === 'loading') return <div className="loading">{t('common.loading')}</div>;
+  if (state === 'empty') return <div className="empty-state">{t('common.noData')}</div>;
   if (state === 'forbidden') {
-    return <div className="empty-state">权限不足，无法查看该数据（如需访问请先申请）</div>;
+    return <div className="empty-state">{t('common.forbidden')}</div>;
   }
   if (state === 'error') {
     return (
       <div className="empty-state">
-        <div className="form-error" style={{ display: 'inline-block' }}>{errMsg || '加载失败（服务降级或网络异常）'}</div>
+        <div className="form-error" style={{ display: 'inline-block' }}>{errMsg || t('common.loadFailed')}</div>
         {onRetry && (
           <div style={{ marginTop: 12 }}>
-            <button className="btn btn-ghost btn-sm" onClick={onRetry}>重试</button>
+            <button className="btn btn-ghost btn-sm" onClick={onRetry}>{t('common.retry')}</button>
           </div>
         )}
       </div>

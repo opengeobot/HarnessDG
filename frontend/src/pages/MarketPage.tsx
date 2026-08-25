@@ -2,6 +2,7 @@
 // 时间：2026-08-21  作者：AxeXie
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api, type Page, type Repository, type ResourceTypeSchema, type TaxonomyOption } from '../api/client';
 import { errMsg } from '../App';
 import FilterSidebar, { type FacetDef, type Filters } from '../components/FilterSidebar';
@@ -11,41 +12,43 @@ import RepoFormModal from '../components/RepoFormModal';
 import { useAuth } from '../context/AuthContext';
 
 const PAGE_SIZE = 12;
-const TYPE_META: Record<string, { title: string; unit: string; banner: string }> = {
-  model: { title: '模型市场', unit: '模型', banner: '发布你的模型，让社区使用与部署。' },
-  dataset: { title: '数据市场', unit: '数据集', banner: '开放高质量数据集，加速模型训练。' },
-  studio: { title: '工作空间', unit: '工作空间', banner: '把你的创意做成可交互的应用。' },
+const TYPE_META: Record<string, { titleKey: string; unitKey: string; bannerKey: string }> = {
+  model: { titleKey: 'market.modelTitle', unitKey: 'market.modelUnit', bannerKey: 'market.modelBanner' },
+  dataset: { titleKey: 'market.datasetTitle', unitKey: 'market.datasetUnit', bannerKey: 'market.datasetBanner' },
+  studio: { titleKey: 'market.studioTitle', unitKey: 'market.studioUnit', bannerKey: 'market.studioBanner' },
 };
 
-const SORTS: Record<string, Array<{ v: string; label: string }>> = {
+const SORTS: Record<string, Array<{ v: string; labelKey: string }>> = {
   // 09 §5.3 / §6.2：综合 / 下载量 / 喜欢数
   model: [
-    { v: 'relevance-v1', label: '综合排序' },
-    { v: 'downloads-desc', label: '下载量排序' },
-    { v: 'likes-desc', label: '喜欢数排序' },
+    { v: 'relevance-v1', labelKey: 'market.sortRelevance' },
+    { v: 'downloads-desc', labelKey: 'market.sortDownloads' },
+    { v: 'likes-desc', labelKey: 'market.sortLikes' },
   ],
   dataset: [
-    { v: 'relevance-v1', label: '综合排序' },
-    { v: 'downloads-desc', label: '下载量排序' },
-    { v: 'likes-desc', label: '喜欢数排序' },
+    { v: 'relevance-v1', labelKey: 'market.sortRelevance' },
+    { v: 'downloads-desc', labelKey: 'market.sortDownloads' },
+    { v: 'likes-desc', labelKey: 'market.sortLikes' },
   ],
   // studio 排序 4 项（09 §7.2）：综合 / 最近更新 / 访问数 / 喜欢数
   studio: [
-    { v: 'relevance-v1', label: '综合排序' },
-    { v: 'updatedAt-desc', label: '最近更新' },
-    { v: 'visits-desc', label: '访问数排序' },
-    { v: 'likes-desc', label: '喜欢数排序' },
+    { v: 'relevance-v1', labelKey: 'market.sortRelevance' },
+    { v: 'updatedAt-desc', labelKey: 'market.sortUpdated' },
+    { v: 'visits-desc', labelKey: 'market.sortVisits' },
+    { v: 'likes-desc', labelKey: 'market.sortLikes' },
   ],
 };
 
-const CHIP_LABEL: Record<string, string> = {
-  task: '任务', framework: '框架', license: '协议', architecture: '结构', language: '语种',
-  apiStatus: 'Api 状态', tag: '标签', scene: '场景', org: '组织', gated: '仅看申请制',
-  mcp: 'MCP 兼容', deployable: '可部署', capability: '能力',
+const CHIP_KEY: Record<string, string> = {
+  task: 'market.chipTask', framework: 'market.chipFramework', license: 'market.chipLicense',
+  architecture: 'market.chipArchitecture', language: 'market.chipLanguage', apiStatus: 'market.chipApiStatus',
+  tag: 'market.chipTag', scene: 'market.chipScene', org: 'market.chipOrg', gated: 'market.chipGated',
+  mcp: 'market.chipMcp', deployable: 'market.chipDeployable', capability: 'market.chipCapability',
 };
 
 export default function MarketPage({ typeKey }: { typeKey: string }) {
   const { requireLogin } = useAuth();
+  const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
 
   const [schema, setSchema] = useState<ResourceTypeSchema | null>(null);
@@ -165,27 +168,27 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
 
   // 已选 chips
   const chips = useMemo(() => {
-    const list: Array<{ key: string; label: string; value: string; display: string }> = [];
+    const list: Array<{ key: string; labelKey: string; value: string; display: string }> = [];
     const displayOf = (taxName: string | undefined, key: string): string => {
       if (!taxName) return key;
       return taxonomies[taxName]?.find((o) => o.key === key)?.displayName ?? key;
     };
     const facetOf = (key: string): FacetDef | undefined =>
       (schema?.facets as FacetDef[] | undefined)?.find((f) => f.key === key);
-    if (filters.task) list.push({ key: 'task', label: CHIP_LABEL.task, value: filters.task, display: displayOf(facetOf('task')?.taxonomy ?? undefined, filters.task) });
+    if (filters.task) list.push({ key: 'task', labelKey: CHIP_KEY.task, value: filters.task, display: displayOf(facetOf('task')?.taxonomy ?? undefined, filters.task) });
     for (const k of ['framework', 'license', 'architecture', 'language', 'apiStatus', 'tag', 'scene'] as const) {
       const v = filters[k];
-      if (v) list.push({ key: k, label: CHIP_LABEL[k], value: v, display: displayOf(facetOf(k)?.taxonomy ?? undefined, v) });
+      if (v) list.push({ key: k, labelKey: CHIP_KEY[k], value: v, display: displayOf(facetOf(k)?.taxonomy ?? undefined, v) });
     }
-    if (filters.org) list.push({ key: 'org', label: CHIP_LABEL.org, value: filters.org, display: filters.org });
+    if (filters.org) list.push({ key: 'org', labelKey: CHIP_KEY.org, value: filters.org, display: filters.org });
     for (const k of ['gated', 'mcp', 'deployable'] as const) {
-      if (filters[k]) list.push({ key: k, label: CHIP_LABEL[k], value: 'true', display: CHIP_LABEL[k] });
+      if (filters[k]) list.push({ key: k, labelKey: CHIP_KEY[k], value: 'true', display: t(CHIP_KEY[k]) });
     }
     for (const c of filters.capability ?? []) {
-      list.push({ key: 'capability', label: CHIP_LABEL.capability, value: c, display: displayOf('capability', c) });
+      list.push({ key: 'capability', labelKey: CHIP_KEY.capability, value: c, display: displayOf('capability', c) });
     }
     return list;
-  }, [filters, schema, taxonomies]);
+  }, [filters, schema, taxonomies, t]);
 
   function removeChip(chip: { key: string; value: string }) {
     if (chip.key === 'capability') {
@@ -203,6 +206,7 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
   }
 
   const meta = TYPE_META[typeKey] ?? TYPE_META.model;
+  const unit = t(meta.unitKey);
   const sorts = SORTS[typeKey] ?? SORTS.model;
   const capabilityOptions = taxonomies['capability'] ?? [];
   const hasCapability = typeKey === 'model' && capabilityOptions.length > 0;
@@ -212,23 +216,23 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
       {/* Banner */}
       <div className="market-banner">
         <div>
-          <div className="market-banner-title">{meta.title}</div>
-          <div className="market-banner-sub">{meta.banner}</div>
+          <div className="market-banner-title">{t(meta.titleKey)}</div>
+          <div className="market-banner-sub">{t(meta.bannerKey)}</div>
         </div>
         {typeKey === 'studio' ? (
           <div className="studio-guide">
             <div className="studio-guide-steps">
-              {['创建空间', '上传应用', '配置运行时', '发布分享'].map((s, i) => (
+              {(t('market.guideSteps', { returnObjects: true }) as string[]).map((s, i) => (
                 <span key={s} className="studio-guide-step"><b>{i + 1}</b>{s}</span>
               ))}
             </div>
             <button className="btn btn-primary" onClick={() => requireLogin(() => setFormOpen(true))}>
-              我要创建
+              {t('market.createCta')}
             </button>
           </div>
         ) : (
           <button className="btn btn-primary" onClick={() => requireLogin(() => setFormOpen(true))}>
-            发布{meta.unit}
+            {t('market.publish', { unit })}
           </button>
         )}
       </div>
@@ -246,17 +250,17 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
             <div className="chip-row">
               {chips.map((c) => (
                 <span key={c.key + c.value} className="sel-chip">
-                  {c.label}：{c.display}
+                  {t(c.labelKey)}{t('common.kvSep')}{c.display}
                   <b onClick={() => removeChip(c)}>✕</b>
                 </span>
               ))}
-              <a className="sel-chip-clear" onClick={clearChips}>清空全部</a>
+              <a className="sel-chip-clear" onClick={clearChips}>{t('market.clearAll')}</a>
             </div>
           )}
 
           {/* 工具栏 */}
           <div className="toolbar">
-            <input type="search" placeholder={`搜索${meta.unit}（共 ${data?.total ?? 0} 个）`}
+            <input type="search" placeholder={t('market.searchPlaceholder', { unit, n: data?.total ?? 0 })}
                    defaultValue={keyword}
                    onKeyDown={(e) => {
                      if (e.key === 'Enter') {
@@ -266,7 +270,9 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
             {hasCapability && (
               <div className="cap-dropdown">
                 <button className="btn btn-ghost btn-sm" onClick={() => setCapOpen(!capOpen)}>
-                  能力{(filters.capability ?? []).length > 0 ? `（${filters.capability!.length}）` : ''} ▾
+                  {(filters.capability ?? []).length > 0
+                    ? t('market.capabilityCount', { n: filters.capability!.length })
+                    : `${t('market.chipCapability')} ▾`}
                 </button>
                 {capOpen && (
                   <div className="cap-menu">
@@ -284,13 +290,13 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
                         {o.displayName}
                       </label>
                     ))}
-                    <button className="btn btn-ghost btn-sm" onClick={() => setCapOpen(false)}>收起</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setCapOpen(false)}>{t('market.collapse')}</button>
                   </div>
                 )}
               </div>
             )}
             <select value={sort} onChange={(e) => updateParams({ sort: e.target.value })}>
-              {sorts.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+              {sorts.map((s) => <option key={s.v} value={s.v}>{t(s.labelKey)}</option>)}
             </select>
           </div>
 
@@ -298,14 +304,14 @@ export default function MarketPage({ typeKey }: { typeKey: string }) {
           <DataState state={state} errMsg={errMsgText} onRetry={load}>
             {featured && featured.items.length > 0 && (
               <div style={{ marginBottom: 20 }}>
-                <h3 style={{ margin: '0 0 10px' }}>✨ 精选</h3>
+                <h3 style={{ margin: '0 0 10px' }}>{t('market.featured')}</h3>
                 <div className="repo-grid">
                   {featured.items.map((r) => <RepoCardRenderer key={r.id} repo={r} />)}
                 </div>
               </div>
             )}
             {featured && featured.items.length > 0 && (
-              <h3 style={{ margin: '0 0 10px' }}>全部</h3>
+              <h3 style={{ margin: '0 0 10px' }}>{t('market.all')}</h3>
             )}
             <div className="repo-grid">
               {(data?.items ?? []).map((r) => <RepoCardRenderer key={r.id} repo={r} />)}

@@ -1,6 +1,7 @@
 // 仓库创建/编辑弹窗（09 §5.5 字段映射）— 字段由 ResourceTypeSchema 驱动，禁止硬编码枚举
 // 时间：2026-08-21  作者：AxeXie
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   api,
   type Repository, type ResourceTypeSchema, type TaxonomyOption, type OrganizationListItem,
@@ -12,15 +13,16 @@ interface FormMeta {
   [key: string]: string | number | boolean | string[];
 }
 
-const TYPE_LABEL: Record<string, string> = { model: '模型', dataset: '数据集', studio: '工作空间' };
-const FIELD_LABEL: Record<string, string> = {
-  task: '任务', framework: '框架', license: '开源协议', architecture: '结构',
-  language: '语种', tags: '标签', capabilities: '能力', apiStatus: '推理 Api 状态',
-  parameterCount: '参数量', parameterUnit: '参数单位', deployable: '支持部署工作空间',
-  mcpCompatible: 'MCP 兼容', estimatedRows: '预估行数', dataFormats: '数据格式',
-  sensitivityLevel: '敏感级别', previewPolicy: '预览策略', scenes: '场景',
-  runtimeType: '运行时类型',
+const TYPE_KEY: Record<string, string> = { model: 'repoForm.typeModel', dataset: 'repoForm.typeDataset', studio: 'repoForm.typeStudio' };
+const FIELD_KEY: Record<string, string> = {
+  task: 'repoForm.fieldTask', framework: 'repoForm.fieldFramework', license: 'repoForm.fieldLicense', architecture: 'repoForm.fieldArchitecture',
+  language: 'repoForm.fieldLanguage', tags: 'repoForm.fieldTags', capabilities: 'repoForm.fieldCapabilities', apiStatus: 'repoForm.fieldApiStatus',
+  parameterCount: 'repoForm.fieldParameterCount', parameterUnit: 'repoForm.fieldParameterUnit', deployable: 'repoForm.fieldDeployable',
+  mcpCompatible: 'repoForm.fieldMcpCompatible', estimatedRows: 'repoForm.fieldEstimatedRows', dataFormats: 'repoForm.fieldDataFormats',
+  sensitivityLevel: 'repoForm.fieldSensitivityLevel', previewPolicy: 'repoForm.fieldPreviewPolicy', scenes: 'repoForm.fieldScenes',
+  runtimeType: 'repoForm.fieldRuntimeType',
 };
+const VIS_KEY: Record<string, string> = { public: 'repoForm.visPublic', organization: 'repoForm.visOrg', private: 'repoForm.visPrivate' };
 
 interface MetaProp { type?: string; }
 
@@ -32,6 +34,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
   onSaved: (repo: Repository, created: boolean) => void;
 }) {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const editing = !!initial;
   const [schema, setSchema] = useState<ResourceTypeSchema | null>(null);
   const [taxonomies, setTaxonomies] = useState<Record<string, TaxonomyOption[]>>({});
@@ -151,7 +154,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
 
   function renderMetaField(key: string, prop: MetaProp) {
     const req = requiredKeys.includes(key);
-    const label = FIELD_LABEL[key] ?? key;
+    const label = FIELD_KEY[key] ? t(FIELD_KEY[key]) : key;
     const taxName = taxonomyOf[key];
     const options = taxName ? taxonomies[taxName] : undefined;
 
@@ -164,7 +167,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
           <label>{label}{req && ' *'}</label>
           <select value={val} required={req}
                   onChange={(e) => setField(key, e.target.value)}>
-            <option value="">请选择</option>
+            <option value="">{t('repoForm.selectPlease')}</option>
             {roots.map((r) => {
               const kids = options.filter((o) => o.parentKey === r.key);
               return kids.length > 0 ? (
@@ -188,7 +191,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
           <label>{label}{req && ' *'}</label>
           <select value={val} required={req}
                   onChange={(e) => setField(key, e.target.value)}>
-            <option value="">请选择</option>
+            <option value="">{t('repoForm.selectPlease')}</option>
             {options.map((o) => <option key={o.key} value={o.key}>{o.displayName}</option>)}
           </select>
         </div>
@@ -220,7 +223,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
       return (
         <div className="field" key={key}>
           <label>{label}</label>
-          <input value={val} placeholder="多个用逗号分隔"
+          <input value={val} placeholder={t('repoForm.arrPlaceholder')}
                  onChange={(e) => setField(key, e.target.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean))} />
         </div>
       );
@@ -252,7 +255,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
               <select style={{ width: 110 }}
                       value={typeof meta['parameterUnit'] === 'string' ? (meta['parameterUnit'] as string) : ''}
                       onChange={(e) => setField('parameterUnit', e.target.value)}>
-                <option value="">单位</option>
+                <option value="">{t('repoForm.unitPlaceholder')}</option>
                 <option value="B">B</option>
                 <option value="M">M</option>
                 <option value="B*">B*</option>
@@ -280,7 +283,9 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
       <div className="modal" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span className="modal-title">
-            {editing ? `编辑${TYPE_LABEL[typeKey] ?? typeKey}` : `发布${TYPE_LABEL[typeKey] ?? typeKey}`}
+            {editing
+              ? t('repoForm.editTitle', { unit: TYPE_KEY[typeKey] ? t(TYPE_KEY[typeKey]) : typeKey })
+              : t('repoForm.publishTitle', { unit: TYPE_KEY[typeKey] ? t(TYPE_KEY[typeKey]) : typeKey })}
           </span>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
@@ -290,48 +295,48 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
 
             <div style={{ display: 'flex', gap: 12 }}>
               <div className="field" style={{ flex: 1 }}>
-                <label>命名空间 *</label>
+                <label>{t('repoForm.nsLabel')}</label>
                 {editing ? (
                   <input value={initial!.namespace} disabled />
                 ) : (
                   <select value={namespaceId} required onChange={(e) => setNamespaceId(e.target.value)}>
-                    <option value="">请选择</option>
-                    {user && <option value={user.namespaceId}>@{user.username}（个人）</option>}
-                    {orgs.map((o) => <option key={o.id} value={o.namespaceId}>@{o.slug}（{o.name}）</option>)}
+                    <option value="">{t('repoForm.selectPlease')}</option>
+                    {user && <option value={user.namespaceId}>@{user.username}{t('repoForm.nsPersonal')}</option>}
+                    {orgs.map((o) => <option key={o.id} value={o.namespaceId}>@{o.slug}{t('repoForm.nsOrg', { name: o.name })}</option>)}
                   </select>
                 )}
               </div>
               <div className="field" style={{ flex: 1 }}>
-                <label>仓库名 *</label>
+                <label>{t('repoForm.nameLabel')}</label>
                 <input value={name} disabled={editing} required
                        pattern="[a-z0-9][a-z0-9_\-\.]{0,63}"
-                       title="小写字母/数字开头，可含 - _ ."
-                       placeholder="如 qwen-7b"
+                       title={t('repoForm.nameTitle')}
+                       placeholder={t('repoForm.namePlaceholder')}
                        onChange={(e) => setName(e.target.value)} />
               </div>
             </div>
 
             <div className="field">
-              <label>展示名称</label>
+              <label>{t('repoForm.displayLabel')}</label>
               <input value={displayName} maxLength={128}
                      onChange={(e) => setDisplayName(e.target.value)} />
             </div>
 
             <div className="field">
-              <label>简介</label>
+              <label>{t('repoForm.descLabel')}</label>
               <textarea className="reason-input" value={description} maxLength={4000}
                         onChange={(e) => setDescription(e.target.value)} />
             </div>
 
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <div className="field">
-                <label>可见性 *</label>
+                <label>{t('repoForm.visLabel')}</label>
                 <div style={{ display: 'flex', gap: 14 }}>
                   {(['public', 'organization', 'private'] as const).map((v) => (
                     <label key={v} className="filter-check">
                       <input type="radio" name="visibility" checked={visibility === v}
                              onChange={() => setVisibility(v)} />
-                      {v === 'public' ? '公开' : v === 'organization' ? '组织' : '私有'}
+                      {t(VIS_KEY[v])}
                     </label>
                   ))}
                 </div>
@@ -341,7 +346,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
                   <label>&nbsp;</label>
                   <label className="filter-check">
                     <input type="checkbox" checked={gated} onChange={(e) => setGated(e.target.checked)} />
-                    申请制（ gated ）
+                    {t('repoForm.gatedLabel')}
                   </label>
                 </div>
               )}
@@ -349,8 +354,8 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
 
             {properties['tags'] && (
               <div className="field">
-                <label>标签</label>
-                <input value={tagsText} placeholder="多个标签用逗号分隔，最多 32 个"
+                <label>{t('repoForm.tagsLabel')}</label>
+                <input value={tagsText} placeholder={t('repoForm.tagsPlaceholder')}
                        onChange={(e) => setTagsText(e.target.value)} />
               </div>
             )}
@@ -358,9 +363,9 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
             {metaKeys.map((k) => renderMetaField(k, properties[k]))}
           </div>
           <div className="modal-foot">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>取消</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>{t('repoForm.cancel')}</button>
             <button type="submit" className="btn btn-primary" disabled={busy}>
-              {busy ? '提交中…' : (editing ? '保存修改' : '创建仓库')}
+              {busy ? t('repoForm.submitting') : (editing ? t('repoForm.saveBtn') : t('repoForm.createBtn'))}
             </button>
           </div>
         </form>

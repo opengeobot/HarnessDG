@@ -1,11 +1,13 @@
 // 登录/注册弹窗（09 §2.3）：左侧宣传区 + 右侧表单区，登录/注册 Tab 切换
 // 时间：2026-08-21  作者：AxeXie
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { errMsg } from '../App';
 
 export default function AuthModal() {
   const { authModalOpen, closeLogin, login, register } = useAuth();
+  const { t } = useTranslation();
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [nickname, setNickname] = useState('');
@@ -43,54 +45,54 @@ export default function AuthModal() {
       <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
         <div className="auth-promo">
           <div className="auth-promo-logo">M</div>
-          <h2>ModelHub 模型社区</h2>
-          <p>发现、分享与部署模型、数据集与创意工作空间。</p>
+          <h2>{t('auth.title')}</h2>
+          <p>{t('auth.subtitle')}</p>
           <ul>
-            <li>海量开源模型与数据集目录</li>
-            <li>数据驱动的筛选与全局搜索</li>
-            <li>一键下载 CLI / SDK / Git 多方式</li>
+            <li>{t('auth.feature1')}</li>
+            <li>{t('auth.feature2')}</li>
+            <li>{t('auth.feature3')}</li>
           </ul>
         </div>
         <div className="auth-form-side">
           <div className="auth-modal-head">
             <div className="auth-tabs">
               <span className={`auth-tab ${tab === 'login' ? 'active' : ''}`}
-                    onClick={() => switchTab('login')}>登录</span>
+                    onClick={() => switchTab('login')}>{t('auth.loginTab')}</span>
               <span className={`auth-tab ${tab === 'register' ? 'active' : ''}`}
-                    onClick={() => switchTab('register')}>注册</span>
+                    onClick={() => switchTab('register')}>{t('auth.registerTab')}</span>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={closeLogin}>✕</button>
           </div>
           {err && <div className="form-error" style={{ marginBottom: 12 }}>{err}</div>}
           <form className="form" onSubmit={submit}>
             <div className="field">
-              <label>用户名</label>
+              <label>{t('auth.username')}</label>
               <input value={username} onChange={(e) => setUsername(e.target.value)}
                      autoComplete="username" required
-                     pattern="[A-Za-z0-9_\-\.]{3,32}" title="3-32位字母/数字/下划线/短横线" />
+                     pattern="[A-Za-z0-9_\-\.]{3,32}" title={t('auth.usernamePattern')} />
             </div>
             {tab === 'register' && (
               <div className="field">
-                <label>昵称（可选）</label>
+                <label>{t('auth.nickname')}</label>
                 <input value={nickname} onChange={(e) => setNickname(e.target.value)}
-                       placeholder="展示名称" />
+                       placeholder={t('auth.nicknamePlaceholder')} />
               </div>
             )}
             <div className="field">
-              <label>密码</label>
+              <label>{t('auth.password')}</label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                      autoComplete={tab === 'login' ? 'current-password' : 'new-password'} required />
-              {tab === 'register' && <span className="hint">建议 12 位以上，含大小写字母、数字与符号（以服务端校验为准）</span>}
+              {tab === 'register' && <span className="hint">{t('auth.passwordHint')}</span>}
             </div>
             <button className="btn btn-primary" disabled={busy}>
-              {busy ? '提交中…' : (tab === 'login' ? '登录' : '注册')}
+              {busy ? t('auth.submitting') : (tab === 'login' ? t('auth.loginTab') : t('auth.registerTab'))}
             </button>
           </form>
           <div className="auth-switch">
             {tab === 'login' ? (
-              <>还没有账号？<a onClick={() => switchTab('register')} style={{ cursor: 'pointer' }}>立即注册</a></>
+              <>{t('auth.noAccount')}<a onClick={() => switchTab('register')} style={{ cursor: 'pointer' }}>{t('auth.registerNow')}</a></>
             ) : (
-              <>已有账号？<a onClick={() => switchTab('login')} style={{ cursor: 'pointer' }}>去登录</a></>
+              <>{t('auth.hasAccount')}<a onClick={() => switchTab('login')} style={{ cursor: 'pointer' }}>{t('auth.goLogin')}</a></>
             )}
           </div>
         </div>

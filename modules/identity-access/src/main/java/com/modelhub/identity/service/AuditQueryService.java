@@ -54,10 +54,11 @@ public class AuditQueryService {
         this.objectMapper = objectMapper;
     }
 
-    /** json 模式：cursor 分页（新→旧）+ actor/action/resource 可选过滤。 */
+    /** json 模式：cursor 分页（新→旧）+ actor/action/resource/from/to 可选过滤。 */
     @Transactional(readOnly = true)
     public CursorResult<AuditLogView> query(CurrentPrincipal actor, CursorQuery cursor,
-                                            String actorFilter, String actionFilter, String resourceFilter) {
+                                            String actorFilter, String actionFilter, String resourceFilter,
+                                            OffsetDateTime from, OffsetDateTime to) {
         requireAuditor(actor);
         long lastId = cursor.lastKey() == Long.MIN_VALUE ? Long.MAX_VALUE : cursor.lastKey();
         List<Object> params = new ArrayList<>();
@@ -67,6 +68,7 @@ public class AuditQueryService {
         appendFilter(sql, params, "actor", actorFilter);
         appendFilter(sql, params, "action", actionFilter);
         appendFilter(sql, params, "resource", resourceFilter);
+        appendTimeFilter(sql, params, from, to);
         sql.append(" ORDER BY id DESC LIMIT ?");
         params.add(cursor.limit() + 1);
         List<IdRow> all = jdbc.query(sql.toString(), idRowMapper, params.toArray());
@@ -81,7 +83,8 @@ public class AuditQueryService {
     /** ndjson 模式：全量流式导出（过滤条件同 query）；行内禁止含敏感串（SEC-05）。 */
     @Transactional(readOnly = true)
     public void exportNdjson(CurrentPrincipal actor, String actorFilter, String actionFilter,
-                             String resourceFilter, OutputStream out) {
+                             String resourceFilter, OffsetDateTime from, OffsetDateTime to,
+                             OutputStream out) {
         requireAuditor(actor);
         List<Object> params = new ArrayList<>();
         StringBuilder sql = new StringBuilder("SELECT ").append(BASE_COLUMNS)
@@ -89,6 +92,7 @@ public class AuditQueryService {
         appendFilter(sql, params, "actor", actorFilter);
         appendFilter(sql, params, "action", actionFilter);
         appendFilter(sql, params, "resource", resourceFilter);
+        appendTimeFilter(sql, params, from, to);
         sql.append(" ORDER BY id DESC");
         // PreparedStatementCreator + fetchSize：PG 游标式遍历，内存占用与行数无关
         jdbc.query(connection -> {
@@ -127,6 +131,19 @@ public class AuditQueryService {
         }
         sql.append(" AND ").append(column).append(" = ?");
         params.add(value.trim());
+    }
+
+    /** created_at 时间范围过滤（管理后台日志管理），走 ix_audit_logs_created 索引。 */
+    private static void appendTimeFilter(StringBuilder sql, List<Object> params,
+                                         OffsetDateTime from, OffsetDateTime to) {
+        if (from != null) {
+            sql.append(" AND created_at >= ?");
+            params.add(from);
+        }
+        if (to != null) {
+            sql.append(" AND created_at <= ?");
+            params.add(to);
+        }
     }
 
     private AuditLogView mapRow(ResultSet rs) throws SQLException {

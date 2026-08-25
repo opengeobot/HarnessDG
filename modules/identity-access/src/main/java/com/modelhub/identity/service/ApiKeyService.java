@@ -99,7 +99,7 @@ public class ApiKeyService {
                 UserEntity u = users.findById(k.getUserId()).orElse(null);
                 if (u == null || !u.isActive()) return null;
                 return new CurrentPrincipal(u.getId(), u.getPublicId(), u.getUsername(),
-                        u.getAuthVersion(), "apikey:" + k.getPublicId(), Set.of());
+                        u.getAuthVersion(), "apikey:" + k.getPublicId(), Set.of(), Set.of());
             }
         }
         return null;

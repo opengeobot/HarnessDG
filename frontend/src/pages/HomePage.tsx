@@ -2,18 +2,20 @@
 // 时间：2026-08-21  作者：AxeXie
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api, type Page, type Repository } from '../api/client';
 import { RepoCardRenderer } from '../components/cards';
 import GlobalSearchOverlay from '../components/GlobalSearchOverlay';
 
 const MARKET_LINKS = [
-  { key: 'model', to: '/models', title: '模型市场', desc: '开源模型目录，按任务/框架/协议筛选' },
-  { key: 'dataset', to: '/datasets', title: '数据市场', desc: '训练数据集，支持申请制访问' },
-  { key: 'studio', to: '/studios', title: '工作空间', desc: '可交互的创意应用与演示' },
+  { key: 'model', to: '/models', titleKey: 'home.entryModel', descKey: 'home.entryModelDesc' },
+  { key: 'dataset', to: '/datasets', titleKey: 'home.entryDataset', descKey: 'home.entryDatasetDesc' },
+  { key: 'studio', to: '/studios', titleKey: 'home.entryStudio', descKey: 'home.entryStudioDesc' },
 ];
 
 export default function HomePage() {
   const nav = useNavigate();
+  const { t } = useTranslation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [hot, setHot] = useState<Record<string, Page<Repository>>>({});
 
@@ -32,10 +34,10 @@ export default function HomePage() {
     <div>
       {/* Hero */}
       <div className="home-hero">
-        <h1>ModelHub 模型社区</h1>
-        <p>发现、分享与部署模型、数据集与创意工作空间</p>
+        <h1>{t('home.heroTitle')}</h1>
+        <p>{t('home.heroSubtitle')}</p>
         <button className="home-search-btn" onClick={() => setSearchOpen(true)}>
-          🔍 搜索模型、数据集与工作空间…
+          {t('home.searchBtn')}
         </button>
       </div>
 
@@ -43,9 +45,9 @@ export default function HomePage() {
       <div className="home-entries">
         {MARKET_LINKS.map((m) => (
           <div key={m.key} className="card card-pad home-entry" onClick={() => nav(m.to)}>
-            <div className="home-entry-title">{m.title}</div>
-            <div className="home-entry-desc">{m.desc}</div>
-            <span className="home-entry-go">进入 →</span>
+            <div className="home-entry-title">{t(m.titleKey)}</div>
+            <div className="home-entry-desc">{t(m.descKey)}</div>
+            <span className="home-entry-go">{t('home.entryGo')}</span>
           </div>
         ))}
       </div>
@@ -53,13 +55,13 @@ export default function HomePage() {
       {/* 热门模型（09 §3） */}
       <section className="home-sec">
         <div className="home-sec-head">
-          <h2>热门模型</h2>
-          <a onClick={() => nav('/models')} style={{ cursor: 'pointer' }}>查看全部 →</a>
+          <h2>{t('home.hotModels')}</h2>
+          <a onClick={() => nav('/models')} style={{ cursor: 'pointer' }}>{t('home.viewAll')}</a>
         </div>
         {!hot['model'] ? (
-          <div className="loading">加载中…</div>
+          <div className="loading">{t('common.loading')}</div>
         ) : hot['model'].items.length === 0 ? (
-          <div className="empty-state card">暂无内容</div>
+          <div className="empty-state card">{t('home.empty')}</div>
         ) : (
           <div className="repo-grid">
             {hot['model'].items.map((r) => <RepoCardRenderer key={r.id} repo={r} />)}
@@ -70,13 +72,13 @@ export default function HomePage() {
       {/* 精选工作空间（featured=true；未就绪降级空板块，09 §3） */}
       <section className="home-sec">
         <div className="home-sec-head">
-          <h2>精选工作空间</h2>
-          <a onClick={() => nav('/studios')} style={{ cursor: 'pointer' }}>查看全部 →</a>
+          <h2>{t('home.featuredStudios')}</h2>
+          <a onClick={() => nav('/studios')} style={{ cursor: 'pointer' }}>{t('home.viewAll')}</a>
         </div>
         {!hot['studio'] ? (
-          <div className="loading">加载中…</div>
+          <div className="loading">{t('common.loading')}</div>
         ) : hot['studio'].items.length === 0 ? (
-          <div className="empty-state card">精选内容陆续上线中，先去看看全部工作空间吧</div>
+          <div className="empty-state card">{t('home.studioEmpty')}</div>
         ) : (
           <div className="repo-grid">
             {hot['studio'].items.map((r) => <RepoCardRenderer key={r.id} repo={r} />)}

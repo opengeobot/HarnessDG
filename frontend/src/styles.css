@@ -469,6 +469,8 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 
 /* ---------- 个人中心（09 §9） ---------- */
 .my-layout { display: flex; gap: 20px; align-items: flex-start; }
+/* 管理后台：复用 my-* 布局，侧栏略宽以容纳六项菜单 */
+.admin-layout .my-side { width: 232px; position: sticky; top: 76px; }
 .my-side { width: 220px; flex-shrink: 0; padding: 16px 10px; }
 .my-profile { display: flex; align-items: center; gap: 12px; padding: 0 8px 14px; border-bottom: 1px solid var(--border); }
 .my-menu { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }

@@ -2,15 +2,17 @@
 // 时间：2026-08-21  作者：AxeXie
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { api, type HotSearches, type Page, type Repository } from '../api/client';
 
 const SEARCH_TYPES = ['model', 'dataset', 'studio'] as const;
-const TYPE_LABEL: Record<string, string> = { model: '模型市场', dataset: '数据市场', studio: '工作空间' };
+const TYPE_LABEL_KEY: Record<string, string> = { model: 'nav.models', dataset: 'nav.datasets', studio: 'nav.studios' };
 
 type GroupResults = Record<string, Page<Repository> | null>;
 
 export default function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
   const nav = useNavigate();
+  const { t } = useTranslation();
   const [keyword, setKeyword] = useState('');
   const [hot, setHot] = useState<HotSearches | null>(null);
   const [groups, setGroups] = useState<GroupResults>({});
@@ -63,7 +65,7 @@ export default function GlobalSearchOverlay({ onClose }: { onClose: () => void }
     <div className="modal-mask search-mask" onClick={onClose}>
       <div className="search-panel" onClick={(e) => e.stopPropagation()}>
         <div className="search-bar">
-          <input autoFocus value={keyword} placeholder="搜索模型、数据集与工作空间…"
+          <input autoFocus value={keyword} placeholder={t('search.placeholder')}
                  onChange={(e) => onInput(e.target.value)}
                  onKeyDown={(e) => {
                    if (e.key === 'Enter') {
@@ -78,7 +80,7 @@ export default function GlobalSearchOverlay({ onClose }: { onClose: () => void }
         <div className="search-body">
           {!searched && (
             <>
-              <div className="search-sec-title">热门搜索</div>
+              <div className="search-sec-title">{t('search.hotTitle')}</div>
               {hot && hot.words.length > 0 ? (
                 <div className="hot-words">
                   {hot.words.map((w, i) => (
@@ -88,22 +90,22 @@ export default function GlobalSearchOverlay({ onClose }: { onClose: () => void }
                   ))}
                 </div>
               ) : (
-                <div className="empty-state" style={{ padding: 24 }}>暂无热门搜索</div>
+                <div className="empty-state" style={{ padding: 24 }}>{t('search.noHot')}</div>
               )}
             </>
           )}
 
           {searched && (busy ? (
-            <div className="loading">搜索中…</div>
-          ) : SEARCH_TYPES.every((t) => !groups[t] || groups[t]!.items.length === 0) ? (
-            <div className="empty-state" style={{ padding: 24 }}>未找到相关结果</div>
+            <div className="loading">{t('search.searching')}</div>
+          ) : SEARCH_TYPES.every((tp) => !groups[tp] || groups[tp]!.items.length === 0) ? (
+            <div className="empty-state" style={{ padding: 24 }}>{t('search.noResult')}</div>
           ) : (
-            SEARCH_TYPES.map((t) => {
-              const g = groups[t];
+            SEARCH_TYPES.map((tp) => {
+              const g = groups[tp];
               if (!g || g.items.length === 0) return null;
               return (
-                <div key={t}>
-                  <div className="search-sec-title">{TYPE_LABEL[t]}（{g.total}）</div>
+                <div key={tp}>
+                  <div className="search-sec-title">{t('search.groupTitle', { label: t(TYPE_LABEL_KEY[tp]), n: g.total })}</div>
                   {g.items.map((r) => (
                     <div key={r.id} className="search-item" onClick={() => goto(r)}>
                       <span className="search-item-path">{r.namespace}/{r.name}</span>

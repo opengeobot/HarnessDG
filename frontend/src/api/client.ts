@@ -167,7 +167,7 @@ async function rawRequest<T>(path: string, opts: RequestOptions): Promise<T> {
       signal: opts.signal,
     });
   } catch (e) {
-    throw new ApiRequestError(0, 'NETWORK_ERROR', '网络请求失败', undefined);
+    throw new ApiRequestError(0, 'NETWORK_ERROR', 'Network request failed', undefined);
   }
 
   // 401 且可刷新 → 刷新后重试一次（整页刷新后内存 csrfToken 为空，但 mh_csrf cookie 仍在，09 §11）
@@ -336,6 +336,54 @@ export const api = {
   // Organizations（后端返回 PageResult，列表项含 repoCounts，09 §5.2）
   listOrganizations: (page = 1, pageSize = 20) =>
     rawRequest<Page<OrganizationListItem>>('/organizations', { query: { page, pageSize } }),
+
+  // Admin（管理后台：仅 platform_admin，审计读另允许 platform_auditor）
+  adminOverview: () => rawRequest<SystemOverview>('/admin/system/overview', {}),
+  adminUsers: (query?: { q?: string; status?: string; cursor?: string; limit?: number }) =>
+    rawRequest<CursorPage<AdminUser>>('/admin/users', { query }),
+  adminDisableUser: (userId: string) =>
+    rawRequest<AdminUser>(`/admin/users/${userId}:disable`, { method: 'POST', idempotencyKey: uuid() }),
+  adminEnableUser: (userId: string) =>
+    rawRequest<AdminUser>(`/admin/users/${userId}:enable`, { method: 'POST', idempotencyKey: uuid() }),
+  adminUnlockUser: (userId: string) =>
+    rawRequest<void>(`/admin/users/${userId}:unlock`, { method: 'POST', idempotencyKey: uuid() }),
+  adminUserRoles: (userId: string) =>
+    rawRequest<{ roles: string[] }>(`/admin/users/${userId}/roles`, {}),
+  adminAssignRole: (userId: string, roleCode: string) =>
+    rawRequest<{ roles: string[] }>(`/admin/users/${userId}/roles`, { method: 'POST', body: { roleCode }, idempotencyKey: uuid() }),
+  adminRevokeRole: (userId: string, roleCode: string) =>
+    rawRequest<{ roles: string[] }>(`/admin/users/${userId}/roles/${roleCode}:revoke`, { method: 'POST', idempotencyKey: uuid() }),
+  adminRoles: () => rawRequest<{ items: AdminRole[] }>('/admin/roles', {}),
+  adminCreateRole: (body: { code: string; description?: string; permissions: string[] }) =>
+    rawRequest<AdminRole>('/admin/roles', { method: 'POST', body, idempotencyKey: uuid() }),
+  adminUpdateRole: (roleId: string, body: { description?: string; permissions?: string[] }, etag: string) =>
+    rawRequest<AdminRole>(`/admin/roles/${roleId}`, { method: 'PATCH', body, ifMatch: etag, idempotencyKey: uuid() }),
+  adminDeleteRole: (roleId: string) =>
+    rawRequest<void>(`/admin/roles/${roleId}`, { method: 'DELETE', idempotencyKey: uuid() }),
+  adminPermissions: () => rawRequest<{ items: AdminPermission[] }>('/admin/permissions', {}),
+  adminDicts: () => rawRequest<{ items: AdminDict[] }>('/admin/dicts', {}),
+  adminCreateDict: (body: { dictCode: string; name: string; description?: string }) =>
+    rawRequest<AdminDict>('/admin/dicts', { method: 'POST', body, idempotencyKey: uuid() }),
+  adminUpdateDict: (dictId: string, body: { name?: string; description?: string }, etag: string) =>
+    rawRequest<AdminDict>(`/admin/dicts/${dictId}`, { method: 'PATCH', body, ifMatch: etag, idempotencyKey: uuid() }),
+  adminDeleteDict: (dictId: string) =>
+    rawRequest<void>(`/admin/dicts/${dictId}`, { method: 'DELETE', idempotencyKey: uuid() }),
+  adminDictItems: (dictId: string) =>
+    rawRequest<{ items: AdminDictItem[] }>(`/admin/dicts/${dictId}/items`, {}),
+  adminCreateDictItem: (dictId: string, body: { itemValue: string; labelZh?: string; labelEn?: string; sortOrder?: number; remark?: string }) =>
+    rawRequest<AdminDictItem>(`/admin/dicts/${dictId}/items`, { method: 'POST', body, idempotencyKey: uuid() }),
+  adminUpdateDictItem: (dictId: string, itemId: number, body: { labelZh?: string; labelEn?: string; sortOrder?: number; remark?: string }) =>
+    rawRequest<AdminDictItem>(`/admin/dicts/${dictId}/items/${itemId}`, { method: 'PATCH', body, idempotencyKey: uuid() }),
+  adminDeleteDictItem: (dictId: string, itemId: number) =>
+    rawRequest<void>(`/admin/dicts/${dictId}/items/${itemId}`, { method: 'DELETE', idempotencyKey: uuid() }),
+  adminSetDictItemStatus: (dictId: string, itemId: number, enable: boolean) =>
+    rawRequest<AdminDictItem>(`/admin/dicts/${dictId}/items/${itemId}:${enable ? 'enable' : 'disable'}`, { method: 'POST', idempotencyKey: uuid() }),
+  adminAuditLogs: (query?: { actor?: string; action?: string; resource?: string; from?: string; to?: string; cursor?: string; limit?: number }) =>
+    rawRequest<CursorPage<AdminAuditLog>>('/admin/audit-logs', { query }),
+  adminRepoRetry: (repoId: string) =>
+    rawRequest<unknown>(`/admin/repositories/${repoId}:retry`, { method: 'POST', idempotencyKey: uuid() }),
+  adminRepoDelete: (repoId: string) =>
+    rawRequest<unknown>(`/admin/repositories/${repoId}:delete`, { method: 'POST', idempotencyKey: uuid() }),
 };
 
 // ---------- 工具 ----------
@@ -554,4 +602,74 @@ export interface Feedback {
   author: string;
   content: string;
   createdAt: string;
+}
+
+// ---------- 管理后台类型（契约 Admin schemas） ----------
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  nickname: string;
+  status: 'active' | 'locked' | 'disabled';
+  roles: string[];
+  createdAt: string;
+}
+
+export interface AdminRole {
+  id: string;
+  code: string;
+  builtIn: boolean;
+  description: string;
+  permissions: string[];
+  assigneeCount: number;
+  version: number;
+  etag?: string;
+}
+
+export interface AdminPermission {
+  code: string;
+  module: string;
+  description: string;
+}
+
+export interface AdminDict {
+  id: string;
+  dictCode: string;
+  name: string;
+  description: string;
+  status: string;
+  itemCount: number;
+  version: number;
+  etag?: string;
+}
+
+export interface AdminDictItem {
+  id: number;
+  itemValue: string;
+  labelZh: string;
+  labelEn: string;
+  sortOrder: number;
+  status: string;
+  remark: string;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  actor: string;
+  organization: string;
+  action: string;
+  resource: string;
+  result: string;
+  sourceIp: string;
+  userAgent: string;
+  traceId: string;
+  idempotencyKey: string;
+  details: unknown;
+  createdAt: string;
+}
+
+export interface SystemOverview {
+  counts: { users: number; organizations: number; repositories: number; auditLogs: number };
+  healthStatus: string;
+  healthChecks: Record<string, string>;
 }

@@ -1,6 +1,7 @@
 // 列表页左侧筛选栏（09 §4/§5.2/§6.1/§7.2）— 分组折叠、组内单选可取消，选项全部数据驱动
 // 时间：2026-08-21  作者：AxeXie
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api, type TaxonomyOption, type OrganizationListItem } from '../api/client';
 
 /** 契约 ResourceTypeSchema.facets 项（key/dataType/filterable/sortable/taxonomy）。 */
@@ -29,12 +30,12 @@ export interface Filters {
   deployable?: boolean;
 }
 
-const GROUP_LABEL: Record<string, string> = {
-  task: '任务', framework: '框架', license: '开源协议', architecture: '结构',
-  language: '语种', tag: '标签', scene: '场景', apiStatus: '推理 Api 状态',
+const GROUP_KEY: Record<string, string> = {
+  task: 'filter.groupTask', framework: 'filter.groupFramework', license: 'filter.groupLicense', architecture: 'filter.groupArchitecture',
+  language: 'filter.groupLanguage', tag: 'filter.groupTag', scene: 'filter.groupScene', apiStatus: 'filter.groupApiStatus',
 };
-const BOOL_LABEL: Record<string, string> = {
-  deployable: '支持部署工作空间', mcpCompatible: 'MCP 兼容',
+const BOOL_KEY: Record<string, string> = {
+  deployable: 'filter.boolDeployable', mcpCompatible: 'filter.boolMcp',
 };
 /** boolean facet key → 列表查询参数名（04 §6.3）。 */
 const BOOL_PARAM: Record<string, 'deployable' | 'mcp'> = {
@@ -58,6 +59,7 @@ function CollapsibleGroup({ title, children }: { title: string; children: React.
 function TaskTreeGroup({ options, value, onPick }: {
   options: TaxonomyOption[]; value?: string; onPick: (v?: string) => void;
 }) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState('');
   const roots = options.filter((o) => !o.parentKey);
   const childrenOf = (key: string) => options.filter((o) => o.parentKey === key);
@@ -65,7 +67,7 @@ function TaskTreeGroup({ options, value, onPick }: {
   const flat = roots.length === options.length;
   return (
     <>
-      <input className="filter-search" placeholder="快速搜索任务…"
+      <input className="filter-search" placeholder={t('filter.searchTask')}
              value={filter} onChange={(e) => setFilter(e.target.value)} />
       {flat ? (
         <div className="chip-wrap">
@@ -85,7 +87,7 @@ function TaskTreeGroup({ options, value, onPick }: {
         if (filter && kids.length === 0) return null;
         return (
           <details key={root.key} className="task-cat" open={!!filter}>
-            <summary>{root.displayName}（{childrenOf(root.key).length}）</summary>
+            <summary>{root.displayName}{t('filter.catCount', { n: childrenOf(root.key).length })}</summary>
             <div className="chip-wrap">
               {kids.map((o) => (
                 <span key={o.key}
@@ -106,6 +108,7 @@ function TaskTreeGroup({ options, value, onPick }: {
 function OrgGroup({ typeKey, value, onPick }: {
   typeKey: string; value?: string; onPick: (slug?: string) => void;
 }) {
+  const { t } = useTranslation();
   const [orgs, setOrgs] = useState<OrganizationListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -118,18 +121,18 @@ function OrgGroup({ typeKey, value, onPick }: {
   }, [page]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const unit = typeKey === 'dataset' ? '数据集' : typeKey === 'studio' ? '工作空间' : '模型';
+  const unitKey = typeKey === 'dataset' ? 'filter.unitDataset' : typeKey === 'studio' ? 'filter.unitStudio' : 'filter.unitModel';
   return (
     <>
       {orgs.length === 0 ? (
-        <div className="filter-empty">暂无组织</div>
+        <div className="filter-empty">{t('filter.noOrg')}</div>
       ) : orgs.map((o) => (
         <div key={o.id}
              className={`filter-org-item ${value === o.slug ? 'active' : ''}`}
              onClick={() => onPick(value === o.slug ? undefined : o.slug)}>
           <span className="filter-org-name">{o.name}</span>
           <span className="filter-org-count">
-            已发布 {o.repoCounts?.[typeKey] ?? 0} 个{unit}
+            {t('filter.orgCount', { n: o.repoCounts?.[typeKey] ?? 0, unit: t(unitKey) })}
           </span>
         </div>
       ))}
@@ -151,9 +154,10 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
   filters: Filters;
   onChange: (patch: Partial<Filters>) => void;
 }) {
+  const { t } = useTranslation();
   const filterable = (facets ?? []).filter((f) => f.filterable !== false);
   const taskFacet = filterable.find((f) => f.key === 'task' && f.taxonomy && taxonomies[f.taxonomy]);
-  const boolFacets = filterable.filter((f) => f.dataType === 'boolean' && BOOL_LABEL[f.key]);
+  const boolFacets = filterable.filter((f) => f.dataType === 'boolean' && BOOL_KEY[f.key]);
   const sceneFacet = filterable.find((f) => f.key === 'scene' && f.taxonomy && taxonomies[f.taxonomy]);
   // 普通 taxonomy 单选组（排除 task/scene/capability，capability 在工具栏做多选下拉）
   const singleGroups = filterable.filter((f) =>
@@ -165,7 +169,7 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
   return (
     <aside className="filter-sidebar">
       {taskFacet && (
-        <CollapsibleGroup title={GROUP_LABEL.task}>
+        <CollapsibleGroup title={t('filter.groupTask')}>
           <TaskTreeGroup options={taxonomies[taskFacet.taxonomy!]}
                          value={filters.task}
                          onPick={(v) => onChange({ task: v })} />
@@ -173,7 +177,7 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
       )}
 
       {singleGroups.map((f) => (
-        <CollapsibleGroup key={f.key} title={GROUP_LABEL[f.key] ?? f.key}>
+        <CollapsibleGroup key={f.key} title={GROUP_KEY[f.key] ? t(GROUP_KEY[f.key]) : f.key}>
           <div className="filter-opt-list">
             {taxonomies[f.taxonomy!].map((o) => (
               <div key={o.key}
@@ -190,7 +194,7 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
       ))}
 
       {sceneFacet && (
-        <CollapsibleGroup title={GROUP_LABEL.scene}>
+        <CollapsibleGroup title={t('filter.groupScene')}>
           <div className="chip-wrap">
             {taxonomies[sceneFacet.taxonomy!]
               .slice(0, sceneExpanded ? undefined : 4)
@@ -204,14 +208,14 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
           </div>
           {taxonomies[sceneFacet.taxonomy!].length > 4 && (
             <a className="filter-more" onClick={() => setSceneExpanded(!sceneExpanded)}>
-              {sceneExpanded ? '收起' : `展开更多（${taxonomies[sceneFacet.taxonomy!].length - 4}）`}
+              {sceneExpanded ? t('filter.collapse') : t('filter.expandMore', { n: taxonomies[sceneFacet.taxonomy!].length - 4 })}
             </a>
           )}
         </CollapsibleGroup>
       )}
 
       {boolFacets.length > 0 && (
-        <CollapsibleGroup title="能力">
+        <CollapsibleGroup title={t('filter.capGroup')}>
           {boolFacets.map((f) => {
             const param = BOOL_PARAM[f.key];
             const checked = param ? !!filters[param] : false;
@@ -219,7 +223,7 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
               <label key={f.key} className="filter-check">
                 <input type="checkbox" checked={checked}
                        onChange={() => onChange({ [param]: !checked } as Partial<Filters>)} />
-                {BOOL_LABEL[f.key]}
+                {BOOL_KEY[f.key] ? t(BOOL_KEY[f.key]) : f.key}
               </label>
             );
           })}
@@ -227,17 +231,17 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
       )}
 
       {typeKey === 'dataset' && (
-        <CollapsibleGroup title="其他">
+        <CollapsibleGroup title={t('filter.otherGroup')}>
           <label className="filter-check">
             <input type="checkbox" checked={!!filters.gated}
                    onChange={() => onChange({ gated: !filters.gated })} />
-            仅看申请制
+            {t('filter.gatedOnly')}
           </label>
         </CollapsibleGroup>
       )}
 
       {showOrg && (
-        <CollapsibleGroup title="组织">
+        <CollapsibleGroup title={t('filter.orgGroup')}>
           <OrgGroup typeKey={typeKey} value={filters.org} onPick={(slug) => onChange({ org: slug })} />
         </CollapsibleGroup>
       )}

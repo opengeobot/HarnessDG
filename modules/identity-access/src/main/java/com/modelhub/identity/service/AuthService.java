@@ -4,7 +4,7 @@ import com.modelhub.identity.config.IdentityProperties;
 import com.modelhub.identity.domain.NamespaceEntity;
 import com.modelhub.identity.domain.UserEntity;
 import com.modelhub.identity.repo.NamespaceRepository;
-import com.modelhub.identity.repo.PlatformRoleAssignmentRepository;
+import com.modelhub.identity.repo.SysUserRoleRepository;
 import com.modelhub.identity.repo.UserRepository;
 import com.modelhub.identity.security.CurrentPrincipal;
 import com.modelhub.identity.service.SessionService.IssuedSession;
@@ -50,7 +50,7 @@ public class AuthService {
 
     private final UserRepository users;
     private final NamespaceRepository namespaces;
-    private final PlatformRoleAssignmentRepository platformRoles;
+    private final SysUserRoleRepository userRoles;
     private final SessionService sessionService;
     private final JwtService jwtService;
     private final AuditService auditService;
@@ -61,13 +61,13 @@ public class AuthService {
     private final BusinessCounters counters;
 
     public AuthService(UserRepository users, NamespaceRepository namespaces,
-                       PlatformRoleAssignmentRepository platformRoles, SessionService sessionService,
+                       SysUserRoleRepository userRoles, SessionService sessionService,
                        JwtService jwtService, AuditService auditService, RateLimiter rateLimiter,
                        PasswordEncoder passwordEncoder, IdentityProperties props, LoginGuard loginGuard,
                        BusinessCounters counters) {
         this.users = users;
         this.namespaces = namespaces;
-        this.platformRoles = platformRoles;
+        this.userRoles = userRoles;
         this.sessionService = sessionService;
         this.jwtService = jwtService;
         this.auditService = auditService;
@@ -184,7 +184,7 @@ public class AuthService {
     public UserView getMe(CurrentPrincipal principal) {
         UserEntity user = users.findById(principal.userId()).orElseThrow();
         NamespaceEntity ns = namespaces.findByUserIdAndNamespaceType(user.getId(), "user").orElse(null);
-        List<String> roles = platformRoles.findActiveRoles(user.getId());
+        List<String> roles = userRoles.findActiveRoleCodes(user.getId());
         return new UserView(user.getPublicId().toString(), user.getUsername(), user.getNickname(),
                 user.getStatus(), ns == null ? null : ns.getPublicId().toString(), roles,
                 user.getProfileVersion(), user.getCreatedAt());
@@ -219,9 +219,10 @@ public class AuthService {
         if (av == null || ((Number) av).longValue() != user.getAuthVersion()) {
             throw new ApiException(ErrorCode.UNAUTHENTICATED, "会话已失效，请重新登录");
         }
-        List<String> roles = platformRoles.findActiveRoles(userId);
+        List<String> roles = userRoles.findActiveRoleCodes(userId);
         return new CurrentPrincipal(userId, user.getPublicId(), user.getUsername(),
-                user.getAuthVersion(), String.valueOf(claims.getClaim("sid")), Set.copyOf(roles));
+                user.getAuthVersion(), String.valueOf(claims.getClaim("sid")), Set.copyOf(roles),
+                Set.copyOf(userRoles.findActivePermissionCodes(userId)));
     }
 
     /** platform_admin 解锁被锁定账户（04 §4.1）。 */
@@ -257,7 +258,7 @@ public class AuthService {
     }
 
     private AuthResult authResult(UserEntity user, UUID namespacePublicId, IssuedSession session) {
-        List<String> roles = platformRoles.findActiveRoles(user.getId());
+        List<String> roles = userRoles.findActiveRoleCodes(user.getId());
         UserView view = new UserView(user.getPublicId().toString(), user.getUsername(), user.getNickname(),
                 user.getStatus(), namespacePublicId == null ? null : namespacePublicId.toString(), roles,
                 user.getProfileVersion(), user.getCreatedAt());

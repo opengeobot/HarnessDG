@@ -2,9 +2,12 @@
 // 时间：2026-08-21  作者：AxeXie
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import type { Repository } from '../api/client';
 
-const VIS_LABEL: Record<string, string> = { public: '公开', organization: '组织', private: '私有' };
+/** 可见性徽标文案键（未命中降级展示原值）。 */
+const VIS_KEY: Record<string, string> = { public: 'card.visPublic', organization: 'card.visOrganization', private: 'card.visPrivate' };
 
 /** metadata 字段安全读取：非预期类型返回 undefined（04 §12 降级渲染）。 */
 function metaStr(repo: Repository, key: string): string | undefined {
@@ -21,12 +24,13 @@ function gotoDetail(nav: ReturnType<typeof useNavigate>, r: Repository) {
 }
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleDateString('zh-CN');
+  return new Date(iso).toLocaleDateString(i18n.language === 'zh' ? 'zh-CN' : 'en-US');
 }
 
 /** model/dataset 通用 ResourceCard（09 §5.4）。 */
 export function ResourceCard({ repo }: { repo: Repository }) {
   const nav = useNavigate();
+  const { t } = useTranslation();
   const task = metaStr(repo, 'task');
   const license = metaStr(repo, 'license');
   const architecture = metaStr(repo, 'architecture');
@@ -35,14 +39,14 @@ export function ResourceCard({ repo }: { repo: Repository }) {
   const framework = metaStr(repo, 'framework');
   const frameworks = metaArr(repo, 'frameworks');
   const frameworkText = frameworks.length > 1
-    ? `${frameworks[0]} 等 ${frameworks.length} 个框架`
+    ? t('card.frameworksEtc', { first: frameworks[0], n: frameworks.length })
     : (frameworks[0] ?? framework);
   const pCount = repo.metadata?.['parameterCount'];
   const pUnit = metaStr(repo, 'parameterUnit') ?? '';
   const tags = metaArr(repo, 'tags').slice(0, 4);
 
   const metaItems = [
-    typeof pCount === 'number' ? `参数量 ${pCount}${pUnit}` : undefined,
+    typeof pCount === 'number' ? t('card.paramCount', { n: pCount, unit: pUnit }) : undefined,
     frameworkText, license, architecture, language,
   ].filter((x): x is string => !!x);
 
@@ -52,9 +56,9 @@ export function ResourceCard({ repo }: { repo: Repository }) {
         <span className="repo-ns">@{repo.namespace}/{repo.name}</span>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {repo.visibility !== 'public' && (
-            <span className={`badge badge-${repo.visibility}`}>{VIS_LABEL[repo.visibility]}</span>
+            <span className={`badge badge-${repo.visibility}`}>{VIS_KEY[repo.visibility] ? t(VIS_KEY[repo.visibility]) : repo.visibility}</span>
           )}
-          {repo.gated && <span className="badge badge-gated">申请制</span>}
+          {repo.gated && <span className="badge badge-gated">{t('card.gated')}</span>}
           {apiStatus && <span className="badge badge-api">{apiStatus}</span>}
         </div>
       </div>

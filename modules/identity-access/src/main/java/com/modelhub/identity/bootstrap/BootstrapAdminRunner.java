@@ -2,10 +2,12 @@ package com.modelhub.identity.bootstrap;
 
 import com.modelhub.identity.config.BootstrapProperties;
 import com.modelhub.identity.domain.NamespaceEntity;
-import com.modelhub.identity.domain.PlatformRoleAssignmentEntity;
+import com.modelhub.identity.domain.SysRoleEntity;
+import com.modelhub.identity.domain.SysUserRoleEntity;
 import com.modelhub.identity.domain.UserEntity;
 import com.modelhub.identity.repo.NamespaceRepository;
-import com.modelhub.identity.repo.PlatformRoleAssignmentRepository;
+import com.modelhub.identity.repo.SysRoleRepository;
+import com.modelhub.identity.repo.SysUserRoleRepository;
 import com.modelhub.identity.repo.UserRepository;
 import com.modelhub.identity.service.AuditService;
 import com.modelhub.shared.id.PublicIds;
@@ -31,17 +33,20 @@ public class BootstrapAdminRunner implements ApplicationRunner {
     private final BootstrapProperties props;
     private final UserRepository users;
     private final NamespaceRepository namespaces;
-    private final PlatformRoleAssignmentRepository roles;
+    private final SysRoleRepository sysRoles;
+    private final SysUserRoleRepository userRoles;
     private final PasswordEncoder passwordEncoder;
     private final AuditService auditService;
 
     public BootstrapAdminRunner(BootstrapProperties props, UserRepository users,
-                                NamespaceRepository namespaces, PlatformRoleAssignmentRepository roles,
+                                NamespaceRepository namespaces, SysRoleRepository sysRoles,
+                                SysUserRoleRepository userRoles,
                                 PasswordEncoder passwordEncoder, AuditService auditService) {
         this.props = props;
         this.users = users;
         this.namespaces = namespaces;
-        this.roles = roles;
+        this.sysRoles = sysRoles;
+        this.userRoles = userRoles;
         this.passwordEncoder = passwordEncoder;
         this.auditService = auditService;
     }
@@ -49,7 +54,7 @@ public class BootstrapAdminRunner implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (roles.countByRevokedAtIsNull() > 0) {
+        if (userRoles.countByRevokedAtIsNull() > 0) {
             return;
         }
         if (!props.enabled() || props.username().isBlank() || props.password().isBlank()) {
@@ -76,10 +81,14 @@ public class BootstrapAdminRunner implements ApplicationRunner {
             namespaces.save(ns);
             return u;
         });
-        PlatformRoleAssignmentEntity assignment = new PlatformRoleAssignmentEntity();
-        assignment.setUserId(user.getId());
-        assignment.setRole("platform_admin");
-        roles.save(assignment);
+        SysRoleEntity adminRole = sysRoles.findByCode("platform_admin")
+                .orElseThrow(() -> new IllegalStateException("RBAC 种子角色 platform_admin 缺失（V16）"));
+        if (userRoles.findByUserIdAndRoleIdAndRevokedAtIsNull(user.getId(), adminRole.getId()).isEmpty()) {
+            SysUserRoleEntity assignment = new SysUserRoleEntity();
+            assignment.setUserId(user.getId());
+            assignment.setRoleId(adminRole.getId());
+            userRoles.save(assignment);
+        }
         auditService.appendSimple("bootstrap", "bootstrap.platform_admin",
                 "user:" + user.getPublicId(), "success");
         log.info("bootstrap: 已创建首个 platform_admin（{}）并写入审计", username);
