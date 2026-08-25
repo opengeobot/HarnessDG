@@ -107,10 +107,13 @@ public class OrganizationService {
         return toView(org, ns.getPublicId());
     }
 
+    /** 组织列表（09 §5.2）：全部 active 组织匿名可读——组织是公开信息，namespace slug
+     *  本就在仓库列表暴露；按 slug 排序。详情端点仍要求成员关系（防枚举不变）；
+     *  创建仓库的组织成员资格由服务端授权兜底（403）。 */
     @Transactional(readOnly = true)
-    public PageResult<OrgView> listMine(CurrentPrincipal actor, PageQuery page) {
-        Page<OrganizationEntity> result = organizations.findMyOrganizations(
-                actor.userId(), PageRequest.of(page.page() - 1, page.pageSize()));
+    public PageResult<OrgView> listAllActive(PageQuery page) {
+        Page<OrganizationEntity> result = organizations.findAllActive(
+                PageRequest.of(page.page() - 1, page.pageSize()));
         List<OrgView> items = result.getContent().stream()
                 .map(o -> toView(o, orgNamespaceId(o.getId())))
                 .toList();

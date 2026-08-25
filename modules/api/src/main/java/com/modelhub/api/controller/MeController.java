@@ -32,6 +32,10 @@ public class MeController {
     private static final Set<String> ACCESS_REQUEST_STATUSES =
             Set.of("pending", "approved", "rejected", "revoked", "expired");
 
+    /** 契约 typeKey 格式（与 /resource-types/{typeKey} 同 pattern）。 */
+    private static final java.util.regex.Pattern TYPE_KEY_PATTERN =
+            java.util.regex.Pattern.compile("^[a-z][a-z0-9_-]{1,63}$");
+
     /** cursor 响应 data：items + nextCursor。 */
     public record MyAccessRequestPageData(List<AccessRequestView> items, String nextCursor) {}
 
@@ -57,12 +61,18 @@ public class MeController {
         return ApiEnvelope.ok(new MyAccessRequestPageData(result.items(), result.nextCursor()));
     }
 
-    /** 个人仓库列表（04 §5 /me/repositories）：tab ∈ {created, likes, favorites}，页码分页。 */
+    /** 个人仓库列表（04 §5 /me/repositories）：tab ∈ {created, likes, favorites}，
+     *  可选 type 按资源类型过滤，页码分页。 */
     @GetMapping("/repositories")
     public ApiEnvelope<PageResult<CatalogService.RepoView>> myRepositories(
             @RequestParam Map<String, String> params, HttpServletRequest request) {
         String tab = params.getOrDefault("tab", "created");
+        String type = params.get("type");
+        if (type != null && !type.isBlank() && !TYPE_KEY_PATTERN.matcher(type).matches()) {
+            throw new ApiException(ErrorCode.VALIDATION_FAILED, "非法 type 过滤值: " + type,
+                    List.of(new ApiException.Detail("type", "invalid_format")));
+        }
         PageQuery page = PageQuery.from(params);
-        return ApiEnvelope.ok(interactions.listMine(Principals.requireCurrent(request), tab, page));
+        return ApiEnvelope.ok(interactions.listMine(Principals.requireCurrent(request), tab, type, page));
     }
 }

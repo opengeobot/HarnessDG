@@ -32,10 +32,11 @@ class HealthContractTests extends BaseIntegrationTest {
         assertThat(body.path("checks").path("database").asText()).isEqualTo("ok");
     }
 
+    /** 组织列表匿名可读（09 §5.2 有意行为变更）：组织是公开信息，详情端点仍要求成员关系。 */
     @Test
-    void organizations_endpoint_requires_authentication() {
+    void organizations_list_is_anonymously_readable() {
         ResponseEntity<String> resp = rest.getForEntity("/api/v1/organizations", String.class);
-        assertThat(resp.getStatusCode().value()).isEqualTo(401);
+        assertThat(resp.getStatusCode().value()).isEqualTo(200);
     }
 
     @Test
@@ -69,7 +70,9 @@ class HealthContractTests extends BaseIntegrationTest {
         ResponseEntity<String> ok = meCall(s.accessToken());
         assertThat(JSON.readTree(ok.getBody()).path("traceId").asText()).isNotBlank();
 
-        ResponseEntity<String> err = rest.getForEntity("/api/v1/organizations", String.class);
+        // 组织列表已匿名可读（09 §5.2），错误体 traceId 改用仍需认证的 /me/repositories
+        ResponseEntity<String> err = rest.getForEntity("/api/v1/me/repositories", String.class);
+        assertThat(err.getStatusCode().value()).isEqualTo(401);
         assertThat(JSON.readTree(err.getBody()).path("traceId").asText()).isNotBlank();
     }
 

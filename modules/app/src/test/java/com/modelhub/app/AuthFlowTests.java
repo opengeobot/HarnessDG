@@ -41,7 +41,8 @@ class AuthFlowTests extends BaseIntegrationTest {
         String refresh = cookies.stream().filter(c -> c.startsWith("mh_refresh=")).findFirst().orElseThrow();
         String csrf = cookies.stream().filter(c -> c.startsWith("mh_csrf=")).findFirst().orElseThrow();
         assertThat(refresh).contains("HttpOnly").contains("SameSite=Lax").contains("Path=/api/v1/auth");
-        assertThat(csrf).doesNotContain("HttpOnly");
+        // mh_csrf 非 HttpOnly 且必须 Path=/：SPA 页面 document.cookie 读取做双提交（09 §11）
+        assertThat(csrf).doesNotContain("HttpOnly").contains("Path=/");
         // 两条 Cookie 必须独立输出，禁止逗号折叠
         assertThat(cookies.size()).isGreaterThanOrEqualTo(2);
     }

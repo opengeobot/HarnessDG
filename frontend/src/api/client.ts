@@ -133,11 +133,14 @@ interface RequestOptions {
   ifMatch?: string;
   /** 双提交 CSRF token（refresh/logout 必需，04 §3）。 */
   csrfToken?: string;
-  query?: Record<string, string | number | undefined>;
+  query?: Record<string, QueryValue>;
   /** 跳过 401 自动刷新（避免 refresh 自身递归）。 */
   skipRefresh?: boolean;
   signal?: AbortSignal;
 }
+
+/** 查询参数值：数组展开为重复参数（framework/tag/scene/capability 多值筛选）。 */
+export type QueryValue = string | number | boolean | string[] | undefined;
 
 async function rawRequest<T>(path: string, opts: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {};
@@ -167,8 +170,8 @@ async function rawRequest<T>(path: string, opts: RequestOptions): Promise<T> {
     throw new ApiRequestError(0, 'NETWORK_ERROR', '网络请求失败', undefined);
   }
 
-  // 401 且可刷新 → 刷新后重试一次
-  if (resp.status === 401 && !opts.skipRefresh && tokenState.csrfToken) {
+  // 401 且可刷新 → 刷新后重试一次（整页刷新后内存 csrfToken 为空，但 mh_csrf cookie 仍在，09 §11）
+  if (resp.status === 401 && !opts.skipRefresh && (tokenState.csrfToken || readCookie('mh_csrf'))) {
     const ok = await tryRefresh();
     if (ok) {
       return rawRequest<T>(path, { ...opts, skipRefresh: true });
@@ -199,11 +202,19 @@ async function rawRequest<T>(path: string, opts: RequestOptions): Promise<T> {
   return env.data;
 }
 
-function buildQuery(query?: Record<string, string | number | undefined>): string {
+function buildQuery(query?: Record<string, QueryValue>): string {
   if (!query) return '';
   const parts: string[] = [];
   for (const [k, v] of Object.entries(query)) {
     if (v === undefined || v === '') continue;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item !== undefined && item !== '') {
+          parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(item)}`);
+        }
+      }
+      continue;
+    }
     parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
   }
   return parts.length ? `?${parts.join('&')}` : '';
@@ -229,11 +240,15 @@ export const api = {
     rawRequest<void>('/auth/change-password', { method: 'POST', body, idempotencyKey: uuid() }),
 
   // Repositories
-  listRepositories: (query: RepoListQuery) =>
-    rawRequest<Page<Repository>>('/repositories', { query: query as Record<string, string | number | undefined> }),
+  listRepositories: (query: RepoListQuery, signal?: AbortSignal) =>
+    rawRequest<Page<Repository>>('/repositories', {
+      query: query as Record<string, QueryValue>, signal,
+    }),
   getRepository: (repoId: string) => rawRequest<Repository>(`/repositories/${repoId}`, {}),
   resolveRepo: (typeKey: string, namespace: string, name: string) =>
     rawRequest<Repository>(`/repositories/resolve/${typeKey}/${namespace}/${name}`, {}),
+  relatedRepositories: (repoId: string, page = 1, pageSize = 6) =>
+    rawRequest<Page<Repository>>(`/repositories/${repoId}/related`, { query: { page, pageSize } }),
   createRepo: (body: CreateRepoRequest) =>
     rawRequest<Repository>('/repositories', { method: 'POST', body, idempotencyKey: uuid() }),
   patchRepo: (repoId: string, body: Record<string, unknown>, ifMatch: string) =>
@@ -254,8 +269,9 @@ export const api = {
     rawRequest<void>(`/repositories/${repoId}/favorite`, { method: 'DELETE' }),
 
   // Files / Upload / Download
+  // GET /files 返回 FilePageEnvelope：data={items,nextCursor}（04 §7），不是裸数组
   listFiles: (repoId: string, branch?: string, path?: string) =>
-    rawRequest<FileNode[]>(`/repositories/${repoId}/files`, {
+    rawRequest<FilePage>(`/repositories/${repoId}/files`, {
       query: { branch: branch ?? 'main', path },
     }),
   createDownloadSession: (repoId: string, fileId: string) =>
@@ -273,9 +289,19 @@ export const api = {
   abortUpload: (uploadId: string) =>
     rawRequest<UploadSession>(`/uploads/${uploadId}:abort`, { method: 'POST', body: {}, idempotencyKey: uuid() }),
 
+  // Feedbacks（详情页交流反馈，04 §5）
+  listFeedbacks: (repoId: string, cursor?: string, limit = 20) =>
+    rawRequest<CursorPage<Feedback>>(`/repositories/${repoId}/feedbacks`, {
+      query: { cursor, limit },
+    }),
+  createFeedback: (repoId: string, content: string) =>
+    rawRequest<Feedback>(`/repositories/${repoId}/feedbacks`, {
+      method: 'POST', body: { content }, idempotencyKey: uuid(),
+    }),
+
   // Me
-  meRepositories: (tab: 'created' | 'likes' | 'favorites', page = 1, pageSize = 12) =>
-    rawRequest<Page<Repository>>('/me/repositories', { query: { tab, page, pageSize } }),
+  meRepositories: (tab: 'created' | 'likes' | 'favorites', page = 1, pageSize = 12, type?: string) =>
+    rawRequest<Page<Repository>>('/me/repositories', { query: { tab, page, pageSize, type } }),
   myAccessRequests: (status?: string) =>
     rawRequest<CursorPage<AccessRequest>>('/me/access-requests', { query: { status } }),
 
@@ -284,6 +310,9 @@ export const api = {
     rawRequest<AccessRequest>(`/repositories/${repoId}/access-requests`, {
       method: 'POST', body: { reason }, idempotencyKey: uuid(),
     }),
+  /** 所有者/维护者查看仓库的申请列表（09 §6.3；非维护者 403）。 */
+  repoAccessRequests: (repoId: string) =>
+    rawRequest<CursorPage<AccessRequest>>(`/repositories/${repoId}/access-requests`, {}),
   approveAccess: (repoId: string, requestId: string, ifMatch: string) =>
     rawRequest<AccessRequest>(`/repositories/${repoId}/access-requests/${requestId}:approve`, {
       method: 'POST', body: {}, ifMatch, idempotencyKey: uuid(),
@@ -299,10 +328,14 @@ export const api = {
 
   // Resource Types & Metadata
   resourceTypes: () => rawRequest<{ items: ResourceType[] }>('/resource-types', {}),
+  resourceTypeSchema: (typeKey: string, version?: number) =>
+    rawRequest<ResourceTypeSchema>(`/resource-types/${typeKey}/schema`, { query: { version } }),
   metadataOptions: () => rawRequest<MetadataOptions>('/metadata/options', {}),
+  hotSearches: () => rawRequest<HotSearches>('/metadata/hot-searches', {}),
 
-  // Organizations
-  listOrganizations: () => rawRequest<Organization[]>('/organizations', {}),
+  // Organizations（后端返回 PageResult，列表项含 repoCounts，09 §5.2）
+  listOrganizations: (page = 1, pageSize = 20) =>
+    rawRequest<Page<OrganizationListItem>>('/organizations', { query: { page, pageSize } }),
 };
 
 // ---------- 工具 ----------
@@ -360,10 +393,11 @@ export interface Repository {
   stats: { likes: number; favorites: number; downloads: number; visits: number; fileCount: number };
   lifecycleStatus: 'provisioning' | 'draft' | 'active' | 'archived' | 'deleting' | 'deleted' | 'purging' | 'purged' | 'failed';
   metadata?: Record<string, unknown>;
-  metadataSchemaVersion: string;
+  metadataSchemaVersion: number;
   version: number;
   createdAt: string;
   updatedAt: string;
+  etag?: string;
 }
 
 export interface CreateRepoRequest {
@@ -375,19 +409,30 @@ export interface CreateRepoRequest {
   visibility?: 'public' | 'organization' | 'private';
   gated?: boolean;
   metadata?: Record<string, unknown>;
-  metadataSchemaVersion: string;
+  metadataSchemaVersion: number;
 }
 
 export interface RepoListQuery {
   type?: string;
   keyword?: string;
+  task?: string;
+  framework?: string[];
+  tag?: string[];
+  scene?: string[];
+  capability?: string[];
+  architecture?: string;
+  language?: string;
   license?: string;
+  apiStatus?: string;
   org?: string;
   gated?: boolean;
-  sort?: 'relevance-v1' | 'updatedAt-desc' | 'downloads-desc' | 'likes-desc' | 'hot-desc';
+  mcp?: boolean;
+  deployable?: boolean;
+  featured?: boolean;
+  sort?: 'relevance-v1' | 'updatedAt-desc' | 'downloads-desc' | 'likes-desc' | 'visits-desc' | 'hot-desc';
   page?: number;
   pageSize?: number;
-  facet?: string;
+  facet?: string[];
 }
 
 export interface RelationshipState {
@@ -402,6 +447,12 @@ export interface FileNode {
   size?: number;
   sha256?: string;
   commitSha?: string;
+}
+
+/** GET /files 响应 data（04 FilePageEnvelope）。 */
+export interface FilePage {
+  items: FileNode[];
+  nextCursor: string | null;
 }
 
 export interface DownloadSession {
@@ -442,13 +493,42 @@ export interface AccessRequest {
 
 export interface ResourceType {
   typeKey: string;
-  currentVersion: string;
+  currentVersion: number;
   displayName: string;
   capabilities?: string[];
 }
 
+/** 契约 ResourceTypeSchema（/resource-types/{typeKey}/schema），筛选组数据驱动来源。 */
+export interface ResourceTypeSchema {
+  typeKey: string;
+  version: number;
+  metadataSchema: Record<string, unknown>;
+  uiSchema?: Record<string, unknown>;
+  filePolicy?: Record<string, unknown>;
+  defaultVisibility?: string;
+  allowedWorkflows?: string[];
+  facets?: Array<Record<string, unknown>>;
+  checksum?: string;
+  status?: string;
+  publishedAt?: string;
+}
+
+export interface TaxonomyOption {
+  key: string;
+  displayName: string;
+  parentKey: string | null;
+  status: string;
+}
+
 export interface MetadataOptions {
-  taxonomies: Record<string, Array<{ value: string; label: string; deprecated?: boolean }>>;
+  version?: string;
+  taxonomies: Record<string, TaxonomyOption[]>;
+}
+
+/** 契约 HotSearches（/metadata/hot-searches）。 */
+export interface HotSearches {
+  version: string;
+  words: string[];
 }
 
 export interface Organization {
@@ -456,6 +536,22 @@ export interface Organization {
   namespaceId: string;
   slug: string;
   name: string;
+  description?: string;
   status: string;
   version: number;
+  etag?: string;
+  createdAt?: string;
+}
+
+/** 组织列表项：列表端点额外返回 repoCounts（typeKey → 计数）。 */
+export interface OrganizationListItem extends Organization {
+  repoCounts?: Record<string, number>;
+}
+
+/** 交流反馈（契约 Feedback）。 */
+export interface Feedback {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: string;
 }

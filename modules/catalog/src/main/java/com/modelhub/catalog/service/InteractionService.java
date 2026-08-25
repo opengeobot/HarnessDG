@@ -168,10 +168,12 @@ public class InteractionService {
     }
 
     /** 个人中心仓库列表（04 §5 /me/repositories）：tab ∈ {created, likes, favorites}，
+     *  可选 type 按 resource_type 过滤（契约 typeKey pattern 由 controller 校验），
      *  页码分页；结果全部经 computeVisibleScope 过滤（ME-001 不泄漏私有资源），
      *  total 以过滤后计。 */
     @Transactional(readOnly = true)
-    public PageResult<CatalogService.RepoView> listMine(CurrentPrincipal actor, String tab, PageQuery page) {
+    public PageResult<CatalogService.RepoView> listMine(CurrentPrincipal actor, String tab, String type,
+                                                        PageQuery page) {
         if (tab == null || !ME_TABS.contains(tab)) {
             throw ApiException.badRequest("未知 tab 值: " + tab,
                     List.of(new ApiException.Detail("tab", "unknown_value")));
@@ -186,6 +188,10 @@ public class InteractionService {
             case "favorites" -> where.append("AND EXISTS (SELECT 1 FROM repository_favorites fv "
                     + "WHERE fv.repository_id = r.id AND fv.user_id = :me) ");
             default -> throw new IllegalStateException("unreachable tab: " + tab);
+        }
+        if (type != null && !type.isBlank()) {
+            where.append("AND r.resource_type = :mType ");
+            qp.put("mType", type);
         }
         qp.put("me", actor.userId());
         // includeSelfOwned=true：/me/repositories 以当前用户为主体，其自创私有仓库

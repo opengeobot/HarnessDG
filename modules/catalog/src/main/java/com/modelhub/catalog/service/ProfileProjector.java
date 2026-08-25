@@ -155,6 +155,9 @@ public class ProfileProjector {
         });
         p.setTaskValueId(taxonomyValueId("dataset_task", textOrNull(metadata, "task")));
         p.setEstimatedRows(metadata.hasNonNull("estimatedRows") ? metadata.get("estimatedRows").asLong() : null);
+        // data_formats JSONB NOT NULL：投影 metadata.dataFormats 数组，缺省空数组
+        JsonNode formats = metadata.get("dataFormats");
+        p.setDataFormats(formats != null && formats.isArray() ? formats.toString() : "[]");
         p.setSensitivityLevel(textOrNull(metadata, "sensitivityLevel"));
         p.setPreviewPolicy(textOrNull(metadata, "previewPolicy"));
         datasetProfiles.save(p);
@@ -164,6 +167,8 @@ public class ProfileProjector {
         StudioProfileEntity p = studioProfiles.findById(repoId).orElseGet(() -> {
             StudioProfileEntity n = new StudioProfileEntity();
             n.setRepositoryId(repoId);
+            // v1 不交付真实运行时（03 §3.3）：新建投影默认 draft（publish_status NOT NULL）
+            n.setPublishStatus("draft");
             return n;
         });
         p.setRuntimeType(textOrNull(metadata, "runtimeType"));

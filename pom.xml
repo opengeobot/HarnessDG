@@ -168,6 +168,13 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>3.2.5</version>
+          <configuration>
+            <!-- surefire fork 的测试 JVM 不继承 docker run -e 环境变量，
+                 必须在此显式禁用 Ryuk（socket 挂载容器内运行时 Ryuk 端口不可达） -->
+            <environmentVariables>
+              <TESTCONTAINERS_RYUK_DISABLED>true</TESTCONTAINERS_RYUK_DISABLED>
+            </environmentVariables>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

@@ -5,6 +5,7 @@ import com.modelhub.api.dto.OrgRequests.CreateOrgRequest;
 import com.modelhub.api.dto.OrgRequests.UpdateMemberRoleRequest;
 import com.modelhub.api.dto.OrgRequests.UpdateOrgRequest;
 import com.modelhub.api.support.Principals;
+import com.modelhub.catalog.service.CatalogService;
 import com.modelhub.identity.service.OrganizationService;
 import com.modelhub.identity.service.OrganizationService.MemberView;
 import com.modelhub.identity.service.OrganizationService.OrgView;
@@ -13,6 +14,7 @@ import com.modelhub.shared.paging.CursorResult;
 import com.modelhub.shared.paging.PageQuery;
 import com.modelhub.shared.paging.PageResult;
 import com.modelhub.shared.web.ApiEnvelope;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,7 +30,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,17 +46,31 @@ public class OrganizationsController {
     /** members cursor 响应 data：items + nextCursor。 */
     public record MemberPageData(java.util.List<MemberView> items, String nextCursor) {}
 
-    private final OrganizationService organizationService;
+    /** 组织列表项（09 §5.2）：OrgView 全字段 + repoCounts（typeKey → 计数，契约 Organization.repoCounts）。 */
+    public record OrgListItem(@JsonProperty("id") String publicId, String slug, String name,
+                              String description, String namespaceId, String status, long version,
+                              String etag, OffsetDateTime createdAt, Map<String, Long> repoCounts) {}
 
-    public OrganizationsController(OrganizationService organizationService) {
+    private final OrganizationService organizationService;
+    private final CatalogService catalogService;
+
+    public OrganizationsController(OrganizationService organizationService, CatalogService catalogService) {
         this.organizationService = organizationService;
+        this.catalogService = catalogService;
     }
 
+    /** 组织列表（09 §5.2）：匿名可读全部 active 组织 + repoCounts 聚合计数。 */
     @GetMapping
-    public ApiEnvelope<PageResult<OrgView>> list(@RequestParam Map<String, String> params,
-                                                 HttpServletRequest request) {
+    public ApiEnvelope<PageResult<OrgListItem>> list(@RequestParam Map<String, String> params) {
         PageQuery page = PageQuery.from(params);
-        return ApiEnvelope.ok(organizationService.listMine(Principals.requireCurrent(request), page));
+        PageResult<OrgView> orgs = organizationService.listAllActive(page);
+        Map<String, Map<String, Long>> counts = catalogService.repoCountsByNamespace();
+        List<OrgListItem> items = orgs.items().stream()
+                .map(o -> new OrgListItem(o.publicId(), o.slug(), o.name(), o.description(),
+                        o.namespaceId(), o.status(), o.version(), o.etag(), o.createdAt(),
+                        counts.getOrDefault(o.namespaceId(), Map.of())))
+                .toList();
+        return ApiEnvelope.ok(new PageResult<>(orgs.total(), orgs.page(), orgs.pageSize(), items));
     }
 
     @PostMapping

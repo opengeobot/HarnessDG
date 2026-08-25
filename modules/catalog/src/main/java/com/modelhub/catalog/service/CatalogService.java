@@ -64,7 +64,7 @@ public class CatalogService {
 
     private static final Pattern NAME_PATTERN = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$");
     private static final Set<String> SORT_KEYS =
-            Set.of("relevance-v1", "updatedAt-desc", "downloads-desc", "likes-desc", "hot-desc");
+            Set.of("relevance-v1", "updatedAt-desc", "downloads-desc", "likes-desc", "visits-desc", "hot-desc");
     private static final Map<String, String> SORT_ORDER_SQL = Map.of(
             "relevance-v1", "(COALESCE(s.downloads,0)*2 + COALESCE(s.likes,0)*3 "
                     + "+ COALESCE(s.favorites,0)*2 + COALESCE(s.visits,0)*0.1) DESC, "
@@ -72,6 +72,7 @@ public class CatalogService {
             "updatedAt-desc", "r.updated_at DESC, r.public_id DESC",
             "downloads-desc", "COALESCE(s.downloads,0) DESC, r.updated_at DESC, r.public_id DESC",
             "likes-desc", "COALESCE(s.likes,0) DESC, r.updated_at DESC, r.public_id DESC",
+            "visits-desc", "COALESCE(s.visits,0) DESC, r.updated_at DESC, r.public_id DESC",
             "hot-desc", "(COALESCE(s.visits,0) + 3*COALESCE(s.downloads,0) + 2*COALESCE(s.likes,0)) DESC, "
                     + "r.updated_at DESC, r.public_id DESC");
 
@@ -902,6 +903,31 @@ public class CatalogService {
     }
 
     // ---------- 视图装配 ----------
+
+    /** 组织筛选组用聚合（09 §5.2）：一次查询统计各 namespace 下 active/archived 仓库按类型计数，
+     * 返回 namespace publicId → (typeKey → count)。repositories.namespace_id 是内部 id，
+     * 需映射为 namespace public_id（与 RepoView.namespace 同一标识）。
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Map<String, Long>> repoCountsByNamespace() {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery(
+                "SELECT namespace_id, resource_type, COUNT(*) FROM repositories "
+                        + "WHERE lifecycle_status IN ('active','archived') "
+                        + "GROUP BY namespace_id, resource_type").getResultList();
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Map<String, Long>> byInternal = new HashMap<>();
+        for (Object[] row : rows) {
+            byInternal.computeIfAbsent(((Number) row[0]).longValue(), k -> new HashMap<>())
+                    .put((String) row[1], ((Number) row[2]).longValue());
+        }
+        Map<String, Map<String, Long>> result = new HashMap<>();
+        namespaces.findAllById(byInternal.keySet()).forEach(ns ->
+                result.put(ns.getPublicId().toString(), byInternal.get(ns.getId())));
+        return result;
+    }
 
     /** 视图装配（供 InteractionService.listMine 等复用 CatalogService.toViews 的 RepoView）。 */
     public List<RepoView> toViews(List<RepositoryEntity> repos) {

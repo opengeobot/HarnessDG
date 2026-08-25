@@ -31,6 +31,11 @@ public interface OrganizationRepository extends JpaRepository<OrganizationEntity
             """)
     Page<OrganizationEntity> findMyOrganizations(@Param("userId") Long userId, Pageable pageable);
 
+    /** 全部 active 组织分页（09 §5.2：组织列表匿名可读，按 slug 排序）。 */
+    @Query(value = "select o from OrganizationEntity o where o.status = 'active' order by o.slug asc",
+            countQuery = "select count(o) from OrganizationEntity o where o.status = 'active'")
+    Page<OrganizationEntity> findAllActive(Pageable pageable);
+
     /** CAS 条件更新（If-Match，04 §10）：仅当版本一致时更新，返回受影响行数。 */
     @Modifying
     @Query("update OrganizationEntity o set o.name = :name, o.description = :description, "

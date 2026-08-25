@@ -48,3 +48,9 @@ secrets/
 # ---- 操作系统 ----
 .DS_Store
 Thumbs.db
+
+# ---- 仓库 ----
+*repos/
+
+# ---- 图像 ----
+*.png

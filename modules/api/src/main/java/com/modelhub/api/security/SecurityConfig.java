@@ -54,6 +54,8 @@ public class SecurityConfig {
                                 "/api/v1/repositories/resolve/**",
                                 "/api/v1/resource-types/**",
                                 "/api/v1/metadata/options",
+                                "/api/v1/metadata/hot-searches",
+                                "/api/v1/organizations",
                                 "/api/v1/downloads/*/content").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/repositories/*/files/*/download-sessions").permitAll()

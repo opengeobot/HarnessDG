@@ -8,9 +8,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,14 +34,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestPropertySource(properties = "modelhub.test.profile=governance")
 class GovernanceFlowTest extends CatalogTestSupport {
 
+    static final String GOV_PG_HOST = "mh-tc-govpg";
+
     static final PostgreSQLContainer<?> GOV_PG =
             new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-                    .withDatabaseName("govhub").withUsername("test").withPassword("test");
+                    .withDatabaseName("govhub").withUsername("test").withPassword("test")
+                    .withCreateContainerCmdModifier(joinNet(GOV_PG_HOST))
+                    // 默认 JDBC 等待策略探测宿主映射端口（本机发布端口转发不稳定），改用日志等待
+                    .waitingFor(Wait.forLogMessage(".*ready to accept connections.*", 2)
+                            .withStartupTimeout(Duration.ofMinutes(3)))
+                    .withReuse(true);
 
     static {
         GOV_PG.start();
         infraOverrides = Map.of(
-                "spring.datasource.url", GOV_PG.getJdbcUrl() + "&stringtype=unspecified",
+                "spring.datasource.url", jdbcUrlOf(GOV_PG_HOST, "govhub") + "?stringtype=unspecified",
                 "spring.datasource.username", "test",
                 "spring.datasource.password", "test",
                 "modelhub.gitea.base-url", "http://127.0.0.1:1",

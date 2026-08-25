@@ -240,7 +240,7 @@ class BrowseCursorPaginationTest extends ArtifactTestSupport {
     private void createGiteaBranch(String repoId, String branchName) {
         Long internalId = repositoryRepo.findByPublicId(UUID.fromString(repoId)).orElseThrow().getId();
         GitBindingEntity binding = gitBindings.findByRepositoryId(internalId).orElseThrow();
-        String base = "http://" + GITEA.getHost() + ":" + GITEA.getMappedPort(3000);
+        String base = "http://" + GITEA_HOST + ":3000";
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_JSON);
         h.setBasicAuth("modelhub", "ModelHub-Root-1x");

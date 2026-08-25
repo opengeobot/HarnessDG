@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
@@ -26,14 +28,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestPropertySource(properties = "modelhub.test.profile=fail-provisioning")
 class CatalogProvisionFailureTest extends CatalogTestSupport {
 
+    static final String FAIL_PG_HOST = "mh-tc-failpg";
+
     static final PostgreSQLContainer<?> FAIL_PG =
             new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-                    .withDatabaseName("failhub").withUsername("test").withPassword("test");
+                    .withDatabaseName("failhub").withUsername("test").withPassword("test")
+                    .withCreateContainerCmdModifier(joinNet(FAIL_PG_HOST))
+                    // 默认 JDBC 等待策略探测宿主映射端口（本机发布端口转发不稳定），改用日志等待
+                    .waitingFor(Wait.forLogMessage(".*ready to accept connections.*", 2)
+                            .withStartupTimeout(Duration.ofMinutes(3)))
+                    .withReuse(true);
 
     static {
         FAIL_PG.start();
         infraOverrides = Map.of(
-                "spring.datasource.url", FAIL_PG.getJdbcUrl() + "&stringtype=unspecified",
+                "spring.datasource.url", jdbcUrlOf(FAIL_PG_HOST, "failhub") + "?stringtype=unspecified",
                 "spring.datasource.username", "test",
                 "spring.datasource.password", "test",
                 "modelhub.gitea.base-url", "http://127.0.0.1:1",
