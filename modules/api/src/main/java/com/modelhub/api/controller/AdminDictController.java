@@ -38,11 +38,13 @@ public class AdminDictController {
     /** PATCH /dicts/{dictId} 请求体：字段为 null 表示不修改。 */
     public record UpdateDictBody(String name, String description) {}
 
-    /** POST /dicts/{dictId}/items 请求体。 */
-    public record CreateItemBody(String itemValue, String labelZh, String labelEn, Integer sortOrder, String remark) {}
+    /** POST /dicts/{dictId}/items 请求体（parentItemValue 可选，两级层级）。 */
+    public record CreateItemBody(String itemValue, String labelZh, String labelEn, Integer sortOrder,
+                                 String remark, String parentItemValue) {}
 
-    /** PATCH /dicts/{dictId}/items/{itemId} 请求体：字段为 null 表示不修改（item_value 不可改）。 */
-    public record UpdateItemBody(String labelZh, String labelEn, Integer sortOrder, String remark) {}
+    /** PATCH /dicts/{dictId}/items/{itemId} 请求体：字段为 null 表示不修改（item_value 不可改；parentItemValue 空串改回根级）。 */
+    public record UpdateItemBody(String labelZh, String labelEn, Integer sortOrder, String remark,
+                                 String parentItemValue) {}
 
     private final SysDictService dictService;
 
@@ -114,7 +116,7 @@ public class AdminDictController {
                                                                 HttpServletRequest request) {
         CurrentPrincipal actor = Principals.requireCurrent(request);
         DictItemView item = dictService.createItem(actor, dictId, body.itemValue(), body.labelZh(),
-                body.labelEn(), body.sortOrder(), body.remark());
+                body.labelEn(), body.sortOrder(), body.remark(), body.parentItemValue());
         return ResponseEntity.status(HttpStatus.CREATED).header("Idempotency-Key", idempotencyKey)
                 .body(ApiEnvelope.created(item));
     }
@@ -127,7 +129,7 @@ public class AdminDictController {
                                                                 HttpServletRequest request) {
         CurrentPrincipal actor = Principals.requireCurrent(request);
         DictItemView item = dictService.updateItem(actor, dictId, itemId, body.labelZh(), body.labelEn(),
-                body.sortOrder(), body.remark());
+                body.sortOrder(), body.remark(), body.parentItemValue());
         return ResponseEntity.ok().header("Idempotency-Key", idempotencyKey)
                 .body(ApiEnvelope.ok(item));
     }

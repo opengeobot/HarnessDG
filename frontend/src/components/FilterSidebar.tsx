@@ -55,45 +55,55 @@ function CollapsibleGroup({ title, children }: { title: string; children: React.
   );
 }
 
+/** 仅展示启用选项（字典统一：disabled 项不出现在筛选面）。 */
+const activeOnly = (opts: TaxonomyOption[]) => opts.filter((o) => o.status === 'active');
+
+/** 按当前语言择显：中文优先 displayName，英文优先 displayNameEn（缺省回退）。 */
+function labelOf(o: TaxonomyOption, zh: boolean): string {
+  if (zh) return o.displayName || o.displayNameEn || o.key;
+  return o.displayNameEn || o.displayName || o.key;
+}
+
 /** 任务树组：分类折叠 + 子任务 chip 单选可取消，映射 task 参数（09 §5.2）。 */
 function TaskTreeGroup({ options, value, onPick }: {
   options: TaxonomyOption[]; value?: string; onPick: (v?: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const zh = i18n.language.startsWith('zh');
   const [filter, setFilter] = useState('');
-  const roots = options.filter((o) => !o.parentKey);
-  const childrenOf = (key: string) => options.filter((o) => o.parentKey === key);
-  // 无层级时（平铺 taxonomy）直接列 chips
-  const flat = roots.length === options.length;
+  const opts = activeOnly(options);
+  const roots = opts.filter((o) => !o.parentKey);
+  const childrenOf = (key: string) => opts.filter((o) => o.parentKey === key);
+  // 无层级时（平铺字典）直接列 chips
+  const flat = roots.length === opts.length;
+  const match = (o: TaxonomyOption) =>
+    !filter || labelOf(o, zh).includes(filter) || o.key.includes(filter);
   return (
     <>
       <input className="filter-search" placeholder={t('filter.searchTask')}
              value={filter} onChange={(e) => setFilter(e.target.value)} />
       {flat ? (
         <div className="chip-wrap">
-          {options
-            .filter((o) => !filter || o.displayName.includes(filter) || o.key.includes(filter))
-            .map((o) => (
+          {opts.filter(match).map((o) => (
               <span key={o.key}
                     className={`filter-chip ${value === o.key ? 'active' : ''}`}
                     onClick={() => onPick(value === o.key ? undefined : o.key)}>
-                {o.displayName}
+                {labelOf(o, zh)}
               </span>
             ))}
         </div>
       ) : roots.map((root) => {
-        const kids = childrenOf(root.key)
-          .filter((o) => !filter || o.displayName.includes(filter) || o.key.includes(filter));
+        const kids = childrenOf(root.key).filter(match);
         if (filter && kids.length === 0) return null;
         return (
           <details key={root.key} className="task-cat" open={!!filter}>
-            <summary>{root.displayName}{t('filter.catCount', { n: childrenOf(root.key).length })}</summary>
+            <summary>{labelOf(root, zh)}{t('filter.catCount', { n: childrenOf(root.key).length })}</summary>
             <div className="chip-wrap">
               {kids.map((o) => (
                 <span key={o.key}
                       className={`filter-chip ${value === o.key ? 'active' : ''}`}
                       onClick={() => onPick(value === o.key ? undefined : o.key)}>
-                  {o.displayName}
+                  {labelOf(o, zh)}
                 </span>
               ))}
             </div>
@@ -154,7 +164,8 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
   filters: Filters;
   onChange: (patch: Partial<Filters>) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const zh = i18n.language.startsWith('zh');
   const filterable = (facets ?? []).filter((f) => f.filterable !== false);
   const taskFacet = filterable.find((f) => f.key === 'task' && f.taxonomy && taxonomies[f.taxonomy]);
   const boolFacets = filterable.filter((f) => f.dataType === 'boolean' && BOOL_KEY[f.key]);
@@ -179,14 +190,14 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
       {singleGroups.map((f) => (
         <CollapsibleGroup key={f.key} title={GROUP_KEY[f.key] ? t(GROUP_KEY[f.key]) : f.key}>
           <div className="filter-opt-list">
-            {taxonomies[f.taxonomy!].map((o) => (
+            {activeOnly(taxonomies[f.taxonomy!]).map((o) => (
               <div key={o.key}
                    className={`filter-opt ${(filters as Record<string, unknown>)[f.key] === o.key ? 'active' : ''}`}
                    onClick={() => {
                      const cur = (filters as Record<string, unknown>)[f.key];
                      onChange({ [f.key]: cur === o.key ? undefined : o.key } as Partial<Filters>);
                    }}>
-                {o.displayName}
+                {labelOf(o, zh)}
               </div>
             ))}
           </div>
@@ -196,19 +207,19 @@ export default function FilterSidebar({ typeKey, facets, taxonomies, filters, on
       {sceneFacet && (
         <CollapsibleGroup title={t('filter.groupScene')}>
           <div className="chip-wrap">
-            {taxonomies[sceneFacet.taxonomy!]
+            {activeOnly(taxonomies[sceneFacet.taxonomy!])
               .slice(0, sceneExpanded ? undefined : 4)
               .map((o) => (
                 <span key={o.key}
                       className={`filter-chip ${filters.scene === o.key ? 'active' : ''}`}
                       onClick={() => onChange({ scene: filters.scene === o.key ? undefined : o.key })}>
-                  {o.displayName}
+                  {labelOf(o, zh)}
                 </span>
               ))}
           </div>
-          {taxonomies[sceneFacet.taxonomy!].length > 4 && (
+          {activeOnly(taxonomies[sceneFacet.taxonomy!]).length > 4 && (
             <a className="filter-more" onClick={() => setSceneExpanded(!sceneExpanded)}>
-              {sceneExpanded ? t('filter.collapse') : t('filter.expandMore', { n: taxonomies[sceneFacet.taxonomy!].length - 4 })}
+              {sceneExpanded ? t('filter.collapse') : t('filter.expandMore', { n: activeOnly(taxonomies[sceneFacet.taxonomy!]).length - 4 })}
             </a>
           )}
         </CollapsibleGroup>

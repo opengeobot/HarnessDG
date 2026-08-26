@@ -412,7 +412,7 @@ public class CatalogService {
     /** admin 端点：failed/draft/provisioning 源状态删除（05 §8、§9.2）。 */
     @Transactional
     public JobView adminDelete(CurrentPrincipal actor, UUID repoId) {
-        requirePlatformAdmin(actor);
+        requireRepoOpsPermission(actor);
         RepositoryEntity repo = repositories.findByPublicId(repoId)
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "仓库不存在"));
         String status = repo.getLifecycleStatus();
@@ -484,7 +484,7 @@ public class CatalogService {
     /** admin 端点：重试失败的 provisioning（05 §8），契约返回 202 JobEnvelope。 */
     @Transactional
     public JobView adminRetry(CurrentPrincipal actor, UUID repoId) {
-        requirePlatformAdmin(actor);
+        requireRepoOpsPermission(actor);
         RepositoryEntity repo = repositories.findByPublicId(repoId)
                 .orElseThrow(() -> new ApiException(ErrorCode.RESOURCE_NOT_FOUND, "仓库不存在"));
         if (!"failed".equals(repo.getLifecycleStatus())) {
@@ -508,9 +508,10 @@ public class CatalogService {
         return new JobView(job.getPublicId(), job.getJobType(), job.getStatus(), job.getCreatedAt());
     }
 
-    private void requirePlatformAdmin(CurrentPrincipal actor) {
-        if (actor == null || !actor.isPlatformAdmin()) {
-            throw new ApiException(ErrorCode.FORBIDDEN, "需要 platform_admin 权限");
+    /** 仓库运维权限点（V19 收敛：粗粒度 platform_admin → admin:repo:manage，保留无 principal → 403 语义）。 */
+    private void requireRepoOpsPermission(CurrentPrincipal actor) {
+        if (actor == null || !actor.hasPermission("admin:repo:manage")) {
+            throw new ApiException(ErrorCode.FORBIDDEN, "需要 admin:repo:manage 权限");
         }
     }
 

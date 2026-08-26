@@ -37,11 +37,11 @@ public class AuthService {
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9_-]{2,30}$");
     public static final String GENERIC_LOGIN_FAILURE = "用户名或密码错误";
 
-    /** 当前用户视图（含 namespaceId 发现，03 §2.1）。字段名对齐 OpenAPI User schema。 */
+    /** 当前用户视图（含 namespaceId 发现，03 §2.1）。字段名对齐 OpenAPI User schema；permissions 为角色权限并集。 */
     public record UserView(
             @JsonProperty("id") String publicId,
             String username, String nickname, String status,
-            String namespaceId, List<String> platformRoles,
+            String namespaceId, List<String> platformRoles, List<String> permissions,
             @JsonProperty("version") long profileVersion,
             OffsetDateTime createdAt) {}
 
@@ -187,6 +187,7 @@ public class AuthService {
         List<String> roles = userRoles.findActiveRoleCodes(user.getId());
         return new UserView(user.getPublicId().toString(), user.getUsername(), user.getNickname(),
                 user.getStatus(), ns == null ? null : ns.getPublicId().toString(), roles,
+                userRoles.findActivePermissionCodes(user.getId()),
                 user.getProfileVersion(), user.getCreatedAt());
     }
 
@@ -261,6 +262,7 @@ public class AuthService {
         List<String> roles = userRoles.findActiveRoleCodes(user.getId());
         UserView view = new UserView(user.getPublicId().toString(), user.getUsername(), user.getNickname(),
                 user.getStatus(), namespacePublicId == null ? null : namespacePublicId.toString(), roles,
+                userRoles.findActivePermissionCodes(user.getId()),
                 user.getProfileVersion(), user.getCreatedAt());
         return new AuthResult(view, session);
     }

@@ -5,6 +5,9 @@ import com.modelhub.catalog.service.CatalogService;
 import com.modelhub.catalog.service.GatedAccessService;
 import com.modelhub.catalog.service.GatedAccessService.AccessRequestView;
 import com.modelhub.catalog.service.InteractionService;
+import com.modelhub.identity.security.CurrentPrincipal;
+import com.modelhub.identity.service.SysMenuService;
+import com.modelhub.identity.service.SysMenuService.VisibleMenu;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import com.modelhub.shared.paging.CursorQuery;
@@ -13,6 +16,7 @@ import com.modelhub.shared.paging.PageQuery;
 import com.modelhub.shared.paging.PageResult;
 import com.modelhub.shared.web.ApiEnvelope;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,7 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** 个人中心端点（04 §7/§5）：gated 申请列表与 /me/repositories 个人仓库 tab 列表。 */
+/** 个人中心端点（04 §7/§5）：gated 申请列表与 /me/repositories 个人仓库 tab 列表；
+ *  /me/menus 可见菜单按权限派生（字典统一+菜单权限重构计划 §五）。 */
 @RestController
 @RequestMapping("/api/v1/me")
 public class MeController {
@@ -41,10 +46,13 @@ public class MeController {
 
     private final GatedAccessService gated;
     private final InteractionService interactions;
+    private final SysMenuService menuService;
 
-    public MeController(GatedAccessService gated, InteractionService interactions) {
+    public MeController(GatedAccessService gated, InteractionService interactions,
+                        SysMenuService menuService) {
         this.gated = gated;
         this.interactions = interactions;
+        this.menuService = menuService;
     }
 
     @GetMapping("/access-requests")
@@ -74,5 +82,13 @@ public class MeController {
         }
         PageQuery page = PageQuery.from(params);
         return ApiEnvelope.ok(interactions.listMine(Principals.requireCurrent(request), tab, type, page));
+    }
+
+    /** GET /me/menus：返回当前用户权限过滤后的可见菜单（登录态即可）。 */
+    @GetMapping("/menus")
+    public ResponseEntity<ApiEnvelope<Map<String, Object>>> menus(HttpServletRequest request) {
+        CurrentPrincipal actor = Principals.requireCurrent(request);
+        List<VisibleMenu> items = menuService.menuTreeOf(actor);
+        return ResponseEntity.ok(ApiEnvelope.ok(Map.of("items", items)));
     }
 }

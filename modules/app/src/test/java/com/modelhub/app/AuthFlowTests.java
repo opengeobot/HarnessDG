@@ -34,6 +34,8 @@ class AuthFlowTests extends BaseIntegrationTest {
         JsonNode user = root.path("data").path("user");
         assertThat(user.path("username").asText()).isEqualTo(username);
         assertThat(user.path("namespaceId").asText()).isNotBlank();
+        // RBAC 权限透出：新用户无平台角色，permissions 为空数组（字段存在且为数组）
+        assertThat(user.path("permissions").isArray()).isTrue();
         assertThat(root.path("data").path("accessToken").asText()).isNotBlank();
 
         List<String> cookies = resp.getHeaders().get("Set-Cookie");
@@ -106,6 +108,8 @@ class AuthFlowTests extends BaseIntegrationTest {
         Session s = register(unique("erin"), "Passw0rd-x12");
         ResponseEntity<String> me = meCall(s.accessToken());
         assertThat(me.getStatusCode().value()).isEqualTo(200);
+        // /auth/me 透出权限集合（角色权限并集，与 platformRoles 同源）
+        assertThat(json(me).path("data").path("permissions").isArray()).isTrue();
         String etag = me.getHeaders().getETag();
         assertThat(etag).isNotBlank();
 

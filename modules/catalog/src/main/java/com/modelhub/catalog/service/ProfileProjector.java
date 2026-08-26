@@ -8,14 +8,13 @@ import com.modelhub.catalog.domain.ModelProfileEntity;
 import com.modelhub.catalog.domain.RepositoryEntity;
 import com.modelhub.catalog.domain.SchemaVersionEntity;
 import com.modelhub.catalog.domain.StudioProfileEntity;
-import com.modelhub.catalog.domain.TaxonomyEntity;
-import com.modelhub.catalog.domain.TaxonomyValueEntity;
 import com.modelhub.catalog.repo.DatasetProfileRepository;
 import com.modelhub.catalog.repo.FacetValueRepository;
 import com.modelhub.catalog.repo.ModelProfileRepository;
 import com.modelhub.catalog.repo.StudioProfileRepository;
-import com.modelhub.catalog.repo.TaxonomyRepository;
-import com.modelhub.catalog.repo.TaxonomyValueRepository;
+import com.modelhub.identity.domain.SysDictItemEntity;
+import com.modelhub.identity.repo.SysDictItemRepository;
+import com.modelhub.identity.repo.SysDictRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,20 +34,20 @@ public class ProfileProjector {
     private final ModelProfileRepository modelProfiles;
     private final DatasetProfileRepository datasetProfiles;
     private final StudioProfileRepository studioProfiles;
-    private final TaxonomyRepository taxonomies;
-    private final TaxonomyValueRepository taxonomyValues;
+    private final SysDictRepository dicts;
+    private final SysDictItemRepository dictItems;
 
     public ProfileProjector(ObjectMapper objectMapper, FacetValueRepository facetValues,
                             ModelProfileRepository modelProfiles, DatasetProfileRepository datasetProfiles,
-                            StudioProfileRepository studioProfiles, TaxonomyRepository taxonomies,
-                            TaxonomyValueRepository taxonomyValues) {
+                            StudioProfileRepository studioProfiles, SysDictRepository dicts,
+                            SysDictItemRepository dictItems) {
         this.objectMapper = objectMapper;
         this.facetValues = facetValues;
         this.modelProfiles = modelProfiles;
         this.datasetProfiles = datasetProfiles;
         this.studioProfiles = studioProfiles;
-        this.taxonomies = taxonomies;
-        this.taxonomyValues = taxonomyValues;
+        this.dicts = dicts;
+        this.dictItems = dictItems;
     }
 
     /** metadata 变更后重建投影（先删后插，幂等）。 */
@@ -136,9 +135,9 @@ public class ProfileProjector {
             n.setRepositoryId(repoId);
             return n;
         });
-        p.setTaskValueId(taxonomyValueId("model_task", textOrNull(metadata, "task")));
-        p.setArchitectureValueId(taxonomyValueId("architecture", textOrNull(metadata, "architecture")));
-        p.setPrimaryLanguageValueId(taxonomyValueId("language", textOrNull(metadata, "language")));
+        p.setTaskValueId(dictItemId("model_task", textOrNull(metadata, "task")));
+        p.setArchitectureValueId(dictItemId("architecture", textOrNull(metadata, "architecture")));
+        p.setPrimaryLanguageValueId(dictItemId("language", textOrNull(metadata, "language")));
         p.setApiStatus(textOrNull(metadata, "apiStatus"));
         p.setParameterCount(metadata.hasNonNull("parameterCount") ? metadata.get("parameterCount").asLong() : null);
         p.setParameterUnit(textOrNull(metadata, "parameterUnit"));
@@ -153,7 +152,7 @@ public class ProfileProjector {
             n.setRepositoryId(repoId);
             return n;
         });
-        p.setTaskValueId(taxonomyValueId("dataset_task", textOrNull(metadata, "task")));
+        p.setTaskValueId(dictItemId("dataset_task", textOrNull(metadata, "task")));
         p.setEstimatedRows(metadata.hasNonNull("estimatedRows") ? metadata.get("estimatedRows").asLong() : null);
         // data_formats JSONB NOT NULL：投影 metadata.dataFormats 数组，缺省空数组
         JsonNode formats = metadata.get("dataFormats");
@@ -180,18 +179,15 @@ public class ProfileProjector {
         return v == null || v.isNull() ? null : v.asText();
     }
 
-    private Long taxonomyValueId(String taxonomyKey, String valueKey) {
-        if (valueKey == null) {
+    /** 字典统一（V18）：分类值外键改指向 sys_dict_item，按 (dictCode, itemValue) 解析。 */
+    private Long dictItemId(String dictCode, String itemValue) {
+        if (itemValue == null) {
             return null;
         }
-        TaxonomyEntity tax = taxonomies.findByTaxonomyKey(taxonomyKey).orElse(null);
-        if (tax == null) {
-            return null;
-        }
-        return taxonomyValues.findByTaxonomyIdOrderBySortOrder(tax.getId()).stream()
-                .filter(v -> valueKey.equals(v.getValueKey()))
-                .map(TaxonomyValueEntity::getId)
-                .findFirst().orElse(null);
+        return dicts.findByDictCode(dictCode)
+                .flatMap(dict -> dictItems.findByDictIdAndItemValue(dict.getId(), itemValue))
+                .map(SysDictItemEntity::getId)
+                .orElse(null);
     }
 
     /** profile 清理（仓库 purge 阶段使用）。 */

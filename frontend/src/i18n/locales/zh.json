@@ -375,6 +375,7 @@
     "menuDicts": "字典管理",
     "menuAudit": "审计日志",
     "menuRepos": "仓库运维",
+    "menuMenus": "菜单管理",
     "guardForbidden": "无权访问管理后台（需平台管理员角色）",
     "opOk": "操作成功",
     "countUsers": "用户数",
@@ -432,6 +433,8 @@
     "labelZh": "中文标签",
     "labelEn": "英文标签",
     "sortOrder": "排序",
+    "parentItem": "父级项",
+    "rootItem": "根级（无父项）",
     "remark": "备注",
     "editItem": "编辑项",
     "deleteItem": "删除项",
@@ -458,5 +461,24 @@
     "deleteAccepted": "已提交删除任务",
     "repoConfirmTitle": "强制删除仓库",
     "repoDeleteMessage": "确定强制删除仓库 {{name}} 吗？此操作不可恢复。"
+  },
+  "adminMenu": {
+    "createTitle": "新建菜单",
+    "editTitle": "编辑菜单",
+    "codeLabel": "菜单编码",
+    "nameLabel": "菜单名称",
+    "typeLabel": "类型",
+    "type_directory": "目录",
+    "type_menu": "菜单",
+    "type_button": "按钮",
+    "parentLabel": "父级",
+    "noParent": "顶级（无父级）",
+    "pathLabel": "路由路径",
+    "permissionLabel": "权限点",
+    "noPermission": "无（登录可见）",
+    "createBtn": "新建菜单",
+    "deleteTitle": "删除菜单",
+    "deleteMessage": "确定删除菜单 {{code}} 吗？其子节点也将一并删除。",
+    "noPanel": "该菜单暂无对应面板"
   }
 }

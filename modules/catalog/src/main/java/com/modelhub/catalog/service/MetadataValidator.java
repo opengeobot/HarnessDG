@@ -3,9 +3,9 @@ package com.modelhub.catalog.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.modelhub.catalog.domain.SchemaVersionEntity;
-import com.modelhub.catalog.domain.TaxonomyValueEntity;
-import com.modelhub.catalog.repo.TaxonomyRepository;
-import com.modelhub.catalog.repo.TaxonomyValueRepository;
+import com.modelhub.identity.domain.SysDictItemEntity;
+import com.modelhub.identity.repo.SysDictItemRepository;
+import com.modelhub.identity.repo.SysDictRepository;
 import com.modelhub.shared.error.ApiException;
 import com.modelhub.shared.error.ErrorCode;
 import org.springframework.stereotype.Component;
@@ -27,14 +27,14 @@ import java.util.Set;
 public class MetadataValidator {
 
     private final ObjectMapper objectMapper;
-    private final TaxonomyRepository taxonomies;
-    private final TaxonomyValueRepository taxonomyValues;
+    private final SysDictRepository dicts;
+    private final SysDictItemRepository dictItems;
 
-    public MetadataValidator(ObjectMapper objectMapper, TaxonomyRepository taxonomies,
-                             TaxonomyValueRepository taxonomyValues) {
+    public MetadataValidator(ObjectMapper objectMapper, SysDictRepository dicts,
+                             SysDictItemRepository dictItems) {
         this.objectMapper = objectMapper;
-        this.taxonomies = taxonomies;
-        this.taxonomyValues = taxonomyValues;
+        this.dicts = dicts;
+        this.dictItems = dictItems;
     }
 
     /** 校验并返回解析后的 metadata 根节点。 */
@@ -173,15 +173,15 @@ public class MetadataValidator {
         details.add(new ApiException.Detail(field, "unknown_value"));
     }
 
-    /** taxonomy 绑定字段：值必须是对应 taxonomy 的已注册 value_key（deprecated 值保留可用）。 */
+    /** taxonomy 绑定字段：值必须是对应字典的已注册字典项（字典统一后读 sys_dict，active+disabled 均算已注册，保持「弃用值可用」语义）。 */
     private void checkTaxonomy(String field, String value, JsonNode prop, List<ApiException.Detail> details) {
         String taxonomyKey = prop.path("taxonomy").asText(null);
         if (taxonomyKey == null) {
             return;
         }
-        taxonomies.findByTaxonomyKey(taxonomyKey).ifPresent(tax -> {
-            boolean matched = taxonomyValues.findByTaxonomyIdOrderBySortOrder(tax.getId()).stream()
-                    .map(TaxonomyValueEntity::getValueKey)
+        dicts.findByDictCode(taxonomyKey).ifPresent(dict -> {
+            boolean matched = dictItems.findByDictIdOrderBySortOrder(dict.getId()).stream()
+                    .map(SysDictItemEntity::getItemValue)
                     .anyMatch(value::equals);
             if (!matched) {
                 details.add(new ApiException.Detail(field, "unknown_taxonomy_value"));

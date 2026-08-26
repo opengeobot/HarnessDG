@@ -1,11 +1,12 @@
-// 管理后台外壳（管理后台计划 §五）：左侧菜单 + 6 面板，/admin/:tab? 路由
-// 守卫：未登录 → 首页 + 登录弹窗；无平台角色 → 403 文案；
-// platform_auditor 仅可见概览与审计（写面服务端二次校验）。
-// 时间：2026-08-25  作者：AxeXie
+// 管理后台外壳（字典统一+菜单权限重构计划 §七.2）：左侧菜单由 /me/menus 接口驱动
+// （标准 RBAC：可见菜单 = 用户权限派生结果），path→panel 映射保留在前端。
+// 守卫：未登录 → 首页 + 登录弹窗；无可见菜单（无权限/接口失败）→ 403 文案；
+// 写面服务端二次校验（权限点）。
+// 时间：2026-08-26  作者：AxeXie
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, type SystemOverview } from '../../api/client';
+import { api, type SystemOverview, type VisibleMenu } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { DataState } from '../../components/ui';
 import UsersPanel from './UsersPanel';
@@ -13,15 +14,36 @@ import RolesPanel from './RolesPanel';
 import DictsPanel from './DictsPanel';
 import AuditPanel from './AuditPanel';
 import ReposPanel from './ReposPanel';
+import MenusPanel from './MenusPanel';
 
-const MENU: Array<{ key: string; labelKey: string; icon: string; adminOnly: boolean }> = [
-  { key: 'overview', labelKey: 'admin.menuOverview', icon: '📊', adminOnly: false },
-  { key: 'users', labelKey: 'admin.menuUsers', icon: '👥', adminOnly: true },
-  { key: 'roles', labelKey: 'admin.menuRoles', icon: '🔑', adminOnly: true },
-  { key: 'dicts', labelKey: 'admin.menuDicts', icon: '📖', adminOnly: true },
-  { key: 'audit', labelKey: 'admin.menuAudit', icon: '📜', adminOnly: false },
-  { key: 'repos', labelKey: 'admin.menuRepos', icon: '🛠️', adminOnly: true },
-];
+/** 路径尾段 → 面板渲染（接口只提供 code/path/名称/排序，组件映射保留在前端）。 */
+function PanelOf({ tab }: { tab: string }) {
+  const { t } = useTranslation();
+  switch (tab) {
+    case 'overview': return <OverviewPanel />;
+    case 'users': return <UsersPanel />;
+    case 'roles': return <RolesPanel />;
+    case 'dicts': return <DictsPanel />;
+    case 'audit': return <AuditPanel />;
+    case 'repos': return <ReposPanel />;
+    case 'menus': return <MenusPanel />;
+    default:
+      return <div className="card card-pad empty-state">{t('adminMenu.noPanel')}</div>;
+  }
+}
+
+/** 面板图标（仅前端展示属性）。 */
+const TAB_ICON: Record<string, string> = {
+  overview: '📊', users: '👥', roles: '🔑', dicts: '📖',
+  audit: '📜', repos: '🛠️', menus: '🧭', orgs: '🏢',
+};
+
+/** 菜单路径 → 面板 tab 键（取路径尾段）。 */
+function tabOf(path: string | null): string {
+  if (!path) return '';
+  const seg = path.split('/').filter(Boolean);
+  return seg[seg.length - 1] ?? '';
+}
 
 /** 概览面板：平台计数 + 健康检查（/admin/system/overview）。 */
 function OverviewPanel() {
@@ -77,10 +99,14 @@ function OverviewPanel() {
 }
 
 export default function AdminPage() {
-  const { tab = 'overview' } = useParams();
+  const { tab = '' } = useParams();
   const nav = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, loading, openLogin } = useAuth();
+  const zh = i18n.language.startsWith('zh');
+
+  // 可见菜单（按权限派生）；接口失败降级为空 → 守卫文案
+  const [menus, setMenus] = useState<VisibleMenu[] | null>(null);
 
   // 未登录守卫（同 /my）
   useEffect(() => {
@@ -90,15 +116,23 @@ export default function AdminPage() {
     }
   }, [loading, user, nav, openLogin]);
 
+  useEffect(() => {
+    if (!user) return;
+    api.meMenus()
+      .then((d) => setMenus(d.items))
+      .catch(() => setMenus([]));
+  }, [user]);
+
   if (loading) return <div className="page-loading">{t('common.loading')}</div>;
   if (!user) return null;
-  if (user.platformRoles.length === 0) {
+  if (menus === null) return <div className="page-loading">{t('common.loading')}</div>;
+  if (menus.length === 0) {
     return <div className="card card-pad empty-state" style={{ margin: 24 }}>{t('admin.guardForbidden')}</div>;
   }
 
-  const isAdmin = user.platformRoles.includes('platform_admin');
-  const items = MENU.filter((m) => !m.adminOnly || isAdmin);
-  const active = items.some((m) => m.key === tab) ? tab : 'overview';
+  const items = [...menus].sort((a, b) => a.sortOrder - b.sortOrder);
+  const tabs = items.map((m) => tabOf(m.path));
+  const active = tabs.includes(tab) ? tab : tabs[0];
 
   return (
     <div className="my-layout admin-layout">
@@ -111,21 +145,19 @@ export default function AdminPage() {
           </div>
         </div>
         <nav className="my-menu">
-          {items.map((m) => (
-            <div key={m.key} className={`my-menu-item ${active === m.key ? 'active' : ''}`}
-                 onClick={() => nav(`/admin/${m.key}`)}>
-              <span>{m.icon}</span>{t(m.labelKey)}
-            </div>
-          ))}
+          {items.map((m) => {
+            const key = tabOf(m.path);
+            return (
+              <div key={m.code} className={`my-menu-item ${active === key ? 'active' : ''}`}
+                   onClick={() => nav(`/admin/${key}`)}>
+                <span>{TAB_ICON[key] ?? '📄'}</span>{zh ? m.nameZh : m.nameEn}
+              </div>
+            );
+          })}
         </nav>
       </aside>
       <div className="my-main">
-        {active === 'overview' && <OverviewPanel />}
-        {active === 'users' && <UsersPanel />}
-        {active === 'roles' && <RolesPanel />}
-        {active === 'dicts' && <DictsPanel />}
-        {active === 'audit' && <AuditPanel />}
-        {active === 'repos' && <ReposPanel />}
+        <PanelOf tab={active} />
       </div>
     </div>
   );

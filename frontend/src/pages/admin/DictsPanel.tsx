@@ -74,9 +74,10 @@ function DictFormModal({ initial, onClose, onSaved }: {
   );
 }
 
-/** 字典项表单弹窗（新增/编辑共用；编辑时 itemValue 只读）。 */
-function ItemFormModal({ dictId, initial, onClose, onSaved }: {
-  dictId: string; initial: AdminDictItem | null; onClose: () => void; onSaved: () => void;
+/** 字典项表单弹窗（新增/编辑共用；编辑时 itemValue 只读；父项下拉仅根级项，两级封顶）。 */
+function ItemFormModal({ dictId, initial, items, onClose, onSaved }: {
+  dictId: string; initial: AdminDictItem | null; items: AdminDictItem[];
+  onClose: () => void; onSaved: () => void;
 }) {
   const { t } = useTranslation();
   const editing = !!initial;
@@ -85,17 +86,23 @@ function ItemFormModal({ dictId, initial, onClose, onSaved }: {
   const [labelEn, setLabelEn] = useState(initial?.labelEn ?? '');
   const [sortOrder, setSortOrder] = useState(initial?.sortOrder ?? 0);
   const [remark, setRemark] = useState(initial?.remark ?? '');
+  const [parentItemValue, setParentItemValue] = useState(initial?.parentItemValue ?? '');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  // 父项候选：仅根级项（两级封顶），编辑时排除自身
+  const parentOptions = items.filter((it) => !it.parentItemValue && it.itemValue !== initial?.itemValue);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(''); setBusy(true);
     try {
       if (editing && initial) {
-        await api.adminUpdateDictItem(dictId, initial.id, { labelZh, labelEn, sortOrder, remark });
+        await api.adminUpdateDictItem(dictId, initial.id,
+          { labelZh, labelEn, sortOrder, remark, parentItemValue });
       } else {
-        await api.adminCreateDictItem(dictId, { itemValue: itemValue.trim(), labelZh, labelEn, sortOrder, remark });
+        await api.adminCreateDictItem(dictId,
+          { itemValue: itemValue.trim(), labelZh, labelEn, sortOrder, remark,
+            parentItemValue: parentItemValue || undefined });
       }
       onSaved();
     } catch (ex) {
@@ -133,6 +140,17 @@ function ItemFormModal({ dictId, initial, onClose, onSaved }: {
               <label>{t('admin.sortOrder')}</label>
               <input type="number" value={sortOrder}
                      onChange={(e) => setSortOrder(Number(e.target.value) || 0)} />
+            </div>
+            <div className="field">
+              <label>{t('admin.parentItem')}</label>
+              <select value={parentItemValue} onChange={(e) => setParentItemValue(e.target.value)}>
+                <option value="">{t('admin.rootItem')}</option>
+                {parentOptions.map((p) => (
+                  <option key={p.itemValue} value={p.itemValue}>
+                    {p.itemValue}（{p.labelZh || p.labelEn}）
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label>{t('admin.remark')}</label>
@@ -185,6 +203,20 @@ export default function DictsPanel() {
   function pick(dict: AdminDict) {
     setSelected(dict);
     loadItems(dict);
+  }
+
+  // 层级展示：根级项在前，其子项紧随其后缩进（两级封顶）
+  const orderedItems: Array<{ item: AdminDictItem; depth: number }> = [];
+  for (const root of items.filter((it) => !it.parentItemValue)) {
+    orderedItems.push({ item: root, depth: 0 });
+    for (const child of items.filter((it) => it.parentItemValue === root.itemValue)) {
+      orderedItems.push({ item: child, depth: 1 });
+    }
+  }
+  // 兼容：父项已不存在的孤儿项兼容追加在末尾
+  for (const it of items.filter((it) => it.parentItemValue
+      && !items.some((p) => p.itemValue === it.parentItemValue))) {
+    orderedItems.push({ item: it, depth: 1 });
   }
 
   function refreshAfterItemChange() {
@@ -292,24 +324,28 @@ export default function DictsPanel() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((it) => (
-                  <tr key={it.id}>
-                    <td><b>{it.itemValue}</b></td>
-                    <td>{it.labelZh}</td>
-                    <td>{it.labelEn}</td>
-                    <td>{it.sortOrder}</td>
+                {orderedItems.map(({ item, depth }) => (
+                  <tr key={item.id}>
                     <td>
-                      <span className={`badge ${it.status === 'active' ? 'badge-public' : 'badge-pending'}`}>
-                        {it.status}
+                      <b style={depth > 0 ? { paddingLeft: 22, fontWeight: 500 } : undefined}>
+                        {depth > 0 ? '└─ ' : ''}{item.itemValue}
+                      </b>
+                    </td>
+                    <td>{item.labelZh}</td>
+                    <td>{item.labelEn}</td>
+                    <td>{item.sortOrder}</td>
+                    <td>
+                      <span className={`badge ${item.status === 'active' ? 'badge-public' : 'badge-pending'}`}>
+                        {item.status}
                       </span>
                     </td>
-                    <td>{it.remark}</td>
+                    <td>{item.remark}</td>
                     <td>
-                      <button className="btn btn-ghost btn-sm" onClick={() => setEditingItem(it)}>{t('admin.editBtn')}</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => toggleItem(it)}>
-                        {it.status === 'active' ? t('admin.actDisable') : t('admin.actEnable')}
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditingItem(item)}>{t('admin.editBtn')}</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => toggleItem(item)}>
+                        {item.status === 'active' ? t('admin.actDisable') : t('admin.actEnable')}
                       </button>
-                      <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => deleteItem(it)}>
+                      <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => deleteItem(item)}>
                         {t('admin.deleteBtn')}
                       </button>
                     </td>
@@ -330,7 +366,7 @@ export default function DictsPanel() {
                        }} />
       )}
       {selected && (itemForm || editingItem) && (
-        <ItemFormModal dictId={selected.id} initial={editingItem}
+        <ItemFormModal dictId={selected.id} initial={editingItem} items={items}
                        onClose={() => { setItemForm(false); setEditingItem(null); }}
                        onSaved={refreshAfterItemChange} />
       )}

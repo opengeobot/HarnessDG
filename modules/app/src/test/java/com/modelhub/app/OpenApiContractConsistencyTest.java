@@ -272,7 +272,10 @@ class OpenApiContractConsistencyTest extends CatalogTestSupport {
                 "/admin/users", "/admin/users/{userId}/roles",
                 "/admin/roles", "/admin/permissions",
                 "/admin/dicts", "/admin/dicts/{dictId}/items",
-                "/admin/system/overview");
+                "/admin/system/overview",
+                "/me/menus",
+                "/admin/menus", "/admin/menus/{code}",
+                "/admin/menus/{code}:disable", "/admin/menus/{code}:enable");
         for (String path : implemented) {
             assertTrue(paths.containsKey(path), "契约 paths 缺少实现已提供的关键端点: " + path);
         }

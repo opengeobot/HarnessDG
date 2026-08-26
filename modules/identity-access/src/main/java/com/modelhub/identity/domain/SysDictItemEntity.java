@@ -7,7 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-/** 通用字典项（V17）：item_value 字典内唯一且不可改；标签按语言列存储。 */
+/** 通用字典项（V17/V18）：item_value 字典内唯一且不可改；标签按语言列存储；parent_id 支持两级层级。 */
 @Entity
 @Table(name = "sys_dict_item")
 public class SysDictItemEntity {
@@ -34,6 +34,9 @@ public class SysDictItemEntity {
     @Column(nullable = false)
     private String status = "active";
 
+    @Column(name = "parent_id")
+    private Long parentId;
+
     private String remark;
 
     public Long getId() { return id; }
@@ -51,4 +54,6 @@ public class SysDictItemEntity {
     public void setStatus(String status) { this.status = status; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
+    public Long getParentId() { return parentId; }
+    public void setParentId(Long parentId) { this.parentId = parentId; }
 }

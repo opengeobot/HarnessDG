@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -30,9 +32,9 @@ public class SysDictService {
     public record DictView(UUID id, String dictCode, String name, String description,
                            String status, long itemCount, long version) {}
 
-    /** 契约 DictItem schema。 */
+    /** 契约 DictItem schema（parentItemValue 为 null 表示根级，两级层级）。 */
     public record DictItemView(long id, String itemValue, String labelZh, String labelEn,
-                               int sortOrder, String status, String remark) {}
+                               int sortOrder, String status, String remark, String parentItemValue) {}
 
     private final SysDictRepository dicts;
     private final SysDictItemRepository items;
@@ -117,12 +119,18 @@ public class SysDictService {
     public List<DictItemView> listItems(CurrentPrincipal actor, UUID dictPublicId) {
         requireAdmin(actor);
         SysDictEntity dict = requireDict(dictPublicId);
-        return items.findByDictIdOrderBySortOrder(dict.getId()).stream().map(this::toItemView).toList();
+        List<SysDictItemEntity> all = items.findByDictIdOrderBySortOrder(dict.getId());
+        Map<Long, String> valueById = new HashMap<>();
+        all.forEach(i -> valueById.put(i.getId(), i.getItemValue()));
+        return all.stream()
+                .map(i -> toItemView(i, i.getParentId() == null ? null : valueById.get(i.getParentId())))
+                .toList();
     }
 
     @Transactional
     public DictItemView createItem(CurrentPrincipal actor, UUID dictPublicId, String itemValue,
-                                   String labelZh, String labelEn, Integer sortOrder, String remark) {
+                                   String labelZh, String labelEn, Integer sortOrder, String remark,
+                                   String parentItemValue) {
         requireAdmin(actor);
         SysDictEntity dict = requireDict(dictPublicId);
         if (itemValue == null || itemValue.isBlank()) {
@@ -136,6 +144,7 @@ public class SysDictService {
         if (items.findByDictIdAndItemValue(dict.getId(), itemValue.trim()).isPresent()) {
             throw new ApiException(ErrorCode.CONFLICT, "字典项值已存在");
         }
+        Long parentId = resolveParent(dict, null, parentItemValue);
         SysDictItemEntity item = new SysDictItemEntity();
         item.setDictId(dict.getId());
         item.setItemValue(itemValue.trim());
@@ -143,16 +152,18 @@ public class SysDictService {
         item.setLabelEn(labelEn.trim());
         item.setSortOrder(sortOrder == null ? 0 : sortOrder);
         item.setRemark(remark);
+        item.setParentId(parentId);
         items.save(item);
         auditService.appendSimple(actor.username(), "dict.item_create",
                 "dict:" + dict.getDictCode() + ":item:" + item.getItemValue(), "success");
-        return toItemView(item);
+        return toItemView(item, parentItemValue == null || parentItemValue.isBlank() ? null : parentItemValue.trim());
     }
 
-    /** 更新字典项：标签/排序/备注可改，item_value 不可改（稳定键）。 */
+    /** 更新字典项：标签/排序/备注/父项可改，item_value 不可改（稳定键）；parentItemValue 为 null 不改，空串改回根级。 */
     @Transactional
     public DictItemView updateItem(CurrentPrincipal actor, UUID dictPublicId, long itemId,
-                                   String labelZh, String labelEn, Integer sortOrder, String remark) {
+                                   String labelZh, String labelEn, Integer sortOrder, String remark,
+                                   String parentItemValue) {
         requireAdmin(actor);
         SysDictEntity dict = requireDict(dictPublicId);
         SysDictItemEntity item = requireItem(dict, itemId);
@@ -168,10 +179,18 @@ public class SysDictService {
         if (remark != null) {
             item.setRemark(remark);
         }
+        String parentValue = null;
+        if (parentItemValue != null) {
+            item.setParentId(resolveParent(dict, item, parentItemValue));
+            parentValue = parentItemValue.isBlank() ? null : parentItemValue.trim();
+        } else {
+            parentValue = item.getParentId() == null ? null
+                    : items.findById(item.getParentId()).map(SysDictItemEntity::getItemValue).orElse(null);
+        }
         items.save(item);
         auditService.appendSimple(actor.username(), "dict.item_update",
                 "dict:" + dict.getDictCode() + ":item:" + item.getItemValue(), "success");
-        return toItemView(item);
+        return toItemView(item, parentValue);
     }
 
     @Transactional
@@ -187,7 +206,7 @@ public class SysDictService {
         items.save(item);
         auditService.appendSimple(actor.username(), active ? "dict.item_enable" : "dict.item_disable",
                 "dict:" + dict.getDictCode() + ":item:" + item.getItemValue(), "success");
-        return toItemView(item);
+        return toItemView(item, parentValueOf(item));
     }
 
     @Transactional
@@ -195,7 +214,10 @@ public class SysDictService {
         requireAdmin(actor);
         SysDictEntity dict = requireDict(dictPublicId);
         SysDictItemEntity item = requireItem(dict, itemId);
-        // v1 通用字典暂无业务引用点；后续接入业务表后在此补充引用检查
+        if (items.countByParentId(item.getId()) > 0) {
+            throw new ApiException(ErrorCode.CONFLICT, "字典项仍有子项，不可删除");
+        }
+        // profile 外键引用由数据库外键约束兑底（删除被引用项会报 FK 错，全局异常处理转 409/500）
         items.delete(item);
         auditService.appendSimple(actor.username(), "dict.item_delete",
                 "dict:" + dict.getDictCode() + ":item:" + item.getItemValue(), "success");
@@ -208,9 +230,34 @@ public class SysDictService {
                 dict.getStatus(), items.countByDictId(dict.getId()), dict.getVersion());
     }
 
-    private DictItemView toItemView(SysDictItemEntity item) {
+    private DictItemView toItemView(SysDictItemEntity item, String parentItemValue) {
         return new DictItemView(item.getId(), item.getItemValue(), item.getLabelZh(), item.getLabelEn(),
-                item.getSortOrder(), item.getStatus(), item.getRemark());
+                item.getSortOrder(), item.getStatus(), item.getRemark(), parentItemValue);
+    }
+
+    private String parentValueOf(SysDictItemEntity item) {
+        return item.getParentId() == null ? null
+                : items.findById(item.getParentId()).map(SysDictItemEntity::getItemValue).orElse(null);
+    }
+
+    /** 解析父项：须属同一字典且自身为根级（两级封顶）；空白入参返回 null 表示根级。 */
+    private Long resolveParent(SysDictEntity dict, SysDictItemEntity self, String parentItemValue) {
+        if (parentItemValue == null || parentItemValue.isBlank()) {
+            return null;
+        }
+        String pv = parentItemValue.trim();
+        SysDictItemEntity parent = items.findByDictIdAndItemValue(dict.getId(), pv)
+                .orElseThrow(() -> ApiException.badRequest("父字典项不存在",
+                        List.of(new ApiException.Detail("parentItemValue", "unknown_parent"))));
+        if (self != null && parent.getId().equals(self.getId())) {
+            throw ApiException.badRequest("父字典项不能为自身",
+                    List.of(new ApiException.Detail("parentItemValue", "self_parent")));
+        }
+        if (parent.getParentId() != null) {
+            throw ApiException.badRequest("字典仅支持两级层级，父项必须为根级",
+                    List.of(new ApiException.Detail("parentItemValue", "max_depth_exceeded")));
+        }
+        return parent.getId();
     }
 
     private SysDictEntity requireDict(UUID dictPublicId) {

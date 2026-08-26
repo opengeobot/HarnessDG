@@ -24,6 +24,15 @@ const FIELD_KEY: Record<string, string> = {
 };
 const VIS_KEY: Record<string, string> = { public: 'repoForm.visPublic', organization: 'repoForm.visOrg', private: 'repoForm.visPrivate' };
 
+/** 仅启用选项可选（字典统一：禁用项不出现在创建/编辑表单，与筛选面一致）。 */
+const activeOnly = (opts: TaxonomyOption[]) => opts.filter((o) => o.status === 'active');
+
+/** 按当前语言择显：中文优先 displayName，英文优先 displayNameEn（缺省回退）。 */
+function labelOf(o: TaxonomyOption, zh: boolean): string {
+  if (zh) return o.displayName || o.displayNameEn || o.key;
+  return o.displayNameEn || o.displayName || o.key;
+}
+
 interface MetaProp { type?: string; }
 
 export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
@@ -34,7 +43,8 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
   onSaved: (repo: Repository, created: boolean) => void;
 }) {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const zh = i18n.language.startsWith('zh');
   const editing = !!initial;
   const [schema, setSchema] = useState<ResourceTypeSchema | null>(null);
   const [taxonomies, setTaxonomies] = useState<Record<string, TaxonomyOption[]>>({});
@@ -156,7 +166,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
     const req = requiredKeys.includes(key);
     const label = FIELD_KEY[key] ? t(FIELD_KEY[key]) : key;
     const taxName = taxonomyOf[key];
-    const options = taxName ? taxonomies[taxName] : undefined;
+    const options = taxName && taxonomies[taxName] ? activeOnly(taxonomies[taxName]) : undefined;
 
     // 分层 taxonomy（任务树）→ optgroup 下拉
     if (prop.type === 'string' && options && options.some((o) => o.parentKey)) {
@@ -171,11 +181,11 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
             {roots.map((r) => {
               const kids = options.filter((o) => o.parentKey === r.key);
               return kids.length > 0 ? (
-                <optgroup key={r.key} label={r.displayName}>
-                  {kids.map((k) => <option key={k.key} value={k.key}>{k.displayName}</option>)}
+                <optgroup key={r.key} label={labelOf(r, zh)}>
+                  {kids.map((k) => <option key={k.key} value={k.key}>{labelOf(k, zh)}</option>)}
                 </optgroup>
               ) : (
-                <option key={r.key} value={r.key}>{r.displayName}</option>
+                <option key={r.key} value={r.key}>{labelOf(r, zh)}</option>
               );
             })}
           </select>
@@ -192,7 +202,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
           <select value={val} required={req}
                   onChange={(e) => setField(key, e.target.value)}>
             <option value="">{t('repoForm.selectPlease')}</option>
-            {options.map((o) => <option key={o.key} value={o.key}>{o.displayName}</option>)}
+            {options.map((o) => <option key={o.key} value={o.key}>{labelOf(o, zh)}</option>)}
           </select>
         </div>
       );
@@ -209,7 +219,7 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
               <span key={o.key}
                     className={`filter-chip ${val.includes(o.key) ? 'active' : ''}`}
                     onClick={() => toggleArr(key, o.key)}>
-                {o.displayName}
+                {labelOf(o, zh)}
               </span>
             ))}
           </div>

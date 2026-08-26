@@ -304,6 +304,8 @@ export const api = {
     rawRequest<Page<Repository>>('/me/repositories', { query: { tab, page, pageSize, type } }),
   myAccessRequests: (status?: string) =>
     rawRequest<CursorPage<AccessRequest>>('/me/access-requests', { query: { status } }),
+  /** 当前用户可见菜单树（按权限派生，标准 RBAC）。 */
+  meMenus: () => rawRequest<{ items: VisibleMenu[] }>('/me/menus', {}),
 
   // Access Requests
   requestAccess: (repoId: string, reason: string) =>
@@ -370,9 +372,9 @@ export const api = {
     rawRequest<void>(`/admin/dicts/${dictId}`, { method: 'DELETE', idempotencyKey: uuid() }),
   adminDictItems: (dictId: string) =>
     rawRequest<{ items: AdminDictItem[] }>(`/admin/dicts/${dictId}/items`, {}),
-  adminCreateDictItem: (dictId: string, body: { itemValue: string; labelZh?: string; labelEn?: string; sortOrder?: number; remark?: string }) =>
+  adminCreateDictItem: (dictId: string, body: { itemValue: string; labelZh?: string; labelEn?: string; sortOrder?: number; remark?: string; parentItemValue?: string }) =>
     rawRequest<AdminDictItem>(`/admin/dicts/${dictId}/items`, { method: 'POST', body, idempotencyKey: uuid() }),
-  adminUpdateDictItem: (dictId: string, itemId: number, body: { labelZh?: string; labelEn?: string; sortOrder?: number; remark?: string }) =>
+  adminUpdateDictItem: (dictId: string, itemId: number, body: { labelZh?: string; labelEn?: string; sortOrder?: number; remark?: string; parentItemValue?: string }) =>
     rawRequest<AdminDictItem>(`/admin/dicts/${dictId}/items/${itemId}`, { method: 'PATCH', body, idempotencyKey: uuid() }),
   adminDeleteDictItem: (dictId: string, itemId: number) =>
     rawRequest<void>(`/admin/dicts/${dictId}/items/${itemId}`, { method: 'DELETE', idempotencyKey: uuid() }),
@@ -384,6 +386,16 @@ export const api = {
     rawRequest<unknown>(`/admin/repositories/${repoId}:retry`, { method: 'POST', idempotencyKey: uuid() }),
   adminRepoDelete: (repoId: string) =>
     rawRequest<unknown>(`/admin/repositories/${repoId}:delete`, { method: 'POST', idempotencyKey: uuid() }),
+  // 菜单管理（admin:menu:view/manage）
+  adminMenus: () => rawRequest<{ items: SysMenu[] }>('/admin/menus', {}),
+  adminCreateMenu: (body: { code: string; nameZh: string; nameEn: string; parentCode?: string; menuType: 'directory' | 'menu' | 'button'; path?: string; permissionCode?: string; sortOrder?: number }) =>
+    rawRequest<SysMenu>('/admin/menus', { method: 'POST', body, idempotencyKey: uuid() }),
+  adminUpdateMenu: (code: string, body: { nameZh?: string; nameEn?: string; parentCode?: string | null; path?: string | null; permissionCode?: string | null; sortOrder?: number }, etag: string) =>
+    rawRequest<SysMenu>(`/admin/menus/${code}`, { method: 'PATCH', body, ifMatch: etag, idempotencyKey: uuid() }),
+  adminDeleteMenu: (code: string) =>
+    rawRequest<void>(`/admin/menus/${code}`, { method: 'DELETE', idempotencyKey: uuid() }),
+  adminSetMenuStatus: (code: string, enable: boolean) =>
+    rawRequest<SysMenu>(`/admin/menus/${code}:${enable ? 'enable' : 'disable'}`, { method: 'POST', idempotencyKey: uuid() }),
 };
 
 // ---------- 工具 ----------
@@ -407,6 +419,8 @@ export interface User {
   avatarUrl?: string;
   status: 'active' | 'locked' | 'disabled';
   platformRoles: Array<'platform_admin' | 'platform_auditor'>;
+  /** 角色权限并集（标准 RBAC，与 platformRoles 同源）。 */
+  permissions?: string[];
   version: number;
 }
 
@@ -564,6 +578,7 @@ export interface ResourceTypeSchema {
 export interface TaxonomyOption {
   key: string;
   displayName: string;
+  displayNameEn?: string;
   parentKey: string | null;
   status: string;
 }
@@ -651,6 +666,8 @@ export interface AdminDictItem {
   sortOrder: number;
   status: string;
   remark: string;
+  /** 父项值（两级层级）；null 为根级。 */
+  parentItemValue?: string | null;
 }
 
 export interface AdminAuditLog {
@@ -672,4 +689,28 @@ export interface SystemOverview {
   counts: { users: number; organizations: number; repositories: number; auditLogs: number };
   healthStatus: string;
   healthChecks: Record<string, string>;
+}
+
+/** 契约 VisibleMenu（/me/menus 派生结果）。 */
+export interface VisibleMenu {
+  code: string;
+  nameZh: string;
+  nameEn: string;
+  path: string | null;
+  sortOrder: number;
+}
+
+/** 契约 SysMenu（/admin/menus 管理面全量视图）。 */
+export interface SysMenu {
+  code: string;
+  nameZh: string;
+  nameEn: string;
+  parentCode: string | null;
+  menuType: 'directory' | 'menu' | 'button';
+  path: string | null;
+  permissionCode: string | null;
+  sortOrder: number;
+  status: 'active' | 'disabled';
+  version: number;
+  etag?: string;
 }

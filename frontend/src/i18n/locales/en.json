@@ -375,6 +375,7 @@
     "menuDicts": "Dictionaries",
     "menuAudit": "Audit Logs",
     "menuRepos": "Repository Ops",
+    "menuMenus": "Menus",
     "guardForbidden": "No access to the admin console (platform admin role required)",
     "opOk": "Done",
     "countUsers": "Users",
@@ -432,6 +433,8 @@
     "labelZh": "Label (zh)",
     "labelEn": "Label (en)",
     "sortOrder": "Sort",
+    "parentItem": "Parent item",
+    "rootItem": "Root (no parent)",
     "remark": "Remark",
     "editItem": "Edit Item",
     "deleteItem": "Delete Item",
@@ -458,5 +461,24 @@
     "deleteAccepted": "Delete job submitted",
     "repoConfirmTitle": "Force Delete Repository",
     "repoDeleteMessage": "Force delete repository {{name}}? This cannot be undone."
+  },
+  "adminMenu": {
+    "createTitle": "Create Menu",
+    "editTitle": "Edit Menu",
+    "codeLabel": "Menu code",
+    "nameLabel": "Menu name",
+    "typeLabel": "Type",
+    "type_directory": "Directory",
+    "type_menu": "Menu",
+    "type_button": "Button",
+    "parentLabel": "Parent",
+    "noParent": "Top level (no parent)",
+    "pathLabel": "Route path",
+    "permissionLabel": "Permission",
+    "noPermission": "None (visible when logged in)",
+    "createBtn": "New menu",
+    "deleteTitle": "Delete Menu",
+    "deleteMessage": "Delete menu {{code}}? Its child nodes will be removed as well.",
+    "noPanel": "No panel for this menu yet"
   }
 }

@@ -13,4 +13,6 @@ public interface SysDictItemRepository extends JpaRepository<SysDictItemEntity, 
     Optional<SysDictItemEntity> findByDictIdAndItemValue(Long dictId, String itemValue);
 
     long countByDictId(Long dictId);
+
+    long countByParentId(Long parentId);
 }
