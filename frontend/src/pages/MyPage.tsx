@@ -248,7 +248,7 @@ function RepoSubPage({ sub }: { sub: SubPage }) {
       )}
       {deleting && (
         <ConfirmDialog title={t('my.deleteTitle')}
-                        message={t('my.deleteMessage', { ns: deleting.namespace, name: deleting.name })}
+                        message={t('my.deleteMessage', { namespace: deleting.namespace, name: deleting.name })}
                         confirmText={t('my.deleteBtn')} busy={delBusy}
                         onConfirm={confirmDelete} onCancel={() => setDeleting(null)} />
       )}

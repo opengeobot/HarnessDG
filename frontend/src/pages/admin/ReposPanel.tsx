@@ -1,4 +1,5 @@
-// 仓库运维面板：关键词检索 + 生命周期状态 + :retry（provisioning 失败重试）/ :delete（强制删除）
+// 仓库运维面板：关键词检索 + 生命周期状态 + 编辑（PATCH）/ 常规删除（DELETE+If-Match）
+// + :retry（provisioning 失败重试）/ :delete（非 active 强制删除）
 // 时间：2026-08-25  作者：AxeXie
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -6,11 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { api, type Repository } from '../../api/client';
 import { errMsg } from '../../App';
 import { ConfirmDialog, DataState, useToast } from '../../components/ui';
+import RepoFormModal from '../../components/RepoFormModal';
 
 /** retry 适用状态（04 §8：provisioning 失败可重试）。 */
 const RETRY_STATES = ['failed', 'provisioning'];
 /** 强制删除适用源状态（05 §8：failed / draft / provisioning）。 */
 const DELETE_STATES = ['failed', 'draft', 'provisioning'];
+/** 常规删除/编辑适用状态（与后端 update/delete 语义一致；管理员经 facade 对任意仓库获 ADMIN）。 */
+const MANAGE_STATES = ['active', 'archived'];
 
 export default function ReposPanel() {
   const { t } = useTranslation();
@@ -19,6 +23,7 @@ export default function ReposPanel() {
   const [items, setItems] = useState<Repository[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'empty' | 'error'>('ready');
   const [deleting, setDeleting] = useState<Repository | null>(null);
+  const [editing, setEditing] = useState<Repository | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function search(kw: string) {
@@ -47,7 +52,12 @@ export default function ReposPanel() {
     if (!deleting) return;
     setBusy(true);
     try {
-      await api.adminRepoDelete(deleting.id);
+      if (MANAGE_STATES.includes(deleting.lifecycleStatus)) {
+        // active/archived 走标准 DELETE + If-Match（与个人删除同路径，乐观并发）
+        await api.deleteRepo(deleting.id, deleting.etag ?? `W/"${deleting.version}"`);
+      } else {
+        await api.adminRepoDelete(deleting.id);
+      }
       toast.show(t('admin.deleteAccepted'));
       setDeleting(null);
       search(keyword);
@@ -99,12 +109,20 @@ export default function ReposPanel() {
                   </span>
                 </td>
                 <td>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setEditing(r)}>
+                    {t('admin.actEdit')}
+                  </button>
+                  {MANAGE_STATES.includes(r.lifecycleStatus) && (
+                    <button className="btn btn-ghost btn-sm" onClick={() => setDeleting(r)}>
+                      {t('admin.actDelete')}
+                    </button>
+                  )}
                   {RETRY_STATES.includes(r.lifecycleStatus) && (
                     <button className="btn btn-ghost btn-sm" onClick={() => retry(r)}>
                       {t('admin.actRetry')}
                     </button>
                   )}
-                  {DELETE_STATES.includes(r.lifecycleStatus) && (
+                  {DELETE_STATES.includes(r.lifecycleStatus) && !MANAGE_STATES.includes(r.lifecycleStatus) && (
                     <button className="btn btn-ghost btn-sm" onClick={() => setDeleting(r)}>
                       {t('admin.actDeleteRepo')}
                     </button>
@@ -117,10 +135,20 @@ export default function ReposPanel() {
       </DataState>
 
       {deleting && (
-        <ConfirmDialog title={t('admin.repoConfirmTitle')}
-                       message={t('admin.repoDeleteMessage', { name: `${deleting.namespace}/${deleting.name}` })}
-                       confirmText={t('admin.actDeleteRepo')} busy={busy}
+        <ConfirmDialog title={MANAGE_STATES.includes(deleting.lifecycleStatus)
+                         ? t('admin.repoDeleteTitle') : t('admin.repoConfirmTitle')}
+                       message={MANAGE_STATES.includes(deleting.lifecycleStatus)
+                         ? t('admin.repoDeleteNormalMessage', { name: `${deleting.namespace}/${deleting.name}` })
+                         : t('admin.repoDeleteMessage', { name: `${deleting.namespace}/${deleting.name}` })}
+                       confirmText={MANAGE_STATES.includes(deleting.lifecycleStatus)
+                         ? t('admin.actDelete') : t('admin.actDeleteRepo')}
+                       busy={busy}
                        onConfirm={confirmDelete} onCancel={() => setDeleting(null)} />
+      )}
+      {editing && (
+        <RepoFormModal typeKey={editing.type} initial={editing}
+                       onClose={() => setEditing(null)}
+                       onSaved={() => { setEditing(null); toast.show(t('my.saveOk')); search(keyword); }} />
       )}
     </div>
   );

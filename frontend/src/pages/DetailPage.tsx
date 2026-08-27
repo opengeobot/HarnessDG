@@ -6,8 +6,9 @@ import { useTranslation } from 'react-i18next';
 import { api, type AccessRequest, type Feedback, type FileNode, type Page, type Repository } from '../api/client';
 import { errMsg } from '../App';
 import { useAuth } from '../context/AuthContext';
-import { useToast, DataState } from '../components/ui';
+import { useToast, DataState, ConfirmDialog } from '../components/ui';
 import DownloadModal from '../components/DownloadModal';
+import RepoFormModal from '../components/RepoFormModal';
 
 const VIS_KEY: Record<string, string> = {
   public: 'card.visPublic', organization: 'card.visOrganization', private: 'card.visPrivate',
@@ -47,6 +48,11 @@ export default function DetailPage() {
   const [liked, setLiked] = useState(false);
   const [favorited, setFavorited] = useState(false);
   const [related, setRelated] = useState<Page<Repository> | null>(null);
+
+  // 所有者/管理员维护入口（仓库维护计划 §D）：编辑（RepoFormModal）+ 删除（DELETE+If-Match）
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
 
   // README 纯文本降级渲染（无 Markdown 库，受控 pre）
   const [readme, setReadme] = useState<string | null>(null);
@@ -180,10 +186,31 @@ export default function DetailPage() {
     }
   }
 
+  /** 删除当前仓库（后端要求 ADMIN：本人命名空间或 platform_admin）；成功后回对应市场页。 */
+  async function confirmDelete() {
+    if (!repo) return;
+    setDelBusy(true);
+    try {
+      await api.deleteRepo(repo.id, repo.etag ?? etagOfVersion(repo.version));
+      toast.show(t('detail.deleteAccepted'));
+      nav(TYPE_PATH[repo.type] ?? '/');
+    } catch (e) {
+      toast.show(errMsg(e), 'err');
+      setDelBusy(false);
+    }
+  }
+
   if (err) return <div className="form-error">{err}</div>;
   if (!repo) return <div className="loading">{t('common.loading')}</div>;
 
   const metaEntries = Object.entries(repo.metadata ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '');
+
+  // 维护权限客户端判定（协作者不经此入口，仍可在个人中心维护）：
+  // 本人命名空间（slug 同口径比对）→ ADMIN；platform_admin → 任意仓库 ADMIN；
+  // 可维护状态与 PATCH/DELETE 语义一致
+  const canManage = !!user
+    && (user.platformRoles.includes('platform_admin') || user.namespaceSlug === repo.namespace)
+    && ['active', 'archived', 'draft'].includes(repo.lifecycleStatus);
 
   return (
     <div className="detail-layout">
@@ -221,6 +248,13 @@ export default function DetailPage() {
             <button className={`btn btn-ghost ${favorited ? 'btn-active' : ''}`} onClick={doFavorite}>
               {t('detail.favorite', { n: repo.stats.favorites })}
             </button>
+            {canManage && (
+              <>
+                <button className="btn btn-ghost" onClick={() => setEditOpen(true)}>{t('detail.edit')}</button>
+                <button className="btn btn-danger" disabled={deleting}
+                        onClick={() => setDeleting(true)}>{t('detail.delete')}</button>
+              </>
+            )}
             {repo.type === 'studio' && (
               <PlannedButton label={t('detail.planTryStudio')} note={t('detail.planTryStudioNote')} />
             )}
@@ -405,6 +439,17 @@ export default function DetailPage() {
       </aside>
 
       {dlOpen && <DownloadModal repo={repo} onClose={() => setDlOpen(false)} />}
+      {editOpen && (
+        <RepoFormModal typeKey={repo.type} initial={repo}
+                       onClose={() => setEditOpen(false)}
+                       onSaved={() => { setEditOpen(false); toast.show(t('my.saveOk')); loadRepo(); }} />
+      )}
+      {deleting && (
+        <ConfirmDialog title={t('detail.deleteTitle')}
+                       message={t('detail.deleteMessage', { namespace: repo.namespace, name: repo.name })}
+                       confirmText={t('detail.delete')} busy={delBusy}
+                       onConfirm={confirmDelete} onCancel={() => setDeleting(false)} />
+      )}
     </div>
   );
 }

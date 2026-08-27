@@ -414,6 +414,8 @@ export function uuid(): string {
 export interface User {
   id: string;
   namespaceId: string;
+  /** 个人命名空间 slug（与仓库 namespace 字段同口径，所有权判定用）。 */
+  namespaceSlug?: string;
   username: string;
   nickname: string;
   avatarUrl?: string;

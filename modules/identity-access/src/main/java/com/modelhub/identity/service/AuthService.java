@@ -37,11 +37,12 @@ public class AuthService {
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9_-]{2,30}$");
     public static final String GENERIC_LOGIN_FAILURE = "用户名或密码错误";
 
-    /** 当前用户视图（含 namespaceId 发现，03 §2.1）。字段名对齐 OpenAPI User schema；permissions 为角色权限并集。 */
+    /** 当前用户视图（含 namespaceId 发现，03 §2.1）。字段名对齐 OpenAPI User schema；permissions 为角色权限并集；
+     *  namespaceSlug 为个人命名空间 slug（前端所有权判定用，与仓库视图 namespace 字段同口径）。 */
     public record UserView(
             @JsonProperty("id") String publicId,
             String username, String nickname, String status,
-            String namespaceId, List<String> platformRoles, List<String> permissions,
+            String namespaceId, String namespaceSlug, List<String> platformRoles, List<String> permissions,
             @JsonProperty("version") long profileVersion,
             OffsetDateTime createdAt) {}
 
@@ -102,7 +103,7 @@ public class AuthService {
 
         auditService.append(normalized, "user.register", "user:" + user.getPublicId(), "success",
                 ip, userAgent, null);
-        return authResult(user, ns.getPublicId(), sessionService.issue(user, null, ip));
+        return authResult(user, ns, sessionService.issue(user, null, ip));
     }
 
     @Transactional
@@ -128,7 +129,7 @@ public class AuthService {
         NamespaceEntity ns = namespaces.findByUserIdAndNamespaceType(user.getId(), "user").orElse(null);
         auditService.append(normalized, "auth.login", "user:" + user.getPublicId(), "success",
                 ip, userAgent, null);
-        return authResult(user, ns == null ? null : ns.getPublicId(), sessionService.issue(user, null, ip));
+        return authResult(user, ns, sessionService.issue(user, null, ip));
     }
 
     /** refresh：Origin + CSRF + Cookie 三匹配（02 §6.1 末段）。 */
@@ -141,7 +142,7 @@ public class AuthService {
         IssuedSession issued = sessionService.rotate(refreshToken, csrfToken, clientMeta);
         UserEntity user = users.findById(issued.userId()).orElseThrow();
         NamespaceEntity ns = namespaces.findByUserIdAndNamespaceType(user.getId(), "user").orElse(null);
-        return authResult(user, ns == null ? null : ns.getPublicId(), issued);
+        return authResult(user, ns, issued);
     }
 
     @Transactional
@@ -186,7 +187,8 @@ public class AuthService {
         NamespaceEntity ns = namespaces.findByUserIdAndNamespaceType(user.getId(), "user").orElse(null);
         List<String> roles = userRoles.findActiveRoleCodes(user.getId());
         return new UserView(user.getPublicId().toString(), user.getUsername(), user.getNickname(),
-                user.getStatus(), ns == null ? null : ns.getPublicId().toString(), roles,
+                user.getStatus(), ns == null ? null : ns.getPublicId().toString(),
+                ns == null ? null : ns.getSlug(), roles,
                 userRoles.findActivePermissionCodes(user.getId()),
                 user.getProfileVersion(), user.getCreatedAt());
     }
@@ -258,10 +260,11 @@ public class AuthService {
         }
     }
 
-    private AuthResult authResult(UserEntity user, UUID namespacePublicId, IssuedSession session) {
+    private AuthResult authResult(UserEntity user, NamespaceEntity ns, IssuedSession session) {
         List<String> roles = userRoles.findActiveRoleCodes(user.getId());
         UserView view = new UserView(user.getPublicId().toString(), user.getUsername(), user.getNickname(),
-                user.getStatus(), namespacePublicId == null ? null : namespacePublicId.toString(), roles,
+                user.getStatus(), ns == null ? null : ns.getPublicId().toString(),
+                ns == null ? null : ns.getSlug(), roles,
                 userRoles.findActivePermissionCodes(user.getId()),
                 user.getProfileVersion(), user.getCreatedAt());
         return new AuthResult(view, session);

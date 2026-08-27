@@ -56,7 +56,6 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'organization' | 'private'>('public');
   const [gated, setGated] = useState(false);
-  const [tagsText, setTagsText] = useState('');
   const [meta, setMeta] = useState<FormMeta>({});
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -80,8 +79,6 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
       setGated(initial.gated);
       const m = (initial.metadata ?? {}) as FormMeta;
       setMeta({ ...m });
-      const t = m['tags'];
-      setTagsText(Array.isArray(t) ? t.join(', ') : '');
     } else {
       setNamespaceId(user?.namespaceId ?? '');
     }
@@ -127,12 +124,12 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
     e.preventDefault();
     setErr(''); setBusy(true);
     try {
-      // 组装 metadata：仅含 schema 声明字段（additionalProperties=false），空值剔除
+      // 组装 metadata：仅含 schema 声明字段（additionalProperties=false），空值剔除；
+      // tags 已字典化（V20 schema v2 绑定 'tag' 字典），与其余字段同走通用循环，
+      // 未注册字典项由服务端 422 unknown_taxonomy_value 兜底。
       const metadata: Record<string, unknown> = {};
-      const tags = tagsText.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-      if (properties['tags'] && tags.length > 0) metadata['tags'] = tags;
       for (const [key, prop] of Object.entries(properties)) {
-        if (key === 'tags' || key === 'coverObjectKey') continue;
+        if (key === 'coverObjectKey') continue;
         const v = meta[key];
         if (v === undefined || v === '' || (Array.isArray(v) && v.length === 0)) continue;
         metadata[key] = v;
@@ -208,9 +205,11 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
       );
     }
 
-    // 多选（数组 + taxonomy）→ checkbox 组
+    // 多选（数组 + taxonomy）→ checkbox 组；字典外遗留值以灰色可移除芯片回显，
+    // 保留提交时由服务端 422 提示（编辑存量数据的兼容路径）
     if (prop.type === 'array' && options) {
       const val = Array.isArray(meta[key]) ? (meta[key] as string[]) : [];
+      const legacy = val.filter((v) => !options.some((o) => o.key === v));
       return (
         <div className="field" key={key}>
           <label>{label}</label>
@@ -220,6 +219,13 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
                     className={`filter-chip ${val.includes(o.key) ? 'active' : ''}`}
                     onClick={() => toggleArr(key, o.key)}>
                 {labelOf(o, zh)}
+              </span>
+            ))}
+            {legacy.map((v) => (
+              <span key={'legacy-' + v} className="filter-chip active"
+                    style={{ opacity: 0.55 }} title={t('repoForm.tagsLegacy')}
+                    onClick={() => toggleArr(key, v)}>
+                {v} ✕
               </span>
             ))}
           </div>
@@ -286,7 +292,8 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
     );
   }
 
-  const metaKeys = Object.keys(properties).filter((k) => k !== 'tags' && k !== 'coverObjectKey' && k !== 'parameterUnit');
+  // tags 字典化后归入 schema 驱动渲染（facets 派生 taxonomyOf['tags']='tag' → 芯片多选）
+  const metaKeys = Object.keys(properties).filter((k) => k !== 'coverObjectKey' && k !== 'parameterUnit');
 
   return (
     <div className="modal-mask" onClick={onClose}>
@@ -361,14 +368,6 @@ export default function RepoFormModal({ typeKey, initial, onClose, onSaved }: {
                 </div>
               )}
             </div>
-
-            {properties['tags'] && (
-              <div className="field">
-                <label>{t('repoForm.tagsLabel')}</label>
-                <input value={tagsText} placeholder={t('repoForm.tagsPlaceholder')}
-                       onChange={(e) => setTagsText(e.target.value)} />
-              </div>
-            )}
 
             {metaKeys.map((k) => renderMetaField(k, properties[k]))}
           </div>
