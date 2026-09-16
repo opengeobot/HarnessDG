@@ -109,6 +109,7 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .set(AssetEntity::getOwners, asset.owners(), JSONB_LIST_HANDLER)
                 .set(AssetEntity::getTags, asset.tags(), JSONB_LIST_HANDLER)
                 .set(AssetEntity::getLicense, asset.license())
+                .set(AssetEntity::getOwnerTeamId, asset.ownerTeamId())
                 .set(AssetEntity::getRowVersion, currentVersion + 1)
                 .set(AssetEntity::getUpdatedBy, asset.updatedBy())
                 .set(AssetEntity::getUpdatedAt, asset.updatedAt())
@@ -258,6 +259,7 @@ public class MyBatisAssetRepository implements AssetRepository {
         entity.setOwners(asset.owners());
         entity.setTags(asset.tags());
         entity.setLicense(asset.license());
+        entity.setOwnerTeamId(asset.ownerTeamId());
         AssetRepositoryRef ref = asset.repository();
         if (ref != null) {
             entity.setRepoFullName(ref.fullName());
@@ -296,6 +298,7 @@ public class MyBatisAssetRepository implements AssetRepository {
                 .tags(entity.getTags())
                 .tagIds(tagIds)
                 .license(entity.getLicense())
+                .ownerTeamId(entity.getOwnerTeamId())
                 .rowVersion(entity.getRowVersion() == null ? 0L : entity.getRowVersion())
                 .createdBy(entity.getCreatedBy())
                 .updatedBy(entity.getUpdatedBy())

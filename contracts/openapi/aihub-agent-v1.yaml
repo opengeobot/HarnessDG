@@ -181,7 +181,7 @@ paths:
 
 components:
   securitySchemes:
-    bearerJwt:
+    bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
@@ -200,6 +200,20 @@ components:
         visibility: { type: string }
         status: { type: string }
         license: { type: string }
+        tagIds:
+          type: array
+          items:
+            type: string
+            pattern: "^tag_"
+          description: "Controlled tag references (write-only in creates/updates, read-only in responses)"
+        organizationId:
+          type: string
+          pattern: "^org_"
+          description: "Organization identifier"
+        projectId:
+          type: string
+          pattern: "^proj_"
+          description: "Project identifier"
 
     AssetDetail:
       allOf:
@@ -209,6 +223,12 @@ components:
             organizationId: { type: string }
             owners: { type: array, items: { type: string } }
             tags: { type: array, items: { type: string } }
+            tagIds:
+              type: array
+              items:
+                type: string
+                pattern: "^tag_"
+              description: "Controlled tag references (write-only in creates/updates, read-only in responses)"
             provisioningStatus: { type: string }
             createdAt: { type: string, format: date-time }
             updatedAt: { type: string, format: date-time }
@@ -266,4 +286,4 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
 
 security:
-  - bearerJwt: []
+  - bearerAuth: []

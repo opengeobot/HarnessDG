@@ -36,6 +36,7 @@ final class AssetRequestMapper {
                 request.tags(),
                 request.tagIds(),
                 request.license(),
+                request.ownerTeamId(),
                 toModelProfile(request.model()),
                 toDatasetProfile(request.dataset()),
                 principalId);
@@ -52,6 +53,7 @@ final class AssetRequestMapper {
                 request.tags(),
                 request.tagIds(),
                 request.license(),
+                request.ownerTeamId(),
                 toModelProfile(request.model()),
                 toDatasetProfile(request.dataset()),
                 principalId);

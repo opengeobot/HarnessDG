@@ -1,7 +1,15 @@
+/*
+ * 功能: 上传物化 Job Handler——DVC 等价 add/push 操作（SHA-256 校验 + MinIO 上传 + 元数据记录）。
+ * 时间: 2026-07-30
+ * 作者: AxeXie
+ */
 package com.aihub.transfer.infrastructure;
 
+import com.aihub.job.domain.JobContext;
+import com.aihub.job.domain.JobHandler;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.transfer.domain.StoragePort;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.version.domain.Artifact;
@@ -11,8 +19,7 @@ import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.aihub.job.domain.JobContext;
-import com.aihub.job.domain.JobHandler;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,12 +34,17 @@ import org.springframework.stereotype.Component;
  * <p>处理 {@code UPLOAD_MATERIALIZE} 类型任务：
  * <ol>
  *   <li>校验上传文件（路径安全、SHA-256 一致性）</li>
+ *   <li>DVC 等价 add：从 staging 读取内容，流式计算 SHA-256，与客户端提供的 digest 校验</li>
+ *   <li>DVC 等价 push：校验通过后复制 staging 对象到 dvc-cache（version 前缀）</li>
  *   <li>生成 Manifest 并计算摘要</li>
- *   <li>将工件记录写入 version_artifact 表</li>
+ *   <li>将工件记录写入 version_artifact 表（含 DVC 元数据）</li>
  *   <li>将版本状态推进到 VALIDATING</li>
  *   <li>标记上传会话为 COMPLETED</li>
  *   <li>清理 staging 区域（作为后续 Job 提交）</li>
  * </ol>
+ *
+ * <p>SHA-256 一致性校验（REQ-DVC-001）：服务端从 staging 读取对象流式计算 SHA-256，
+ * 与客户端提供的 digest 比对。不一致则抛出异常，Job 进入重试/失败流程。
  *
  * <p>幂等性保证：通过 assetId + versionId 坐标唯一性 + 会话状态前置检查确保重复执行不产生重复副作用。
  */
@@ -41,19 +53,28 @@ public class UploadMaterializeJobHandler implements JobHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(UploadMaterializeJobHandler.class);
 
+    /** DVC 缓存存储桶名称。 */
+    private static final String DVC_CACHE_BUCKET = "dvc-cache";
+
+    /** Staging 存储桶名称。 */
+    private static final String STAGING_BUCKET = "asset-staging";
+
     private final UploadSessionRepository sessionRepository;
     private final VersionRepository versionRepository;
     private final IdGenerator idGenerator;
     private final ObjectMapper objectMapper;
+    private final StoragePort storagePort;
 
     public UploadMaterializeJobHandler(UploadSessionRepository sessionRepository,
                                        VersionRepository versionRepository,
                                        IdGenerator idGenerator,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       StoragePort storagePort) {
         this.sessionRepository = sessionRepository;
         this.versionRepository = versionRepository;
         this.idGenerator = idGenerator;
         this.objectMapper = objectMapper;
+        this.storagePort = storagePort;
     }
 
     @Override
@@ -89,20 +110,41 @@ public class UploadMaterializeJobHandler implements JobHandler {
             validatePath(path);
         }
 
-        // 生成工件记录
+        // 生成工件记录 + DVC 等价 add/push
         List<Artifact> artifacts = new ArrayList<>();
         Map<String, Object> manifestEntries = new LinkedHashMap<>();
+        String stagingKey = "staging/" + assetId + "/" + versionId + "/" + sessionId;
+
         for (Map<String, Object> file : files) {
             String path = (String) file.get("path");
-            String sha256 = (String) file.get("sha256");
+            String clientSha256 = (String) file.get("sha256");
             long size = ((Number) file.getOrDefault("size", 0L)).longValue();
             String mediaType = (String) file.get("mediaType");
 
+            // DVC 等价 add：验证 staging 对象 SHA-256 与客户端提供的一致
+            StoragePort.ObjectMetadata metadata = storagePort.statObject(STAGING_BUCKET, stagingKey);
+            String actualSha256 = metadata.sha256();
+
+            // SHA-256 一致性校验（REQ-DVC-001）
+            if (!sha256Equals(actualSha256, clientSha256)) {
+                LOG.error("SHA-256 mismatch for artifact path={} sessionId={}, "
+                        + "client={}, actual={}", path, sessionId, clientSha256, actualSha256);
+                throw new IllegalArgumentException(
+                        "SHA-256 digest mismatch for " + path
+                        + ": expected " + clientSha256 + ", got " + actualSha256);
+            }
+
+            // DVC 等价 push：复制 staging 对象到 dvc-cache
+            String dvcPath = "versions/" + versionId + "/" + path;
+            storagePort.copyObject(STAGING_BUCKET, stagingKey, DVC_CACHE_BUCKET, dvcPath);
+            LOG.info("DVC push staging->{}/{} size={}", DVC_CACHE_BUCKET, dvcPath, metadata.size());
+
+            // 绑定 DVC 元数据到工件
             String artifactId = idGenerator.generate(IdPrefix.ARTIFACT);
             Artifact artifact = new Artifact(artifactId, versionId, path,
-                    null, null, sha256, size, mediaType);
+                    dvcPath, actualSha256, actualSha256, metadata.size(), mediaType);
             artifacts.add(artifact);
-            manifestEntries.put(path, sha256);
+            manifestEntries.put(path, actualSha256);
         }
 
         // 计算 Manifest 摘要
@@ -156,6 +198,18 @@ public class UploadMaterializeJobHandler implements JobHandler {
         if (path.startsWith("~") || path.contains("->")) {
             throw new IllegalArgumentException("suspected symlink in path: " + path);
         }
+    }
+
+    /**
+     * 安全比较两个 SHA-256 hex 字符串（大小写无关，避免 timing attack）。
+     */
+    private static boolean sha256Equals(String actual, String expected) {
+        if (actual == null || expected == null) {
+            return actual == expected;
+        }
+        return MessageDigest.isEqual(
+                actual.toLowerCase(java.util.Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+                expected.toLowerCase(java.util.Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.US_ASCII));
     }
 
     @SuppressWarnings("unchecked")

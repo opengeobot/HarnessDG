@@ -67,6 +67,9 @@ public class AssetEntity {
     @TableField("license")
     private String license;
 
+    @TableField("owner_team_id")
+    private String ownerTeamId;
+
     @TableField("repo_full_name")
     private String repoFullName;
 
@@ -222,6 +225,14 @@ public class AssetEntity {
 
     public void setLicense(String license) {
         this.license = license;
+    }
+
+    public String getOwnerTeamId() {
+        return ownerTeamId;
+    }
+
+    public void setOwnerTeamId(String ownerTeamId) {
+        this.ownerTeamId = ownerTeamId;
     }
 
     public String getRepoFullName() {

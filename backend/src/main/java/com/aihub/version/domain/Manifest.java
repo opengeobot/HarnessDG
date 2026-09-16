@@ -3,6 +3,7 @@ package com.aihub.version.domain;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.Normalizer;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -37,26 +38,33 @@ public record Manifest(Map<String, Object> entries) {
         }
     }
 
-    /** 规范化为确定性字符串表示。 */
+    /**
+     * 规范化为确定性字符串表示。
+     *
+     * <p>所有字符串（键与值）均先应用 Unicode NFC 规范化，
+     * 确保不同组合形式的同一字符产生相同摘要。
+     */
     public String canonicalize() {
         TreeMap<String, Object> sorted = new TreeMap<>(entries);
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, Object> entry : sorted.entrySet()) {
             Object value = entry.getValue();
             if (value == null) continue;
+            String normalizedKey = Normalizer.normalize(entry.getKey(), Normalizer.Form.NFC);
             if (value instanceof List<?> list) {
                 List<String> sortedList = list.stream()
                         .filter(java.util.Objects::nonNull)
                         .map(Object::toString)
+                        .map(s -> Normalizer.normalize(s, Normalizer.Form.NFC))
                         .sorted()
                         .collect(Collectors.toList());
                 if (sortedList.isEmpty()) continue;
-                sb.append(entry.getKey()).append("=")
+                sb.append(normalizedKey).append("=")
                         .append(String.join(",", sortedList)).append("\n");
             } else {
-                String strVal = value.toString();
+                String strVal = Normalizer.normalize(value.toString(), Normalizer.Form.NFC);
                 if (strVal.isBlank()) continue;
-                sb.append(entry.getKey()).append("=").append(strVal).append("\n");
+                sb.append(normalizedKey).append("=").append(strVal).append("\n");
             }
         }
         return sb.toString();

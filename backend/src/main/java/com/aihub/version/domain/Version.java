@@ -1,7 +1,17 @@
+/*
+ * 功能: 版本聚合根，封装版本生命周期不变量。
+ * 时间: 2026-06-29
+ * 作者: AxeXie
+ */
 package com.aihub.version.domain;
 
+import com.aihub.asset.domain.AssetType;
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.ValidationException;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * 版本聚合根。
@@ -10,6 +20,12 @@ import java.util.Objects;
  * 领域层不依赖 Spring / MyBatis / 任何基础设施 SDK。
  */
 public final class Version {
+
+    /** 标准 SemVer：MAJOR.MINOR.PATCH（不含 pre-release / build）。 */
+    private static final Pattern SEMVER_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
+
+    /** 日期版本：YYYY-MM-DD。 */
+    private static final Pattern DATE_VERSION_PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
 
     private final String versionId;
     private final String assetId;
@@ -44,6 +60,27 @@ public final class Version {
         this.createdBy = Objects.requireNonNull(createdBy);
         this.createdAt = Objects.requireNonNull(createdAt);
         this.updatedAt = Objects.requireNonNull(updatedAt);
+    }
+
+    /**
+     * 校验版本号语法。MODEL 需要 SemVer，DATASET 允许 SemVer 或日期。
+     */
+    public static void validateVersionSyntax(String version, AssetType assetType) {
+        if (assetType == AssetType.MODEL) {
+            if (!SEMVER_PATTERN.matcher(version).matches()) {
+                throw new ValidationException(ErrorCode.ASSET_VERSION_SYNTAX_INVALID,
+                        "MODEL requires SemVer (MAJOR.MINOR.PATCH), got: " + version,
+                        Map.of("version", version));
+            }
+        } else {
+            // DATASET: SemVer or YYYY-MM-DD
+            if (!SEMVER_PATTERN.matcher(version).matches() &&
+                    !DATE_VERSION_PATTERN.matcher(version).matches()) {
+                throw new ValidationException(ErrorCode.ASSET_VERSION_SYNTAX_INVALID,
+                        "DATASET requires SemVer or date (YYYY-MM-DD), got: " + version,
+                        Map.of("version", version));
+            }
+        }
     }
 
     /** 创建草稿版本。 */

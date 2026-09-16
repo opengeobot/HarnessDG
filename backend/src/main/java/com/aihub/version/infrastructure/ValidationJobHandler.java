@@ -74,36 +74,93 @@ public class ValidationJobHandler implements JobHandler {
         boolean allPassed = true;
 
         // 1. Card 校验
-        findings.add(Map.of("check", "card", "status", "PASSED", "message", "Card README present"));
+        findings.add(Map.of(
+                "ruleId", "CARD_README_PRESENT",
+                "check", "card",
+                "status", "PASSED",
+                "severity", "INFO",
+                "i18nKey", "validation.card",
+                "message", "Card README present"));
 
         // 2. Manifest 校验
         if (version.manifestDigest() != null && !version.manifestDigest().isBlank()) {
-            findings.add(Map.of("check", "manifest", "status", "PASSED", "message", "Manifest digest present"));
+            findings.add(Map.of(
+                    "ruleId", "MANIFEST_DIGEST_PRESENT",
+                    "check", "manifest",
+                    "status", "PASSED",
+                    "severity", "INFO",
+                    "i18nKey", "validation.manifest",
+                    "message", "Manifest digest present"));
         } else {
-            findings.add(Map.of("check", "manifest", "status", "FAILED", "message", "Manifest digest missing"));
+            findings.add(Map.of(
+                    "ruleId", "MANIFEST_DIGEST_PRESENT",
+                    "check", "manifest",
+                    "status", "FAILED",
+                    "severity", "ERROR",
+                    "i18nKey", "validation.manifest",
+                    "message", "Manifest digest missing"));
             allPassed = false;
         }
 
         // 3. Artifact 校验
         var artifacts = versionRepository.listArtifactsByVersion(versionId);
         if (!artifacts.isEmpty()) {
-            findings.add(Map.of("check", "artifacts", "status", "PASSED",
+            findings.add(Map.of(
+                    "ruleId", "ARTIFACTS_REGISTERED",
+                    "check", "artifacts",
+                    "status", "PASSED",
+                    "severity", "INFO",
+                    "i18nKey", "validation.artifacts",
                     "message", artifacts.size() + " artifact(s) registered"));
         } else {
-            findings.add(Map.of("check", "artifacts", "status", "FAILED", "message", "No artifacts registered"));
+            findings.add(Map.of(
+                    "ruleId", "ARTIFACTS_REGISTERED",
+                    "check", "artifacts",
+                    "status", "FAILED",
+                    "severity", "ERROR",
+                    "i18nKey", "validation.artifacts",
+                    "message", "No artifacts registered"));
             allPassed = false;
         }
 
         // 4. DVC 校验（P3 简化：检查工件是否绑定 DVC 哈希）
         boolean dvcOk = artifacts.stream().allMatch(a -> a.dvcHash() != null || a.sha256() != null);
-        findings.add(Map.of("check", "dvc", "status", dvcOk ? "PASSED" : "WARN",
+        findings.add(Map.of(
+                "ruleId", "DVC_HASH_COMPLETE",
+                "check", "dvc",
+                "status", dvcOk ? "PASSED" : "WARN",
+                "severity", dvcOk ? "INFO" : "WARN",
+                "i18nKey", "validation.dvc",
                 "message", dvcOk ? "All artifacts have content hashes" : "Some artifacts missing DVC hash"));
 
         // 5. License 校验
-        findings.add(Map.of("check", "license", "status", "PASSED", "message", "License check delegated to asset profile"));
+        findings.add(Map.of(
+                "ruleId", "LICENSE_CHECKED",
+                "check", "license",
+                "status", "PASSED",
+                "severity", "INFO",
+                "i18nKey", "validation.license",
+                "message", "License check delegated to asset profile"));
 
-        // 6. 敏感度校验
-        findings.add(Map.of("check", "sensitivity", "status", "PASSED", "message", "No sensitive content detected"));
+        // 6. Pickle 高风险文件检测（REQ-VAL-001）
+        boolean pickleRisk = artifacts.stream()
+                .anyMatch(a -> isHighRiskFile(a.path()));
+        findings.add(Map.of(
+                "ruleId", "RISK_HIGH_FILE_TYPE",
+                "check", "security",
+                "status", pickleRisk ? "RISK_HIGH" : "PASSED",
+                "severity", pickleRisk ? "RISK_HIGH" : "INFO",
+                "i18nKey", "validation.security",
+                "message", pickleRisk ? "High-risk files detected (Pickle/dynamic code)" : "No high-risk files detected"));
+
+        // 7. 敏感度校验
+        findings.add(Map.of(
+                "ruleId", "SENSITIVITY_CHECKED",
+                "check", "sensitivity",
+                "status", "PASSED",
+                "severity", "INFO",
+                "i18nKey", "validation.sensitivity",
+                "message", "No sensitive content detected"));
 
         String reportStatus = allPassed ? "PASSED" : "FAILED";
         String reportId = idGenerator.generate(IdPrefix.VALIDATION_REPORT);
@@ -126,5 +183,31 @@ public class ValidationJobHandler implements JobHandler {
             versionRepository.update(version);
             LOG.info("validation failed versionId={} reportId={}, returning to DRAFT", versionId, reportId);
         }
+    }
+
+    /**
+     * 检测是否为高风险文件（Pickle/动态代码/未知可执行文件）。
+     * REQ-VAL-001: Pickle 高风险标记。
+     */
+    private boolean isHighRiskFile(String fileName) {
+        if (fileName == null || fileName.isEmpty()) return false;
+        String lower = fileName.toLowerCase();
+        // Pickle 系列
+        if (lower.endsWith(".pkl") || lower.endsWith(".pickle") || lower.endsWith(".pklz")) return true;
+        // Joblib (scikit-learn 模型序列化)
+        if (lower.endsWith(".joblib")) return true;
+        // TensorFlow/Keras 模型
+        if (lower.endsWith(".h5") || lower.endsWith(".keras")) return true;
+        // PyTorch 模型
+        if (lower.endsWith(".pt") || lower.endsWith(".pth") || lower.endsWith(".ckpt")) return true;
+        // ONNX (可能含恶意 op)
+        if (lower.endsWith(".onnx")) return true;
+        // Python 字节码/可执行
+        if (lower.endsWith(".pyc") || lower.endsWith(".pyo") || lower.endsWith(".pyd")) return true;
+        // Windows 可执行
+        if (lower.endsWith(".exe") || lower.endsWith(".dll") || lower.endsWith(".bat") || lower.endsWith(".cmd")) return true;
+        // Shell 脚本
+        if (lower.endsWith(".sh") || lower.endsWith(".bash") || lower.endsWith(".ps1")) return true;
+        return false;
     }
 }

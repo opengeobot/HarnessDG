@@ -56,15 +56,18 @@ public class UploadApplicationService {
         this.idGenerator = idGenerator;
     }
 
+    /** 单上传会话最大字节数：20GiB。 */
+    private static final long MAX_UPLOAD_SIZE_BYTES = 20L * 1024 * 1024 * 1024;
+
     /** 创建上传会话。 */
     @Transactional
     public UploadSessionView createSession(String assetId, String versionId,
                                            long totalBytes, int fileCount,
                                            String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        if (totalBytes > UploadSession.MAX_SESSION_BYTES) {
-            throw new ValidationException(
-                    "total bytes exceeds 20GiB limit, use CLI/DVC for large uploads");
+        if (totalBytes > MAX_UPLOAD_SIZE_BYTES) {
+            throw new ValidationException(ErrorCode.UPLOAD_SIZE_EXCEEDED,
+                    "upload size " + totalBytes + " exceeds 20 GiB limit");
         }
         String sessionId = idGenerator.generate(IdPrefix.UPLOAD_SESSION);
         Instant expiresAt = Instant.now().plus(DEFAULT_SESSION_TTL);

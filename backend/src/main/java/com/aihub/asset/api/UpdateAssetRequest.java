@@ -20,6 +20,7 @@ import java.util.List;
  * @param tags           标签列表（legacy，为空表示不变更）
  * @param tagIds         受控标签 ID 列表（为空表示不变更；非空时重写 asset_tag 关联）
  * @param license        许可证
+ * @param ownerTeamId    主 Owner Team ID（DEC-011 不可置空）
  * @param model          模型画像（模型类有效）
  * @param dataset        数据集画像（数据集类有效）
  */
@@ -32,6 +33,7 @@ public record UpdateAssetRequest(String organizationId,
                                  List<String> tags,
                                  List<String> tagIds,
                                  String license,
+                                 String ownerTeamId,
                                  CreateAssetRequest.ModelInput model,
                                  CreateAssetRequest.DatasetInput dataset) {
 }

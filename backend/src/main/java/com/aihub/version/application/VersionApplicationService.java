@@ -1,5 +1,8 @@
 package com.aihub.version.application;
 
+import com.aihub.asset.domain.Asset;
+import com.aihub.asset.domain.AssetRepository;
+import com.aihub.asset.domain.AssetType;
 import com.aihub.audit.application.AuditEvent;
 import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
@@ -33,15 +36,18 @@ public class VersionApplicationService {
     private static final Logger LOG = LoggerFactory.getLogger(VersionApplicationService.class);
 
     private final VersionRepository versionRepository;
+    private final AssetRepository assetRepository;
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final IdGenerator idGenerator;
 
     public VersionApplicationService(VersionRepository versionRepository,
+                                     AssetRepository assetRepository,
                                      AuthorizationService authorizationService,
                                      AuditService auditService,
                                      IdGenerator idGenerator) {
         this.versionRepository = versionRepository;
+        this.assetRepository = assetRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
@@ -51,6 +57,11 @@ public class VersionApplicationService {
     @Transactional
     public VersionView createDraftVersion(String assetId, String version, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        // 加载资产以获取类型（用于版本号语法校验）
+        Asset asset = assetRepository.findByAssetId(assetId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
+                        "asset not found: " + assetId, Map.of()));
+        Version.validateVersionSyntax(version, asset.type());
         // 坐标唯一性校验
         versionRepository.findByCoordinate(assetId, version).ifPresent(existing -> {
             throw new ConflictException(ErrorCode.ASSET_VERSION_CONFLICT,

@@ -35,6 +35,7 @@ import java.util.List;
  * @param tags           标签列表（legacy 自由标签，只读回显）
  * @param tagIds         受控标签 ID 列表（来自 asset_tag 关联）
  * @param license        许可证
+ * @param ownerTeamId    主 Owner Team ID（DEC-011）
  * @param model          模型画像（仅模型类非空）
  * @param dataset        数据集画像（仅数据集类非空）
  * @param repository          仓库引用
@@ -57,6 +58,7 @@ public record AssetView(String assetId,
                         List<String> tags,
                         List<String> tagIds,
                         String license,
+                        String ownerTeamId,
                         ModelView model,
                         DatasetView dataset,
                         RepositoryView repository,
@@ -108,6 +110,7 @@ public record AssetView(String assetId,
                 asset.tags(),
                 asset.tagIds(),
                 asset.license(),
+                asset.ownerTeamId(),
                 modelView(asset.modelProfile()),
                 datasetView(asset.datasetProfile()),
                 repositoryView(asset.repository()),

@@ -18,8 +18,11 @@ import java.util.regex.Pattern;
  */
 public final class Asset {
 
-    /** 命名空间与名称统一为小写字母、数字与连字符，便于映射为 Git 仓库名与 URL 友好别名。 */
-    private static final Pattern SLUG_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$");
+    /** 命名空间 slug：小写字母、数字与连字符。 */
+    public static final Pattern SLUG_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$");
+
+    /** 名称 slug：小写字母、数字、连字符与下划线。 */
+    public static final Pattern NAME_PATTERN = Pattern.compile("^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$");
 
     private final String assetId;
     private final AssetType type;
@@ -36,6 +39,7 @@ public final class Asset {
     private List<String> tags;
     private List<String> tagIds;
     private String license;
+    private String ownerTeamId;
     private ModelProfile modelProfile;
     private DatasetProfile datasetProfile;
     private AssetRepositoryRef repository;
@@ -65,6 +69,7 @@ public final class Asset {
         this.tags = normalizeList(builder.tags);
         this.tagIds = normalizeList(builder.tagIds);
         this.license = builder.license;
+        this.ownerTeamId = builder.ownerTeamId;
         this.modelProfile = builder.modelProfile;
         this.datasetProfile = builder.datasetProfile;
         this.repository = builder.repository;
@@ -94,7 +99,9 @@ public final class Asset {
      * @param visibility     可见性
      * @param owners         Owner 列表
      * @param tags           标签列表
+     * @param tagIds         受控标签 ID 列表
      * @param license        许可证
+     * @param ownerTeamId    主 Owner Team ID（DEC-011 必填）
      * @param modelProfile   模型画像（模型类必填语义，可空字段）
      * @param datasetProfile 数据集画像（数据集类必填语义，可空字段）
      * @param createdBy      创建者主体 ID
@@ -113,13 +120,15 @@ public final class Asset {
                                List<String> tags,
                                List<String> tagIds,
                                String license,
+                               String ownerTeamId,
                                ModelProfile modelProfile,
                                DatasetProfile datasetProfile,
                                String createdBy) {
         requireSlug(namespace, "namespace");
-        requireSlug(name, "name");
+        requireName(name, "name");
         Objects.requireNonNull(type, "type must not be null");
         Objects.requireNonNull(visibility, "visibility must not be null");
+        Objects.requireNonNull(ownerTeamId, "ownerTeamId must not be null (DEC-011: at least one Team required)");
         Instant now = Instant.now();
         Builder builder = new Builder()
                 .assetId(assetId)
@@ -136,6 +145,7 @@ public final class Asset {
                 .tags(tags)
                 .tagIds(tagIds)
                 .license(license)
+                .ownerTeamId(ownerTeamId)
                 .createdBy(createdBy)
                 .updatedBy(createdBy)
                 .createdAt(now)
@@ -157,6 +167,7 @@ public final class Asset {
                                List<String> tags,
                                List<String> tagIds,
                                String license,
+                               String ownerTeamId,
                                ModelProfile modelProfile,
                                DatasetProfile datasetProfile,
                                String updatedBy) {
@@ -177,6 +188,12 @@ public final class Asset {
             this.tagIds = normalizeList(tagIds);
         }
         this.license = license;
+        if (ownerTeamId != null) {
+            if (ownerTeamId.isBlank()) {
+                throw new IllegalArgumentException("ownerTeamId cannot be blank (DEC-011: at least one Team required)");
+            }
+            this.ownerTeamId = ownerTeamId.trim();
+        }
         if (type == AssetType.MODEL && modelProfile != null) {
             this.modelProfile = modelProfile;
         }
@@ -265,6 +282,22 @@ public final class Asset {
         }
     }
 
+    private static void requireName(String value, String field) {
+        if (value == null || !NAME_PATTERN.matcher(value).matches()) {
+            throw new IllegalArgumentException(
+                    field + " must be a lowercase slug of letters, digits, dashes and underscores: " + value);
+        }
+    }
+
+    /**
+     * 资产坐标：{@code aih://{namespace}/{type}/{name}}。
+     *
+     * @return 唯一资产坐标字符串
+     */
+    public String coordinate() {
+        return "aih://" + namespace + "/" + type + "/" + name;
+    }
+
     public String assetId() {
         return assetId;
     }
@@ -319,6 +352,10 @@ public final class Asset {
 
     public String license() {
         return license;
+    }
+
+    public String ownerTeamId() {
+        return ownerTeamId;
     }
 
     public ModelProfile modelProfile() {
@@ -392,6 +429,7 @@ public final class Asset {
         private List<String> tags;
         private List<String> tagIds;
         private String license;
+        private String ownerTeamId;
         private ModelProfile modelProfile;
         private DatasetProfile datasetProfile;
         private AssetRepositoryRef repository;
@@ -472,6 +510,11 @@ public final class Asset {
 
         public Builder license(String license) {
             this.license = license;
+            return this;
+        }
+
+        public Builder ownerTeamId(String ownerTeamId) {
+            this.ownerTeamId = ownerTeamId;
             return this;
         }
 

@@ -16,6 +16,10 @@ public class ValidationException extends PlatformException {
         super(ErrorCode.COMMON_INVALID_ARGUMENT, message);
     }
 
+    public ValidationException(ErrorCode errorCode, String message) {
+        super(errorCode, message);
+    }
+
     public ValidationException(ErrorCode errorCode, String message, Map<String, Object> details) {
         super(errorCode, message, details, null);
     }

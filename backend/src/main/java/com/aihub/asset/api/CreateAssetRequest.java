@@ -21,6 +21,7 @@ import java.util.List;
  * @param owners      Owner 列表
  * @param tags        标签列表
  * @param license     许可证
+ * @param ownerTeamId 主 Owner Team ID（DEC-011 必填）
  * @param model       模型画像（模型类有效）
  * @param dataset     数据集画像（数据集类有效）
  */
@@ -36,6 +37,7 @@ public record CreateAssetRequest(AssetType type,
                                  List<String> tags,
                                  List<String> tagIds,
                                  String license,
+                                 String ownerTeamId,
                                  ModelInput model,
                                  DatasetInput dataset) {
 

@@ -70,6 +70,10 @@ public class PreviewJobHandler implements JobHandler {
         // 内容大小检查
         if (content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_CONTENT_BYTES) {
             LOG.warn("preview content exceeds 1MiB limit assetId={}", assetId);
+            String errorJson = objectMapper.writeValueAsString(Map.of(
+                    "errorReason", "PREVIEW_SIZE_EXCEEDED",
+                    "rows", List.of()));
+            savePreview(assetId, versionId, errorJson);
             return;
         }
 
@@ -90,7 +94,13 @@ public class PreviewJobHandler implements JobHandler {
             previewJson = objectMapper.writeValueAsString(Map.of("raw", truncate(content, MAX_ROWS * 100)));
         }
 
-        // 幂等写入预览（先删除再插入）
+        savePreview(assetId, versionId, previewJson);
+    }
+
+    /**
+     * 幂等写入预览记录（先删除再插入）。
+     */
+    private void savePreview(String assetId, String versionId, String previewJson) {
         String previewId = idGenerator.generate(IdPrefix.PREVIEW);
         if (versionId != null) {
             jdbcTemplate.update("DELETE FROM asset_preview WHERE asset_id = ? AND version_id = ?", assetId, versionId);
@@ -107,33 +117,137 @@ public class PreviewJobHandler implements JobHandler {
     }
 
     /**
-     * 解析 CSV 内容为 JSON 表格。
+     * 解析 CSV 内容为 JSON 表格（RFC 4180 兼容）。
+     *
+     * <p>支持引号字段、转义引号（"" → "）、引号内换行符等标准 CSV 特性。
      */
     private String parseCsv(String csvContent) throws Exception {
+        List<String[]> allRecords = parseCsvRecords(csvContent);
+        if (allRecords.isEmpty()) {
+            return objectMapper.writeValueAsString(Map.of("rows", List.of()));
+        }
+
+        String[] rawHeaders = allRecords.remove(0);
+        boolean columnTruncated = rawHeaders.length > MAX_COLS;
+        String[] headers = applyColumnLimit(rawHeaders);
+
         List<Map<String, String>> rows = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new StringReader(csvContent))) {
-            String headerLine = reader.readLine();
-            if (headerLine == null) {
-                return objectMapper.writeValueAsString(Map.of("rows", List.of()));
+        int rowCount = 0;
+        for (String[] values : allRecords) {
+            if (rowCount >= MAX_ROWS) break;
+            Map<String, String> row = new LinkedHashMap<>();
+            for (int i = 0; i < headers.length; i++) {
+                String value = i < values.length ? sanitize(values[i]) : "";
+                row.put(headers[i].trim(), value);
             }
-            String[] headers = headerLine.split(",");
-            if (headers.length > MAX_COLS) {
-                headers = java.util.Arrays.copyOf(headers, MAX_COLS);
+            rows.add(row);
+            rowCount++;
+        }
+        return objectMapper.writeValueAsString(Map.of(
+                "rows", rows,
+                "truncated", rowCount >= MAX_ROWS,
+                "columnTruncated", columnTruncated));
+    }
+
+    /**
+     * RFC 4180 CSV 解析器。将整段 CSV 文本解析为记录列表（每条记录是一个字段数组）。
+     *
+     * <p>规则：
+     * <ul>
+     *   <li>字段可以是用双引号包裹的，也可以是无引号的。</li>
+     *   <li>引号字段中的双引号通过连续两个双引号（""）转义。</li>
+     *   <li>引号字段中可以包含逗号、换行符等分隔符。</li>
+     *   <li>CRLF 和 LF 均作为记录分隔符。</li>
+     * </ul>
+     */
+    private List<String[]> parseCsvRecords(String csv) {
+        List<String[]> records = new ArrayList<>();
+        int len = csv.length();
+        int pos = 0;
+
+        while (pos <= len) {
+            List<String> fields = new ArrayList<>();
+
+            // 解析一条记录的所有字段
+            while (true) {
+                // 跳过字段前导空格（仅用于判断是否引号字段）
+                int fieldStart = pos;
+
+                if (pos < len && csv.charAt(pos) == '"') {
+                    // 引号字段
+                    pos++; // skip opening quote
+                    StringBuilder sb = new StringBuilder();
+                    while (pos < len) {
+                        char c = csv.charAt(pos);
+                        if (c == '"') {
+                            if (pos + 1 < len && csv.charAt(pos + 1) == '"') {
+                                // escaped quote
+                                sb.append('"');
+                                pos += 2;
+                            } else {
+                                // closing quote
+                                pos++; // skip closing quote
+                                break;
+                            }
+                        } else {
+                            sb.append(c);
+                            pos++;
+                        }
+                    }
+                    fields.add(sb.toString());
+
+                    // 跳过关闭引号后的空白
+                    while (pos < len && (csv.charAt(pos) == ' ' || csv.charAt(pos) == '\t')) {
+                        pos++;
+                    }
+                } else {
+                    // 无引号字段 — 读到逗号或行末
+                    while (pos < len && csv.charAt(pos) != ','
+                            && csv.charAt(pos) != '\r' && csv.charAt(pos) != '\n') {
+                        pos++;
+                    }
+                    fields.add(csv.substring(fieldStart, pos));
+                }
+
+                // 检查字段终止符
+                if (pos < len && csv.charAt(pos) == ',') {
+                    pos++; // skip comma, next field
+                    continue;
+                }
+
+                // CRLF 或 LF → 记录结束
+                if (pos < len && csv.charAt(pos) == '\r') {
+                    pos++; // skip CR
+                    if (pos < len && csv.charAt(pos) == '\n') {
+                        pos++; // skip LF
+                    }
+                    break;
+                }
+                if (pos < len && csv.charAt(pos) == '\n') {
+                    pos++; // skip LF
+                    break;
+                }
+
+                // 文件末尾
+                break;
             }
 
-            String line;
-            int rowCount = 0;
-            while ((line = reader.readLine()) != null && rowCount < MAX_ROWS) {
-                String[] values = line.split(",", -1);
-                Map<String, String> row = new LinkedHashMap<>();
-                for (int i = 0; i < headers.length && i < values.length; i++) {
-                    row.put(headers[i].trim(), sanitize(values[i].trim()));
-                }
-                rows.add(row);
-                rowCount++;
+            // 跳过空记录末尾（连续 CRLF）
+            if (pos >= len && fields.size() == 1 && fields.get(0).isEmpty()) {
+                break;
             }
+
+            records.add(fields.toArray(new String[0]));
         }
-        return objectMapper.writeValueAsString(Map.of("rows", rows, "truncated", rows.size() >= MAX_ROWS));
+
+        return records;
+    }
+
+    private String[] applyColumnLimit(String[] headers) {
+        if (headers.length > MAX_COLS) {
+            return java.util.Arrays.copyOf(headers, MAX_COLS);
+        }
+        return headers;
     }
 
     /**

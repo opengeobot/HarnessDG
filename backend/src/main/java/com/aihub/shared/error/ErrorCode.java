@@ -148,6 +148,9 @@ public enum ErrorCode {
     /** 资产不存在（亦用于私有资源防枚举）。 */
     ASSET_NOT_FOUND(HttpStatus.NOT_FOUND, "error.asset.notFound", false, AlertLevel.NONE),
 
+    /** 资产坐标格式非法（namespace/name 不满足 aih:// 规范）。 */
+    ASSET_COORDINATE_INVALID(HttpStatus.BAD_REQUEST, "error.asset.coordinateInvalid", false, AlertLevel.NONE),
+
     /** 资产坐标已存在（namespace+type+name 冲突）。 */
     ASSET_ALREADY_EXISTS(HttpStatus.CONFLICT, "error.asset.alreadyExists", false, AlertLevel.NONE),
 
@@ -177,11 +180,17 @@ public enum ErrorCode {
     /** 资产版本冲突，目标版本已存在。 */
     ASSET_VERSION_CONFLICT(HttpStatus.CONFLICT, "error.asset.versionConflict", false, AlertLevel.INFO),
 
+    /** 资产版本号语法不合法（MODEL 需要 SemVer，DATASET 允许 SemVer 或日期）。 */
+    ASSET_VERSION_SYNTAX_INVALID(HttpStatus.BAD_REQUEST, "error.asset.versionSyntaxInvalid", false, AlertLevel.NONE),
+
     /** 当前版本状态不允许该操作。 */
     VERSION_STATE_NOT_ALLOWED(HttpStatus.CONFLICT, "error.version.stateNotAllowed", false, AlertLevel.INFO),
 
     /** 版本未找到。 */
     VERSION_NOT_FOUND(HttpStatus.NOT_FOUND, "error.version.notFound", false, AlertLevel.NONE),
+
+    /** 上传大小超过 20GiB 限制。 */
+    UPLOAD_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "error.upload.sizeExceeded", false, AlertLevel.NONE),
 
     /** 上传会话已过期。 */
     UPLOAD_SESSION_EXPIRED(HttpStatus.CONFLICT, "error.upload.sessionExpired", false, AlertLevel.INFO),

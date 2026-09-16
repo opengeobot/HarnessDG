@@ -115,6 +115,10 @@ public class AssetApplicationService {
         if (command.visibility() == null) {
             throw new ValidationException("asset visibility is required");
         }
+        if (!StringUtils.hasText(command.ownerTeamId())) {
+            throw new ValidationException("ownerTeamId is required (DEC-011: asset must have at least one Team)");
+        }
+        validateCoordinate(command.namespace(), command.name());
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         validateGovernanceFields(command.type(), command.license(),
                 modelFramework(command), modelTask(command),
@@ -149,6 +153,9 @@ public class AssetApplicationService {
     public AssetView updateAsset(String assetId, UpdateAssetCommand command) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         Asset asset = loadAccessible(assetId, command.principalId());
+        if (command.ownerTeamId() != null && !StringUtils.hasText(command.ownerTeamId())) {
+            throw new ValidationException("ownerTeamId cannot be set to null/blank (DEC-011: at least one Team required)");
+        }
         validateGovernanceFields(asset.type(), command.license(),
                 modelFramework(command), modelTask(command),
                 datasetFormat(command), datasetModality(command));
@@ -164,6 +171,7 @@ public class AssetApplicationService {
                 command.tags(),
                 validatedTagIds,
                 command.license(),
+                command.ownerTeamId(),
                 command.model(),
                 command.dataset(),
                 command.principalId());
@@ -328,6 +336,7 @@ public class AssetApplicationService {
                     .tags(asset.tags())
                     .tagIds(asset.tagIds())
                     .license(asset.license())
+                    .ownerTeamId(asset.ownerTeamId())
                     .modelProfile(asset.modelProfile())
                     .datasetProfile(asset.datasetProfile())
                     .repository(asset.repository())
@@ -364,6 +373,7 @@ public class AssetApplicationService {
                     command.tags(),
                     tagIds,
                     command.license(),
+                    command.ownerTeamId(),
                     command.model(),
                     command.dataset(),
                     command.principalId());
@@ -378,6 +388,19 @@ public class AssetApplicationService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
                         "asset not found: " + assetId, Map.of()));
         return asset;
+    }
+
+    private void validateCoordinate(String namespace, String name) {
+        if (!Asset.SLUG_PATTERN.matcher(namespace).matches()) {
+            throw new ValidationException(ErrorCode.ASSET_COORDINATE_INVALID,
+                    "invalid coordinate: namespace \"" + namespace + "\" does not match aih:// slug format",
+                    Map.of("namespace", namespace, "name", name));
+        }
+        if (!Asset.NAME_PATTERN.matcher(name).matches()) {
+            throw new ValidationException(ErrorCode.ASSET_COORDINATE_INVALID,
+                    "invalid coordinate: name \"" + name + "\" does not match aih:// name format",
+                    Map.of("namespace", namespace, "name", name));
+        }
     }
 
     private void validateGovernanceFields(AssetType type, String license,
