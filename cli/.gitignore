@@ -1,0 +1,16 @@
+# AIHub CLI 凭据文件 (文件回退模式)
+# 包含 JWT 令牌和密码，绝不提交到版本控制
+.aih-credentials.json
+
+# 构建产物
+dist/
+
+# 依赖
+node_modules/
+
+# 临时文件
+*.tsbuildinfo
+
+# npm lockfile (use pnpm)
+package-lock.json
+npm-debug.log*
