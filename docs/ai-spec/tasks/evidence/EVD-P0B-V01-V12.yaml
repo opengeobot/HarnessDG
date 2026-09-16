@@ -1,0 +1,137 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0B-V01-V12
+status: PASS
+
+task:
+  taskId: null # 基于 p0b-exit-catalog 全栈验证
+  requirements: [REQ-IAM-001, REQ-IAM-003, REQ-AUD-001, REQ-OBS-001, REQ-AUTH-001]
+  scenarios:
+    - AC-P0B-IAM-002 # 登录 JWT 签发
+    - AC-P0B-IAM-010 # JWT 校验 (401)
+    - AC-P0B-AUD-001 # 审计记录
+    - AC-P0B-AUD-002 # 脱敏
+    - AC-P0B-OBS-003 # 健康分层
+    - AC-P0B-AUTH-003 # 越权拒绝
+
+governance:
+  specValidation:
+    command: null
+    result: null
+  taskValidation:
+    command: deploy/compose/scripts/verify.ps1
+    result: PASS
+  changedPathValidation:
+    command: null
+    result: null
+  completionValidation:
+    command: null
+    result: null
+
+source:
+  branch: main
+  commitSha: null # 基于 2026-07-02 全栈验证
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-02T20:00:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: null
+  node: null
+  pnpm: null
+  docker: "24+"
+  composeProfiles: []
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG/deploy/compose
+  command: >
+    docker compose up -d --build && docker compose ps && deploy/compose/scripts/verify.ps1
+  startedAt: 2026-07-02T16:00:00+08:00
+  finishedAt: 2026-07-02T20:00:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: [PostgreSQL, MinIO, Gitea]
+  e4EntryPoint: Nginx
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-ENG-001
+      assertion: V01 docker compose config --quiet exit 0
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-004
+      assertion: V04 Flyway V1-V22 迁移成功、关键表存在
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-002
+      assertion: V05 登录签发 JWT、/me 200
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-010
+      assertion: V05 无 Token 401 fail-closed
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-AUD-001
+      assertion: V08 audit_log 含 AUTH_LOGIN_SUCCEEDED 事件
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-AUD-002
+      assertion: V08 request_summary 无明文口令
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: V06/V07/V09/V10/V11 无 Token 401、越权 403
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-OBS-003
+      assertion: V11 /actuator/health 200
+      scenarioCategory: normal
+  notProven:
+    - V05-V11 仅验证 fail-closed 拒绝路径，未验证有权限 200 完整路径
+    - AC-P0B-IAM-001 Bootstrap 首次管理员（一次性操作，非重复验证）
+    - AC-P0B-IAM-003 首登改密
+    - AC-P0B-IAM-004 错误凭据登录
+    - AC-P0B-IAM-005 账户锁定
+    - AC-P0B-IAM-006 refresh 轮换
+    - AC-P0B-IAM-007 refresh 重放拒绝
+    - AC-P0B-IAM-008 禁用后旧 Token 失效
+    - AC-P0B-IAM-009 登出后 refresh 吊销
+    - AC-P0B-IAM-011 并发刷新
+    - AC-P0B-IAM-012 用户管理全生命周期
+    - AC-P0B-AGT-001~005 Agent 全部场景
+    - AC-P0B-AUTH-001~002, 004~009 全部场景
+    - AC-P0B-TAX-001~006 字典/标签全部场景
+    - AC-P0B-CFG-001~003 配置全部场景
+    - AC-P0B-IDM-001~003 幂等全部场景
+    - AC-P0B-JOB-001~005 任务全部场景
+    - AC-P0B-AUD-003~005 审计其他场景
+    - AC-P0B-NOT-001~005 通知全部场景
+    - AC-P0B-OBS-001, 002, 004, 005 观测其他场景
+    - AC-P0B-UI-001~006 前端全部场景
+
+artifacts:
+  reports:
+    - deploy/compose/scripts/verify.ps1 输出日志
+    - deploy/compose/scripts/verify.sh 输出日志
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries:
+    - V08: SELECT * FROM audit_log WHERE event_type = 'AUTH_LOGIN_SUCCEEDED'
+  auditEvents:
+    - AUTH_LOGIN_SUCCEEDED (V08)
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - 基于 2026-07-02 全栈人工执行
+    - 全栈 E2E 尚未纳入 CI 自动化
+  environmentDifferences: []
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

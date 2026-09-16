@@ -2,3 +2,9 @@
 .trae/
 *.log
 issues/
+
+# 代码分析产物
+graphify-out/
+
+# 本地 IDE 调试笔记
+debug-websocket-proxy-error.md

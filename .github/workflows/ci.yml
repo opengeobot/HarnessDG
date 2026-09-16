@@ -30,6 +30,42 @@ jobs:
       - name: mvnw verify
         run: ./mvnw -B verify
 
+  # 安全扫描：依赖漏洞 (OWASP dependency-check) + npm audit + 敏感信息泄露 (Gitleaks)
+  # 对应 REQ-SEC-001，CVSS >= 9.0 阻断流水线
+  security-scan:
+    name: Security (dependency + secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # 后端依赖漏洞扫描 (OWASP dependency-check)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Maven dependency-check
+        working-directory: backend
+        run: |
+          ./mvnw -B org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=9 \
+            -Dformat='ALL' \
+            -DskipSystemScopes=true
+      # 前端依赖漏洞扫描
+      - name: npm audit
+        working-directory: frontend
+        run: |
+          npm audit --audit-level=critical || {
+            echo "::error::Critical vulnerabilities found in frontend dependencies"
+            exit 1
+          }
+      # 敏感信息/Token 泄露检测
+      - name: Secret scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   frontend:
     name: Frontend (lint / typecheck / test / build)
     runs-on: ubuntu-latest
@@ -47,6 +83,9 @@ jobs:
           node-version: "20"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
+      # 配置 npm 国内镜像源加速依赖安装
+      - name: Set npm registry mirror
+        run: npm config set registry https://registry.npmmirror.com
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Lint

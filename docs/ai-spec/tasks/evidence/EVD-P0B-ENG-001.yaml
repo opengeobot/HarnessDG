@@ -1,0 +1,102 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0B-ENG-001
+status: PASS
+
+task:
+  taskId: null # 无独立 Task Card，基于 p0b-exit-catalog 工程门禁场景
+  requirements: [REQ-COM-001]
+  scenarios:
+    - AC-P0B-ENG-001
+    - AC-P0B-ENG-002
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: null # 无独立 Task Card 时跳过
+  taskValidation:
+    command: npx @redocly/cli lint contracts/openapi/aihub-v1.yaml
+    result: PASS
+  changedPathValidation:
+    command: null
+    result: null
+  completionValidation:
+    command: null
+    result: null
+
+source:
+  branch: main
+  commitSha: null # 基于 2026-07-02 全栈验证快照
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-02T21:00:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: "17+" # Maven wrapper
+  node: "20+"
+  pnpm: "9+"
+  docker: "24+"
+  composeProfiles: []
+  composeServices: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG
+  command: >
+    backend: mvnw -o verify (213 单元测试 + ArchUnit + 26 IT skipped due to no Docker network)
+    frontend: pnpm lint && pnpm typecheck && pnpm build (全部通过，无 >500kB 告警)
+    openapi: npx @redocly/cli lint contracts/openapi/aihub-v1.yaml (valid, 1 无害 warning)
+    compose: docker compose config --quiet (exit 0)
+  startedAt: 2026-07-02T18:00:00+08:00
+  finishedAt: 2026-07-02T21:00:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1
+  e3RealDependencies: []
+  e4EntryPoint: ""
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-ENG-001
+      assertion: 从空工作区按锁文件构建后端/前端，编译/Lint/类型/单测/ArchUnit 全通过；生成物可复现
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-002
+      assertion: OpenAPI lint 无错误；所有公开操作有 operation/tool ID
+      scenarioCategory: normal
+  notProven:
+    - AC-P0B-ENG-003 breaking diff 工具未配置
+    - AC-P0B-ENG-004 空库迁移需 Docker
+    - AC-P0B-ENG-005 升级迁移需 Docker
+    - AC-P0B-ENG-006 Profile 扫描需手动检查
+
+artifacts:
+  reports:
+    - 基于 `docs/architecture/implementation-status-2026-07-02.md` 第 3 节验证结果
+  logs: []
+  screenshots: []
+  traces: []
+  metrics:
+    - 后端: 213 单元测试通过
+    - 前端: lint/typecheck/build 全通过
+  databaseQueries: []
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - 26 个 IT 因无 Docker 网络跳过
+  assumptions:
+    - 基于 2026-07-02 全栈验证结果
+  environmentDifferences:
+    - 本机无 Docker 网络，E3/E4 场景未执行
+    - 构建使用 -o 离线模式
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

@@ -59,24 +59,25 @@
 | Webhook Inbox | `V18__webhook_inbox.sql`：`webhook_inbox` | `notification/**/*Test` | V04（表存在） | 已实现 |
 | 权限 seed 与幂等增强 | `V20__permission_seed_and_idempotency.sql`：`api_idempotency` 增加 principal_id、READER 角色收紧 | `authorization/**/*Test` | V04（表存在） | 已实现（AUD-006/016/017） |
 
-### Verify 用例与能力对应（`deploy/compose/scripts/verify.{ps1,sh}`）
+## 实现状态（2026-07-30）
 
-| 用例 | 覆盖 | 服务不可用行为 |
-| --- | --- | --- |
-| V01 | `docker compose config --quiet` | 始终执行 |
-| V02 | postgres/minio/gitea/backend 健康 | 容器未起时 SKIP |
-| V03 | 四个 Bucket 存在且非匿名 | minio 未起时 SKIP |
-| V04 | Flyway V1-V20 成功迁移、关键表存在 | postgres 未起时 SKIP |
-| V05 | 登录签发 JWT、`/me` 200、无 Token→401（fail-closed） | backend 未起时 SKIP |
-| V06 | `/system/audit-logs`、`/metrics/summary` 无 Token→401、越权→403 | backend 未起时 SKIP |
-| V07 | `/system/dictionaries`、`/tags` 无 Token→401、越权→403 | backend 未起时 SKIP |
-| V08 | `audit_log` 存在、无明文口令泄漏（脱敏）、登录成功产生 `AUTH_LOGIN_SUCCEEDED` 事件 | postgres 未起时 SKIP |
-| V09 | `/system/jobs` 默认拒绝 | backend 未起时 SKIP |
-| V10 | `/system/notifications` 默认拒绝 | backend 未起时 SKIP |
-| V11 | `/actuator/health` 200、`/system/dependencies` 默认拒绝 | backend 未起时 SKIP |
-| V12 | `/system/alerts` 告警列表、DEAD 任务/积压告警 | backend 未起时 SKIP |
+> 基于 2026-07-01 基线增量更新；P0-B 行仅标注变更，未变更行保持与 2026-07-01 一致。
+> P1-P4 业务能力的代码实现状态新增如下。
+> 迁移文件位于 `backend/src/main/resources/db/migration/`；Verify 用例位于 `deploy/compose/scripts/verify.{ps1,sh}`。
 
-> 说明：Bootstrap 管理员默认仅持 `ADMIN_SCOPES`（user/authorization/agent）且首登强制改密，
-> 因此 V06-V11 以“无 Token→401、越权 Token→403”验证 fail-closed 默认拒绝语义，
-> 而非以管理员令牌断言 200。完整“有权限 200”路径由带具体 Scope 的 IT（如 `AuthorizationIT`）覆盖。
-> SKIP 不等于 PASS；未启动全栈时相关用例只标 SKIP，脚本不冒充通过。
+| 能力 | 迁移/关键表 | 后端测试类（`backend/src/test/...`） | Verify 用例 | 状态 |
+| --- | --- | --- | --- | --- |
+| 资产 CRUD（P1） | `V2`/`V12`/`V14`：`asset`、`asset_tag`、治理字段 | `asset/**/*Test`、`asset/AssetCatalogIT` | V04/V06 | 已实现（代码+测试） |
+| 资产讨论（P1） | `V15`：`discussion_thread`、`discussion_comment`、`discussion_subscription` | `asset/**/*Test`（Discussion） | V04 | 已实现 |
+| Gitea 建仓（P1） | 无新增表（复用 Gitea API） | `integration/gitea/**/*Test` | V04 | 已实现 |
+| 版本管理（P2） | `V16`：`asset_version`、`version_artifact` | `version/**/*Test` | V04 | 已实现 |
+| 上传/下载（P2） | `V16`：`upload_session`、`upload_file`、`upload_part` | `transfer/**/*Test` | V04 | 已实现 |
+| 安全预览（P2） | `V16`：`asset_preview` | `version/PreviewController` 相关测试 | V04 | 已实现 |
+| DVC 配置（P2） | `V16`：`version_artifact`（DVC digest） | `version/DvcConfiguration` 相关测试 | V04 | 已实现 |
+| 发布校验/审批（P3） | `V17`：`validation_report`、`publish_request`、`review_decision` | `version/**/*Test` | V04 | 已实现 |
+| 不可变发布（P3） | `V17`：发布不可变约束 | `version/PublishApplicationService` 相关测试 | V04 | 已实现 |
+| MCP 端点（P4） | 无新增表（MCP 适配器） | `mcp/**/*Test` | V04 | 已实现 |
+| Agent API（P4） | 复用 `iam_agent`、`iam_agent_tool` | `identity/SystemAgentController` 相关测试 | V04 | 已实现 |
+
+> 以上状态为代码实现状态，Evidence 验证参见 `.trae/specs/gap-analysis-code-vs-design/gap-list.md`
+> Verify 用例 V01-V12 参见上文"实现状态（2026-07-01）"节的 V01-V12 表。

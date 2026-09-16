@@ -1,7 +1,7 @@
 # 已确认决策日志
 
-> 状态：`DRAFT`
-> 当前生效的 Accepted Decision：12（`DEC-005` 已被 `DEC-008` 替代）
+> 状态：`MAINTAINED`
+> 当前生效的 Accepted Decision：12（总计 13 条，含 1 条已被替代）
 
 ## 1. 规则
 

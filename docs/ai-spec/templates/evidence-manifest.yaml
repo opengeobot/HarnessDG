@@ -36,6 +36,7 @@ environment:
   pnpm: ...
   docker: ...
   composeProfiles: []
+  composeServices: [] # E4: 涉及的真实 Compose 服务清单，例如 [app, worker, postgres, nginx]
   externalDependencyVersions: {}
 
 execution:
@@ -46,12 +47,22 @@ execution:
   exitCode: null
   result: PASS # PASS | FAIL | SKIP
   evidenceLevel: E1 # E1 | E2 | E3 | E4 | E5
+  e3RealDependencies: [] # E3: 真实依赖列表（PostgreSQL/MinIO/Gitea 等），不可用 Mock 替代
+  e4EntryPoint: "" # E4: 入口点，Nginx | Browser | Client | MCP | REST
 
 coverage:
   proven:
     - scenarioId: AC-...
       assertion: ...
+      scenarioCategory: normal # normal | failure | denial | recovery
   notProven: []
+
+contractConsistency:
+  openapiMatched: null # OpenAPI 契约是否与被测 Commit 一致
+  eventSchemaMatched: null # Event Schema 是否与被测 Commit 一致
+  migrationMatched: null # Flyway Migration 是否与被测 Commit 一致
+  uiMatched: null # UI 资源是否与被测 Commit 一致
+  runbookMatched: null # Runbook 是否与被测 Commit 一致
 
 artifacts:
   reports: []
@@ -60,6 +71,7 @@ artifacts:
   traces: []
   metrics: []
   databaseQueries: []
+  auditEvents: [] # 审计事件记录：事件类型、主体、资源、result、errorCode
 
 secrets:
   redactionChecked: false
