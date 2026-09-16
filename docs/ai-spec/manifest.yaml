@@ -112,10 +112,10 @@ documents:
     status: PROPOSED
   - path: 01-requirements/p0b-identity-authorization.md
     kind: requirements
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/p0b-platform-services.md
     kind: requirements
-    status: PROPOSED
+    status: READY
   - path: 01-requirements/p1-asset-catalog.md
     kind: requirements
     status: OPEN

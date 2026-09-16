@@ -1,14 +1,14 @@
 # P0-B 身份、组织与授权需求
 
-> 状态：`PROPOSED`
+> 状态：`READY`（用户已批准；`REQ-AUTH-003` 保持 `OPEN`，等待 `TASK-GOV-002`）
 > 依据：ADR-0002、设计 5.4/5.5/11.1。
-> 已确认：`DEC-004`（单公司租户、多组织、多项目）。
-> 阻塞：用户跨组织、Team/Owner 与最终角色矩阵受 Q-102..106 影响。
+> 已确认：`DEC-004`（单公司租户、多组织、多项目）、`DEC-011`（多组织多项目成员关系与 Team/Owner 语义）。
+> 阻塞：`Q-102..106` 已由 `DEC-011` 闭合，不再是阻塞项；仅 `REQ-AUTH-003` 的最终权限矩阵等待 `TASK-GOV-002`。
 
 ## REQ-IAM-001 Bootstrap 首个管理员
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: 部署管理员
@@ -31,7 +31,7 @@ minimumEvidenceLevel: E4
 
 - 非空库尝试引导：无操作并产生安全级运行日志，不回显账号信息；
 - 数据写入失败：事务回滚，不留下无 Principal 的 User 或无 User 的 Principal；
-- 审计事件：`BOOTSTRAP_ADMIN_CREATED`（事件是否纳入公共 Schema 待补）。
+- 审计事件：`BOOTSTRAP_ADMIN_CREATED`；P0-B 只要求写入 `audit_log`，是否纳入公共 Event Schema 不在本需求验收范围。
 
 ### 追踪
 
@@ -42,7 +42,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-002 用户登录与首次改密
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: USER
@@ -65,7 +65,7 @@ minimumEvidenceLevel: E4
 - 成功清理失败计数，签发 access JWT 和 refresh Cookie；
 - PENDING_ACTIVATION/forcePasswordChange 用户仅能访问 `/me`、改密、刷新策略允许端点和登出；
 - 改密验证当前密码、新密码策略和确认值；
-- 成功改密递增 tokenVersion，吊销旧 Token Family，用户进入 ACTIVE，并签发/要求重新登录的精确策略需确认；
+- 成功改密递增 tokenVersion、吊销该用户全部旧 Token Family，并为当前会话签发新 Token Family（当前会话不中断），用户进入 ACTIVE；
 - 响应/日志/审计不包含密码或 JWT。
 
 ### 错误、审计与指标
@@ -75,7 +75,7 @@ minimumEvidenceLevel: E4
 | 用户名/密码错误 | `AUTH_INVALID_CREDENTIALS` | `AUTH_LOGIN_FAILED`/FAILED |
 | LOCKED | `AUTH_ACCOUNT_LOCKED` | `AUTH_LOGIN_FAILED`/DENIED |
 | DISABLED | `AUTH_ACCOUNT_DISABLED` | `AUTH_LOGIN_FAILED`/DENIED |
-| 未先改密访问业务 | `PASSWORD_CHANGE_REQUIRED` | 访问拒绝审计策略待定 |
+| 未先改密访问业务 | `PASSWORD_CHANGE_REQUIRED` | 拒绝审计（不记录凭据/JWT） |
 | 新密码不合规 | `PASSWORD_POLICY_VIOLATION` | 不记录密码 |
 | 成功 | — | `AUTH_LOGIN_SUCCEEDED` / `USER_PASSWORD_CHANGED` |
 
@@ -90,7 +90,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-003 access JWT 校验与 PrincipalContext
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: 所有在线 Principal
@@ -134,7 +134,7 @@ locale/requestId/traceId`。
 ## REQ-IAM-004 refresh 轮换、并发与重放检测
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: USER 浏览器会话
@@ -159,7 +159,7 @@ minimumEvidenceLevel: E4
 - 重放：`AUTH_REFRESH_REPLAYED` + `AUTH_TOKEN_REPLAY_REJECTED`/DENIED；
 - 其他无效：`AUTH_UNAUTHENTICATED` 或 `AUTH_TOKEN_EXPIRED`；
 - 成功：`AUTH_TOKEN_REFRESHED`；
-- 审计只记录 Family/主体的安全摘要或业务 ID，不记录 JWT/jti 原文策略需统一。
+- 审计只记录 Family/主体的安全摘要或业务 ID，不记录 JWT、jti 或 credential 原文（`INV-TKN-004`、`INV-TKN-008`）。
 
 ### 追踪
 
@@ -170,7 +170,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-005 登出、禁用、改密和重置的会话失效
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actors: [USER, 用户管理员, Agent 管理员]
@@ -182,9 +182,10 @@ minimumEvidenceLevel: E4
 - 登出吊销当前 Token Family 并清除 refresh Cookie；重复登出安全幂等；
 - 禁用 User/Agent 递增 tokenVersion、吊销所有 Family/credential；
 - 重置密码吊销所有会话，User 进入 PENDING_ACTIVATION 并强制改密；
-- 用户自行改密至少吊销其他会话；是否保留当前会话由产品确认；
+- 用户自行改密吊销该用户其他会话的 Token Family，当前会话轮换 refresh Token 后保留，不强制重新登录；
 - 任一动作提交后的下一次旧 access 请求必须实时失败；
-- 已排队且尚未执行的该 Principal 写任务必须冻结/取消/重新授权，精确类型策略需 Job 需求声明。
+- 已排队且尚未执行的该 Principal 写任务必须冻结/取消/重新授权；具体 Task Type 与动作由 `REQ-JOB-001`
+  的任务 Catalog 声明。
 
 ### 权限/审计
 
@@ -201,7 +202,7 @@ minimumEvidenceLevel: E4
 ## REQ-IAM-006 用户全生命周期管理
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actor: 用户管理员
@@ -219,7 +220,7 @@ minimumEvidenceLevel: E4
 - 编辑不能通过请求体修改 principalId/userId/tokenVersion/password hash；
 - 启停和重置遵守 UserStatus；
 - 不提供物理删除；
-- 不能禁用最后一个有效平台管理员，规则需加入正式权限决策；
+- 不能禁用最后一个有效平台管理员：拒绝并返回 `COMMON_INVALID_ARGUMENT`，同时产生拒绝审计；
 - 所有列表/详情/动作受后端 Permission，不仅依赖前端按钮。
 
 ### 审计与通知
@@ -235,7 +236,7 @@ minimumEvidenceLevel: E4
 ## REQ-AGT-001 Agent 注册与凭据交换
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actors: [Agent 管理员, AGENT]
@@ -260,7 +261,7 @@ minimumEvidenceLevel: E4
 - 未知 Agent：`AGENT_NOT_FOUND` 或统一凭据错误，外部不得枚举；
 - 无效凭据：`AUTH_INVALID_CREDENTIALS`；
 - 禁用：`AUTH_ACCOUNT_DISABLED`；
-- 未知 Scope/Tool：`COMMON_INVALID_ARGUMENT`（建议新增稳定专用错误）；
+- 未知 Scope/Tool：`COMMON_INVALID_ARGUMENT`；P0-B 不新增专用错误码，未知取值不得进入授权集合；
 - 事件：`AGENT_REGISTERED`、`CLIENT_TOKEN_ISSUED/REJECTED`、`AGENT_TOOL_ALLOWLIST_UPDATED`。
 
 ### 追踪
@@ -272,14 +273,14 @@ minimumEvidenceLevel: E4
 ## REQ-ORG-001 Organization、Project 与 Membership
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P0-B
-blockedBy: [Q-102, Q-105]
+decisions: [DEC-011]
 minimumEvidenceLevel: E4
 ```
 
-### 建议行为
+### 行为
 
 - 系统只有一个公司租户，不提供租户 CRUD；平台管理员创建/停用 Organization；
 - 组织管理员在自己 Organization 内创建/停用 Project、管理成员；
@@ -295,7 +296,8 @@ minimumEvidenceLevel: E4
 
 - `organization:manage`、`project:view/manage`；
 - `ORGANIZATION_NOT_FOUND/ALREADY_EXISTS/MEMBER_*`、`PROJECT_*`；
-- `ORGANIZATION_CREATED`、成员添加/移除、`PROJECT_CREATED`；启停事件需补契约。
+- `ORGANIZATION_CREATED`、成员添加/移除、`PROJECT_CREATED`；启停事件定稿为
+  `ORGANIZATION_ENABLED/DISABLED`、`PROJECT_ENABLED/DISABLED`，与成员事件一并进入受控 Event Catalog。
 
 ### 追踪
 
@@ -306,20 +308,20 @@ minimumEvidenceLevel: E4
 ## REQ-ORG-002 Team 与资产责任主体
 
 ```yaml
-status: OPEN
-priority: MUST if Team accepted
-phase: P0-B/P1 boundary
-blockedBy: [Q-103, Q-104, Q-105]
+status: READY
+priority: MUST
+phase: P0-B
+decisions: [DEC-011]
 minimumEvidenceLevel: E4
 ```
 
-### 建议行为
+### 行为
 
 - Team 是 Organization 内正式资源，具有 teamId/code/name/status/rowVersion；
 - 组织管理员管理 Team 和成员；
 - Team Member 必须先是 Organization Member；
 - Team 可作为 Role Binding、ACL 和 Asset Owner 的主体；
-- 资产至少一个 Team Owner，可附个人 Maintainer（建议）；
+- 资产至少一个 Team Owner，可附个人 Maintainer；
 - 移除成员/停用 Team 不得留下无 Owner 资产；
 - 禁止用字符串 team name 作为 Owner。
 
@@ -332,7 +334,7 @@ minimumEvidenceLevel: E4
 ## REQ-AUTH-001 统一实时授权判定
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 actors: 所有 Principal/Adapter
@@ -378,7 +380,7 @@ principal + action/permission + scope + resource + resourceState
 ## REQ-AUTH-002 列表权限下推与防枚举
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -412,11 +414,11 @@ minimumEvidenceLevel: E4
 status: OPEN
 priority: MUST
 phase: P0-B
-blockedBy: [Q-105, final permission matrix]
+blockedBy: [TASK-GOV-002]
 minimumEvidenceLevel: E4
 ```
 
-### 建议行为
+### 行为
 
 - Permission Catalog 只由版本化 Migration/代码扩展，不由 UI 任意创建；
 - 内置 Role 稳定不可改删；自定义 Role 可在允许作用域创建；

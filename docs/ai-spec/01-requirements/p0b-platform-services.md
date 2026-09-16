@@ -1,12 +1,14 @@
 # P0-B 治理、可靠性与观测需求
 
-> 状态：`PROPOSED`
+> 状态：`READY`（用户已批准；`REQ-OBS-001` 保持 `OPEN`，受 `AUD-005` 阻塞）
 > 依据：ADR-0002、设计 5.6-5.14、11、13-15。
+> 已确认：`DEC-013`（zh-CN/en-US 运行时切换、企业后台 UI 基线与 Compose/Playwright 验收）。
+> 阻塞：`REQ-OBS-001` 受 `AUD-005`（OTel 范围冲突）阻塞，其余需求无未决阻塞。
 
 ## REQ-COM-001 统一 ID、上下文、响应与错误
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E3
@@ -41,7 +43,7 @@ minimumEvidenceLevel: E3
 ## REQ-TAX-001 字典与运行时国际化
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permissions: [dictionary:read, dictionary:manage]
@@ -76,7 +78,7 @@ minimumEvidenceLevel: E4
 ## REQ-TAG-001 平台/组织受控标签
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permissions: [tag:read, tag:manage]
@@ -93,13 +95,13 @@ minimumEvidenceLevel: E4
 - 关联前校验标签 ACTIVE 且对目标资产 Organization 可用；
 - DISABLED 标签保留历史关联/显示，禁止新关联；
 - enable/disable/update 使用 rowVersion；
-- merge 若进入 MVP，必须定义 source/target、引用迁移、幂等、恢复和审计；否则明确非目标；
+- merge 明确为 P0-B 非目标：不提供 merge API，不产生合并事件；
 - 删除仅允许从未引用或完成保留策略的标签，默认使用 DISABLED。
 
 ### 错误与审计
 
 `TAG_NOT_FOUND/ALREADY_EXISTS/VALUE_INVALID/CONCURRENT_MODIFICATION`；
-`TAG_CREATED/UPDATED/ENABLED/DISABLED/MERGED`（Merge 事件待范围确认）。
+`TAG_CREATED/UPDATED/ENABLED/DISABLED`。
 
 ### 追踪
 
@@ -110,7 +112,7 @@ minimumEvidenceLevel: E4
 ## REQ-CFG-001 类型化非敏感运行配置
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permission: system:configure
@@ -127,7 +129,7 @@ minimumEvidenceLevel: E4
 - key 或 value 命中 Secret 规则时拒绝，不能只按 key 名判断；
 - update 要求 expected version 并记录 old/new 的脱敏摘要；
 - hotReloadable=true 提交后原子刷新读模型；false 明确返回 restartRequired；
-- 安全和发布策略配置要求二次确认，双人审批是否需要由产品决策；
+- 安全和发布策略变更需要二次确认并写入审计；双人审批不在 P0-B 范围，由 `INV-CFG-006` 后续决策定义；
 - 配置读取失败使用安全默认或阻止启动，不能静默宽松。
 
 ### 错误与审计
@@ -144,7 +146,7 @@ minimumEvidenceLevel: E4
 ## REQ-IDM-001 写接口幂等
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -176,7 +178,7 @@ minimumEvidenceLevel: E4
 ## REQ-JOB-001 PostgreSQL 可靠任务
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permissions: [job:read, job:manage]
@@ -215,7 +217,7 @@ pending/running/retry/dead、claim conflict、lease expiry、duration、attempt 
 ## REQ-LOG-001 结构化运行日志与脱敏
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -247,7 +249,7 @@ minimumEvidenceLevel: E4
 ## REQ-AUD-001 不可变业务审计
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permission: audit:read
@@ -265,7 +267,8 @@ minimumEvidenceLevel: E4
 - 不提供 Update/Delete API，数据库阻止普通应用角色改删；
 - 查询使用 Cursor、受 `audit:read` 和数据范围限制；
 - 保留期和归档不能由普通管理员绕过；
-- 审计写失败的业务处理策略明确：高风险写应 fail closed 还是可靠缓冲需分类，不允许仅 warn 后永久丢失。
+- 审计写失败的业务处理策略：高风险写（发布、授权、成员/角色/ACL、配置变更）fail closed 并回滚业务；
+  低风险写允许经持久化缓冲重试；任何分类都不允许仅 warn 后静默丢失。
 
 ### 追踪
 
@@ -276,7 +279,7 @@ minimumEvidenceLevel: E4
 ## REQ-NOT-001 站内通知与 Outbox
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 permission: notification:read
@@ -294,7 +297,8 @@ minimumEvidenceLevel: E4
 - 事务回滚时 Notification/Outbox 同时不存在；
 - `VERSION_*`、`UPLOAD_FAILED`、`JOB_DEAD`、`AGENT_ACCESS_DENIED`、`STORAGE_QUOTA_WARNING`、
   `SYSTEM_DEPENDENCY_UNHEALTHY` 进入受控 Event Catalog；
-- 通知管理权限（模板/Delivery/重发）与本人读取权限分离，当前 Permission Catalog 需补决策。
+- 通知模板、Delivery 与重发管理明确为 P0-B 非目标：不新增 `notification:manage` 类管理权限；
+  P0-B 只提供接收者本人的读取与已读标记，管理端页面在权限决策追加前不实现。
 
 ### 错误/指标
 
@@ -308,7 +312,7 @@ minimumEvidenceLevel: E4
 ## REQ-WHK-001 签名 Webhook 投递
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
 minimumEvidenceLevel: E4
@@ -343,7 +347,7 @@ minimumEvidenceLevel: E4
 status: OPEN
 priority: MUST
 phase: P0-B
-blockedBy: [AUD-005, Q-304]
+blockedBy: [AUD-005]
 permission: system:observe
 minimumEvidenceLevel: E4/E5
 ```
@@ -358,7 +362,7 @@ minimumEvidenceLevel: E4/E5
 - `/system/dependencies` 受权并隐藏 Endpoint、凭据、拓扑敏感细节；
 - API/MCP/Job/依赖/DB/JVM/业务指标覆盖设计清单；
 - DEAD、Inbox/Outbox 积压、一致性差异、依赖故障和安全事件有告警；
-- observability Compose Profile 含 Collector/Prometheus/Grafana（Loki 可选策略需确认）；
+- observability Compose Profile 含 Collector/Prometheus/Grafana；Loki 为可选组件，不进入 P0-B 验收断言；
 - 目标是实际 Trace/Target/Dashboard/Alert 证据，不是 Bean 存在。
 
 ### 追踪
@@ -369,9 +373,10 @@ minimumEvidenceLevel: E4/E5
 ## REQ-UI-001 公共管理端
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P0-B
+decisions: [DEC-013]
 minimumEvidenceLevel: E4
 ```
 
