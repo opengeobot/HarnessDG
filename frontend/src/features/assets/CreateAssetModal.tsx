@@ -25,6 +25,7 @@ interface FormValues {
   displayName?: string;
   description?: string;
   visibility: Visibility;
+  ownerTeamId?: string;
   owners?: string[];
   tags?: string[];
   tagIds?: string[];
@@ -71,6 +72,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           displayName: values.displayName,
           description: values.description,
           visibility: values.visibility,
+          ownerTeamId: values.ownerTeamId,
           owners: values.owners,
           tags: values.tags,
           tagIds: values.tagIds,
@@ -185,6 +187,24 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
               { value: 'INTERNAL', label: t('assets.create.internal') },
               { value: 'PUBLIC', label: t('assets.create.public') },
             ]}
+          />
+        </Form.Item>
+        <Form.Item
+          name="ownerTeamId"
+          label={t('assets.create.ownerTeamLabel')}
+          rules={[{ required: true, message: t('assets.create.ownerTeamRequired') }]}
+        >
+          <ControlledSelect
+            apiUrl={`/system/organizations/${orgId ?? ''}/teams`}
+            queryKey={['ownerTeams', orgId ?? '']}
+            enabled={!!orgId}
+            extractOptions={(data) =>
+              (data as Array<{ teamId: string; name: string }>).map(
+                (team): SelectOption => ({ value: team.teamId, label: `${team.name} (${team.teamId})` }),
+              )
+            }
+            placeholder={t('assets.create.ownerTeamPlaceholder')}
+            disabled={!orgId}
           />
         </Form.Item>
         <Form.Item name="owners" label={t('assets.create.ownerLabel')}>

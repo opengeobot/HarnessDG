@@ -23,6 +23,8 @@ interface PreviewPanelProps {
 interface ParsedPreview {
   rows: Record<string, unknown>[];
   truncated?: boolean;
+  columnTruncated?: boolean;
+  errorReason?: string;
 }
 
 export function PreviewPanel({ assetId, versionId }: PreviewPanelProps) {
@@ -73,6 +75,19 @@ export function PreviewPanel({ assetId, versionId }: PreviewPanelProps) {
     parsed = null;
   }
 
+  // Size exceeded error
+  if (parsed && parsed.errorReason === 'PREVIEW_SIZE_EXCEEDED') {
+    return (
+      <Card title={t('version.preview')}>
+        <Alert
+          type="warning"
+          message={t('version.previewSizeExceeded')}
+          showIcon
+        />
+      </Card>
+    );
+  }
+
   if (!parsed || !parsed.rows || parsed.rows.length === 0) {
     return (
       <Card title={t('version.preview')}>
@@ -114,6 +129,14 @@ export function PreviewPanel({ assetId, versionId }: PreviewPanelProps) {
         <Alert
           type="warning"
           message={t('version.previewTruncated')}
+          showIcon
+          style={{ marginBottom: 12 }}
+        />
+      )}
+      {parsed.columnTruncated && (
+        <Alert
+          type="warning"
+          message={t('version.previewColumnTruncated')}
           showIcon
           style={{ marginBottom: 12 }}
         />

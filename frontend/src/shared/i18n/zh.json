@@ -169,6 +169,9 @@
       "public": "公开",
       "ownerLabel": "Owner 团队",
       "ownerPlaceholder": "请选择 Owner 团队（需先选组织）",
+      "ownerTeamLabel": "所属团队",
+      "ownerTeamRequired": "请选择所属团队",
+      "ownerTeamPlaceholder": "请选择所属团队（需先选组织）",
       "controlledTagIds": "受控标签 ID",
       "license": "许可证",
       "dataFormat": "数据格式",
@@ -300,7 +303,9 @@
     "preview": "数据预览",
     "previewNotAvailable": "暂无预览数据",
     "previewEmpty": "预览内容为空",
-    "previewTruncated": "预览已截断，仅显示前 100 行"
+    "previewTruncated": "预览已截断，仅显示前 100 行",
+    "previewColumnTruncated": "部分列已隐藏（限制：50 列）",
+    "previewSizeExceeded": "文件过大，无法预览（限制：1 MiB）"
   },
   "review": {
     "title": "发布审批",

@@ -169,6 +169,9 @@
       "public": "Public",
       "ownerLabel": "Owner Team",
       "ownerPlaceholder": "Select owner team (requires organization)",
+      "ownerTeamLabel": "Owner Team",
+      "ownerTeamRequired": "Please select owner team",
+      "ownerTeamPlaceholder": "Select owner team (requires organization)",
       "controlledTagIds": "Controlled Tag IDs",
       "license": "License",
       "dataFormat": "Data Format",
@@ -300,7 +303,9 @@
     "preview": "Data Preview",
     "previewNotAvailable": "No preview available",
     "previewEmpty": "Preview content is empty",
-    "previewTruncated": "Preview truncated, showing first 100 rows only"
+    "previewTruncated": "Preview truncated, showing first 100 rows only",
+    "previewColumnTruncated": "Some columns were hidden (limit: 50)",
+    "previewSizeExceeded": "File too large for preview (limit: 1 MiB)"
   },
   "review": {
     "title": "Release Review",

@@ -95,6 +95,7 @@ export interface CreateAssetRequest {
   displayName?: string;
   description?: string;
   visibility: Visibility;
+  ownerTeamId?: string;
   owners?: string[];
   tags?: string[];
   tagIds?: string[];
