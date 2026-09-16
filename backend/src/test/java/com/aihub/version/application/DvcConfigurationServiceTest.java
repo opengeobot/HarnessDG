@@ -72,4 +72,42 @@ class DvcConfigurationServiceTest {
         verify(authorizationService).requirePermission("asset:read");
         verify(auditService).record(any());
     }
+
+    @Test
+    @DisplayName("生成 Version 级别 DVC 完整配置应包含短期 S3 凭据")
+    void generateDvcRemoteConfigShouldIncludeShortTermCredentials() {
+        DvcConfigurationService.DvcRemoteConfigFull config = service.generateDvcRemoteConfig("ver_1");
+
+        assertThat(config.bucket()).isEqualTo("dvc-cache");
+        assertThat(config.endpoint()).isEqualTo("http://localhost:9000");
+        assertThat(config.prefix()).isEqualTo("versions/ver_1/");
+        assertThat(config.accessKey()).isEqualTo("minioadmin");
+        assertThat(config.secretKey()).isEqualTo("minioadmin");
+        assertThat(config.expiresAt()).isAfter(java.time.Instant.now().plusSeconds(14 * 60));
+        assertThat(config.dvcRemoteConfig()).contains("[remote \"aihub\"]");
+        assertThat(config.dvcRemoteConfig()).contains("s3://dvc-cache/versions/ver_1/");
+
+        verify(authorizationService).requirePermission("asset:read");
+        verify(auditService).record(any());
+    }
+
+    @Test
+    @DisplayName("生成 Version 级别 DVC 配置审计中 secretKey 应脱敏")
+    void generateDvcRemoteConfigAuditShouldMaskSecretKey() {
+        service.generateDvcRemoteConfig("ver_1");
+
+        // 验证审计事件中 secretKey 被脱敏为 "***"
+        verify(auditService).record(argThat(event ->
+                "***".equals(event.attributes().get("secretKey"))));
+    }
+
+    @Test
+    @DisplayName("generateDvcRemoteConfig 应优先使用外部端点")
+    void generateDvcRemoteConfigShouldPreferExternalEndpoint() {
+        minioProperties.setExternalEndpoint("http://minio.example.com:9000");
+
+        DvcConfigurationService.DvcRemoteConfigFull config = service.generateDvcRemoteConfig("ver_1");
+
+        assertThat(config.endpoint()).isEqualTo("http://minio.example.com:9000");
+    }
 }

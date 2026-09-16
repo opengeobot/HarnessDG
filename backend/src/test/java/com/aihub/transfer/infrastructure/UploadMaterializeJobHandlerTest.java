@@ -1,8 +1,14 @@
+/*
+ * 功能: UploadMaterializeJobHandler 单元测试——覆盖路径校验、幂等、物化流程、SHA-256 一致性校验。
+ * 时间: 2026-07-30
+ * 作者: AxeXie
+ */
 package com.aihub.transfer.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.transfer.domain.StoragePort;
 import com.aihub.transfer.domain.UploadSession;
 import com.aihub.transfer.domain.UploadSessionRepository;
 import com.aihub.transfer.domain.UploadSessionStatus;
@@ -39,13 +45,15 @@ class UploadMaterializeJobHandlerTest {
     private VersionRepository versionRepository;
     @Mock
     private IdGenerator idGenerator;
+    @Mock
+    private StoragePort storagePort;
 
     private UploadMaterializeJobHandler handler;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        handler = new UploadMaterializeJobHandler(sessionRepository, versionRepository, idGenerator, objectMapper);
+        handler = new UploadMaterializeJobHandler(sessionRepository, versionRepository, idGenerator, objectMapper, storagePort);
     }
 
     @Test
@@ -65,6 +73,9 @@ class UploadMaterializeJobHandlerTest {
             when(sessionRepository.findBySessionId(any())).thenReturn(Optional.of(session));
             when(versionRepository.findByVersionId(any())).thenReturn(Optional.empty());
             when(idGenerator.generate(IdPrefix.ARTIFACT)).thenReturn("art_1");
+            when(storagePort.statObject(anyString(), anyString()))
+                    .thenReturn(new StoragePort.ObjectMetadata(100L, "abc123", "\"abc123\""));
+            doNothing().when(storagePort).copyObject(anyString(), anyString(), anyString(), anyString());
 
             String payload = buildPayload("model.bin", "abc123", 100L);
             JobContext context = createContext(payload);
@@ -179,6 +190,9 @@ class UploadMaterializeJobHandlerTest {
             Version version = Version.createDraft("ver_1", "asset_1", "v1", "principal_1");
             when(versionRepository.findByVersionId(any())).thenReturn(Optional.of(version));
             when(idGenerator.generate(IdPrefix.ARTIFACT)).thenReturn("art_1");
+            when(storagePort.statObject(anyString(), anyString()))
+                    .thenReturn(new StoragePort.ObjectMetadata(1024L, "sha256abc", "\"sha256abc\""));
+            doNothing().when(storagePort).copyObject(anyString(), anyString(), anyString(), anyString());
 
             String payload = buildPayload("model.bin", "sha256abc", 1024L);
             JobContext context = createContext(payload);
@@ -205,6 +219,10 @@ class UploadMaterializeJobHandlerTest {
             when(sessionRepository.findBySessionId(any())).thenReturn(Optional.of(session));
             when(versionRepository.findByVersionId(any())).thenReturn(Optional.empty());
             when(idGenerator.generate(IdPrefix.ARTIFACT)).thenReturn("art_1", "art_2");
+            when(storagePort.statObject(anyString(), anyString()))
+                    .thenReturn(new StoragePort.ObjectMetadata(100L, "abc", "\"abc\""))
+                    .thenReturn(new StoragePort.ObjectMetadata(50L, "def", "\"def\""));
+            doNothing().when(storagePort).copyObject(anyString(), anyString(), anyString(), anyString());
 
             Map<String, Object> payloadMap = new HashMap<>();
             payloadMap.put("sessionId", "sess_1");
@@ -222,6 +240,87 @@ class UploadMaterializeJobHandlerTest {
             // 验证先删除后插入
             verify(versionRepository).deleteArtifactsByVersion("ver_1");
             verify(versionRepository, times(2)).insertArtifact(any(Artifact.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("SHA-256 一致性校验 (REQ-DVC-001)")
+    class Sha256ConsistencyCheck {
+
+        @Test
+        @DisplayName("客户端 SHA-256 与存储对象 SHA-256 一致时应通过")
+        void shouldPassWhenSha256Matches() throws Exception {
+            UploadSession session = createOpenSession();
+            when(sessionRepository.findBySessionId(any())).thenReturn(Optional.of(session));
+            when(versionRepository.findByVersionId(any())).thenReturn(Optional.empty());
+            when(idGenerator.generate(IdPrefix.ARTIFACT)).thenReturn("art_1");
+
+            // 模拟 MinIO 对象 ETag（非 multipart = SHA-256）
+            String expectedSha256 = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+            when(storagePort.statObject(anyString(), anyString()))
+                    .thenReturn(new StoragePort.ObjectMetadata(100L, expectedSha256, "\"" + expectedSha256 + "\""));
+            doNothing().when(storagePort).copyObject(anyString(), anyString(), anyString(), anyString());
+
+            String payload = buildPayload("model.bin", expectedSha256, 100L);
+            JobContext context = createContext(payload);
+
+            // 不应抛出异常
+            handler.handle(context);
+
+            // 验证 DVC push 被调用
+            verify(storagePort).copyObject(eq("asset-staging"), anyString(), eq("dvc-cache"), anyString());
+            // 验证工件写入
+            verify(versionRepository).insertArtifact(any(Artifact.class));
+        }
+
+        @Test
+        @DisplayName("SHA-256 不一致时应拒绝物化")
+        void shouldFailWhenSha256Mismatch() throws Exception {
+            UploadSession session = createOpenSession();
+            when(sessionRepository.findBySessionId(any())).thenReturn(Optional.of(session));
+
+            String clientSha256 = "client1234567890abcdef1234567890abcdef1234567890abcdef12345678";
+            String actualSha256 = "actual1234567890abcdef1234567890abcdef1234567890abcdef12345678";
+            when(storagePort.statObject(anyString(), anyString()))
+                    .thenReturn(new StoragePort.ObjectMetadata(100L, actualSha256, "\"" + actualSha256 + "\""));
+
+            String payload = buildPayload("model.bin", clientSha256, 100L);
+            JobContext context = createContext(payload);
+
+            assertThatThrownBy(() -> handler.handle(context))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("SHA-256 digest mismatch")
+                    .hasMessageContaining(clientSha256)
+                    .hasMessageContaining(actualSha256);
+
+            // DVC push 不应被调用
+            verify(storagePort, never()).copyObject(anyString(), anyString(), anyString(), anyString());
+            // 工件不应被写入
+            verify(versionRepository, never()).insertArtifact(any(Artifact.class));
+        }
+
+        @Test
+        @DisplayName("SHA-256 大小写不敏感比对")
+        void shouldIgnoreCaseWhenComparingSha256() throws Exception {
+            UploadSession session = createOpenSession();
+            when(sessionRepository.findBySessionId(any())).thenReturn(Optional.of(session));
+            when(versionRepository.findByVersionId(any())).thenReturn(Optional.empty());
+            when(idGenerator.generate(IdPrefix.ARTIFACT)).thenReturn("art_1");
+
+            // 客户端提供大写 hex，MinIO 返回小写 hex
+            String upperSha256 = "ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890";
+            String lowerSha256 = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+            when(storagePort.statObject(anyString(), anyString()))
+                    .thenReturn(new StoragePort.ObjectMetadata(100L, lowerSha256, "\"" + lowerSha256 + "\""));
+            doNothing().when(storagePort).copyObject(anyString(), anyString(), anyString(), anyString());
+
+            String payload = buildPayload("model.bin", upperSha256, 100L);
+            JobContext context = createContext(payload);
+
+            // 不应抛出异常：大小写差异被忽略
+            handler.handle(context);
+
+            verify(storagePort).copyObject(anyString(), anyString(), anyString(), anyString());
         }
     }
 

@@ -100,7 +100,7 @@ class AssetControllerTest {
         Asset asset = Asset.create("ast_demo", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "一个领域问答模型", Visibility.INTERNAL,
                 List.of("team-nlp"), List.of("text-generation"), List.of("tag_001"), "Apache-2.0",
-                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+                "team_nlp_001", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
         return AssetView.from(asset);
     }
 

@@ -1,0 +1,4 @@
+{
+  "files": ["../escape.csv", "./relative.csv", "normal.csv"],
+  "version": "1.0"
+}

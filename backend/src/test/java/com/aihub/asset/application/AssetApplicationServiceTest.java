@@ -84,14 +84,14 @@ class AssetApplicationServiceTest {
     private CreateAssetCommand modelCommand() {
         return new CreateAssetCommand(AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation"), null, "Apache-2.0",
+                List.of("text-generation"), null, "Apache-2.0", "team_nlp_001",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
     private Asset storedModel() {
         return Asset.create("ast_stored", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, List.of("team-nlp"),
-                List.of("text-generation"), null, "Apache-2.0",
+                List.of("text-generation"), null, "Apache-2.0", "team_nlp_001",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
     }
 
@@ -124,7 +124,7 @@ class AssetApplicationServiceTest {
 
         UpdateAssetCommand command = new UpdateAssetCommand(null, null, "新名", "新描述",
                 Visibility.PUBLIC, List.of("team-platform"), List.of("llm"), null, "MIT",
-                new ModelProfile("vllm", "chat", null), null, "usr_02");
+                "team_platform_001", new ModelProfile("vllm", "chat", null), null, "usr_02");
         AssetView view = service.updateAsset("ast_stored", command);
 
         assertThat(view.displayName()).isEqualTo("新名");
@@ -177,7 +177,7 @@ class AssetApplicationServiceTest {
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "bad-model", "Bad Model", null, Visibility.INTERNAL, List.of("team-nlp"), null, null,
-                "Bad-License", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+                "Bad-License", "team_nlp_001", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
 
         assertThatThrownBy(() -> service.createAsset(command))
                 .isInstanceOf(ValidationException.class);
@@ -192,7 +192,7 @@ class AssetApplicationServiceTest {
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "tagged-model", "Tagged Model", null, Visibility.INTERNAL, List.of("team-nlp"),
-                null, List.of("tag_001"), "Apache-2.0",
+                null, List.of("tag_001"), "Apache-2.0", "team_nlp_001",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
         AssetView view = service.createAsset(command);
 
@@ -207,7 +207,7 @@ class AssetApplicationServiceTest {
 
         CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
                 "bad-tag-model", "Bad Tag Model", null, Visibility.INTERNAL, List.of("team-nlp"),
-                null, List.of("tag_unknown"), "Apache-2.0",
+                null, List.of("tag_unknown"), "Apache-2.0", "team_nlp_001",
                 new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
 
         assertThatThrownBy(() -> service.createAsset(command))
@@ -272,5 +272,129 @@ class AssetApplicationServiceTest {
 
         assertThatThrownBy(() -> service.deprecateAsset("ast_stored", "usr_01"))
                 .isInstanceOf(ConflictException.class);
+    }
+
+    // ---- DEC-011: Asset must have at least one Team owner ----
+
+    @Test
+    void createAssetRejectsMissingOwnerTeamId() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "no-team-model", "No Team Model", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, null, "Apache-2.0", null,
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("ownerTeamId");
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetRejectsBlankOwnerTeamId() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "blank-team-model", "Blank Team Model", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, null, "Apache-2.0", "  ",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("ownerTeamId");
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetSucceedsWithValidOwnerTeamId() {
+        AssetView view = service.createAsset(modelCommand());
+
+        assertThat(view.ownerTeamId()).isEqualTo("team_nlp_001");
+        verify(assetRepository).insert(any(Asset.class));
+    }
+
+    @Test
+    void updateAssetRejectsBlankOwnerTeamId() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        UpdateAssetCommand command = new UpdateAssetCommand(null, null, null, null,
+                null, null, null, null, null, "  ",
+                null, null, "usr_01");
+
+        assertThatThrownBy(() -> service.updateAsset("ast_stored", command))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("ownerTeamId");
+    }
+
+    @Test
+    void updateAssetSucceedsWithValidOwnerTeamId() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+        doNothing().when(assetRepository).update(any(Asset.class));
+
+        UpdateAssetCommand command = new UpdateAssetCommand(null, null, null, null,
+                null, null, null, null, null, "team_new_001",
+                null, null, "usr_01");
+        AssetView view = service.updateAsset("ast_stored", command);
+
+        assertThat(view.ownerTeamId()).isEqualTo("team_new_001");
+        verify(assetRepository).update(any(Asset.class));
+    }
+
+    // ---- aih:// coordinate format validation ----
+
+    @Test
+    void createAssetValidatesCoordinateFormat() {
+        AssetView view = service.createAsset(modelCommand());
+
+        assertThat(view.namespace()).isEqualTo("nlp");
+        assertThat(view.name()).isEqualTo("qwen-domain-7b");
+    }
+
+    @Test
+    void createAssetRejectsUppercaseNamespace() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "NLP",
+                "bad-model", "Bad", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, null, "Apache-2.0", "team_nlp_001",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetRejectsEmptyNamespace() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "",
+                "good-model", "Empty NS", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, null, "Apache-2.0", "team_nlp_001",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetRejectsNameWithPathSeparators() {
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                "model/sub-model", "Path Name", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, null, "Apache-2.0", "team_nlp_001",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
+    }
+
+    @Test
+    void createAssetRejectsNameTooLong() {
+        String longName = "a".repeat(65);
+        CreateAssetCommand command = new CreateAssetCommand(AssetType.MODEL, null, null, "nlp",
+                longName, "Long Name", null, Visibility.INTERNAL, List.of("team-nlp"),
+                null, null, "Apache-2.0", "team_nlp_001",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+
+        assertThatThrownBy(() -> service.createAsset(command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).insert(any(Asset.class));
     }
 }

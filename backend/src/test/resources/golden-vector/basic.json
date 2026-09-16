@@ -1,0 +1,7 @@
+{
+  "files": ["data.csv", "README.md"],
+  "format": "csv",
+  "license": "MIT",
+  "size_bytes": 1048576,
+  "version": "1.0.0"
+}
