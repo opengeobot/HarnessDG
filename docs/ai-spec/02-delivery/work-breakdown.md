@@ -62,6 +62,7 @@ GOV（决策与基线）
 | `TASK-P0BR-002` | `principalId=prn_`、userId/agentId 语义在 JWT/API/DB/审计统一 | TERM-001、INV-COM-001 | GOV-005 |
 | `TASK-P0BR-003` | Permission Catalog、Java 常量、V4+ Seed、OpenAPI 和 UI 无漂移 | TERM-003、AUD-016 | GOV-002 |
 | `TASK-P0BR-004` | 内置角色按确认 Persona 最小权限重建 | AUD-017、personas matrix | P0BR-003 |
+| `TASK-P0BR-047` | 修复可部署 Profile 的 Mapper 扫描覆盖，恢复 Compose 栈启动与 E3/E4 可达性 | AC-P0B-ENG-004/006 | GOV-002 |
 
 ### 4.2 身份与授权纵向旅程
 
