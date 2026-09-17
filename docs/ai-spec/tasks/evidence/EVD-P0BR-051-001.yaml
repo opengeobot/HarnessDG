@@ -1,0 +1,205 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-051-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得 E4：
+# POST /api/v1/assets 由 500 恢复为 201，job_task 出现且仅出现 1 条 PROVISION 任务行，
+# 其 job_id/type/payload/status/principal_id/asset_id/created_at/updated_at/row_version 均可读回。
+# 但 AC-P0B-UI-004 的「提交后回读详情」未闭环：GET /api/v1/assets/{id} 返回 500，
+# 根因在 AssetModelEntity（allowedPaths 之外）的既存缺陷，故 status 为 PARTIAL，
+# 交接状态为 IMPLEMENTED_UNVERIFIED，不声明完成。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-051
+  requirements: [REQ-JOB-001]
+  scenarios:
+    - AC-P0B-JOB-001
+    - AC-P0B-UI-004
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-051.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-051.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-051.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 1d058fdfa226760ac3526c4a2f43b8f167d256d1
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/job/infrastructure/JdbcJobRepository.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JdbcIdempotencyStore.java
+    - backend/src/main/java/com/aihub/job/application/IdempotencyService.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcJobRepositoryInsertSqlTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcJobRepositoryIT.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcIdempotencyStoreIT.java
+    - backend/src/test/java/com/aihub/job/application/IdempotencyServiceTest.java
+    - docs/ai-spec/tasks/TASK-P0BR-051.md
+    - docs/ai-spec/tasks/TASK-P0BR-052.md
+    - docs/ai-spec/tasks/TASK-P0BR-053.md
+
+environment:
+  observedAt: 2026-09-17T15:52:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16（Compose 固定镜像）
+    minio: minio/minio RELEASE 系列（Compose 固定镜像）
+    gitea: gitea/gitea（Compose 固定镜像）
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    docker compose -f deploy/compose/compose.yaml build backend;
+    docker compose -f deploy/compose/compose.yaml up -d;
+    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/e4-051-052.ps1;
+    cd backend; ./mvnw.cmd -B verify
+  startedAt: 2026-09-17T15:45:00+08:00
+  finishedAt: 2026-09-17T15:55:00+08:00
+  exitCode: 0
+  result: PARTIAL
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 16（真实容器，job_task 真实写入并读回）
+    - MinIO（真实容器，Healthy）
+    - Gitea（真实容器，Healthy）
+  e4EntryPoint: REST（http://localhost:8080），真实 Compose 栈后端 + 真实 PostgreSQL
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        真实 Compose 栈上 POST /api/v1/assets 返回 201（修复前为 500 INTERNAL_ERROR），
+        资产主链路恢复。脚本断言 "AC-P0B-JOB-001 asset create 201 (was 500)" PASS。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        创建后 job_task 中 type='REPOSITORY_PROVISION' 的行数恰好 +1，
+        且该行 asset_id 等于本次创建的 assetId（列/占位符/参数逐一对齐，参数未错位）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        任务行读取回实测：created_at 非空、updated_at 非空、row_version 为非负整数、
+        payload 为 jsonb 且包含 assetId 键、principal_id 为真实 principal（prn_ 前缀）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        后端日志门禁 PASS：5 分钟内无 "column index is out of range"、
+        无 "Can't infer the SQL type"（修复前每个创建请求都会产生前者）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        E2 静态门禁：JdbcJobRepositoryInsertSqlTest 从源码抽取 INSERT INTO job_task 的
+        列清单与 VALUES 占位符，断言两者数量一致且列清单完整（2/2 通过）。
+        负例对照：把 VALUES 占位符减为 15 时该测试失败并报
+        "expected: 16 but was: 15"，证明门禁具备真实鉴别力。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        E3 仓储回归测试：JdbcJobRepositoryIT 用真实 PostgreSQL 容器执行 insert 并读回
+        全部绑定列、验证 claimNext 可领取且 principal/asset/trace 未错位、
+        以 information_schema 断言 NOT NULL 无默认值列集合（3 项）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        权限未放宽的反证：TASK-P0BR-053 的 verify.ps1 V09 仍然 PASS——
+        最小权限主体访问 /api/v1/system/jobs 返回 403 AUTH_PERMISSION_DENIED，
+        修复插入语句未触及任务端点权限判定。
+      scenarioCategory: denial
+  notProven:
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        「提交后回读资产详情，治理字段与所选 itemCode 一致」未闭环：
+        GET /api/v1/assets/{id} 返回 500。根因已定位（见 E4 日志中的
+        BadSqlGrammarException）：MyBatis-Plus 依 AssetModelEntity 的
+        @TableField 注解（列名 precision 被 MySQL 风格反引号包裹）生成
+        SELECT asset_id,framework,...,parameter_scale,`precision`,weight_format,... FROM asset_model，
+        PostgreSQL 不认反引号，报 "syntax error at or near \",\" Position: 72"。
+        该实体不在本卡 allowedPaths 内，且在 baseCommit 之前即存在，
+        已作为独立既存缺陷另行上报，未在本卡内修复。
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        「DATASET 类型资产经同一弹窗提交成功」未在本卡内单独执行：
+        弹窗交互与受控字典项已由 EVD-P0BR-048-001（E4 浏览器证据）覆盖，
+        本卡的 E4 取 REST 入口证明主链路（job_task 插入）恢复。
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        JdbcJobRepositoryIT / JdbcIdempotencyStoreIT 在本机执行时全部 Skipped：
+        Testcontainers 无法连接本机 Docker（npipe 三种端点均返回 400 BadRequest），
+        既存的 17 个 IT 同样全部 Skipped，属本机环境问题而非产品缺陷。
+        本卡的 E4 结论由真实 Compose 栈独立取得，不依赖这些 IT。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcJobRepositoryInsertSqlTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcJobRepositoryIT.java
+    - .trae/e4-final.log
+  logs:
+    - .trae/e4-final.log
+  screenshots: []
+  traces: []
+  metrics:
+    - E4 脚本：PASS=28 FAIL=0，其中本卡相关 10 项全 PASS，1 项 NOT-PROVEN（readback 被外部缺陷阻断）
+    - mvnw verify：Tests run 488, Failures 2, Errors 0, Skipped 6（2 项失败为既存 PreviewJobHandlerTest CSV 用例，见 limitations）
+    - JdbcJobRepositoryInsertSqlTest 2/2 通过；JdbcJobRepositoryIT 3 项（本机 Skipped）
+    - verify.ps1：V01–V11 全部 PASS，VERIFY_EXIT=0
+  databaseQueries:
+    - select count(*) from job_task where type='REPOSITORY_PROVISION';  ->  创建前后 +1
+    - select job_id,type,status,principal_id,asset_id,payload::text from job_task where asset_id='ast_01m2q5mydk5wsn6f2afcnw6rxg';  ->  1 行，principal_id=prn_01m2pqxczxd2dtxwb57sbya0vg
+    - select (created_at is not null),(updated_at is not null),row_version,(payload ? 'assetId') from job_task where asset_id=...;  ->  true|true|非负整数|true
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据未包含 deploy/compose/.env 中的任何口令、访问令牌、Gitea Token、MinIO 密钥或预签名 URL。
+    - E4 脚本仅读取 .env 用于登录，从不打印凭据或 Token；job payload 仅含 assetId，不含任何凭据。
+
+limitations:
+  skippedTests:
+    - >-
+      PreviewJobHandlerTest.csvMixedQuotedAndUnquoted 与
+      PreviewJobHandlerTest.csvExceedingFiftyColumnsShouldMarkColumnTruncated 失败
+      （expected: ""Quoted"" but was: ""Quoted"",,maybe）。该失败位于 version 模块的 CSV 解析器，
+      在 baseCommit 之前即存在，与 job_task 插入无关，不在本卡 allowedPaths 内，另行上报。
+    - >-
+      JdbcJobRepositoryIT（3 项）与既存 17 个 IT 在本机全部 Skipped：
+      Testcontainers 无法连接本机 Docker Desktop（400 BadRequest），属本机环境问题。
+      本卡结论不依赖这些 IT，改由真实 Compose 栈的 E4 证据支撑。
+  assumptions:
+    - 假设 deploy/compose/.env（gitignored）存在且与 Compose 模板兼容；本轮已确认。
+    - >-
+      为使 POST /api/v1/assets 可被脚本调用，使用了既有的 bootstrap 管理员会话与
+      Compose fixture 团队（team_01m2pwrk1tbwwmt4rdjh8dvqmf）作为 ownerTeamId。
+  environmentDifferences:
+    - >-
+      重新构建并替换了 backend 镜像（含本卡修复）。已从运行容器 cp 出 app.jar 并确认
+      JdbcJobRepository.class 内含修复后的 SQL 字节串，排除「修复未部署」的干扰。
+    - >-
+      任务行的 status 在读取时可能已由 PENDING 变为 RETRY_WAIT/RUNNING：
+      栈内 worker 会立即领取任务。这是正常运行时行为，故 E4 断言
+      「status 落在 ck_job_task_status 允许的枚举内」而非固定 PENDING。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

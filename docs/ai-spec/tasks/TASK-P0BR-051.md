@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-051
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: bcf1243e5a78e5b3fe0e5b55d6ee866842473e7a
-stageGatePassed: false
-stageGateEvidence: 待用户批准。依据 READY 需求 REQ-JOB-001（PostgreSQL 可靠任务，P0-B）与 ACCEPTED 决策 DEC-013（Compose 为功能验收环境），修复可靠任务的插入语句缺陷以恢复资产创建主链路；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
+baseCommit: 1d058fdfa226760ac3526c4a2f43b8f167d256d1
+stageGatePassed: true
+stageGateEvidence: 用户批准。依据 READY 需求 REQ-JOB-001（PostgreSQL 可靠任务，P0-B）与 ACCEPTED 决策 DEC-013（Compose 为功能验收环境），修复可靠任务的插入语句缺陷以恢复资产创建主链路；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
 stageGateEvidenceRefs:
   - DEC-013
 requirements:
@@ -57,13 +57,13 @@ requiredValidationCommands:
   - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-051.md -CheckChangedPaths
   - cd backend; ./mvnw.cmd verify
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
-approvedBy: <human-or-controlled-approval>
-approvedAt: <UTC-timestamp>
+approvedBy: User
+approvedAt: 2026-09-17T07:00:06Z
 ---
 
 # TASK-P0BR-051：修复 job_task 插入的列/占位符不一致，恢复资产创建主链路
 
-> 状态：`DRAFT`（待用户批准）
+> 状态：`READY`（用户已批准并授权实施）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17

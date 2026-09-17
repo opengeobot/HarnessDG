@@ -63,11 +63,14 @@ public class JdbcJobRepository implements JobRepository {
 
     @Override
     public void insert(Job job) {
+        // 列/占位符/参数按同一分组逐行对齐（7+6+3=16），避免再次出现数量不一致。
         jdbcTemplate.update("""
                 INSERT INTO job_task (job_id, type, payload, status, max_attempts, attempts, next_run_at,
                     leased_until, leased_by, trace_id, principal_id, asset_id, error_code,
                     created_at, updated_at, row_version)
-                VALUES (?,?,?::jsonb,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?)
                 """,
                 job.jobId(), job.type(), job.payload(), job.status().name(),
                 job.maxAttempts(), job.attempts(), Timestamp.from(job.nextRunAt()),
