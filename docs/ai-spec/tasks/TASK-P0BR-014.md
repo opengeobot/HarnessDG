@@ -4,7 +4,7 @@ taskId: TASK-P0BR-014
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 6bdbd51cee45fac9752c5723701ba86b7af270b3
+baseCommit: 974286795bd0a9811357206bd96cf1746be64a37
 stageGatePassed: true
 stageGateEvidence: 用户批准（2026-09-17）以 READY 需求 REQ-AGT-001 与 ACCEPTED 决策 DEC-009 作为本任务阶段依据
 stageGateEvidenceRefs:
@@ -37,6 +37,7 @@ crossCuttingPlan:
   - SECRETS|不使用 anonymous 等字面量伪造身份；日志与证据不得出现 JWT、credential、预签名 URL
 allowedPaths:
   - backend/src/main/java/com/aihub/mcp
+  - backend/src/main/java/com/aihub/authorization/application/AuthorizationService.java
   - backend/src/test/java/com/aihub/mcp
   - contracts/mcp/tools.yaml
   - docs/ai-spec/tasks/TASK-P0BR-014.md
@@ -65,7 +66,7 @@ approvedAt: 2026-09-17T01:12:43Z
 
 # TASK-P0BR-014：MCP Tool 调用在缺少已认证主体时失败关闭
 
-> 状态：`DRAFT`
+> 状态：`READY`（已实施提交 `a20c3ff`，E3/E4 未取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-16
@@ -103,6 +104,7 @@ flywayBaseline: V1
   - `backend/src/main/java/com/aihub/mcp/api/McpController.java`
   - `backend/src/main/java/com/aihub/mcp/application/McpToolCatalog.java`
   - `backend/src/main/java/com/aihub/mcp/application/McpResourceHandler.java`
+  - `backend/src/main/java/com/aihub/authorization/application/AuthorizationService.java`（新增非抛异常的 `isToolAllowed` 查询用于 `tools/list` 过滤，复用既有仓储判定，不改变 `requireToolAllowed` 语义）
   - `backend/src/test/java/com/aihub/mcp/**`
   - `contracts/mcp/tools.yaml`
 - 契约：MCP Tool 白名单与认证约束声明（仅澄清失败关闭语义，不新增或删除 Tool）

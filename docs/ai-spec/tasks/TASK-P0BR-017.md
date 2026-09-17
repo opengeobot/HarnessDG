@@ -4,7 +4,7 @@ taskId: TASK-P0BR-017
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 6bdbd51cee45fac9752c5723701ba86b7af270b3
+baseCommit: 91107d1f867828cf33839facb287040e275ece82
 stageGatePassed: true
 stageGateEvidence: 用户批准（2026-09-17）以 READY 需求 REQ-AUTH-001/002 与 ACCEPTED 决策 DEC-011 作为本任务阶段依据
 stageGateEvidenceRefs:
@@ -48,6 +48,7 @@ allowedPaths:
   - backend/src/test/java/com/aihub/asset
   - backend/src/test/java/com/aihub/authorization
   - backend/src/test/java/com/aihub/organization
+  - backend/src/test/java/com/aihub/performance/AssetSearchPerformanceTest.java
   - docs/ai-spec/tasks/TASK-P0BR-017.md
   - docs/ai-spec/tasks/evidence/EVD-P0BR-017-001.yaml
 preExistingDirtyPaths: []
@@ -73,7 +74,7 @@ approvedAt: 2026-09-17T01:12:43Z
 
 # TASK-P0BR-017：资产可见性与作用域组合判定下推，详情采用防枚举语义
 
-> 状态：`DRAFT`
+> 状态：`READY`（已实施提交 `9742867`，E3/E4 未取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-16
@@ -116,6 +117,7 @@ flywayBaseline: V1
   - `backend/src/main/java/com/aihub/asset/infrastructure/MyBatisAssetRepository.java`（若详情需单资产下推查询）
   - `backend/src/test/java/com/aihub/asset/**`
   - `backend/src/test/java/com/aihub/authorization/**`（如需在授权集成测试中复现组合场景）
+  - `backend/src/test/java/com/aihub/performance/AssetSearchPerformanceTest.java`（`AccessScope` 增加 Team 维度后构造签名变化，编译强制同步该性能测试夹具；不改断言与阈值）
 - 契约：无变更（请求/响应结构与既有 OpenAPI 操作保持一致）
 - Migration：无（可见性列与 ACL 表已存在）
 - 页面：无

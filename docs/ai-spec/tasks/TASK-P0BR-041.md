@@ -4,7 +4,7 @@ taskId: TASK-P0BR-041
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 6bdbd51cee45fac9752c5723701ba86b7af270b3
+baseCommit: a20c3fff43d5e657e9931a8f89187eff5cbe632c
 stageGatePassed: true
 stageGateEvidence: 用户批准（2026-09-17）以 READY 需求 REQ-UI-001 与 ACCEPTED 决策 DEC-013 作为本任务阶段依据
 stageGateEvidenceRefs:
@@ -35,6 +35,7 @@ crossCuttingPlan:
   - SECRETS|语言偏好不得写入包含令牌的存储；access JWT 仍只驻留内存
 allowedPaths:
   - frontend/src/shared/i18n
+  - frontend/src/shared/api/client.ts
   - frontend/src/shared/components
   - frontend/src/app/layout
   - frontend/src/app/providers
@@ -67,7 +68,7 @@ approvedAt: 2026-09-17T01:12:43Z
 
 # TASK-P0BR-041：前端运行时 zh-CN/en-US 切换与错误文案按 key 渲染
 
-> 状态：`DRAFT`
+> 状态：`READY`（已实施提交 `f844aa5`，E4 未取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-16
@@ -103,6 +104,7 @@ flywayBaseline: V1
 - 模块：`shared/i18n`、`shared/components`、`app/layout`、`app/providers`、`features/auth`（登录页入口）
 - 文件或目录：
   - `frontend/src/shared/i18n/**`（初始化、切换与持久化、资源补齐）
+  - `frontend/src/shared/api/client.ts`（`Accept-Language` 改为按当前语言动态取值，不再硬编码 `zh-CN`；不改变请求/响应结构）
   - `frontend/src/shared/components/**`（语言切换组件及其导出）
   - `frontend/src/app/layout/**`（Header 入口、导航 key 化）
   - `frontend/src/app/providers/**`（antd locale 与语言状态联动）
