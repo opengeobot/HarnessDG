@@ -11,6 +11,8 @@ import com.aihub.shared.idempotency.IdempotencyStore;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -87,7 +89,10 @@ public class JdbcIdempotencyStore implements IdempotencyStore {
                 .addValue("path", record.key().path())
                 .addValue("digest", record.requestFingerprint())
                 .addValue("payload", payloadJson)
-                .addValue("now", Instant.now());
+                // completed_at 为 TIMESTAMPTZ：必须绑定 OffsetDateTime。
+                // 直接绑定 java.time.Instant 会让 pgjdbc 无法推断 SQL 类型并抛
+                // "Can't infer the SQL type to use for an instance of java.time.Instant"。
+                .addValue("now", OffsetDateTime.ofInstant(Instant.now(), ZoneOffset.UTC));
 
         try {
             jdbc.update(

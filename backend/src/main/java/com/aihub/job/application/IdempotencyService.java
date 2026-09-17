@@ -5,9 +5,12 @@
  */
 package com.aihub.job.application;
 
+import com.aihub.shared.error.ConflictException;
+import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.idempotency.IdempotencyKey;
 import com.aihub.shared.idempotency.IdempotencyRecord;
 import com.aihub.shared.idempotency.IdempotencyStore;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
@@ -32,6 +35,9 @@ public class IdempotencyService {
     /**
      * 幂等执行：命中复用首次结果，未命中执行 supplier 并落库。
      *
+     * <p>命中既有记录时必须比对请求指纹：相同则复用首次结果；不同则说明同一幂等键被用于
+     * 不同的请求体，返回 {@code IDEMPOTENCY_KEY_CONFLICT}(409)，且不执行 supplier。
+     *
      * @param key             幂等键（可空，为空时直接执行不幂等）
      * @param requestFingerprint 请求体指纹（用于检测同键不同请求体冲突）
      * @param supplier        业务逻辑供应者（仅首次执行）
@@ -46,6 +52,10 @@ public class IdempotencyService {
         Optional<IdempotencyRecord> existing = idempotencyStore.find(key);
         if (existing.isPresent()) {
             IdempotencyRecord record = existing.get();
+            if (!Objects.equals(record.requestFingerprint(), requestFingerprint)) {
+                throw new ConflictException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+                        "idempotency key reused with a different request payload: " + key.key());
+            }
             return new IdempotencyResult(
                     new IdempotencyResponse(record.responseStatus(), record.responseBody()), true);
         }
