@@ -99,24 +99,37 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 | --- | --- | --- |
 | **V04** | Flyway V1-V21 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`iam_role_binding`/`iam_resource_acl`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`api_idempotency`/`audit_log`/`notification`/`team`/`team_member`/`discussion_thread`/`asset_version`/`publish_request`/`webhook_inbox`/`system_alert`）存在 | postgres 容器运行 |
 | **V05** | 用登录 bootstrap 管理员签发 JWT、携带 access token 调 `/me` 返回 200、无 Token 调 `/system/users` 返回 401（fail-closed） | backend readiness 就绪、bootstrap 管理员已创建 |
-| **V06** | `/system/audit-logs`、`/system/metrics/summary` 无 Token→401、越权 Token→403 | backend 就绪 |
-| **V07** | `/system/dictionaries`、`/system/tags` 无 Token→401、越权 Token→403 | backend 就绪 |
+| **V05b** | 解除管理员首登改密门；就绪**最小权限验证主体**（`compose-verify-minimal`，仅 `project:view`，不绑定任何角色），并反向自检其不持有任何被测端点所需权限 | backend 就绪、管理员 Token 可用 |
+| **V06** | `/system/audit-logs`、`/system/metrics/summary`：无 Token→401(`AUTH_UNAUTHENTICATED`)、最小权限主体→403(`AUTH_PERMISSION_DENIED`)；管理员→200（**有权限正向断言**） | backend 就绪、V05b 通过 |
+| **V07** | `/system/dictionaries`、`/system/tags`：同上默认拒绝；并断言 `/system/dictionaries` 返回**非空**真实数据（AC-P0B-AUTH-004） | backend 就绪、V05b 通过 |
 | **V08** | `audit_log` 表存在且任何正文都不含明文口令（脱敏恒定不变式）；identity 登录审计已通过 `IdentityAuditAdapter` 统一接入，断言 `AUTH_LOGIN_SUCCEEDED` 事件存在 | postgres 就绪 |
-| **V09** | `/system/jobs` 默认拒绝 | backend 就绪 |
-| **V10** | `/system/notifications` 默认拒绝 | backend 就绪 |
-| **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）默认拒绝 | backend 就绪 |
+| **V09** | `/system/jobs`：默认拒绝 + 管理员正向 200 | backend 就绪、V05b 通过 |
+| **V10** | `/system/notifications`：默认拒绝 + 管理员正向 200 | backend 就绪、V05b 通过 |
+| **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）：默认拒绝 + 管理员正向 200 | backend 就绪、V05b 通过 |
 | **V12** | `/system/alerts`（需 `system:observe`）返回告警列表；DEAD 任务/Outbox 积压/认证失败可触发告警 | backend 就绪 |
 
-### 前置：bootstrap 管理员凭据
+### 前置：bootstrap 管理员凭据与验收主体
 
 V05-V08 需要一个可登录的管理员。Compose `backend` 服务通过 `.env` 的
 `AIHUB_BOOTSTRAP_ADMIN_USERNAME` / `AIHUB_BOOTSTRAP_ADMIN_PASSWORD` 引导首个管理员
 （`.env.example` 提供开发默认 `admin` / `change-me-admin-01`；生产须改用 Secret 文件并强制首登改密）。
 脚本按 `.env` → `.env.example` → 内置默认的顺序读取该凭据。首登强制改密不影响 `/me`（改密门放行认证与 `/me`）。
 
-由于 bootstrap 管理员默认仅持 `ADMIN_SCOPES`（user/authorization/agent），V06-V11 以
-“无 Token→401、越权 Token→403”验证**默认拒绝**语义，而非以管理员令牌断言 200。完整“有权限 200”
-路径由后端集成测试（如 `AuthorizationIT`）覆盖。
+**默认拒绝断言的被测主体是 V05b 就绪的最小权限主体，不是管理员。** 原因：
+`AuthorizationService.isPermitted` 的判定是「JWT 粗粒度 Scope **或** Role Binding 解析出的权限」，
+而 bootstrap 管理员经 `AuthorizationBootstrap` 绑定了平台 ADMIN 角色，**合法持有**
+`audit:read`/`dictionary:read`/`job:read`/`notification:read`/`system:observe` 等权限。
+因此以管理员令牌断言 403 既不成立、也不反映「默认拒绝」；脚本改为：
+
+1. 断言无 Token→401 且错误码为 `AUTH_UNAUTHENTICATED`；
+2. 以最小权限主体（仅 `project:view`、无任何角色绑定）断言 403，**且必须校验响应体错误码为
+   `AUTH_PERMISSION_DENIED`** —— 只比较状态码会把首登强制改密门的 403
+   （`PASSWORD_CHANGE_REQUIRED`）误判为权限拒绝，产生与命题无关的假阳性；
+3. 补有权限正向断言，证明系统不是「全部拒绝」（AC-P0B-AUTH-004）。
+
+V05b 会按产品既定流程（`PUT /api/v1/me/password`，轮换为同值）自动解除管理员与验证主体的首登改密门，
+并在解除后重新登录（改密递增 `tokenVersion`，旧 access Token 会失效）。
+**该前置条件未满足时脚本报 FAIL 而非 PASS，也绝不静默 SKIP。**
 
 ### 运行方式
 

@@ -1,0 +1,219 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-053-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得 E4：
+# verify.ps1 的 V01–V11 全部 PASS（含新增的 V05b 前置条件用例），
+# 且负例对照证明旧断言无鉴别力、新断言命题成立。
+# 但 AC-P0B-AUTH-003 的完整闭环仍受 verify.sh 侧既存缺陷影响（见 notProven），
+# 且 completion 门禁要求工作树干净与责任方接受，本次未满足，
+# 故 status 为 PARTIAL，交接状态为 IMPLEMENTED_UNVERIFIED，不声明完成。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-053
+  requirements: [REQ-AUTH-001, REQ-AUTH-002]
+  scenarios:
+    - AC-P0B-AUTH-003
+    - AC-P0B-AUTH-004
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-053.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-053.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-053.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 1d058fdfa226760ac3526c4a2f43b8f167d256d1
+  dirtyWorktree: true
+  dirtyPaths:
+    - deploy/compose/scripts/verify.ps1
+    - deploy/compose/scripts/verify.sh
+    - docs/runbooks/compose.md
+    - docs/ai-spec/tasks/TASK-P0BR-053.md
+
+environment:
+  observedAt: 2026-09-17T15:52:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16（Compose 固定镜像）
+    alpine（verify.sh 运行载体）: alpine:3.20
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1;
+    docker run --rm --network host -v <compose>:/src:ro -v <lf-verify.sh>:/lf-verify.sh:ro
+    -v //var/run/docker.sock:/var/run/docker.sock alpine:3.20 sh -c
+    "apk add --no-cache bash curl jq docker-cli docker-cli-compose; cp -r /src /work;
+    cp /lf-verify.sh /work/scripts/verify.sh; cd /work; bash -n ./scripts/verify.sh; bash ./scripts/verify.sh"
+  startedAt: 2026-09-17T15:50:00+08:00
+  finishedAt: 2026-09-17T15:58:00+08:00
+  exitCode: 0
+  result: PARTIAL
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 16（真实容器，V04 迁移完整性与 V12+ 表结构断言直连真实库）
+    - MinIO（真实容器，V03 Bucket 初始化）
+    - Gitea（真实容器，V12 仓库一致性）
+  e4EntryPoint: Nginx/REST（http://localhost:8080），真实 Compose 栈 + 真实浏览器无关入口
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        真实栈上 verify.ps1 的 V01–V11 全部 PASS（VERIFY_EXIT=0），
+        其中 V06/V07/V09/V10/V11 的默认拒绝断言以最小权限主体返回
+        403 且响应体 code == AUTH_PERMISSION_DENIED 为判据。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        匿名路径保持既有语义：所有被测端点无 Token 返回 401，
+        且响应体 code 为 AUTH_UNAUTHENTICATED（脚本逐项校验错误码，不再只看状态码）。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        新增 V05b 前置条件用例：脚本先经 PUT /api/v1/me/password 解除管理员与最小权限主体的
+        首登强制改密门，仅当两主体均不处于 PASSWORD_CHANGE_REQUIRED 时才继续；
+        若前置条件未满足则报 FAIL 并给出可操作提示，绝不静默 SKIP、绝不冒充 PASS。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        负例对照（NEGCTRL）证明旧断言无鉴别力：以已完成首登改密的管理员令牌访问
+        6 个受保护端点全部返回 200，即旧脚本「期望 403」必然 FAIL，
+        其在此前栈上的 PASS 只能来自与权限无关的改密门 403（假阳性）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        负例对照证明新命题成立：最小权限主体（scopes 仅 project:view）访问
+        7 个受保护端点全部返回 403 且 code == AUTH_PERMISSION_DENIED。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-AUTH-004
+      assertion: >-
+        正向断言已补齐并 PASS：持有相应权限的主体调用 /api/v1/system/audit-logs、
+        /metrics/summary、/dictionaries、/tags、/jobs、/notifications、/dependencies
+        均返回 200 且返回真实数据（非空集合占位，实测 dataCount=8/1/1）。
+        由此区分「默认拒绝」与「全部拒绝」。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-AUTH-004
+      assertion: >-
+        脚本反向自检：创建最小权限主体后断言其 scopes 不含
+        audit:read/job:read/notification:read/system:observe/dictionary:read/tag:read，
+        防止后续维护者误给该主体加权限而使拒绝断言失去意义。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        verify.sh 与 verify.ps1 语义等价：LF 归一化副本经 bash -n 语法校验通过
+        （LF_SYNTAX_OK），并在 alpine:3.20 容器内真实执行，
+        V01–V11 全部 PASS（含 V05b）。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        verify.sh 的 V12–V21 在容器内真实执行时有 7 项 FAIL
+        （V12 资产创建与 Gitea 一致性、V13 幂等键重放、V14 多组织隔离、
+        V16 版本 Schema、V17 发布审批 Schema、V20 对账 Worker）。
+        经 git diff 逐块核对，这些用例的函数体不在本卡改动范围内，
+        失败原因是脚本查询的列/表与当前 schema 漂移
+        （例如 job_task.idempotency_key、job_task.job_type、resource_acl 关键字段、
+        asset_version/publish_request 关键字段），属既存缺陷，另行上报。
+        verify.ps1 目前只覆盖 V01–V11，故不受影响。
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        E2/E4「脚本被误改为只比较状态码时用例必须失败」未以自动化回归门禁固化：
+        本次以负例对照（NEGCTRL-1/2）人工取证，未新增独立测试文件。
+        固化该类门禁需要新增脚本测试脚手架，超出本卡 allowedPaths 与范围。
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        V12–V21 未纳入 verify.ps1（PowerShell 版只到 V11），
+        两脚本覆盖范围仍不对等。补齐 PowerShell 版属独立整改，不在本卡范围。
+    - scenarioId: AC-P0B-AUTH-004
+      assertion: >-
+        正向断言使用管理员令牌（经 ADMIN 角色合法持有相应权限），
+        未逐一验证「角色绑定→权限码」的解析路径本身；
+        该解析已由既有 AuthorizationLifecycleIT 覆盖（本机 Skipped）。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: true
+
+artifacts:
+  reports:
+    - deploy/compose/scripts/verify.ps1
+    - deploy/compose/scripts/verify.sh
+    - docs/runbooks/compose.md
+    - .trae/negctrl-053.ps1
+  logs:
+    - .trae/e4-final.log
+  screenshots: []
+  traces: []
+  metrics:
+    - verify.ps1：V01–V11 全部 PASS，VERIFY_EXIT=0
+    - verify.sh（容器内，LF 归一化）：V01–V11 全部 PASS；V12–V21 中 7 项 FAIL（既存 schema 漂移）
+    - NEGCTRL-1：管理员访问 6 个受保护端点全部 200
+    - NEGCTRL-2：最小权限主体访问 7 个端点全部 403 + AUTH_PERMISSION_DENIED
+    - NEGCTRL-3：匿名请求 401
+    - NEGCTRL-4：有权限正向可达，dataCount=8 / 1 / 1（真实数据非空集合占位）
+  databaseQueries:
+    - select username, status, must_change_password from iam_user;  ->  admin 与 compose-verify-minimal 均为 ACTIVE 且 must_change_password = 0
+  auditEvents:
+    - eventType: USER_CREATED
+      principal: bootstrap admin
+      resource: compose-verify-minimal
+      result: SUCCESS
+      note: 最小权限验证主体由既有管理员 API 创建，沿用既有审计
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据未包含任何口令、访问令牌、Gitea Token、MinIO 密钥或预签名 URL。
+    - 最小权限验证主体的口令为本地 Compose 验收栈专用值，写死在脚本内属本卡设计
+      （TASK-P0BR-053 §5「验证主体与权限集合显式写在脚本中」），不用于任何生产环境。
+    - 脚本从不打印 Access Token 或响应正文中的敏感字段。
+
+limitations:
+  skippedTests:
+    - >-
+      verify.sh 的 V12–V21 中 7 项 FAIL（见 notProven）。
+      这些用例的函数体不在本卡 diff 内，失败源于脚本查询的列/表与当前 schema 漂移。
+    - >-
+      PreviewJobHandlerTest 的 2 项 CSV 失败与 Testcontainers 相关的
+      17 个 IT Skipped 与本卡无关（本卡不改 backend）。
+  assumptions:
+    - >-
+      脚本假设 bootstrap 管理员可登录且 Compose fixture 团队/组织已存在；
+      V05b 会自动解除改密门，无需人工干预。
+  environmentDifferences:
+    - >-
+      verify.ps1 原文件为 UTF-8 无 BOM，PS 5.1 会按 GBK(936) 解码，导致新增中文
+      破坏字节对齐并报 "Unexpected token '}'"。本卡为其补 UTF-8 BOM
+      （原文件靠既有中文「字节对偶合」侥幸通过解析），修复后 parse errors = 0。
+      这是为使脚本可运行所必需的改动，未改变任何断言语义。
+    - >-
+      verify.sh 在本机因 core.autocrlf=true 呈 CRLF，直接 bash -n 会报 $'\r' 语法错误。
+      此为仓库既有状态（未新增 .gitattributes），
+      故 E4 取「LF 归一化副本 + 容器内真实执行」的方式取证，并在证据中明确该转换。
+    - >-
+      verify.sh 的 V09/V10 用例标题已由「默认拒绝」更新为「默认拒绝 + 有权限正向可达」，
+      与 verify.ps1 保持一致（函数体此前已含正向断言）。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

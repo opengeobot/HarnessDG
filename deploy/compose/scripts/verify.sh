@@ -2,14 +2,17 @@
 # ============================================================================
 # 功能: AIHub Compose 验收脚本 (Shell)。与 verify.ps1 等价，执行 V01-V21：
 #       V01 Compose 配置；V02 核心服务健康；V03 Bucket 初始化；
-#       V04 数据库迁移；V05 JWT 生命周期；V06 权限过滤；V07 字典/标签；
-#       V08 审计完整性与脱敏；V09 持久化任务；V10 通知；V11 观测与诊断；
-#       V12 资产创建与 Gitea 仓库一致性；V13 幂等键重放；
+#       V04 数据库迁移；V05 JWT 生命周期；V05b 验收主体前置条件；V06 权限过滤；
+#       V07 字典/标签；V08 审计完整性与脱敏；V09 持久化任务；V10 通知；
+#       V11 观测与诊断；V12 资产创建与 Gitea 仓库一致性；V13 幂等键重放；
 #       V14 多组织权限隔离；V15 数据集 Facet 权限过滤；
 #       V16 版本 Schema 验证；V17 发布审批 Schema 验证；
 #       V18 Webhook Inbox 验证；V19 MCP 端点可用性；
 #       V20 对账 Worker 注册验证；
 #       V21 告警 Schema 与端点验证。
+#       默认拒绝断言以「最小权限验证主体 + 稳定错误码 AUTH_PERMISSION_DENIED」
+#       为依据，不把首登改密门的 403 计为权限拒绝；并补有权限正向断言
+#       （AC-P0B-AUTH-004），区分「默认拒绝」与「全部拒绝」。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。
 # 时间: 2026-07-04
@@ -94,15 +97,169 @@ psql_q() {
   docker compose exec -T postgres sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"$1\"" 2>/dev/null | tr -d '[:space:]'
 }
 
-# 断言无 Token=401，携带管理员 Token 被拒=403（默认拒绝/最小权限/改密门）。
+# 仅取响应体（用于解析稳定错误码 code）。
+http_body() {
+  local method="$1"; local path="$2"; local auth="${3:-}"
+  local args=(-s -m 15 -X "${method}" "${BASE_URL}${path}")
+  [ -n "${auth}" ] && args+=(-H "Authorization: Bearer ${auth}")
+  curl "${args[@]}" 2>/dev/null || echo ""
+}
+
+# 稳定错误码提取：断言必须依据响应体 code，不得只看 HTTP 状态码。
+error_code() {
+  local body="$1"
+  printf '%s' "${body}" | sed -nE 's/.*"code"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1
+}
+
+# 前置条件守卫：首登强制改密门产生的 403 与权限判定无关，必须报为前置条件未满足（非 PASS）。
+assert_not_password_change_required() {
+  local body="$1" who="$2" code
+  code="$(error_code "${body}")"
+  if [ "${code}" = "PASSWORD_CHANGE_REQUIRED" ]; then
+    echo "  前置条件未满足：${who} 处于首登强制改密状态（must_change_password），"
+    echo "  其 403 与权限判定无关。请先完成 PUT /api/v1/me/password 改密（V05b 会自动完成）。"
+    return 1
+  fi
+  return 0
+}
+
+# 最小权限验证主体（默认拒绝断言的被测主体）：权限集合显式列出，刻意不含任何被测端点所需权限。
+# 该主体不绑定任何角色，故其后端判定只剩「JWT 粗粒度 scope」，403 必然来自权限判定。
+LEAST_PRIV_USER="compose-verify-minimal"
+LEAST_PRIV_PASS="ComposeVerifyOnly-01!"
+LEAST_PRIV_TOKEN=""
+
+# 以既有登录端点换取 access Token；失败输出空串。
+get_access_token() {
+  local u="$1" p="$2" body
+  body="$(curl -s -m 15 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${u}\",\"password\":\"${p}\"}" \
+    "${BASE_URL}/api/v1/auth/login" 2>/dev/null)"
+  printf '%s' "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p'
+}
+
+# 读取 /me 的 forcePasswordChange 标记（/me 在改密门放行名单内，必定可达）。
+force_password_change() {
+  local token="$1" body
+  body="$(http_body GET /api/v1/me "${token}")"
+  printf '%s' "${body}" | sed -nE 's/.*"forcePasswordChange"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' | head -n1
+}
+
+# 按产品既定流程解除首登强制改密门（轮换为同值），返回可用的新 Token。
+resolve_password_change_gate() {
+  local u="$1" p="$2" token="$3" who="$4" force chg code
+  force="$(force_password_change "${token}")"
+  if [ -z "${force}" ]; then echo "  无法读取 ${who} 的 /api/v1/me，无法确认改密门状态" >&2; return 1; fi
+  if [ "${force}" = "false" ]; then printf '%s' "${token}"; return 0; fi
+  chg="$(curl -s -m 15 -X PUT -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${token}" \
+    -d "{\"currentPassword\":\"${p}\",\"newPassword\":\"${p}\"}" \
+    "${BASE_URL}/api/v1/me/password" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${chg}" | tail -n1)"
+  if [ "${code}" != "200" ]; then echo "  ${who} 首登改密失败，状态 ${code}" >&2; return 1; fi
+  # 改密会递增 tokenVersion，旧 access Token 不再可用，必须重新登录。
+  get_access_token "${u}" "${p}"
+}
+
+# 默认拒绝断言：无 Token→401(AUTH_UNAUTHENTICATED)；最小权限主体→403(AUTH_PERMISSION_DENIED)。
+# 必须校验响应体稳定错误码：仅比较状态码会把首登改密门等无关 403 误判为权限拒绝（历史假阳性）。
 assert_default_deny() {
-  local path="$1" anon auth
+  local path="$1" anon anon_body anon_code auth auth_body code
+  anon_body="$(http_body GET "${path}")"
   anon="$(http_status GET "${path}")"
   if [ "${anon}" != "401" ]; then echo "  无 Token 访问 ${path} 返回 ${anon}，期望 401"; return 1; fi
-  if [ -n "${ACCESS_TOKEN}" ]; then
-    auth="$(http_status GET "${path}" "${ACCESS_TOKEN}")"
-    if [ "${auth}" != "403" ]; then echo "  越权 Token 访问 ${path} 返回 ${auth}，期望 403"; return 1; fi
+  anon_code="$(error_code "${anon_body}")"
+  if [ -n "${anon_code}" ] && [ "${anon_code}" != "AUTH_UNAUTHENTICATED" ]; then
+    echo "  无 Token 访问 ${path} 返回错误码 ${anon_code}，期望 AUTH_UNAUTHENTICATED"; return 1
   fi
+  if [ -z "${LEAST_PRIV_TOKEN}" ]; then
+    echo "  前置条件未满足：最小权限验证主体不可用，无法证明 ${path} 的 403 来自权限判定"; return 1
+  fi
+  auth_body="$(http_body GET "${path}" "${LEAST_PRIV_TOKEN}")"
+  assert_not_password_change_required "${auth_body}" "最小权限验证主体" || return 1
+  auth="$(http_status GET "${path}" "${LEAST_PRIV_TOKEN}")"
+  if [ "${auth}" != "403" ]; then echo "  最小权限主体访问 ${path} 返回 ${auth}，期望 403（默认拒绝）"; return 1; fi
+  code="$(error_code "${auth_body}")"
+  if [ "${code}" != "AUTH_PERMISSION_DENIED" ]; then
+    echo "  最小权限主体访问 ${path} 返回错误码 ${code}，期望 AUTH_PERMISSION_DENIED"; return 1
+  fi
+  return 0
+}
+
+# 有权限正向断言（AC-P0B-AUTH-004）：证明系统不是「全部拒绝」，且返回真实数据而非空集合占位。
+assert_permitted() {
+  local path="$1" require_non_empty="${2:-0}" resp code data count
+  if [ -z "${ACCESS_TOKEN}" ]; then
+    echo "  前置条件未满足：管理员 Token 不可用，无法执行 ${path} 的正向断言"; return 1
+  fi
+  resp="$(http_body GET "${path}" "${ACCESS_TOKEN}")"
+  assert_not_password_change_required "${resp}" "管理员" || return 1
+  code="$(http_status GET "${path}" "${ACCESS_TOKEN}")"
+  if [ "${code}" != "200" ]; then
+    echo "  有权限主体访问 ${path} 返回 ${code}，期望 200（$(error_code "${resp}")）"; return 1
+  fi
+  if [ "${require_non_empty}" = "1" ]; then
+    data="$(printf '%s' "${resp}" | sed -nE 's/.*"data"[[:space:]]*:[[:space:]]*\[(.*)/\1/p')"
+    count="$(printf '%s' "${data}" | grep -o '"' | wc -l | tr -d '[:space:]')"
+    if [ -z "${data}" ] || [ "${count:-0}" -lt 4 ]; then
+      echo "  有权限主体访问 ${path} 返回空集合占位，未证明数据真实可达"; return 1
+    fi
+  fi
+  return 0
+}
+
+# ---- V05b: 验收主体前置条件 ----
+# 1) 管理员解除首登改密门（否则后续 403/200 断言都与权限无关）；
+# 2) 就绪最小权限验证主体（用于默认拒绝断言）。
+check_verify_principals() {
+  local new_token create create_code token
+  new_token="$(resolve_password_change_gate "${ADMIN_USER}" "${ADMIN_PASS}" "${ACCESS_TOKEN}" "管理员 ${ADMIN_USER}")" || return 1
+  ACCESS_TOKEN="${new_token}"
+
+  # 就绪最小权限主体：创建（幂等，已存在则复用）→ 登录 → 解除其改密门。
+  create="$(curl -s -m 15 -X POST -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"username\":\"${LEAST_PRIV_USER}\",\"displayName\":\"Compose Verify Minimal\",\"email\":null,\"locale\":\"zh-CN\",\"temporaryPassword\":\"${LEAST_PRIV_PASS}\",\"scopes\":[\"project:view\"]}" \
+    "${BASE_URL}/api/v1/system/users" -w '\n%{http_code}' 2>/dev/null)"
+  create_code="$(printf '%s' "${create}" | tail -n1)"
+  if [ "${create_code}" = "409" ]; then
+    : # 幂等：上一轮运行已创建（口令轮换为同值，临时口令仍有效）。
+  elif [ "${create_code}" != "201" ]; then
+    echo "  创建最小权限验证主体失败，状态 ${create_code}，错误码 $(error_code "${create}")"; return 1
+  fi
+
+  token="$(get_access_token "${LEAST_PRIV_USER}" "${LEAST_PRIV_PASS}")"
+  if [ -z "${token}" ]; then echo "  最小权限验证主体登录失败"; return 1; fi
+  LEAST_PRIV_TOKEN="$(resolve_password_change_gate "${LEAST_PRIV_USER}" "${LEAST_PRIV_PASS}" "${token}" "最小权限验证主体")" || return 1
+
+  # 反向自检：验证主体不得持有任何被测端点所需权限，否则默认拒绝断言会失去意义。
+  local me scopes scope
+  me="$(http_body GET /api/v1/me "${LEAST_PRIV_TOKEN}")"
+  scopes="$(printf '%s' "${me}" | sed -nE 's/.*"scopes"[[:space:]]*:[[:space:]]*\[([^]]*)\].*/\1/p')"
+  for scope in audit:read job:read notification:read system:observe dictionary:read tag:read; do
+    if printf '%s' "${scopes}" | grep -q "${scope}"; then
+      echo "  最小权限验证主体不应持有 ${scope}，否则其 403 无法证明默认拒绝"; return 1
+    fi
+  done
+  return 0
+}
+
+# ---- V06: 权限过滤 ----
+check_perm_filter() {
+  assert_default_deny /api/v1/system/audit-logs || return 1
+  assert_default_deny /api/v1/system/metrics/summary || return 1
+  # 管理员经 ADMIN 角色合法持有 audit:read / system:observe，应真实可达。
+  assert_permitted /api/v1/system/audit-logs || return 1
+  assert_permitted /api/v1/system/metrics/summary || return 1
+  return 0
+}
+
+# ---- V07: 字典/标签 ----
+check_taxonomy() {
+  assert_default_deny /api/v1/system/dictionaries || return 1
+  assert_default_deny /api/v1/system/tags || return 1
+  # AC-P0B-AUTH-004：有 dictionary:read 的主体必须返回真实数据而非空集合占位。
+  assert_permitted /api/v1/system/dictionaries 1 || return 1
   return 0
 }
 
@@ -168,18 +325,10 @@ check_jwt() {
 }
 
 # ---- V06: 权限过滤 ----
-check_perm_filter() {
-  assert_default_deny /api/v1/system/audit-logs || return 1
-  assert_default_deny /api/v1/system/metrics/summary || return 1
-  return 0
-}
+# 实现见上文（含默认拒绝 + 有权限正向断言）。
 
 # ---- V07: 字典/标签 ----
-check_taxonomy() {
-  assert_default_deny /api/v1/system/dictionaries || return 1
-  assert_default_deny /api/v1/system/tags || return 1
-  return 0
-}
+# 实现见上文（含默认拒绝 + 有权限正向断言）。
 
 # ---- V08: 审计脱敏 + identity 登录审计完整性 ----
 # identity 登录/令牌/改密事件已接入权威 AuditService（IdentityAuditAdapter）。
@@ -202,10 +351,18 @@ check_audit() {
 }
 
 # ---- V09: 持久化任务 ----
-check_jobs() { assert_default_deny /api/v1/system/jobs; }
+check_jobs() {
+  assert_default_deny /api/v1/system/jobs || return 1
+  assert_permitted /api/v1/system/jobs || return 1
+  return 0
+}
 
 # ---- V10: 通知 ----
-check_notifications() { assert_default_deny /api/v1/system/notifications; }
+check_notifications() {
+  assert_default_deny /api/v1/system/notifications || return 1
+  assert_permitted /api/v1/system/notifications || return 1
+  return 0
+}
 
 # ---- V11: 观测与诊断 ----
 check_observability() {
@@ -213,6 +370,7 @@ check_observability() {
   h="$(http_status GET /actuator/health)"
   if [ "${h}" != "200" ]; then echo "  /actuator/health 返回 ${h}，期望 200"; return 1; fi
   assert_default_deny /api/v1/system/dependencies || return 1
+  assert_permitted /api/v1/system/dependencies || return 1
   return 0
 }
 
@@ -302,10 +460,12 @@ fi
 
 if [ "${BACKEND_UP}" -eq 1 ]; then
   step V05 "JWT 生命周期" check_jwt
-  step V06 "权限过滤（审计/指标默认拒绝）" check_perm_filter
-  step V07 "字典/标签受控访问（默认拒绝）" check_taxonomy
+  step V05b "验收主体前置条件（改密门已解除 + 最小权限主体就绪）" check_verify_principals
+  step V06 "权限过滤（审计/指标默认拒绝 + 有权限正向可达）" check_perm_filter
+  step V07 "字典/标签受控访问（默认拒绝 + 有权限正向断言）" check_taxonomy
 else
   skip V05 "JWT 生命周期" "backend 健康端点不可达（未执行 docker compose up）"
+  skip V05b "验收主体前置条件" "backend 不可达"
   skip V06 "权限过滤" "backend 不可达"
   skip V07 "字典/标签受控访问" "backend 不可达"
 fi
@@ -317,8 +477,8 @@ else
 fi
 
 if [ "${BACKEND_UP}" -eq 1 ]; then
-  step V09 "持久化任务访问（默认拒绝）" check_jobs
-  step V10 "通知访问（默认拒绝）" check_notifications
+  step V09 "持久化任务访问（默认拒绝 + 有权限正向可达）" check_jobs
+  step V10 "通知访问（默认拒绝 + 有权限正向可达）" check_notifications
   step V11 "观测与诊断" check_observability
 else
   skip V09 "持久化任务访问" "backend 不可达"

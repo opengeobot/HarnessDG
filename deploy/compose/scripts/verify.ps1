@@ -3,6 +3,9 @@
 #       V01 Compose 配置合法；V02 核心服务健康；V03 Bucket 初始化；
 #       V04 数据库迁移；V05 JWT 生命周期；V06 权限过滤；V07 字典/标签；
 #       V08 审计完整性与脱敏；V09 持久化任务；V10 通知；V11 观测与诊断。
+#       默认拒绝断言以「最小权限验证主体 + 稳定错误码 AUTH_PERMISSION_DENIED」
+#       为依据，不把首登改密门的 403 计为权限拒绝；并补有权限正向断言
+#       （AC-P0B-AUTH-004），区分「默认拒绝」与「全部拒绝」。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。与 verify.sh 保持等价。
 # 时间: 2026-07-01
@@ -205,38 +208,180 @@ if (-not $backendReachable) {
     }
 }
 
-# 通用：断言无 Token=401 且携带管理员 Token 被拒（403，默认拒绝/最小权限/改密门）。
+# ---- 稳定错误码提取：断言必须依据响应体 code，不得只看 HTTP 状态码 ----
+function Get-ErrorCode {
+    param([string]$Body)
+    if ([string]::IsNullOrWhiteSpace($Body)) { return "" }
+    try {
+        $json = $Body | ConvertFrom-Json
+        if ($json -and $json.code) { return "$($json.code)" }
+    } catch { }
+    return ""
+}
+
+# 前置条件守卫：首登强制改密门产生的 403 与权限判定无关，必须报为前置条件未满足（非 PASS）。
+function Assert-NotPasswordChangeRequired {
+    param([string]$Body, [string]$Who)
+    if ((Get-ErrorCode $Body) -eq "PASSWORD_CHANGE_REQUIRED") {
+        throw ("前置条件未满足：$Who 处于首登强制改密状态（must_change_password），" +
+               "其 403 与权限判定无关。请先完成 PUT /api/v1/me/password 改密" +
+               "（V05b 会按产品既定流程自动完成）。")
+    }
+}
+
+# 最小权限验证主体（默认拒绝断言的被测主体）：权限集合显式列出，刻意不含任何被测端点所需权限。
+# 该主体不绑定任何角色，故其后端判定只剩「JWT 粗粒度 scope」，403 必然来自权限判定。
+$script:LeastPrivUser = "compose-verify-minimal"
+$script:LeastPrivPass = "ComposeVerifyOnly-01!"
+$script:LeastPrivToken = $null
+
+# 以既有登录端点换取 access Token；返回 Token 或 $null。
+function Get-AccessToken {
+    param([string]$Username, [string]$Password)
+    $body = "{`"username`":`"$Username`",`"password`":`"$Password`"}"
+    $resp = Invoke-Api -Method POST -Path "/api/v1/auth/login" -Body $body
+    if ($resp.Status -ne 200) { return $null }
+    try { return ($resp.Body | ConvertFrom-Json).data.accessToken } catch { return $null }
+}
+
+# 读取主体概要中的 forcePasswordChange 标记（/me 在改密门放行名单内，必定可达）。
+function Test-ForcePasswordChange {
+    param([string]$Token)
+    $resp = Invoke-Api -Method GET -Path "/api/v1/me" -Headers @{ Authorization = "Bearer $Token" }
+    if ($resp.Status -ne 200) { return $null }
+    try { return [bool]($resp.Body | ConvertFrom-Json).data.forcePasswordChange } catch { return $null }
+}
+
+# 按产品既定流程解除首登强制改密门（轮换为同值，不改变本地验收栈凭据），返回可用的新 Token。
+function Resolve-PasswordChangeGate {
+    param([string]$Username, [string]$Password, [string]$Token, [string]$Who)
+    $force = Test-ForcePasswordChange -Token $Token
+    if ($null -eq $force) { throw "无法读取 $Who 的 /api/v1/me，无法确认改密门状态" }
+    if (-not $force) { return $Token }
+    $body = "{`"currentPassword`":`"$Password`",`"newPassword`":`"$Password`"}"
+    $chg = Invoke-Api -Method PUT -Path "/api/v1/me/password" `
+        -Headers @{ Authorization = "Bearer $Token" } -Body $body
+    if ($chg.Status -ne 200) { throw "$Who 首登改密失败，状态 $($chg.Status)（$(Get-ErrorCode $chg.Body)）" }
+    # 改密会递增 tokenVersion，旧 access Token 不再可用，必须重新登录。
+    $fresh = Get-AccessToken -Username $Username -Password $Password
+    if ([string]::IsNullOrEmpty($fresh)) { throw "$Who 改密后重新登录失败" }
+    return $fresh
+}
+
+# ---------------------------------------------------------------------------
+# V05b: 验收主体前置条件
+# 1) 管理员解除首登改密门（否则后续 403/200 断言都与权限无关）；
+# 2) 就绪最小权限验证主体（用于默认拒绝断言）。
+# 该用例失败时 V06/V07/V09/V10/V11 会一并 FAIL（不得 SKIP），因为验收前提已不成立。
+# ---------------------------------------------------------------------------
+if (-not $backendReachable) {
+    Skip-Step "V05b" "验收主体前置条件" "backend 不可达"
+} else {
+    Test-Step "V05b" "验收主体前置条件（改密门已解除 + 最小权限主体就绪）" {
+        $script:accessToken = Resolve-PasswordChangeGate -Username $AdminUser -Password $AdminPass `
+            -Token $script:accessToken -Who "管理员 $AdminUser"
+
+        # 就绪最小权限主体：创建（幂等，已存在则复用）→ 登录 → 解除其改密门。
+        $createBody = "{`"username`":`"$($script:LeastPrivUser)`"," +
+            "`"displayName`":`"Compose Verify Minimal`"," +
+            "`"email`":null,`"locale`":`"zh-CN`"," +
+            "`"temporaryPassword`":`"$($script:LeastPrivPass)`"," +
+            "`"scopes`":[`"project:view`"]}"
+        $create = Invoke-Api -Method POST -Path "/api/v1/system/users" `
+            -Headers @{ Authorization = "Bearer $($script:accessToken)" } -Body $createBody
+        $createCode = Get-ErrorCode $create.Body
+        if ($create.Status -eq 409 -and $createCode -eq "USER_ALREADY_EXISTS") {
+            # 幂等：上一轮运行已创建（口令轮换为同值，临时口令仍有效）。
+        } elseif ($create.Status -ne 201) {
+            throw "创建最小权限验证主体失败，状态 $($create.Status)，错误码 $createCode"
+        }
+
+        $token = Get-AccessToken -Username $script:LeastPrivUser -Password $script:LeastPrivPass
+        if ([string]::IsNullOrEmpty($token)) { throw "最小权限验证主体登录失败" }
+        $script:LeastPrivToken = Resolve-PasswordChangeGate -Username $script:LeastPrivUser `
+            -Password $script:LeastPrivPass -Token $token -Who "最小权限验证主体"
+
+        # 反向自检：验证主体不得持有任何被测端点所需权限，否则默认拒绝断言会失去意义。
+        $me = Invoke-Api -Method GET -Path "/api/v1/me" `
+            -Headers @{ Authorization = "Bearer $($script:LeastPrivToken)" }
+        $lpScopes = @((($me.Body | ConvertFrom-Json).data.scopes))
+        foreach ($scope in @("audit:read", "job:read", "notification:read",
+                             "system:observe", "dictionary:read", "tag:read")) {
+            if ($lpScopes -contains $scope) {
+                throw "最小权限验证主体不应持有 $scope，否则其 403 无法证明默认拒绝"
+            }
+        }
+    }
+}
+
+# 默认拒绝断言：无 Token→401(AUTH_UNAUTHENTICATED)；最小权限主体→403(AUTH_PERMISSION_DENIED)。
+# 必须校验响应体稳定错误码：仅比较状态码会把首登改密门等无关 403 误判为权限拒绝（历史假阳性）。
 function Assert-DefaultDeny {
     param([string]$Path)
     $anon = Invoke-Api -Method GET -Path $Path
     if ($anon.Status -ne 401) { throw "无 Token 访问 $Path 返回 $($anon.Status)，期望 401" }
-    if ($script:accessToken) {
-        $auth = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:accessToken)" }
-        if ($auth.Status -ne 403) { throw "越权 Token 访问 $Path 返回 $($auth.Status)，期望 403（默认拒绝）" }
+    $anonCode = Get-ErrorCode $anon.Body
+    if ($anonCode -and $anonCode -ne "AUTH_UNAUTHENTICATED") {
+        throw "无 Token 访问 $Path 返回错误码 $anonCode，期望 AUTH_UNAUTHENTICATED"
+    }
+    if ([string]::IsNullOrEmpty($script:LeastPrivToken)) {
+        throw "前置条件未满足：最小权限验证主体不可用，无法证明 $Path 的 403 来自权限判定"
+    }
+    $auth = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:LeastPrivToken)" }
+    Assert-NotPasswordChangeRequired -Body $auth.Body -Who "最小权限验证主体"
+    if ($auth.Status -ne 403) {
+        throw "最小权限主体访问 $Path 返回 $($auth.Status)，期望 403（默认拒绝）"
+    }
+    $code = Get-ErrorCode $auth.Body
+    if ($code -ne "AUTH_PERMISSION_DENIED") {
+        throw "最小权限主体访问 $Path 返回错误码 $code，期望 AUTH_PERMISSION_DENIED（403 必须源于权限判定）"
+    }
+}
+
+# 有权限正向断言（AC-P0B-AUTH-004）：证明系统不是「全部拒绝」，且返回真实数据而非空集合占位。
+function Assert-Permitted {
+    param([string]$Path, [switch]$RequireNonEmptyData)
+    if ([string]::IsNullOrEmpty($script:accessToken)) {
+        throw "前置条件未满足：管理员 Token 不可用，无法执行 $Path 的正向断言"
+    }
+    $resp = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:accessToken)" }
+    Assert-NotPasswordChangeRequired -Body $resp.Body -Who "管理员 $AdminUser"
+    if ($resp.Status -ne 200) {
+        throw "有权限主体访问 $Path 返回 $($resp.Status)，期望 200（$(Get-ErrorCode $resp.Body)）"
+    }
+    if ($RequireNonEmptyData) {
+        $count = 0
+        try { $count = @((($resp.Body | ConvertFrom-Json).data)).Count } catch { $count = 0 }
+        if ($count -lt 1) { throw "有权限主体访问 $Path 返回空集合占位，未证明数据真实可达" }
     }
 }
 
 # ---------------------------------------------------------------------------
-# V06: 权限过滤（审计查询默认拒绝）
+# V06: 权限过滤（审计查询默认拒绝 + 有权限正向可达）
 # ---------------------------------------------------------------------------
 if (-not $backendReachable) {
     Skip-Step "V06" "权限过滤（审计）" "backend 不可达"
 } else {
-    Test-Step "V06" "权限过滤（审计/指标默认拒绝）" {
+    Test-Step "V06" "权限过滤（审计/指标默认拒绝 + 有权限正向可达）" {
         Assert-DefaultDeny "/api/v1/system/audit-logs"
         Assert-DefaultDeny "/api/v1/system/metrics/summary"
+        # 管理员经 ADMIN 角色合法持有 audit:read / system:observe，应真实可达。
+        Assert-Permitted "/api/v1/system/audit-logs"
+        Assert-Permitted "/api/v1/system/metrics/summary"
     }
 }
 
 # ---------------------------------------------------------------------------
-# V07: 字典/标签受控访问（默认拒绝）
+# V07: 字典/标签受控访问（默认拒绝 + 有权限正向返回真实数据）
 # ---------------------------------------------------------------------------
 if (-not $backendReachable) {
     Skip-Step "V07" "字典/标签受控访问" "backend 不可达"
 } else {
-    Test-Step "V07" "字典/标签受控访问（默认拒绝）" {
+    Test-Step "V07" "字典/标签受控访问（默认拒绝 + 有权限正向断言）" {
         Assert-DefaultDeny "/api/v1/system/dictionaries"
         Assert-DefaultDeny "/api/v1/system/tags"
+        # AC-P0B-AUTH-004：有 dictionary:read / tag:read 的主体必须返回真实数据而非空集合占位。
+        Assert-Permitted "/api/v1/system/dictionaries" -RequireNonEmptyData
     }
 }
 
@@ -269,29 +414,31 @@ if (-not $pgReachable) {
 }
 
 # ---------------------------------------------------------------------------
-# V09: 持久化任务（默认拒绝）
+# V09: 持久化任务（默认拒绝 + 有权限正向可达）
 # ---------------------------------------------------------------------------
 if (-not $backendReachable) {
     Skip-Step "V09" "持久化任务访问" "backend 不可达"
 } else {
-    Test-Step "V09" "持久化任务访问（默认拒绝）" {
+    Test-Step "V09" "持久化任务访问（默认拒绝 + 有权限正向可达）" {
         Assert-DefaultDeny "/api/v1/system/jobs"
+        Assert-Permitted "/api/v1/system/jobs"
     }
 }
 
 # ---------------------------------------------------------------------------
-# V10: 通知（默认拒绝）
+# V10: 通知（默认拒绝 + 有权限正向可达）
 # ---------------------------------------------------------------------------
 if (-not $backendReachable) {
     Skip-Step "V10" "通知访问" "backend 不可达"
 } else {
-    Test-Step "V10" "通知访问（默认拒绝）" {
+    Test-Step "V10" "通知访问（默认拒绝 + 有权限正向可达）" {
         Assert-DefaultDeny "/api/v1/system/notifications"
+        Assert-Permitted "/api/v1/system/notifications"
     }
 }
 
 # ---------------------------------------------------------------------------
-# V11: 观测（健康公开 200；诊断需 system:observe，默认拒绝）
+# V11: 观测（健康公开 200；诊断需 system:observe，默认拒绝 + 有权限正向可达）
 # ---------------------------------------------------------------------------
 if (-not $backendReachable) {
     Skip-Step "V11" "观测与诊断" "backend 不可达"
@@ -300,6 +447,7 @@ if (-not $backendReachable) {
         $health = Invoke-Api -Method GET -Path "/actuator/health"
         if ($health.Status -ne 200) { throw "/actuator/health 返回 $($health.Status)，期望 200" }
         Assert-DefaultDeny "/api/v1/system/dependencies"
+        Assert-Permitted "/api/v1/system/dependencies"
     }
 }
 
