@@ -93,20 +93,33 @@ flywayBaseline: V1
 ### 缺陷事实（已复核）
 
 `AssetSearchDao.facet(AssetSearchCriteria)` 构造的聚合 SQL 只下推了
-`statuses`、`visibilities`、`keyword` 与 `AccessScope`，**未**下推
-`type`、`sensitivity`、`tagId`/`tagIds` 及 `taskCodes`/`modalityCodes`/`formatCodes`/`languageCodes`。
+`statuses`、`visibilities`、`keyword` 与 `AccessScope`，**未**下推 `type`，
+也未下推 `sensitivity`、`tagId`/`tagIds` 及 `taskCodes`/`modalityCodes`/`formatCodes`/`languageCodes`。
 
-同时 `AssetApplicationService.getAssetFacets(String keyword, AssetType type, String principalId)`
-在构造 `AssetSearchCriteria` 时把除 `keyword`/`type` 之外的过滤位全部置为 `null`，
-而 `AssetController.getAssetFacets` 也只暴露 `keyword` 与 `type` 两个请求参数。
+而调用链已经把 `type` 传到了 criteria：
 
-后果：`?type=DATASET` 返回的是**全类型**计数，与 `AC-DST-TAX-002`
-「不可见资产不影响 items、count、autocomplete 或 Cursor」及
-`REQ-AUTH-002`「facet/count/autocomplete 与 items 使用同一授权 Predicate」的语义不符。
+- `AssetController.getAssetFacets` 暴露 `keyword` 与 `type` 两个请求参数；
+- `AssetApplicationService.getAssetFacets(String keyword, AssetType type, String principalId)`
+  把 `type` 写入 `AssetSearchCriteria` 的第 2 个位置参数；
+- 但 `facet` 的 SQL 拼装忽略该字段。
 
-参考实现对比：`AssetSearchDao.search(AssetSearchCriteria)` 已正确下推上述全部过滤位，
-且 `appendAccessScopeFilter` 已实现可见性判定矩阵（`TASK-P0BR-017` / `AC-P0B-AUTH-003`）。
-本卡把 `facet` 对齐到 `search` 的过滤语义，不新增权限逻辑。
+因此 `GET /api/v1/assets/facets?type=DATASET` 会返回**跨全部类型**的计数，
+与 OpenAPI 中该端点的描述（「返回各维度（type/framework/task/modality/format）的聚合计数，
+用于搜索侧栏过滤」）以及调用方的合理预期不一致。这是**契约与实现不一致的正确性缺陷**。
+
+需要明确区分两点，避免夸大：
+
+1. **不是授权泄漏**。`facet` 已通过 `appendAccessScopeFilter` 下推可见性判定矩阵
+   （`TASK-P0BR-017` / `AC-P0B-AUTH-003` 已实现），无权资产不进入计数。
+   本卡不改变授权谓词，也不新增可见性逻辑。
+2. **`sensitivity`/`tagId` 等参数当前根本不被接受**，属能力缺口而非既有缺陷；
+   该部分扩展由用户在批次选择中显式批准（「A2/B4/B5 Facet 完整化」），
+   其语义依据是 `REQ-DST-TAX-001`（P1）中「Facet 和计数必须在数据库权限、敏感度和状态过滤后计算」。
+   若阶段门禁判定该扩展必须延后，可只实施第 1 项（`type` 下推对齐）并保留其余为后续任务。
+
+参考实现对比：`AssetSearchDao.search(AssetSearchCriteria)` 已正确下推类型、敏感度、
+标签与分类维度等全部过滤位。本卡把 `facet` 的过滤语义对齐到 `search`，
+并抽取共享拼装以避免两处再次漂移。
 
 ## 3. 范围
 
