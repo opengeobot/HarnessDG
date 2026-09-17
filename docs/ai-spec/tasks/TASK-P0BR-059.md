@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-059
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 962a19b46c01b6705047c9599b074e8f3ea54ab5
-stageGatePassed: false
-stageGateEvidence: 待用户批准。依据 READY 需求 REQ-IAM-002「每次失败原子增加计数，达到配置阈值进入 LOCKED」与 ACCEPTED 决策 DEC-003、DEC-013，修复登录失败计数、锁定与失败审计因事务回滚而整体失效的缺陷（DEF-058-1）；属 ADR-0002 允许的安全整改，不新增业务能力。
+baseCommit: 61528b85d93d75167341bc01178666ae6c8cd6ad
+stageGatePassed: true
+stageGateEvidence: 用户批准（AskUserQuestion 选择「批准全部三张（推荐）」）。依据 READY 需求 REQ-IAM-002「每次失败原子增加计数，达到配置阈值进入 LOCKED」与 ACCEPTED 决策 DEC-003、DEC-013，修复登录失败计数、锁定与失败审计因事务回滚而整体失效的缺陷（DEF-058-1）；属 ADR-0002 允许的安全整改，不新增业务能力。
 stageGateEvidenceRefs:
   - DEC-003
   - DEC-013
@@ -60,8 +60,8 @@ requiredValidationCommands:
   - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-059.md -CheckChangedPaths
   - cd backend; ./mvnw.cmd verify
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
-approvedBy: null
-approvedAt: null
+approvedBy: User
+approvedAt: 2026-09-17T10:15:33Z
 ---
 
 # TASK-P0BR-059：修复登录失败计数、锁定与失败审计的事务回滚缺陷

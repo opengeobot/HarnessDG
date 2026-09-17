@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-061
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 962a19b46c01b6705047c9599b074e8f3ea54ab5
-stageGatePassed: false
-stageGateEvidence: 待用户批准。依据 READY 需求 REQ-IAM-006「USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET」「不能禁用最后一个有效平台管理员：拒绝并返回 COMMON_INVALID_ARGUMENT，同时产生拒绝审计」与 ACCEPTED 决策 DEC-003、DEC-013，补齐用户管理全链路审计落点并实现最后管理员保护（DEF-058-4）；属 ADR-0002 允许的审计与授权整改，不新增业务能力。
+baseCommit: 61528b85d93d75167341bc01178666ae6c8cd6ad
+stageGatePassed: true
+stageGateEvidence: 用户批准（AskUserQuestion 选择「批准全部三张（推荐）」）。依据 READY 需求 REQ-IAM-006「USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET」「不能禁用最后一个有效平台管理员：拒绝并返回 COMMON_INVALID_ARGUMENT，同时产生拒绝审计」与 ACCEPTED 决策 DEC-003、DEC-013，补齐用户管理全链路审计落点并实现最后管理员保护（DEF-058-4）；属 ADR-0002 允许的审计与授权整改，不新增业务能力。
 stageGateEvidenceRefs:
   - DEC-003
   - DEC-013
@@ -64,8 +64,8 @@ requiredValidationCommands:
   - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-061.md -CheckChangedPaths
   - cd backend; ./mvnw.cmd verify
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
-approvedBy: null
-approvedAt: null
+approvedBy: User
+approvedAt: 2026-09-17T10:15:33Z
 ---
 
 # TASK-P0BR-061：补齐用户管理审计落点并实现最后管理员保护

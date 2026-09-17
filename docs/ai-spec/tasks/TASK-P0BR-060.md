@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-060
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 962a19b46c01b6705047c9599b074e8f3ea54ab5
-stageGatePassed: false
-stageGateEvidence: 待用户批准。依据 READY 需求 REQ-IAM-004「以原子 compare-and-set 将 jti 从 ACTIVE 置为 ROTATED」「只有一个并发请求可以成功」「ROTATED jti 再用视为重放，整个 Family REVOKED」与 ACCEPTED 决策 DEC-003、DEC-013，修复重放整族吊销与并发刷新双有效 Token 缺陷（DEF-058-2/3）及其失效的拒绝审计；属 ADR-0002 允许的安全整改，不新增业务能力。
+baseCommit: 61528b85d93d75167341bc01178666ae6c8cd6ad
+stageGatePassed: true
+stageGateEvidence: 用户批准（AskUserQuestion 选择「批准全部三张（推荐）」）。依据 READY 需求 REQ-IAM-004「以原子 compare-and-set 将 jti 从 ACTIVE 置为 ROTATED」「只有一个并发请求可以成功」「ROTATED jti 再用视为重放，整个 Family REVOKED」与 ACCEPTED 决策 DEC-003、DEC-013，修复重放整族吊销与并发刷新双有效 Token 缺陷（DEF-058-2/3）及其失效的拒绝审计；属 ADR-0002 允许的安全整改，不新增业务能力。
 stageGateEvidenceRefs:
   - DEC-003
   - DEC-013
@@ -64,8 +64,8 @@ requiredValidationCommands:
   - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-060.md -CheckChangedPaths
   - cd backend; ./mvnw.cmd verify
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
-approvedBy: null
-approvedAt: null
+approvedBy: User
+approvedAt: 2026-09-17T10:15:33Z
 ---
 
 # TASK-P0BR-060：修复 refresh 重放整族吊销被回滚与并发刷新双有效 Token
