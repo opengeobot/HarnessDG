@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-058
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 33b0e4a737ca57d5d9ea52b93de0d800d76f7a32
-stageGatePassed: false
-stageGateEvidence: 待用户批准。依据 READY 需求 REQ-IAM-001~006（P0-B 身份与 JWT）与 ACCEPTED 决策 DEC-004、DEC-013，为 IAM 场景补齐 E4 级证据；属 ADR-0002 出口门禁要求的验证补全，不新增业务能力。
+baseCommit: aecc7b2f27559762fa52dadd85210a6754b05345
+stageGatePassed: true
+stageGateEvidence: 用户批准（AskUserQuestion 选择「批准并授权实施」）。依据 READY 需求 REQ-IAM-001~006（P0-B 身份与 JWT）与 ACCEPTED 决策 DEC-004、DEC-013，为 IAM 场景补齐 E4 级证据；属 ADR-0002 出口门禁要求的验证补全，不新增业务能力。
 stageGateEvidenceRefs:
   - DEC-013
 requirements:
@@ -80,8 +80,8 @@ requiredValidationCommands:
   - docker compose -f deploy/compose/compose.yaml config --quiet
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
   - bash ./deploy/compose/scripts/verify.sh
-approvedBy: null
-approvedAt: null
+approvedBy: User
+approvedAt: 2026-09-17T09:12:44Z
 ---
 
 # TASK-P0BR-058：为 IAM 验收场景补齐 E4 证据（12 项中 10 项当前无证据）
