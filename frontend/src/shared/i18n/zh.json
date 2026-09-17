@@ -56,7 +56,8 @@
   "layout": {
     "profile": "个人中心",
     "logout": "登出",
-    "logoutFailed": "登出失败"
+    "logoutFailed": "登出失败",
+    "switchLanguage": "切换语言"
   },
   "login": {
     "title": "登录",

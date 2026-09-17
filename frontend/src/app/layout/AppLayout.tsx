@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth';
 import { usePermission } from '@/app/permission';
 import { isApiError } from '@/shared/api';
+import { LanguageSwitcher } from '@/shared/components';
 import { NAV_ITEMS, type NavItem } from './navigation';
 
 const { Header, Sider, Content } = Layout;
@@ -26,7 +27,7 @@ export function AppLayout() {
   const { hasAllScopes } = usePermission();
   const { t } = useTranslation();
 
-  // 按权限过滤导航项（父项若无可见子项则隐藏）
+  // 按权限过滤导航项（父项若无可见子项则隐藏）；labelKey 在渲染时求值以响应运行时语言切换
   const menuItems = useMemo<MenuNode[]>(() => {
     const visible = (item: NavItem): boolean =>
       !item.requiredScopes || hasAllScopes(item.requiredScopes);
@@ -37,19 +38,19 @@ export function AppLayout() {
         if (item.children) {
           const children = build(item.children);
           if (children.length > 0) {
-            nodes.push({ key: item.key, label: item.label, children });
+            nodes.push({ key: item.key, label: t(item.labelKey), children });
           }
           continue;
         }
         if (visible(item)) {
-          nodes.push({ key: item.key, label: item.label });
+          nodes.push({ key: item.key, label: t(item.labelKey) });
         }
       }
       return nodes;
     };
 
     return build(NAV_ITEMS);
-  }, [hasAllScopes]);
+  }, [hasAllScopes, t]);
 
   const selectedKey = location.pathname;
   const openKeys = NAV_ITEMS.filter(
@@ -72,27 +73,30 @@ export function AppLayout() {
         <Typography.Title level={4} style={{ color: '#fff', margin: 0, whiteSpace: 'nowrap' }}>
           AI {t('app.title')}
         </Typography.Title>
-        <Dropdown
-          menu={{
-            items: [
-              { key: 'profile', label: t('layout.profile') },
-              { key: 'logout', label: t('layout.logout') },
-            ],
-            onClick: ({ key }) => {
-              if (key === 'profile') {
-                navigate('/profile');
-              } else if (key === 'logout') {
-                void handleLogout();
-              }
-            },
-          }}
-        >
-          <Space style={{ color: '#fff', cursor: 'pointer' }}>
-            <UserOutlined />
-            {principal?.displayName ?? principal?.subject ?? t('app.notLoggedIn')}
-            <DownOutlined />
-          </Space>
-        </Dropdown>
+        <Space size="middle">
+          <LanguageSwitcher />
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'profile', label: t('layout.profile') },
+                { key: 'logout', label: t('layout.logout') },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'profile') {
+                  navigate('/profile');
+                } else if (key === 'logout') {
+                  void handleLogout();
+                }
+              },
+            }}
+          >
+            <Space style={{ color: '#fff', cursor: 'pointer' }}>
+              <UserOutlined />
+              {principal?.displayName ?? principal?.subject ?? t('app.notLoggedIn')}
+              <DownOutlined />
+            </Space>
+          </Dropdown>
+        </Space>
       </Header>
       <Layout>
         <Sider width={220} breakpoint="lg" collapsedWidth="0" theme="light">

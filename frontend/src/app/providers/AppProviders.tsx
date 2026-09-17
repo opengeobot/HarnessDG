@@ -29,7 +29,8 @@ function createQueryClient(): QueryClient {
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
   const { i18n } = useTranslation();
-  const antdLocale = i18n.language === 'en' ? enUS : zhCN;
+  // 语言变化时同步 antd locale；i18n.language 由 changeLanguage 单一入口更新。
+  const antdLocale = i18n.resolvedLanguage === 'en' ? enUS : zhCN;
 
   return (
     <QueryClientProvider client={queryClient}>

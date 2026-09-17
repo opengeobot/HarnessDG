@@ -11,6 +11,7 @@ import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth';
 import { isApiError } from '@/shared/api';
+import { LanguageSwitcher } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
 import type { LoginRequest } from '@/shared/types';
 
@@ -59,6 +60,9 @@ export function LoginPage() {
       }}
     >
       <Card style={{ width: 380 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <LanguageSwitcher variant="default" />
+        </div>
         <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
           {t('login.platformTitle')}
         </Typography.Title>

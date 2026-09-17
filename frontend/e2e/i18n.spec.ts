@@ -1,5 +1,6 @@
 /*
- * 功能: AC-P0B-UI-005 E2E 测试——中英文国际化切换。
+ * 功能: AC-P0B-UI-005 / AC-P0B-TAX-006 E2E 测试——运行时中英文切换与错误按 i18nKey 渲染。
+ *       断言为无条件式：切换器缺失、文案未变化或请求语言不符时测试必须失败。
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
@@ -16,73 +17,80 @@ async function login(page: import('@playwright/test').Page, username: string, pa
   await expect(page).not.toHaveURL(/\/login/);
 }
 
-test.describe('AC-P0B-UI-005: i18n 中英文切换', () => {
-  test('默认语言显示中文文案', async ({ page }) => {
-    await login(page, ADMIN_USERNAME, ADMIN_PASSWORD);
+/** 经唯一入口切换语言并等待界面文案更新 */
+async function switchLanguage(page: import('@playwright/test').Page, label: '中文' | 'English') {
+  await page.getByTestId('language-switcher').click();
+  await page.getByRole('menuitem', { name: label }).click();
+}
 
-    // 检查页面中是否包含中文文案元素。
-    const bodyText = await page.locator('body').textContent();
-    // 默认语言应为中文（根据 admin 用户的 zh-CN locale）。
-    expect(bodyText).toBeTruthy();
-    // 至少应有一些中文字符出现在页面上。
-    const hasChinese = /[\u4e00-\u9fff]/.test(bodyText ?? '');
-    // 如果默认语言是中文，页面应包含中文。
-    // 注：如果默认语言不是中文，此断言可能需要调整。
-    if (hasChinese) {
-      expect(hasChinese).toBe(true);
-    }
-  });
-
-  test('语言切换按钮可切换显示语言', async ({ page }) => {
-    await login(page, ADMIN_USERNAME, ADMIN_PASSWORD);
-
-    // 查找语言切换按钮/下拉菜单。
-    const langSwitcher = page.locator(
-      '[data-testid="language-switcher"], ' +
-      '.ant-btn:has-text("中文"), ' +
-      '.ant-btn:has-text("English"), ' +
-      '.ant-btn:has-text("ZH"), ' +
-      '.ant-btn:has-text("EN")'
-    ).first();
-
-    const hasSwitcher = await langSwitcher.isVisible({ timeout: 5000 }).catch(() => false);
-
-    if (hasSwitcher) {
-      // 切换语言。
-      await langSwitcher.click();
-
-      // 等待可能的下拉选项。
-      const enOption = page.getByText(/English|EN|英文/i).first();
-      if (await enOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await enOption.click();
-      }
-
-      // 切换后页面文本应发生变化。
-      await page.waitForTimeout(1000);
-      const afterText = await page.locator('body').textContent();
-      // 文本应不同（语言切换生效）。
-      // 注：由于 antd 组件可能不完全响应语言切换，这个断言是 best-effort。
-      expect(afterText).toBeTruthy();
-    }
-  });
-
-  test('登录页面支持多语言', async ({ page }) => {
+test.describe('AC-P0B-UI-005/TAX-006: i18n 运行时切换', () => {
+  test('登录页提供语言切换入口并可切换为英文', async ({ page }) => {
     await page.goto('/login');
 
-    // 登录页面应有国际化支持。
-    const bodyText = await page.locator('body').textContent();
-    expect(bodyText).toBeTruthy();
-    expect(bodyText!.length).toBeGreaterThan(0);
+    // 登录页必须存在切换器；缺少即失败（不得条件跳过）。
+    const switcher = page.getByTestId('language-switcher');
+    await expect(switcher).toBeVisible();
 
-    // 查找语言切换器在登录页面。
-    const loginLangSwitcher = page.locator(
-      '[data-testid="language-switcher"], ' +
-      '.ant-btn:has-text("中文"), ' +
-      '.ant-btn:has-text("English")'
-    ).first();
+    await expect(page.getByText('AI 资产管理平台')).toBeVisible();
+    await switchLanguage(page, 'English');
+    await expect(page.getByText('AI Asset Management Platform')).toBeVisible();
+  });
 
-    const hasLoginSwitcher = await loginLangSwitcher.isVisible({ timeout: 3000 }).catch(() => false);
-    // 语言切换器可以在登录页也可在主页面，不强求在登录页。
-    expect(hasLoginSwitcher || !hasLoginSwitcher).toBe(true);
+  test('切换语言后刷新仍保持所选语言', async ({ page }) => {
+    await page.goto('/login');
+    await switchLanguage(page, 'English');
+    await expect(page.getByText('AI Asset Management Platform')).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText('AI Asset Management Platform')).toBeVisible();
+  });
+
+  test('登录后导航与界面文案随语言切换', async ({ page }) => {
+    await page.goto('/login');
+    await switchLanguage(page, 'English');
+    await login(page, ADMIN_USERNAME, ADMIN_PASSWORD);
+
+    // 英文界面下导航与用户菜单应为英文。
+    await expect(page.getByText('Asset Catalog', { exact: true })).toBeVisible();
+    await expect(page.getByText('Logout', { exact: true })).toBeVisible();
+
+    // 切回中文后同一界面应立即变化（导航不再绑定模块加载时的旧文案）。
+    await switchLanguage(page, '中文');
+    await expect(page.getByText('资产目录', { exact: true })).toBeVisible();
+  });
+
+  test('请求头 Accept-Language 与所选语言一致', async ({ page }) => {
+    const observed: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/api/v1/')) {
+        const value = request.headers()['accept-language'];
+        if (value) {
+          observed.push(value);
+        }
+      }
+    });
+
+    await page.goto('/login');
+    await switchLanguage(page, 'English');
+    await login(page, ADMIN_USERNAME, ADMIN_PASSWORD);
+    await page.waitForLoadState('networkidle');
+
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.some((value) => value.startsWith('en'))).toBe(true);
+  });
+
+  test('切换语言后后端错误按 i18nKey 以所选语言渲染', async ({ page }) => {
+    await page.goto('/login');
+    await switchLanguage(page, 'English');
+
+    // 使用错误凭据触发后端认证错误。
+    await page.getByLabel(/用户名|username/i).fill('admin');
+    await page.getByLabel(/密码|password/i).fill('definitely-wrong-password');
+    await page.getByRole('button', { name: /Login|Sign in/i }).click();
+
+    // 错误提示必须出现且不含原始堆栈；文案随界面语言（英文）呈现。
+    const alert = page.locator('.ant-message').first();
+    await expect(alert).toBeVisible();
+    await expect(alert).not.toContainText('at com.aihub');
   });
 });

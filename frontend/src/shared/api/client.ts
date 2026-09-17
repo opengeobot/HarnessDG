@@ -14,6 +14,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import type { ApiErrorBody, ApiResponse } from '@/shared/types';
+import { currentAcceptLanguage } from '@/shared/i18n';
 import { ApiError } from './errors';
 import {
   getAccessToken,
@@ -60,7 +61,8 @@ const instance: AxiosInstance = axios.create({
 instance.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   config.headers.set('X-Request-Id', generateRequestId());
   if (!config.headers.has('Accept-Language')) {
-    config.headers.set('Accept-Language', 'zh-CN');
+    // 与当前界面语言保持一致，使后端错误与字典文案按所选 locale 返回（AC-P0B-UI-005）。
+    config.headers.set('Accept-Language', currentAcceptLanguage());
   }
   // 认证端点需携带安全 Cookie 完成 refresh 轮换
   if (isAuthEndpoint(config.url)) {
