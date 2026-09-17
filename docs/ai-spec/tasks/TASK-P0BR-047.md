@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-047
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 6fc6d1cca7486ae6d33d688e27846a8989ad3bca
-stageGatePassed: false
-stageGateEvidence: 待用户批准。拟以 READY 需求 REQ-IAM-001/REQ-JOB-001 与 ACCEPTED 决策 DEC-013 作为阶段依据。
+baseCommit: 54f20f76102bdbad8cf5f1f2e83e73f42823176d
+stageGatePassed: true
+stageGateEvidence: 用户批准。依据 READY 需求 REQ-IAM-001/REQ-JOB-001（P0-B 公共底座）与 ACCEPTED 决策 DEC-013（Compose 为功能验收环境），修复可部署 Profile 装配缺陷以恢复 AC-P0B-ENG-004/006 的 E3/E4 可达性。
 stageGateEvidenceRefs:
   - DEC-013
 requirements:
@@ -57,11 +57,13 @@ requiredValidationCommands:
   - cd backend; ./mvnw.cmd verify
   - docker compose -f deploy/compose/compose.yaml config --quiet
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
+approvedBy: User
+approvedAt: 2026-09-17T03:34:20Z
 ---
 
 # TASK-P0BR-047：修复 Composable Profile 的 Mapper 扫描覆盖，恢复可部署栈启动
 
-> 状态：`DRAFT`（待用户批准后改为 `READY`）
+> 状态：`READY`（用户已批准并授权实施）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
@@ -285,7 +287,7 @@ Remaining risks or follow-ups:
 
 ### 已验证的前置调查结论（DRAFT 阶段，供批准参考）
 
-在一次性 worktree 中对当前 HEAD 施加**单行** `@MapperScan` 修正后实测：
+在一次性 worktree 中对当时 HEAD 施加**单行** `@MapperScan` 修正后实测：
 
 - `api` Profile：`Started AihubApplication in 11.402 seconds`；
 - `worker` Profile：`Started AihubApplication in 10.653 seconds`；
@@ -293,4 +295,5 @@ Remaining risks or follow-ups:
 - `verify.ps1`：V01-V11 全部 PASS，退出码 0；
 - 后端全量单测：482 项，失败 2 项（`PreviewJobHandlerTest` 的既存 CSV 缺陷，与本修复无关）。
 
-该调查未在主仓库写入任何产品代码修改，不构成实施。
+该调查在一次性 worktree 中进行，未在主仓库写入任何产品代码修改，不构成实施。
+本节为批准前参考，不替代本次实施后取得的正式 Evidence。

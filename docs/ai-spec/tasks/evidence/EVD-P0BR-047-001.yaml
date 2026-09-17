@@ -1,0 +1,166 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-047-001
+# 本卡 requiredEvidenceLevel 为 E3；本次已取得 E3（真实 PostgreSQL 上 Flyway V1..V25 全量应用）
+# 与 E4（Compose 全栈四服务入口，verify.ps1 V01-V11 全 PASS，退出码 0）。
+# 但 completion 门禁未通过（Evidence 尚未经验证责任方接受，且 -CheckCompletion 要求工作树干净、
+# Evidence Commit 等于 HEAD），故交接状态为 IMPLEMENTED_UNVERIFIED，不声明完成。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-047
+  requirements: [REQ-IAM-001, REQ-JOB-001]
+  scenarios:
+    - AC-P0B-ENG-004
+    - AC-P0B-ENG-006
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-047.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-047.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-047.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 54f20f76102bdbad8cf5f1f2e83e73f42823176d
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/bootstrap/AihubApplication.java
+    - backend/src/test/java/com/aihub/arch/MapperScanCoverageTest.java
+    - docs/ai-spec/tasks/TASK-P0BR-047.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-047-001.yaml
+
+environment:
+  observedAt: 2026-09-17T11:55:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16 (Compose 固定镜像)
+    minio: minio/minio RELEASE 系列（Compose 固定镜像）
+    gitea: gitea/gitea（Compose 固定镜像）
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    docker compose -f deploy/compose/compose.yaml down -v --remove-orphans;
+    docker compose -f deploy/compose/compose.yaml up -d --build;
+    powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
+  startedAt: 2026-09-17T11:46:00+08:00
+  finishedAt: 2026-09-17T11:53:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL（真实容器，非 Mock；Flyway V1..V25 实际应用）
+    - MinIO（真实容器，四 Bucket 初始化）
+    - Gitea（真实容器，Healthy）
+  e4EntryPoint: Nginx
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-ENG-004
+      assertion: >-
+        干净卷（down -v 后）启动 Compose 栈，真实 PostgreSQL 上 Flyway 从零应用全部 25 个迁移：
+        后端日志 "Successfully applied 25 migrations to schema \"public\", now at version v25"，
+        flyway_schema_history 中 success=true 的记录数为 25（最高版本 V25）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-004
+      assertion: >-
+        V04 数据库迁移完整性检查 PASS（关键表存在且迁移历史一致），见 verify.ps1 输出。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >-
+        compose/api 与 worker Profile 上下文装配成功，不再出现
+        "required a bean of type ...Mapper that could not be found"：
+        后端 "Started AihubApplication in 5.755 seconds"，worker "Started AihubApplication in 5.326 seconds"。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >-
+        Compose 全部服务就绪：backend/frontend/gitea/minio/nginx/postgres/worker 均 Up，
+        其中 backend、gitea、minio、postgres 为 healthy；backend Healthy 是 nginx 的依赖条件。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >-
+        verify.ps1 经 Nginx 入口执行 V01-V11 全部 PASS，退出码 0：
+        V01 Compose 配置合法、V02 核心服务健康、V03 Bucket 初始化、V04 数据库迁移完整性、
+        V05 JWT 生命周期、V06 权限过滤（审计/指标默认拒绝）、V07 字典/标签受控访问（默认拒绝）、
+        V08 审计脱敏与登录审计、V09 持久化任务访问（默认拒绝）、V10 通知访问（默认拒绝）、
+        V11 观测与诊断。修复后无 Token 越权仍被默认拒绝，权限语义未被放宽。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >-
+        回归门禁具备真实鉴别力：以负例对照验证（临时恢复单星 @MapperScan），
+        MapperScanCoverageTest 精确报出且仅报出 3 个两级包 Mapper 逃逸
+        （asset.discussion.infrastructure 的 CommentMapper / CommentRevisionMapper / DiscussionThreadMapper），
+        测试失败；恢复双星模式后测试通过。
+      scenarioCategory: failure
+  notProven:
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >-
+        未验证「未来新增更深层模块的 Mapper 时门禁自动生效」的长期行为；已通过负例对照
+        证明门禁对单星模式有效，但未构造三层及以上包名的真实模块做端到端演练。
+    - scenarioId: AC-P0B-ENG-004
+      assertion: >-
+        未在本轮验证「已有完整 schema 时重启 backend，Flyway 报 up to date 且不重复执行」的幂等重启场景；
+        本轮只覆盖了干净卷的首次全量迁移。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: true
+  migrationMatched: true
+  uiMatched: true
+  runbookMatched: true
+
+artifacts:
+  reports:
+    - backend/target/surefire-reports/TEST-com.aihub.arch.MapperScanCoverageTest.xml
+    - backend/target/surefire-reports/com.aihub.version.infrastructure.PreviewJobHandlerTest.txt
+  logs:
+    - .trae/compose-up-047.log
+    - .trae/verify-047.log
+    - .trae/mvnw-verify-047.log
+  screenshots: []
+  traces: []
+  metrics:
+    - 后端全量 mvnw verify：Tests run 484, Failures 2, Errors 0, Skipped 6
+    - 新增门禁 MapperScanCoverageTest：Tests run 2, Failures 0
+    - Flyway：Successfully applied 25 migrations, now at version v25
+    - backend 启动耗时 5.755s；worker 启动耗时 5.326s
+    - verify.ps1：V01-V11 共 11 项全部 PASS，退出码 0
+  databaseQueries:
+    - select count(*), max(version) from flyway_schema_history where success;  ->  25 | 9
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据未包含 deploy/compose/.env 中的任何口令、Gitea Token、MinIO 密钥或预签名 URL；
+      verify.ps1 的 V08 显式断言审计日志无明文口令。
+
+limitations:
+  skippedTests:
+    - backend/src/test/java 下 14 个 *IT（Testcontainers）：6 项 skipped。
+      未取得 Testcontainers 运行时证据，原因为本机 Docker Desktop 命名管道探测
+      （NpipesocketClientProviderStrategy 400 BadRequest），属本机环境限制而非产品缺陷。
+      本卡所需的 E3/E4 已改由真实 Compose 栈取得，不依赖 Testcontainers。
+  assumptions:
+    - 假设 deploy/compose/.env（gitignored）已在本地存在且与 Compose 模板兼容；本轮已确认其存在。
+  environmentDifferences:
+    - 与 2026-07-02 验证快照相比，本机 Docker 引擎版本为 29.1.2，迁移范围由 V1-V22 扩展至 V1-V25。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
