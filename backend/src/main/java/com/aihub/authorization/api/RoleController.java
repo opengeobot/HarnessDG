@@ -15,9 +15,14 @@ import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.application.PermissionQueryApplicationService;
 import com.aihub.authorization.application.RoleManagementApplicationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.error.ValidationException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +30,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,6 +40,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>读操作要求 {@code authorization:read}，写操作要求 {@code authorization:manage}（平台作用域），
  * 经统一 {@link AuthorizationService} 校验，fail-closed。
+ *
+ * <p>{@code createRole} 按契约声明支持 {@code Idempotency-Key}：同键同请求体复用首次结果，
+ * 同键不同请求体返回 {@code IDEMPOTENCY_KEY_CONFLICT}。
  */
 @RestController
 @RequestMapping("/api/v1/system")
@@ -42,13 +51,19 @@ public class RoleController {
     private final RoleManagementApplicationService roleService;
     private final PermissionQueryApplicationService permissionService;
     private final AuthorizationService authorizationService;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotency;
 
     public RoleController(RoleManagementApplicationService roleService,
                           PermissionQueryApplicationService permissionService,
-                          AuthorizationService authorizationService) {
+                          AuthorizationService authorizationService,
+                          IdempotencyService idempotencyService,
+                          ObjectMapper objectMapper) {
         this.roleService = roleService;
         this.permissionService = permissionService;
         this.authorizationService = authorizationService;
+        this.idempotencyService = idempotencyService;
+        this.idempotency = new IdempotencySupport(objectMapper);
     }
 
     /**
@@ -61,19 +76,29 @@ public class RoleController {
     }
 
     /**
-     * 创建业务角色。
+     * 创建业务角色。支持 Idempotency-Key 幂等保护。
      */
     @PostMapping("/roles")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<RoleView> createRole(@RequestBody CreateRoleRequest request) {
+    public ApiResponse<RoleView> createRole(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyValue,
+            @RequestBody CreateRoleRequest request) {
         authorizationService.requirePermission(Permissions.AUTHORIZATION_MANAGE);
         if (request == null) {
             throw new ValidationException("request body is required");
         }
-        RoleView view = roleService.createRole(new CreateRoleCommand(
-                request.roleCode(), request.roleName(),
-                request.permissionCodes() == null ? List.of() : request.permissionCodes()));
-        return AuthorizationApiContext.respond(view);
+        IdempotencyKey key = idempotency.buildKey(idempotencyKeyValue,
+                AuthorizationApiContext.principalId(), "POST", "/api/v1/system/roles");
+        String fingerprint = idempotency.sha256Digest(request);
+        AtomicReference<RoleView> ref = new AtomicReference<>();
+        idempotencyService.execute(key, fingerprint, () -> {
+            RoleView view = roleService.createRole(new CreateRoleCommand(
+                    request.roleCode(), request.roleName(),
+                    request.permissionCodes() == null ? List.of() : request.permissionCodes()));
+            ref.set(view);
+            return new IdempotencyService.IdempotencyResponse(201, idempotency.serialize(view));
+        });
+        return AuthorizationApiContext.respond(ref.get());
     }
 
     /**
