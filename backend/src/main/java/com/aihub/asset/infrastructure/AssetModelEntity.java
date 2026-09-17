@@ -31,7 +31,10 @@ public class AssetModelEntity {
     @TableField("parameter_scale")
     private String parameterScale;
 
-    @TableField("`precision`")
+    // 列名不得加引用符：MyBatis-Plus 会把注解值原样拼进 SQL，
+    // 而 MySQL 风格反引号在 PostgreSQL 下是语法错误（syntax error at or near ","）。
+    // precision 作为列名不加引用符完全合法，无需转义。
+    @TableField("precision")
     private String precision;
 
     @TableField("weight_format")

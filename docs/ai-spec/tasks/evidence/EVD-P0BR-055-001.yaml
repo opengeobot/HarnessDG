@@ -1,0 +1,186 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-055-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得完整 E4：
+# MODEL 与 DATASET 两类资产的详情读取均由 500 恢复为 200，治理字段与提交值一致，
+# 未知资产仍返回 404 而非 500，后端日志不再出现 syntax error at or near。
+# 静态门禁带负例对照（重新加反引号时 3/3 失败并精确定位）。
+# status 为 PASS：本卡 AC 已闭环。仍按规范交接为 IMPLEMENTED_UNVERIFIED，
+# 因为「完成」还需完成门禁通过并由验证责任方接受（review.accepted 仍为 false）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-055
+  requirements: [REQ-UI-001]
+  scenarios:
+    - AC-P0B-UI-004
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-055.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-055.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-055.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 483af61ad55386165229479c247f0f82ba547908
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/asset/infrastructure/AssetModelEntity.java
+    - backend/src/test/java/com/aihub/asset/infrastructure/AssetEntityColumnEscapingTest.java
+    - docs/ai-spec/tasks/TASK-P0BR-055.md
+
+environment:
+  observedAt: 2026-09-17T16:52:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16（Compose 固定镜像）
+    minio: minio/minio RELEASE 系列（Compose 固定镜像）
+    gitea: gitea/gitea（Compose 固定镜像）
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    docker compose -f deploy/compose/compose.yaml build backend;
+    docker compose -f deploy/compose/compose.yaml up -d backend;
+    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/e4-054-056.ps1;
+    cd backend; ./mvnw.cmd -B verify
+  startedAt: 2026-09-17T16:30:00+08:00
+  finishedAt: 2026-09-17T16:55:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 16（真实容器，asset_model 真实查询）
+    - MinIO（真实容器，Healthy）
+    - Gitea（真实容器，Healthy）
+  e4EntryPoint: REST（http://localhost:8080），真实 Compose 栈后端 + 真实 PostgreSQL
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        真实栈上登记 MODEL 资产后 GET /api/v1/assets/{id} 返回 200（修复前为 500），
+        且 model.framework=PYTORCH、model.task=TEXT_GENERATION、
+        model.architecture=TRANSFORMER、license=APACHE_2_0 与提交值逐一一致。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        DATASET 资产详情同样返回 200，dataset.format=JSONL、dataset.modality=TEXT
+        与提交值一致——证明修复未只覆盖 MODEL 分支。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        未知 assetId 返回 404 ASSET_NOT_FOUND 而非 500，
+        证明修复未把语法错误换成另一种错误语义，既有 NOT_FOUND 契约保持。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        后端日志门禁 PASS：3 分钟内无 "syntax error at or near"。
+        修复前每次详情读取都会产生该 BadSqlGrammarException。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        以与 MyBatis-Plus 生成的完全相同的裸列名清单
+        （asset_id,framework,task,architecture,parameter_scale,precision,weight_format,
+        runtime,known_risks,usage_restrictions,sensitivity_code）在真实 PostgreSQL
+        上执行查询成功，其中 precision 为裸列名。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        负例对照（SQL 层）：以反引号包裹 precision 的同一查询被 PostgreSQL 拒绝并报
+        syntax error——与修复前 MyBatis-Plus 生成的语句行为一致，
+        证明病因定位准确且裸列名是正确解法。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        E2 静态门禁 AssetEntityColumnEscapingTest 3/3 通过：
+        扫描 asset/infrastructure 下全部实体，断言 @TableField/@TableName/@TableId
+        的值不含反引号、且均为小写下划线裸列名。
+        负例对照：把 @TableField("precision") 改回 @TableField("`precision`") 后
+        3/3 失败并精确报出 "AssetModelEntity.java -> `precision`"；恢复后 3/3 通过。
+      scenarioCategory: failure
+  notProven:
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        「详情回读的 precision 字段与提交值一致」无法断言：createAsset 的请求契约
+        （CreateAssetRequest.ModelInput）只接受 framework/task/architecture，
+        未声明 precision 输入，因此该列在创建时不会被写入。
+        这是创建端点的既有能力缺口（属 REQ-AST-005 更新元数据范畴），
+        不在本卡范围。本卡只断言该列已被正确转义并可被 SELECT 读出。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - backend/src/test/java/com/aihub/asset/infrastructure/AssetEntityColumnEscapingTest.java
+    - .trae/e4-054-056.ps1
+  logs:
+    - .trae/e4-054-056.log
+  screenshots: []
+  traces: []
+  metrics:
+    - E4 脚本：PASS=35 FAIL=0（本卡相关 15 项全 PASS，含 2 项负例对照）
+    - AssetEntityColumnEscapingTest 3/3 通过；负例对照时 3/3 失败
+    - verify.ps1：V01–V11 全部 PASS，VERIFY_EXIT=0
+    - mvnw verify：488+ 项（新增 3 项静态门禁），既存 2 项 CSV 失败见 limitations
+  databaseQueries:
+    - >-
+      select count(*) from (select asset_id,framework,task,architecture,parameter_scale,precision,
+      weight_format,runtime,known_risks,usage_restrictions,sensitivity_code from asset_model) t;
+      ->  成功返回计数（修复前报 syntax error at or near ","）
+    - >-
+      select 1 from (select `precision` from asset_model) t;
+      ->  syntax error（负例对照，证明反引号是病因）
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据未包含任何口令、访问令牌、Gitea Token、MinIO 密钥或预签名 URL。
+    - E4 脚本仅读取 .env 用于登录，从不打印凭据或 Token。
+
+limitations:
+  skippedTests:
+    - >-
+      PreviewJobHandlerTest 的 2 项 CSV 失败（csvMixedQuotedAndUnquoted、
+      csvExceedingFiftyColumnsShouldMarkColumnTruncated）在 baseCommit 之前即存在，
+      与本卡无关，另行上报。
+    - >-
+      既存 17 个 IT 在本机全部 Skipped（Testcontainers 无法连接本机 Docker）。
+      本卡结论由真实 Compose 栈独立取得，不依赖这些 IT。
+  assumptions:
+    - >-
+      asset_model.precision 列由 V14 建立，类型与注释均正确；
+      本卡判定缺陷纯在 Java 侧注解，故**不需要新增 Migration**。
+      该判定已由「裸列名查询成功 + 反引号查询失败」的双向证据支持。
+  environmentDifferences:
+    - >-
+      重新构建并替换了 backend 镜像（含本卡修复），
+      并确认 V26 迁移已随镜像启动应用（flyway_schema_history.version=26 success=t）。
+    - >-
+      E4 脚本中 precision 相关断言由「字段值等于提交值」改为
+      「裸列名可被 SELECT」：前者超出创建端点契约，会误报为缺陷。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

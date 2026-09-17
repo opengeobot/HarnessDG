@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-055
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: a3f45152fce3701dfa2a7018eb251d868d21fb24
-stageGatePassed: false
-stageGateEvidence: 待用户批准。依据 READY 需求 REQ-UI-001（公共管理端，P0-B）与 ACCEPTED 决策 DEC-013（Compose 为功能验收环境），修复模型扩展实体的列名转义缺陷以恢复资产详情读取；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
+baseCommit: 483af61ad55386165229479c247f0f82ba547908
+stageGatePassed: true
+stageGateEvidence: 用户批准。依据 READY 需求 REQ-UI-001（公共管理端，P0-B）与 ACCEPTED 决策 DEC-013（Compose 为功能验收环境），修复模型扩展实体的列名转义缺陷以恢复资产详情读取；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
 stageGateEvidenceRefs:
   - DEC-013
 requirements:
@@ -55,13 +55,13 @@ requiredValidationCommands:
   - ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-055.md -CheckChangedPaths
   - cd backend; ./mvnw.cmd verify
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
-approvedBy: null
-approvedAt: null
+approvedBy: User
+approvedAt: 2026-09-17T08:40:35Z
 ---
 
 # TASK-P0BR-055：修复资产模型扩展实体的列名转义，恢复资产详情读取
 
-> 状态：`DRAFT`（AI 起草，待用户批准；不得由 AI 置为 READY）
+> 状态：`READY`（用户已批准并授权实施）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
