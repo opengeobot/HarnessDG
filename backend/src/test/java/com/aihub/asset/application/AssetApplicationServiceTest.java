@@ -79,6 +79,14 @@ class AssetApplicationServiceTest {
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
         doNothing().when(assetRepository).insert(any(Asset.class));
+        // 本用例聚焦资产生命周期编排，授权上下文显式声明为平台管理员；
+        // 可见性矩阵与防枚举语义由 AssetAccessPolicyTest 与授权集成测试覆盖（TASK-P0BR-017）。
+        when(authorizationService.computeAccessScope(any(), any())).thenReturn(adminScope());
+    }
+
+    private static com.aihub.authorization.domain.AccessScope adminScope() {
+        return new com.aihub.authorization.domain.AccessScope("usr_01", true,
+                java.util.Set.of(), java.util.Set.of(), java.util.Set.of(), java.util.Set.of());
     }
 
     private CreateAssetCommand modelCommand() {

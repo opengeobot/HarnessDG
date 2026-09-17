@@ -1,10 +1,12 @@
 /*
  * 功能: Team 仓储 JDBC 实现，读写 team / team_member 表。
+ *       同时实现跨模块出站端口 TeamMembershipPort，供 authorization 模块接通 AccessScope.teamIds。
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
 package com.aihub.organization.infrastructure;
 
+import com.aihub.organization.application.TeamMembershipPort;
 import com.aihub.organization.domain.Team;
 import com.aihub.organization.domain.TeamMember;
 import com.aihub.organization.domain.TeamRepository;
@@ -13,17 +15,23 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
  * Team 仓储 JDBC 实现。
+ *
+ * <p>同时实现领域端口 {@link TeamRepository} 与跨模块出站端口 {@link TeamMembershipPort}：
+ * 按 principalId 解析所属 Team ID 的作用域查询在数据库阶段完成，供 {@code AuthorizationService}
+ * 的 AccessScope 与资产 PRIVATE 可见性的 Owner 判定使用。
  */
 @Repository
-public class JdbcTeamRepository implements TeamRepository {
+public class JdbcTeamRepository implements TeamRepository, TeamMembershipPort {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -140,6 +148,14 @@ public class JdbcTeamRepository implements TeamRepository {
                 new MapSqlParameterSource()
                         .addValue("teamId", teamId)
                         .addValue("principalId", principalId));
+    }
+
+    @Override
+    public Set<String> findTeamIdsByPrincipal(String principalId) {
+        List<String> ids = jdbcTemplate.queryForList(
+                "SELECT DISTINCT team_id FROM team_member WHERE principal_id = :principalId",
+                new MapSqlParameterSource("principalId", principalId), String.class);
+        return new HashSet<>(ids);
     }
 
     private Team mapTeam(ResultSet rs, int rowNum) throws SQLException {

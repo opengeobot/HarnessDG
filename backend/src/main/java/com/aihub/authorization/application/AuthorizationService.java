@@ -11,6 +11,7 @@ import com.aihub.authorization.domain.Permissions;
 import com.aihub.authorization.domain.ResourceAclRepository;
 import com.aihub.authorization.domain.RoleBindingRepository;
 import com.aihub.organization.application.OrganizationMembershipPort;
+import com.aihub.organization.application.TeamMembershipPort;
 import com.aihub.shared.error.AuthorizationException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
@@ -49,22 +50,25 @@ public class AuthorizationService {
     private final ResourceAclRepository resourceAclRepository;
     private final AgentToolRepository agentToolRepository;
     private final ObjectProvider<OrganizationMembershipPort> membershipPortProvider;
+    private final ObjectProvider<TeamMembershipPort> teamMembershipPortProvider;
 
     public AuthorizationService(RoleBindingRepository roleBindingRepository,
                                 ResourceAclRepository resourceAclRepository,
                                 AgentToolRepository agentToolRepository) {
-        this(roleBindingRepository, resourceAclRepository, agentToolRepository, null);
+        this(roleBindingRepository, resourceAclRepository, agentToolRepository, null, null);
     }
 
     @Autowired
     public AuthorizationService(RoleBindingRepository roleBindingRepository,
                                 ResourceAclRepository resourceAclRepository,
                                 AgentToolRepository agentToolRepository,
-                                ObjectProvider<OrganizationMembershipPort> membershipPortProvider) {
+                                ObjectProvider<OrganizationMembershipPort> membershipPortProvider,
+                                ObjectProvider<TeamMembershipPort> teamMembershipPortProvider) {
         this.roleBindingRepository = roleBindingRepository;
         this.resourceAclRepository = resourceAclRepository;
         this.agentToolRepository = agentToolRepository;
         this.membershipPortProvider = membershipPortProvider;
+        this.teamMembershipPortProvider = teamMembershipPortProvider;
     }
 
     /**
@@ -185,7 +189,7 @@ public class AuthorizationService {
     public AccessScope computeAccessScope(String resourceType, String readAction) {
         PrincipalContext context = PrincipalContextHolder.current().orElse(null);
         if (context == null || context.principalId() == null) {
-            return new AccessScope(null, false, Set.of(), Set.of(), Set.of());
+            return new AccessScope(null, false, Set.of(), Set.of(), Set.of(), Set.of());
         }
         String principalId = context.principalId();
         boolean platformAdmin = isPermitted(context, Permissions.AUTHORIZATION_MANAGE);
@@ -198,9 +202,16 @@ public class AuthorizationService {
             organizationIds.addAll(membershipPort.findOrganizationIdsByPrincipal(principalId));
         }
         Set<String> projectIds = roleBindingRepository.resolveProjectScopes(principalId);
+        // Team 作用域用于 PRIVATE 可见性的 Owner 判定；端口缺失时为空集（fail-closed：不扩大可见范围）。
+        Set<String> teamIds = Set.of();
+        TeamMembershipPort teamMembershipPort = teamMembershipPortProvider == null
+                ? null : teamMembershipPortProvider.getIfAvailable();
+        if (teamMembershipPort != null) {
+            teamIds = teamMembershipPort.findTeamIdsByPrincipal(principalId);
+        }
         Set<String> aclResourceIds = resourceAclRepository.accessibleResourceIds(
                 resourceType, principalId, readAction);
-        return new AccessScope(principalId, platformAdmin, organizationIds, projectIds, aclResourceIds);
+        return new AccessScope(principalId, platformAdmin, organizationIds, projectIds, teamIds, aclResourceIds);
     }
 
     private boolean isAgent(PrincipalContext context) {

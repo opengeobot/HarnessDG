@@ -142,7 +142,7 @@ public class AssetApplicationService {
     @Transactional(readOnly = true)
     public AssetView getAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        Asset asset = loadAccessible(assetId, principalId);
+        Asset asset = loadAccessible(assetId);
         return AssetView.from(asset);
     }
 
@@ -152,7 +152,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView updateAsset(String assetId, UpdateAssetCommand command) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId, command.principalId());
+        Asset asset = loadAccessible(assetId);
         if (command.ownerTeamId() != null && !StringUtils.hasText(command.ownerTeamId())) {
             throw new ValidationException("ownerTeamId cannot be set to null/blank (DEC-011: at least one Team required)");
         }
@@ -187,7 +187,7 @@ public class AssetApplicationService {
     @Transactional
     public void deleteAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId, principalId);
+        Asset asset = loadAccessible(assetId);
         assetRepository.softDelete(asset.assetId(), principalId);
         auditAsset("ASSET_DELETED", principalId, asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
@@ -199,7 +199,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView deprecateAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId, principalId);
+        Asset asset = loadAccessible(assetId);
         try {
             asset.deprecate(principalId);
         } catch (IllegalStateException ex) {
@@ -220,7 +220,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView archiveAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId, principalId);
+        Asset asset = loadAccessible(assetId);
         try {
             asset.archive(principalId);
         } catch (IllegalStateException ex) {
@@ -239,7 +239,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView restoreAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId, principalId);
+        Asset asset = loadAccessible(assetId);
         try {
             asset.restore(principalId);
         } catch (IllegalStateException ex) {
@@ -258,8 +258,8 @@ public class AssetApplicationService {
     @Transactional(readOnly = true)
     public CursorPage<AssetSummaryView> searchAssets(AssetSearchQuery query) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        Set<Visibility> allowed = accessPolicy.visibleVisibilities(query.principalId());
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
+        Set<Visibility> allowed = accessPolicy.visibleVisibilities(accessScope);
         Set<AssetStatus> statuses = query.includeArchived()
                 ? Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED, AssetStatus.ARCHIVED)
                 : Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
@@ -285,8 +285,8 @@ public class AssetApplicationService {
     @Transactional(readOnly = true)
     public AssetFacetView getAssetFacets(String keyword, AssetType type, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        Set<Visibility> allowed = accessPolicy.visibleVisibilities(principalId);
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
+        Set<Visibility> allowed = accessPolicy.visibleVisibilities(accessScope);
         Set<AssetStatus> statuses = Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
         AssetSearchCriteria criteria = new AssetSearchCriteria(
                 keyword, type, null, null, null, null, null, null,
@@ -313,7 +313,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView refreshCardProjection(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        Asset asset = loadAccessible(assetId, principalId);
+        Asset asset = loadAccessible(assetId);
         AssetCardProjectionPort port = cardProjectionPortProvider.getIfAvailable();
         if (port == null || asset.repository() == null) {
             return AssetView.from(asset);
@@ -382,12 +382,19 @@ public class AssetApplicationService {
         }
     }
 
-    private Asset loadAccessible(String assetId, String principalId) {
+    private Asset loadAccessible(String assetId) {
         Asset asset = assetRepository.findByAssetId(assetId)
-                .filter(found -> accessPolicy.canAccess(found, principalId))
+                .filter(found -> accessPolicy.canAccess(found, readAccessScope()))
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
                         "asset not found: " + assetId, Map.of()));
         return asset;
+    }
+
+    /**
+     * 计算当前主体对 ASSET 域的读访问作用域，使详情与列表使用同一可见性判定（REQ-AUTH-002）。
+     */
+    private AccessScope readAccessScope() {
+        return authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
     }
 
     private void validateCoordinate(String namespace, String name) {

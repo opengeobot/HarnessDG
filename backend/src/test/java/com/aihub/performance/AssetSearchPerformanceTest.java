@@ -242,7 +242,7 @@ class AssetSearchPerformanceTest {
 
     private AssetSearchCriteria searchCriteria(String keyword) {
         AccessScope adminScope = new AccessScope("usr_perf_admin", true,
-                Set.of(), Set.of(), Set.of());
+                Set.of(), Set.of(), Set.of(), Set.of());
         return new AssetSearchCriteria(
                 keyword, null, null, null, null, null, null, null, null, null,
                 Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED),
@@ -252,7 +252,7 @@ class AssetSearchPerformanceTest {
 
     private AssetSearchCriteria searchCriteria(String keyword, AssetType type) {
         AccessScope adminScope = new AccessScope("usr_perf_admin", true,
-                Set.of(), Set.of(), Set.of());
+                Set.of(), Set.of(), Set.of(), Set.of());
         return new AssetSearchCriteria(
                 keyword, type, null, null, null, null, null, null, null, null,
                 Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED),
@@ -262,7 +262,7 @@ class AssetSearchPerformanceTest {
 
     private AssetSearchCriteria searchCriteriaWithCursor(String keyword, String cursor) {
         AccessScope adminScope = new AccessScope("usr_perf_admin", true,
-                Set.of(), Set.of(), Set.of());
+                Set.of(), Set.of(), Set.of(), Set.of());
         return new AssetSearchCriteria(
                 keyword, null, null, null, null, null, null, null, null, null,
                 Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED),

@@ -220,19 +220,32 @@ public class AssetSearchDao {
         if (scope == null || scope.platformAdmin()) {
             return;
         }
+        // 可见性判定矩阵（TASK-P0BR-017 / AC-P0B-AUTH-003 / REQ-AUTH-002）：
+        // PUBLIC   → 任意已认证主体；
+        // INTERNAL → 主体在资产所属组织或项目作用域内；
+        // PRIVATE  → 仅显式 ACL 授权或 Owner（Team 成员关系）。
+        // 组织/项目作用域只对 INTERNAL 生效，避免本组织 PRIVATE 资产对全体成员可见。
+        params.addValue("scopeInternalVisibility", Visibility.INTERNAL.name());
+        params.addValue("scopePublicVisibility", Visibility.PUBLIC.name());
         StringBuilder clause = new StringBuilder();
-        clause.append(" AND (a.visibility = 'PUBLIC'");
+        clause.append(" AND (a.visibility = :scopePublicVisibility");
         if (!scope.organizationIds().isEmpty()) {
-            clause.append(" OR a.organization_id IN (:scopeOrgIds)");
+            clause.append(" OR (a.visibility = :scopeInternalVisibility")
+                    .append(" AND a.organization_id IN (:scopeOrgIds))");
             params.addValue("scopeOrgIds", scope.organizationIdList());
         }
         if (!scope.projectIds().isEmpty()) {
-            clause.append(" OR a.project_id IN (:scopeProjectIds)");
+            clause.append(" OR (a.visibility = :scopeInternalVisibility")
+                    .append(" AND a.project_id IN (:scopeProjectIds))");
             params.addValue("scopeProjectIds", scope.projectIdList());
         }
         if (!scope.accessibleResourceIds().isEmpty()) {
             clause.append(" OR a.asset_id IN (:scopeAclIds)");
             params.addValue("scopeAclIds", scope.accessibleResourceIdList());
+        }
+        if (!scope.teamIds().isEmpty()) {
+            clause.append(" OR a.owner_team_id IN (:scopeTeamIds)");
+            params.addValue("scopeTeamIds", scope.teamIdList());
         }
         clause.append(")");
         sql.append(clause);
