@@ -117,4 +117,70 @@ class JdbcIdempotencyStoreIT {
                 .as("既有记录不得被覆盖")
                 .isEqualTo("first");
     }
+
+    /**
+     * 缺陷回归：{@code api_idempotency.idempotency_key} 原为全局 UNIQUE（不含 principal_id），
+     * 第二个主体用同一 key 写入时被 {@code ON CONFLICT (idempotency_key) DO NOTHING} 静默丢弃，
+     * 该主体永远没有幂等记录。V26 把唯一约束对齐到完整作用域后，两名主体应各留一条。
+     */
+    @Test
+    void sameKeyUnderTwoPrincipalsKeepsOneRecordEach() {
+        String sharedKey = "idem-it-multiprincipal-0001";
+        IdempotencyKey first = new IdempotencyKey(sharedKey, "usr_alpha", "POST", "/api/v1/it");
+        IdempotencyKey second = new IdempotencyKey(sharedKey, "usr_beta", "POST", "/api/v1/it");
+
+        idempotencyStore.save(new IdempotencyRecord(first, "digest-alpha", 201, "alpha", Instant.now()));
+        idempotencyStore.save(new IdempotencyRecord(second, "digest-beta", 201, "beta", Instant.now()));
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM api_idempotency WHERE idempotency_key = ?",
+                Integer.class, sharedKey);
+        assertThat(rows)
+                .as("同一 key 下每个主体各应留一条记录，而不是被静默丢弃")
+                .isEqualTo(2);
+
+        assertThat(idempotencyStore.find(first)).as("首个主体应读回自己的记录").isPresent();
+        IdempotencyRecord betaRecord = idempotencyStore.find(second)
+                .orElseThrow(() -> new AssertionError(
+                        "第二个主体必须能读回自己的记录，否则其重放会重复执行业务"));
+        assertThat(betaRecord.responseBody()).isEqualTo("beta");
+        assertThat(betaRecord.requestFingerprint()).isEqualTo("digest-beta");
+    }
+
+    /**
+     * 约束形态门禁：唯一性必须覆盖完整作用域，而不是仅 key。
+     * 若该约束退回全局，则同一 key 在不同 method/path 下也会互相冲突。
+     */
+    @Test
+    void uniqueConstraintCoversFullScopeNotJustKey() {
+        Integer scopeConstraints = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_constraint "
+                        + "WHERE conrelid = 'api_idempotency'::regclass AND conname = 'uq_api_idempotency_scope'",
+                Integer.class);
+        assertThat(scopeConstraints)
+                .as("必须存在覆盖 (idempotency_key, principal_id, method, path) 的唯一约束 uq_api_idempotency_scope")
+                .isEqualTo(1);
+
+        Integer legacyConstraints = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM pg_constraint "
+                        + "WHERE conrelid = 'api_idempotency'::regclass "
+                        + "AND conname = 'api_idempotency_idempotency_key_key'",
+                Integer.class);
+        assertThat(legacyConstraints)
+                .as("仅含 idempotency_key 的全局唯一约束应已被 V26 移除")
+                .isZero();
+
+        // 同一 key + 同一主体，但 method/path 不同：不得互相冲突
+        IdempotencyKey postKey = new IdempotencyKey("idem-it-scope-dim-0001", "usr_gamma", "POST", "/api/v1/it/a");
+        IdempotencyKey deleteKey = new IdempotencyKey("idem-it-scope-dim-0001", "usr_gamma", "DELETE", "/api/v1/it/b");
+        idempotencyStore.save(new IdempotencyRecord(postKey, "digest-post", 201, "post", Instant.now()));
+        idempotencyStore.save(new IdempotencyRecord(deleteKey, "digest-delete", 200, "delete", Instant.now()));
+
+        Integer rows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM api_idempotency WHERE idempotency_key = ?",
+                Integer.class, postKey.key());
+        assertThat(rows)
+                .as("method/path 属于作用域，不同 method/path 不得被误判为同一幂等请求")
+                .isEqualTo(2);
+    }
 }

@@ -101,10 +101,13 @@ public class JdbcIdempotencyStore implements IdempotencyStore {
                             " status, response_payload, completed_at) " +
                             "VALUES (:key, :principalId, :method, :path, :digest, " +
                             " 'COMPLETED', :payload::jsonb, :now) " +
-                            "ON CONFLICT (idempotency_key) DO NOTHING",
+                            // 冲突目标必须与 uq_api_idempotency_scope 一致（key + principalId + method + path）。
+                            // 若只写 idempotency_key，第二个主体用同一 key 写记录会被静默丢弃。
+                            "ON CONFLICT (idempotency_key, principal_id, method, path) DO NOTHING",
                     params);
         } catch (DuplicateKeyException e) {
-            LOG.debug("idempotency key already exists, concurrent save: key={}", record.key().key());
+            LOG.debug("idempotency key already exists for this scope, concurrent save: key={}",
+                    record.key().key());
         }
 
         // 返回已有记录（可能是并发写入的另一条）
