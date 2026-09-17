@@ -25,7 +25,6 @@ import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
-import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
 import { deleteAsset, searchAssets } from './api';
 import { CreateAssetModal } from './CreateAssetModal';
 import type { AssetSummary, AssetType } from './types';
@@ -53,19 +52,17 @@ export function AssetsPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [language, setLanguage] = useState<string | undefined>();
   const [sensitivity, setSensitivity] = useState<string | undefined>();
 
   const queryType = typeFilter === 'ALL' ? undefined : typeFilter;
 
   const query = useInfiniteQuery({
-    queryKey: ['assets', { type: queryType, keyword, language, sensitivity }],
+    queryKey: ['assets', { type: queryType, keyword, sensitivity }],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       searchAssets({
         type: queryType,
         keyword: keyword || undefined,
-        language: language || undefined,
         sensitivity: sensitivity || undefined,
         cursor: pageParam,
         limit: 10,
@@ -199,20 +196,6 @@ export function AssetsPage() {
       </Flex>
 
       <Flex gap={8} wrap align="center">
-        <ControlledSelect
-          apiUrl="/system/dictionaries/language/items"
-          queryKey="dict-language"
-          extractOptions={(data) =>
-            (data as Array<{ itemCode: string }>).map(
-              (item): SelectOption => ({ value: item.itemCode, label: item.itemCode }),
-            )
-          }
-          placeholder={t('assets.filter.language')}
-          allowClear
-          style={{ width: 160 }}
-          value={language}
-          onChange={(v: string) => setLanguage(v ?? undefined)}
-        />
         <Select
           placeholder={t('assets.filter.sensitivity')}
           allowClear

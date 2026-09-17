@@ -1,0 +1,205 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-048-001
+# 本卡 requiredEvidenceLevel 为 E4；本次已取得 E4（真实 Compose 全栈 + 真实浏览器，
+# 五个受控选择器均返回非空真实字典项，且无 404）。
+# 但有两个 AC 场景未能闭环，故 status 为 PARTIAL，交接状态为 IMPLEMENTED_UNVERIFIED，不声明完成：
+#   1) 「选择合法 itemCode 后成功创建资产并回读治理字段」被外部既存缺陷阻断
+#      （JdbcJobRepository.insert 列/占位符数量不一致 -> POST /assets 500），
+#      该缺陷在 baseCommit 之前即存在，且位于本卡 allowedPaths 之外；
+#   2) completion 门禁要求工作树干净且 Evidence 经责任方接受，本次未满足。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-048
+  requirements: [REQ-TAX-001, REQ-UI-001]
+  scenarios:
+    - AC-P0B-UI-004
+    - AC-P0B-TAX-006
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-048.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-048.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-048.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: bea0a3663ed8a63e9d74da17cd0272332c52fcd9
+  dirtyWorktree: true
+  dirtyPaths:
+    - docs/ai-spec/tasks/TASK-P0BR-048.md
+    - docs/ai-spec/tasks/TASK-P0BR-049.md
+    - docs/ai-spec/tasks/TASK-P0BR-050.md
+    - frontend/src/features/assets/AssetsPage.test.tsx
+    - frontend/src/features/assets/AssetsPage.tsx
+    - frontend/src/features/assets/CreateAssetModal.tsx
+    - frontend/src/features/assets/governedDictionaryReferences.test.ts
+
+environment:
+  observedAt: 2026-09-17T13:50:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16（Compose 固定镜像）
+    minio: minio/minio RELEASE 系列（Compose 固定镜像）
+    gitea: gitea/gitea（Compose 固定镜像）
+    chromium: Chrome for Testing 151.0.7922.34（Playwright chromium-1234）
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    docker compose -f deploy/compose/compose.yaml build frontend;
+    docker compose -f deploy/compose/compose.yaml up -d;
+    node .trae/e4-048-full.mjs;
+    cd frontend; pnpm lint; pnpm typecheck; pnpm test; pnpm build
+  startedAt: 2026-09-17T12:05:00+08:00
+  finishedAt: 2026-09-17T13:50:00+08:00
+  exitCode: 0
+  result: PARTIAL
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL（真实容器，MVP Catalog 8 个 dictCode 由 V6 种子实际写入）
+    - MinIO（真实容器，Healthy）
+    - Gitea（真实容器，Healthy）
+  e4EntryPoint: Nginx（http://localhost:8080），真实 Chromium 浏览器
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        真实浏览器经 Nginx 入口登录后打开「登记资产」弹窗，五个治理字段受控选择器均返回非空真实字典项，
+        且选项值均为稳定 itemCode（非展示名）：
+        许可证=[APACHE_2_0, MIT, CC_BY_4_0]、框架=[PYTORCH, TENSORFLOW, PADDLE]、
+        任务=[TEXT_GENERATION, IMAGE_CLASSIFICATION, OBJECT_DETECTION]、
+        数据格式=[JSONL, CSV, PARQUET, IMAGE_FOLDER]、模态=[TEXT, IMAGE, AUDIO, VIDEO]。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        弹窗生命周期内共发出 5 个字典请求，全部命中 MVP Catalog 的稳定 dictCode
+        （license_catalog / model_framework / model_task / dataset_format / dataset_modality），
+        全部返回 200，无任何 404（修复前这 5 条路径分别返回 DICTIONARY_ITEM_NOT_FOUND）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        反证（负例对照）：修复前的 6 个旧 dictCode（license/framework/task/format/modality/language）
+        在真实栈上仍返回 404 + DICTIONARY_ITEM_NOT_FOUND，证明缺陷定位准确、
+        且本卡未通过放宽后端字典校验来「修好」前端。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        搜索页不再展示语言筛选项：AssetsPage.test.tsx 断言「语言」标签不存在、
+        「敏感等级」筛选仍可用；AssetsPage.tsx 已移除 language state、queryKey 与查询参数。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        dictCode 漂移回归门禁具备真实鉴别力：governedDictionaryReferences.test.ts 以 Vite
+        import.meta.glob 静态扫描 features/assets 下全部源码，断言所有
+        /system/dictionaries/<code>/items 引用的 code 均属 MVP Catalog；
+        负例对照（临时把 license_catalog 改回 license）时该文件 2 项断言失败，
+        并精确报出 "license  <-  ./CreateAssetModal.tsx"；恢复后 4/4 通过。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-TAX-006
+      assertion: >-
+        同一组受控选择器在 en-US 下仍返回非空真实字典项（License=3、Framework=3、Task=3 项），
+        表单标签随 locale 渲染（License/Framework/Task），受控值仍为稳定 itemCode；
+        zh-CN 与 en-US 下均无 404 字典请求。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        「选择合法 itemCode 并提交创建资产，回读详情的治理字段与所选 itemCode 一致」未闭环：
+        POST /api/v1/assets 返回 500 INTERNAL_ERROR。根因已定位为持久化任务子系统
+        JdbcJobRepository.insert 声明 16 列但只绑定 15 个占位符
+        （PostgreSQL: "The column index is out of range: 16, number of columns: 15"），
+        经 createProvisionJob -> createAsset 冒泡。该缺陷在 baseCommit 之前即存在
+        （引入提交 d8506bf，2026-07-02）且位于本卡 allowedPaths 之外，
+        已作为独立整改项另行上报，未在本卡内修复。
+    - scenarioId: AC-P0B-TAX-006
+      assertion: >-
+        「触发一次字典请求失败时页面给出可见错误说明而非静默空白」未验证：
+        当前实现对字典查询失败仅表现为空选项，无可见告警。
+        该项属 REQ-UI-001 的既有能力缺口（Error 交互），不在本卡最小修复范围内，
+        未在本卡引入新行为。
+    - scenarioId: AC-P0B-UI-004
+      assertion: >-
+        assets/MODEL 与 DATASET 两种类型在同一弹窗内切换后的完整交互未逐项截图留档；
+        本卡以选项内容与网络请求状态码作为判据。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: true
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - .trae/e4-048-final.log
+    - frontend/src/features/assets/governedDictionaryReferences.test.ts
+    - frontend/src/features/assets/AssetsPage.test.tsx
+    - frontend/src/features/assets/CreateAssetModal.test.tsx
+  logs:
+    - .trae/e4-048-final.log
+  screenshots: []
+  traces: []
+  metrics:
+    - pnpm lint 无错误
+    - pnpm typecheck 无错误
+    - pnpm test 58 项全部通过（17 个文件；默认 5s 超时下本机负载高时会出现与本次变更无关的超时抖动，--testTimeout=60000 下 58/58 通过）
+    - pnpm build 成功（32.30s）
+    - E4 浏览器脚本：27 项断言全部 PASS，1 项因外部既存缺陷标记 BLOCKED
+    - 字典请求：license_catalog/model_framework/model_task/dataset_format/dataset_modality 均 200
+  databaseQueries:
+    - select dict_code, count(*) from system_dict_item group by dict_code;  ->  6 个 dictCode 有项，DEPRECATION_REASON/INDUSTRY_TAG 为空集（合法）
+    - select username, status, must_change_password from iam_user;  ->  admin 由 PENDING_ACTIVATION 经首次改密转为 ACTIVE
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据未包含 deploy/compose/.env 中的任何口令、访问令牌、Gitea Token、MinIO 密钥或预签名 URL。
+    - E4 脚本仅读取 .env 用于登录，从不打印凭据、Token 或响应正文；
+      验证主体的临时口令仅用于本地 Compose 验收栈。
+
+limitations:
+  skippedTests:
+    - >-
+      pnpm test:e2e（Playwright 规格，16 项）未取得通过证据：
+      规格内硬编码的 admin 口令 'admin123' 与 Compose 引导口令不一致，
+      且规格未处理首登强制改密门，因此全部 16 项在真栈上均失败。
+      该问题属既有 E2E 规格过时（frontend/e2e/*.spec.ts 不在本卡 allowedPaths），
+      已作为独立整改项上报。本卡的 E4 由 .trae/e4-048-full.mjs 独立取得。
+  assumptions:
+    - 假设 deploy/compose/.env（gitignored）已在本地存在且与 Compose 模板兼容；本轮已确认其存在。
+    - >-
+      为使 AC-P0B-UI-004 可在浏览器中被真实执行，临时创建了最小权限验证主体
+      e4-048-verifier（scopes=project:view,asset:read,asset:create,dictionary:read,tag:read +
+      ASSET_AUTHOR 角色绑定），以及 fixture 组织/团队。这是因为引导管理员的 JWT 只携带粗粒度
+      ADMIN_SCOPES，前端路由守卫会拒绝其访问 /assets；该权限模型缺口已作为独立整改项上报。
+  environmentDifferences:
+    - >-
+      为使受控选择器可在浏览器中验证，重新构建并替换了 frontend 镜像
+      （前端静态资源为本卡已修复版本）。
+    - >-
+      引导管理员经产品既定的首登强制改密流程由 PENDING_ACTIVATION 转为 ACTIVE
+      （口令轮换为同值，deploy/compose/.env 无需变更）；未修改任何权限或校验逻辑。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

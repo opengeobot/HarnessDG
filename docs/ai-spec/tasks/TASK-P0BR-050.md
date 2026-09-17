@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-050
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 4c14a9f1aacc7ef0e58d6d4a48ae41e526f69b3f
-stageGatePassed: false
-stageGateEvidence: 待用户批准。拟以 READY 需求 REQ-UI-001 与 ACCEPTED 决策 DEC-013 作为阶段依据；本卡为 P0-B 公共管理端可发现性与死链整改（PAGE-ADM-004/008/009 与 PAGE-AST-* 导航可达性），不新增业务能力。
+baseCommit: bea0a3663ed8a63e9d74da17cd0272332c52fcd9
+stageGatePassed: true
+stageGateEvidence: 用户批准。依据 READY 需求 REQ-UI-001（P0-B 公共管理端）与 ACCEPTED 决策 DEC-013，修复 P0-B 范围内的页面可发现性与死链缺陷，不新增业务能力，符合 ADR-0002 的「公共底座接入与安全整改」例外。
 stageGateEvidenceRefs:
   - DEC-013
 requirements:
@@ -62,13 +62,13 @@ requiredValidationCommands:
   - cd frontend; pnpm test
   - cd frontend; pnpm build
   - cd frontend; pnpm test:e2e
-approvedBy: <human-or-controlled-approval>
-approvedAt: <UTC-timestamp>
+approvedBy: User
+approvedAt: 2026-09-17T04:42:50Z
 ---
 
 # TASK-P0BR-050：管理端页面可发现性与版本入口死链修复
 
-> 状态：`DRAFT`（待用户批准后改为 `READY`）
+> 状态：`READY`（用户已批准并授权实施）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17

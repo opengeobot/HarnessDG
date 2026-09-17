@@ -1,12 +1,12 @@
 ---
 schemaVersion: harnessdg.task/v1
 taskId: TASK-P0BR-049
-status: DRAFT
-implementationAuthorized: false
+status: READY
+implementationAuthorized: true
 phase: P0-B
-baseCommit: 4c14a9f1aacc7ef0e58d6d4a48ae41e526f69b3f
-stageGatePassed: false
-stageGateEvidence: 待用户批准。拟以 READY 需求 REQ-AUTH-002/REQ-TAX-001 与 ACCEPTED 决策 DEC-008 作为阶段依据；本卡为 P0-B 列表权限下推与聚合计数一致性整改，不新增业务能力。
+baseCommit: bea0a3663ed8a63e9d74da17cd0272332c52fcd9
+stageGatePassed: true
+stageGateEvidence: 用户批准。依据 READY 需求 REQ-AUTH-002/REQ-TAX-001（P0-B 列表权限下推与字典）与 ACCEPTED 决策 DEC-008，修复 facet 忽略已传入 type 的正确性缺陷；本卡不新增业务能力，符合 ADR-0002 的「公共底座接入与安全整改」例外。用户明确选择「严格守门：先完成 P0-B 出口」，故 REQ-DST-TAX-001（P1）的 matchedFields/排序白名单/新 Facet 维度不在本卡范围。
 stageGateEvidenceRefs:
   - DEC-008
 requirements:
@@ -61,13 +61,13 @@ requiredValidationCommands:
   - git show HEAD:contracts/openapi/aihub-v1.yaml > .trae/aihub-base.yaml; npx --yes @redocly/cli diff .trae/aihub-base.yaml contracts/openapi/aihub-v1.yaml --fail-on-breaking
   - docker compose -f deploy/compose/compose.yaml config --quiet
   - powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
-approvedBy: <human-or-controlled-approval>
-approvedAt: <UTC-timestamp>
+approvedBy: User
+approvedAt: 2026-09-17T04:42:50Z
 ---
 
 # TASK-P0BR-049：资产 Facet 过滤条件下推一致
 
-> 状态：`DRAFT`（待用户批准后改为 `READY`）
+> 状态：`READY`（用户已批准并授权实施）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17

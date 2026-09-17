@@ -76,9 +76,11 @@ describe('AssetsPage', () => {
     expect(screen.getByText('状态')).toBeInTheDocument();
   });
 
-  it('渲染分类过滤面板（语言 + 敏感等级）', () => {
+  it('渲染敏感等级筛选，且不展示无对应字典的失效语言筛选', () => {
     renderWithProviders(<AssetsPage />);
-    expect(screen.getByText('语言')).toBeInTheDocument();
     expect(screen.getByText('敏感等级')).toBeInTheDocument();
+    // dataset_language 不属于 P0-B MVP Catalog，且 REST 当前无法写入 language_codes，
+    // 该筛选只会产生恒空结果，故已移除（TASK-P0BR-048）。
+    expect(screen.queryByText('语言')).not.toBeInTheDocument();
   });
 });

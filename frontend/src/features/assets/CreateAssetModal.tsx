@@ -237,7 +237,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
         </Form.Item>
         <Form.Item name="license" label={t('assets.create.license')}>
           <ControlledSelect
-            apiUrl="/system/dictionaries/license/items"
+            apiUrl="/system/dictionaries/license_catalog/items"
             queryKey="dict-license"
             extractOptions={(data) =>
               (data as Array<{ itemCode: string; i18nKey: string }>).map(
@@ -252,7 +252,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           <>
             <Form.Item name="framework" label={t('assets.detail.framework')}>
               <ControlledSelect
-                apiUrl="/system/dictionaries/framework/items"
+                apiUrl="/system/dictionaries/model_framework/items"
                 queryKey="dict-framework"
                 extractOptions={(data) =>
                   (data as Array<{ itemCode: string }>).map(
@@ -265,7 +265,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
             </Form.Item>
             <Form.Item name="task" label={t('assets.detail.task')}>
               <ControlledSelect
-                apiUrl="/system/dictionaries/task/items"
+                apiUrl="/system/dictionaries/model_task/items"
                 queryKey="dict-task"
                 extractOptions={(data) =>
                   (data as Array<{ itemCode: string }>).map(
@@ -284,7 +284,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
           <>
             <Form.Item name="format" label={t('assets.create.dataFormat')}>
               <ControlledSelect
-                apiUrl="/system/dictionaries/format/items"
+                apiUrl="/system/dictionaries/dataset_format/items"
                 queryKey="dict-format"
                 extractOptions={(data) =>
                   (data as Array<{ itemCode: string }>).map(
@@ -297,7 +297,7 @@ export function CreateAssetModal({ open, onClose }: CreateAssetModalProps) {
             </Form.Item>
             <Form.Item name="modality" label={t('assets.detail.modality')}>
               <ControlledSelect
-                apiUrl="/system/dictionaries/modality/items"
+                apiUrl="/system/dictionaries/dataset_modality/items"
                 queryKey="dict-modality"
                 extractOptions={(data) =>
                   (data as Array<{ itemCode: string }>).map(
