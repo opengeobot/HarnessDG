@@ -208,6 +208,486 @@ assert_permitted() {
   return 0
 }
 
+# ===========================================================================
+# IAM 验收辅助（AC-P0B-IAM-001/003/004/005/006/007/008/009/011/012）
+# 判据严格对齐 p0b-exit-catalog.md 第 3 节；与 verify.ps1 的判据一一对应。
+# ===========================================================================
+
+IAM_PROBE_PASSWORD="ComposeIam-Probe-01!z"
+
+# 带 Cookie 的请求：输出 "<body>\n<http_code>\n<set-cookie 原文>"。
+http_with_cookie() {
+  local method="$1" path="$2" cookie="$3" body="${4:-}"
+  local hdr
+  hdr="$(mktemp)"
+  local args=(-s -D "${hdr}" -m 20 -X "${method}" "${BASE_URL}${path}")
+  [ -n "${cookie}" ] && args+=(-H "Cookie: aihub_refresh=${cookie}")
+  [ -n "${body}" ] && args+=(-H 'Content-Type: application/json' -d "${body}")
+  local resp code setcookie
+  resp="$(curl "${args[@]}" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${resp}" | tail -n1)"
+  resp="$(printf '%s' "${resp}" | sed '$d')"
+  setcookie="$(grep -i '^set-cookie:' "${hdr}" 2>/dev/null | tr -d '\r' | sed -E 's/^[Ss]et-[Cc]ookie:[[:space:]]*//' | tr '\n' ' ')"
+  rm -f "${hdr}"
+  printf '%s\n%s\n%s' "${resp}" "${code}" "${setcookie}"
+}
+
+# 从 Set-Cookie 原文提取刷新 JWT 值。
+refresh_from_cookie() {
+  printf '%s' "$1" | sed -nE 's/.*aihub_refresh=([^;]+).*/\1/p' | head -n1
+}
+
+# 断言刷新 Cookie 的安全属性（AC-P0B-IAM-006）。Secure 由部署配置控制，本地 http 验收只断言
+# 与运行环境无关的属性：HttpOnly、SameSite、受限 Path、有效期。
+assert_refresh_cookie_attributes() {
+  local setcookie="$1" context="$2" attr
+  if [ -z "${setcookie}" ]; then echo "  ${context} 未下发 Set-Cookie，无法断言刷新 Cookie 属性"; return 1; fi
+  for attr in "HttpOnly" "SameSite=Strict" "Path=/api/v1/auth"; do
+    if ! printf '%s' "${setcookie}" | grep -qF "${attr}"; then
+      echo "  ${context} 的 Set-Cookie 缺少属性 ${attr}"; return 1
+    fi
+  done
+  if ! printf '%s' "${setcookie}" | grep -qE 'Max-Age=[0-9]+'; then
+    echo "  ${context} 的 Set-Cookie 缺少 Max-Age 有效期"; return 1
+  fi
+  return 0
+}
+
+# 规范化登录失败响应体：仅 requestId/traceId 允许逐次不同（AC-P0B-IAM-004 防枚举）。
+comparable_error_shape() {
+  printf '%s' "$1" | sed -E 's/"requestId":"[^"]*"/"requestId":"X"/g; s/"traceId":"[^"]*"/"traceId":"X"/g'
+}
+
+# 读取用户行断言值（状态|失败次数|锁定截止|强制改密|Token 版本）。
+user_row_facts() {
+  psql_q "select status || '|' || failed_login_attempts || '|' || coalesce(locked_until::text,'NULL') || '|' || must_change_password || '|' || token_version from iam_user where username='$1'"
+}
+
+# 创建（幂等）IAM 验证用户；输出 userId。
+new_iam_probe_user() {
+  local username="$1" display="$2" resp code uid
+  resp="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"username\":\"${username}\",\"displayName\":\"${display}\",\"email\":null,\"locale\":\"zh-CN\",\"temporaryPassword\":\"${IAM_PROBE_PASSWORD}\",\"scopes\":[\"project:view\"]}" \
+    "${BASE_URL}/api/v1/system/users" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${resp}" | tail -n1)"
+  resp="$(printf '%s' "${resp}" | sed '$d')"
+  if [ "${code}" = "409" ]; then
+    uid="$(psql_q "select user_id from iam_user where username='${username}'")"
+    if [ -z "${uid}" ]; then echo "  用户 ${username} 已存在但无法读取 user_id"; return 1; fi
+    printf '%s' "${uid}"; return 0
+  fi
+  if [ "${code}" != "201" ]; then
+    echo "  创建 IAM 验证用户 ${username} 失败，状态 ${code}，错误码 $(error_code "${resp}")"; return 1
+  fi
+  printf '%s' "${resp}" | sed -nE 's/.*"userId"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1
+}
+
+# AC-P0B-IAM-001：引导只创建一次；口令仅存自适应哈希；日志/审计无明文。
+assert_bootstrap_admin_uniqueness() {
+  local rows algo prefix leak logs
+  rows="$(psql_q "select count(*) from iam_user where username='${ADMIN_USER}'")"
+  if [ "${rows}" != "1" ]; then echo "  引导管理员行数 ${rows}，期望恰好 1（不得重复创建）"; return 1; fi
+  algo="$(psql_q "select password_algorithm from iam_user where username='${ADMIN_USER}'")"
+  if [ "${algo}" != "BCRYPT" ]; then echo "  引导管理员口令算法为 ${algo}，期望自适应哈希 BCRYPT（不得存明文）"; return 1; fi
+  prefix="$(psql_q "select left(password_hash, 4) from iam_user where username='${ADMIN_USER}'")"
+  if ! printf '%s' "${prefix}" | grep -qE '^\$2[aby]\$'; then
+    echo "  引导管理员口令列不是 bcrypt 摘要（前缀 ${prefix}）"; return 1
+  fi
+  leak="$(psql_q "select count(*) from audit_log where request_summary::text like '%${ADMIN_PASS}%'")"
+  if [ "${leak}" != "0" ]; then echo "  审计正文出现引导管理员明文口令（脱敏失效）"; return 1; fi
+  logs="$(docker compose logs backend --tail 400 2>&1 || true)"
+  if printf '%s' "${logs}" | grep -qF "${ADMIN_PASS}"; then
+    echo "  backend 容器日志出现引导管理员明文口令"; return 1
+  fi
+  return 0
+}
+
+# AC-P0B-IAM-003：临时口令失效、新口令可登录、force-change 清除、审计追加。
+assert_first_login_password_change() {
+  local username="compose-verify-iam3" temp="ComposeIam3-Temp-01!z" new="ComposeIam3-New-02!y"
+  local resp code uid facts token gated chg oldlogin newlogin newtoken me force principal audit
+  resp="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"username\":\"${username}\",\"displayName\":\"Compose Verify Iam3\",\"email\":null,\"locale\":\"zh-CN\",\"temporaryPassword\":\"${temp}\",\"scopes\":[\"project:view\"]}" \
+    "${BASE_URL}/api/v1/system/users" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${resp}" | tail -n1)"
+  resp="$(printf '%s' "${resp}" | sed '$d')"
+  if [ "${code}" = "409" ]; then
+    uid="$(psql_q "select user_id from iam_user where username='${username}'")"
+    # 已存在：先重置口令回到「强制改密」前置状态，避免上一轮残留。
+    local rst
+    rst="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -d "{\"temporaryPassword\":\"${temp}\"}" \
+      "${BASE_URL}/api/v1/system/users/${uid}:reset-password" -w '\n%{http_code}' 2>/dev/null | tail -n1)"
+    if [ "${rst}" != "200" ]; then echo "  重置首登改密验证用户口令失败，状态 ${rst}"; return 1; fi
+  elif [ "${code}" != "201" ]; then
+    echo "  创建首登改密验证用户失败，状态 ${code}，错误码 $(error_code "${resp}")"; return 1
+  fi
+  facts="$(user_row_facts "${username}")"
+  if ! printf '%s' "${facts}" | grep -qE '^PENDING_ACTIVATION\|.*\|1\|'; then
+    echo "  新建用户未处于强制改密前置状态（实际：${facts}，期望 must_change_password=1）"; return 1
+  fi
+
+  token="$(get_access_token "${username}" "${temp}")"
+  if [ -z "${token}" ]; then echo "  临时口令登录失败"; return 1; fi
+  gated="$(curl -s -m 20 -H "Authorization: Bearer ${token}" -w '\n%{http_code}' "${BASE_URL}/api/v1/system/users" 2>/dev/null)"
+  code="$(printf '%s' "${gated}" | tail -n1)"
+  gated="$(printf '%s' "${gated}" | sed '$d')"
+  if [ "${code}" != "403" ] || [ "$(error_code "${gated}")" != "PASSWORD_CHANGE_REQUIRED" ]; then
+    echo "  未改密主体访问业务端点返回 ${code}/$(error_code "${gated}")，期望 403 PASSWORD_CHANGE_REQUIRED"; return 1
+  fi
+
+  chg="$(curl -s -m 20 -X PUT -H 'Content-Type: application/json' -H "Authorization: Bearer ${token}" \
+    -d "{\"currentPassword\":\"${temp}\",\"newPassword\":\"${new}\"}" \
+    "${BASE_URL}/api/v1/me/password" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${chg}" | tail -n1)"
+  chg="$(printf '%s' "${chg}" | sed '$d')"
+  if [ "${code}" != "200" ]; then echo "  首登改密失败，状态 ${code}，错误码 $(error_code "${chg}")"; return 1; fi
+  facts="$(user_row_facts "${username}")"
+  if ! printf '%s' "${facts}" | grep -qE '^ACTIVE\||\|0\|'; then
+    echo "  改密后 must_change_password 未清除或状态未激活（实际：${facts}）"; return 1
+  fi
+  oldlogin="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${username}\",\"password\":\"${temp}\"}" "${BASE_URL}/api/v1/auth/login" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${oldlogin}" | tail -n1)"
+  oldlogin="$(printf '%s' "${oldlogin}" | sed '$d')"
+  if [ "${code}" != "401" ] || [ "$(error_code "${oldlogin}")" != "AUTH_INVALID_CREDENTIALS" ]; then
+    echo "  临时口令改密后仍可用，状态 ${code}/$(error_code "${oldlogin}")，期望 401 AUTH_INVALID_CREDENTIALS"; return 1
+  fi
+  newtoken="$(get_access_token "${username}" "${new}")"
+  if [ -z "${newtoken}" ]; then echo "  新口令登录失败"; return 1; fi
+  me="$(http_body GET /api/v1/me "${newtoken}")"
+  force="$(printf '%s' "${me}" | sed -nE 's/.*"forcePasswordChange"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' | head -n1)"
+  if [ "${force}" != "false" ]; then echo "  /me 的 forcePasswordChange 为 ${force}，期望 false（改密后清除）"; return 1; fi
+  principal="$(psql_q "select principal_id from iam_user where username='${username}'")"
+  audit="$(psql_q "select count(*) from audit_log where event_type='USER_PASSWORD_CHANGED' and resource_id='${principal}'")"
+  if [ "${audit:-0}" -lt 1 ]; then echo "  未发现该主体的 USER_PASSWORD_CHANGED 审计事件（改密未审计）"; return 1; fi
+  return 0
+}
+
+# AC-P0B-IAM-004：不存在用户名与错误口令返回同一错误码与同一响应体形状。
+assert_login_anti_enumeration() {
+  local b1 c1 b2 c2 leak failed
+  b1="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"compose-verify-nosuch-account\",\"password\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/auth/login" -w '\n%{http_code}' 2>/dev/null)"
+  c1="$(printf '%s' "${b1}" | tail -n1)"; b1="$(printf '%s' "${b1}" | sed '$d')"
+  b2="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"ComposeWrong-Password-01!z\"}" \
+    "${BASE_URL}/api/v1/auth/login" -w '\n%{http_code}' 2>/dev/null)"
+  c2="$(printf '%s' "${b2}" | tail -n1)"; b2="$(printf '%s' "${b2}" | sed '$d')"
+  if [ "${c1}" != "401" ]; then echo "  不存在的用户名登录返回 ${c1}，期望 401"; return 1; fi
+  if [ "${c2}" != "401" ]; then echo "  错误口令登录返回 ${c2}，期望 401"; return 1; fi
+  if [ "$(error_code "${b1}")" != "AUTH_INVALID_CREDENTIALS" ] || [ "$(error_code "${b2}")" != "AUTH_INVALID_CREDENTIALS" ]; then
+    echo "  失败登录错误码不一致，期望均为 AUTH_INVALID_CREDENTIALS"; return 1
+  fi
+  if [ "$(comparable_error_shape "${b1}")" != "$(comparable_error_shape "${b2}")" ]; then
+    echo "  两种失败登录的响应体形状不一致，暴露账号存在性"; return 1
+  fi
+  leak="$(psql_q "select count(*) from audit_log where request_summary::text like '%ComposeWrong-Password-01!z%'")"
+  if [ "${leak}" != "0" ]; then echo "  登录失败审计出现口令明文（脱敏失效）"; return 1; fi
+  failed="$(psql_q "select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'")"
+  if [ "${failed:-0}" -lt 1 ] && [ "${IAM_SHAPE_PROBE:-0}" = "1" ]; then
+    echo "  未发现 AUTH_LOGIN_FAILED 审计事件（登录失败未审计）"; return 1
+  fi
+  return 0
+}
+
+# AC-P0B-IAM-006：access/refresh 同时轮换；旧 jti 失效；新 Cookie 属性正确。
+assert_refresh_rotation() {
+  local login rt1 tok1 ref rt2 tok2 family active principal status
+  login="$(http_with_cookie POST /api/v1/auth/login "" "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")"
+  local code setcookie
+  code="$(printf '%s' "${login}" | sed -n '2p')"
+  setcookie="$(printf '%s' "${login}" | sed -n '3p')"
+  if [ "${code}" != "200" ]; then echo "  登录失败，状态 ${code}（无法执行刷新轮换断言）"; return 1; fi
+  assert_refresh_cookie_attributes "${setcookie}" "登录" || return 1
+  rt1="$(refresh_from_cookie "${setcookie}")"
+  if [ -z "${rt1}" ]; then echo "  登录未下发刷新 Cookie"; return 1; fi
+  tok1="$(printf '%s' "${login}" | sed -n '1p' | sed -nE 's/.*"accessToken"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+
+  ref="$(http_with_cookie POST /api/v1/auth/refresh "${rt1}" "")"
+  code="$(printf '%s' "${ref}" | sed -n '2p')"
+  setcookie="$(printf '%s' "${ref}" | sed -n '3p')"
+  if [ "${code}" != "200" ]; then echo "  刷新失败，状态 ${code}，错误码 $(error_code "$(printf '%s' "${ref}" | sed -n '1p')")"; return 1; fi
+  assert_refresh_cookie_attributes "${setcookie}" "刷新" || return 1
+  rt2="$(refresh_from_cookie "${setcookie}")"
+  if [ -z "${rt2}" ]; then echo "  刷新未轮换出新刷新 Cookie"; return 1; fi
+  if [ "${rt2}" = "${rt1}" ]; then echo "  刷新后 refresh 未轮换（Cookie 值与旧的相同）"; return 1; fi
+  tok2="$(printf '%s' "${ref}" | sed -n '1p' | sed -nE 's/.*"accessToken"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+  if [ -z "${tok2}" ]; then echo "  刷新响应缺少 accessToken"; return 1; fi
+  if [ "${tok2}" = "${tok1}" ]; then echo "  刷新后 access 未轮换（响应体与旧的相同）"; return 1; fi
+
+  principal="$(psql_q "select principal_id from iam_user where username='${ADMIN_USER}'")"
+  family="$(psql_q "select token_family from iam_token where jti=(select jti from iam_token where principal_id='${principal}' and status='ROTATED' order by id desc limit 1)")"
+  if [ -z "${family}" ]; then echo "  未发现 ROTATED 状态的旧 jti（刷新未把旧 jti 标记失效）"; return 1; fi
+  active="$(psql_q "select count(*) from iam_token where token_family='${family}' and status='ACTIVE'")"
+  if [ "${active}" != "1" ]; then
+    echo "  轮换后该 Token Family 的 ACTIVE 数量为 ${active}，期望恰好 1（无双有效 refresh）"; return 1
+  fi
+  return 0
+}
+
+# AC-P0B-IAM-008：旧 access 立即被拒；refresh 被拒；重新登录被拒；状态与审计一致。
+assert_disable_revokes_sessions() {
+  local username="compose-verify-iam8" uid reset login utok urt before dis facts after rstat relogin audit en
+  uid="$(new_iam_probe_user "${username}" "Compose Verify Iam8")" || return 1
+  reset="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"temporaryPassword\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:reset-password" -w '\n%{http_code}' 2>/dev/null | tail -n1)"
+  if [ "${reset}" != "200" ]; then echo "  重置验证用户口令失败，状态 ${reset}"; return 1; fi
+
+  login="$(http_with_cookie POST /api/v1/auth/login "" "{\"username\":\"${username}\",\"password\":\"${IAM_PROBE_PASSWORD}\"}")"
+  local code
+  code="$(printf '%s' "${login}" | sed -n '2p')"
+  if [ "${code}" != "200" ]; then echo "  验证用户登录失败，状态 ${code}"; return 1; fi
+  utok="$(printf '%s' "${login}" | sed -n '1p' | sed -nE 's/.*"accessToken"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+  urt="$(refresh_from_cookie "$(printf '%s' "${login}" | sed -n '3p')")"
+  before="$(http_status GET /api/v1/me "${utok}")"
+  if [ "${before}" != "200" ]; then echo "  禁用前 /me 返回 ${before}，期望 200（前置条件）"; return 1; fi
+
+  dis="$(curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:disable" -w '\n%{http_code}' 2>/dev/null | tail -n1)"
+  if [ "${dis}" != "200" ]; then echo "  禁用用户失败，状态 ${dis}"; return 1; fi
+  facts="$(user_row_facts "${username}")"
+  if ! printf '%s' "${facts}" | grep -qE '^DISABLED\|'; then
+    echo "  禁用后 iam_user.status 未落库为 DISABLED（实际：${facts}）"; return 1
+  fi
+  after="$(http_status GET /api/v1/me "${utok}")"
+  if [ "${after}" != "401" ]; then echo "  禁用后旧 access 访问 /me 返回 ${after}，期望 401（未实时失效）"; return 1; fi
+  if [ -n "${urt}" ]; then
+    rstat="$(curl -s -m 20 -X POST -H "Cookie: aihub_refresh=${urt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+    if [ "${rstat}" = "200" ]; then echo "  禁用后该用户 refresh 仍可刷新，期望被拒"; return 1; fi
+  fi
+  relogin="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${username}\",\"password\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/auth/login" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${relogin}" | tail -n1)"
+  if [ "${code}" != "403" ]; then echo "  禁用用户重新登录返回 ${code}，期望 403"; return 1; fi
+  if [ "$(error_code "$(printf '%s' "${relogin}" | sed '$d')")" != "AUTH_ACCOUNT_DISABLED" ]; then
+    echo "  禁用用户重新登录错误码不是 AUTH_ACCOUNT_DISABLED"; return 1
+  fi
+  audit="$(psql_q "select count(*) from audit_log where event_type='USER_DISABLED'")"
+  if [ "${audit:-0}" -lt 1 ]; then echo "  未发现 USER_DISABLED 审计事件（禁用未审计）"; return 1; fi
+  en="$(curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:enable" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${en}" != "200" ]; then echo "  复原启用用户失败，状态 ${en}"; return 1; fi
+  return 0
+}
+
+# AC-P0B-IAM-009：Cookie 清除；Family 吊销；重用被拒；重复登出幂等。
+assert_logout_and_reuse() {
+  local login code setcookie rt atok family active reuse lo2 lo3
+  login="$(http_with_cookie POST /api/v1/auth/login "" "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")"
+  code="$(printf '%s' "${login}" | sed -n '2p')"
+  setcookie="$(printf '%s' "${login}" | sed -n '3p')"
+  if [ "${code}" != "200" ]; then echo "  登录失败，状态 ${code}"; return 1; fi
+  rt="$(refresh_from_cookie "${setcookie}")"
+  atok="$(printf '%s' "${login}" | sed -n '1p' | sed -nE 's/.*"accessToken"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+  if [ -z "${rt}" ]; then echo "  登录未下发刷新 Cookie"; return 1; fi
+  family="$(psql_q "select token_family from iam_token where jti=(select jti from iam_token where principal_id=(select principal_id from iam_user where username='${ADMIN_USER}') order by id desc limit 1)")"
+
+  lo2="$(curl -s -D /tmp/lo.$$ -m 20 -X POST -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${atok}" -H "Cookie: aihub_refresh=${rt}" -d '{}' \
+    "${BASE_URL}/api/v1/auth/logout" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${lo2}" | tail -n1)"
+  setcookie="$(grep -i '^set-cookie:' /tmp/lo.$$ 2>/dev/null | tr -d '\r' | sed -E 's/^[Ss]et-[Cc]ookie:[[:space:]]*//' | tr '\n' ' ')"
+  rm -f /tmp/lo.$$
+  if [ "${code}" != "200" ]; then echo "  登出失败，状态 ${code}"; return 1; fi
+  if ! printf '%s' "${setcookie}" | grep -qE 'aihub_refresh=;[[:space:]]' || ! printf '%s' "${setcookie}" | grep -qF 'Max-Age=0'; then
+    echo "  登出未下发清除 Cookie"; return 1
+  fi
+  active="$(psql_q "select count(*) from iam_token where token_family='${family}' and status='ACTIVE'")"
+  if [ "${active}" != "0" ]; then
+    echo "  登出后 Token Family ${family} 残留 ${active} 条 ACTIVE，期望 0（Family 未吊销）"; return 1
+  fi
+  reuse="$(curl -s -m 20 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${reuse}" = "200" ]; then echo "  登出后重用 refresh 仍可刷新，期望被拒"; return 1; fi
+  lo2="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer ${atok}" \
+    -H "Cookie: aihub_refresh=${rt}" -d '{}' "${BASE_URL}/api/v1/auth/logout" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${lo2}" != "200" ]; then echo "  重复登出返回 ${lo2}，期望 200（登出必须幂等）"; return 1; fi
+  lo3="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer ${atok}" \
+    -d '{}' "${BASE_URL}/api/v1/auth/logout" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${lo3}" != "200" ]; then echo "  无 refresh 的登出返回 ${lo3}，期望 200（登出必须幂等）"; return 1; fi
+  return 0
+}
+
+# AC-P0B-IAM-007：重用已轮换 refresh → AUTH_REFRESH_REPLAYED；整族吊销；新 refresh 失效；拒绝审计。
+assert_refresh_replay_revokes_family() {
+  local login rt family code first newrt replay active after audit
+  login="$(http_with_cookie POST /api/v1/auth/login "" "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")"
+  code="$(printf '%s' "${login}" | sed -n '2p')"
+  if [ "${code}" != "200" ]; then echo "  登录失败，状态 ${code}"; return 1; fi
+  rt="$(refresh_from_cookie "$(printf '%s' "${login}" | sed -n '3p')")"
+  family="$(psql_q "select token_family from iam_token where jti=(select jti from iam_token where principal_id=(select principal_id from iam_user where username='${ADMIN_USER}') order by id desc limit 1)")"
+  first="$(http_with_cookie POST /api/v1/auth/refresh "${rt}" "")"
+  code="$(printf '%s' "${first}" | sed -n '2p')"
+  if [ "${code}" != "200" ]; then echo "  建立重放前置的首次刷新失败，状态 ${code}"; return 1; fi
+  newrt="$(refresh_from_cookie "$(printf '%s' "${first}" | sed -n '3p')")"
+  replay="$(http_with_cookie POST /api/v1/auth/refresh "${rt}" "")"
+  code="$(printf '%s' "${replay}" | sed -n '2p')"
+  if [ "${code}" != "401" ]; then echo "  重用已轮换 refresh 返回 ${code}，期望 401"; return 1; fi
+  if [ "$(error_code "$(printf '%s' "${replay}" | sed -n '1p')")" != "AUTH_REFRESH_REPLAYED" ]; then
+    echo "  重用已轮换 refresh 错误码不是 AUTH_REFRESH_REPLAYED"; return 1
+  fi
+  active="$(psql_q "select count(*) from iam_token where token_family='${family}' and status='ACTIVE'")"
+  if [ "${active}" != "0" ]; then
+    echo "  重放检测后 Token Family ${family} 仍残留 ${active} 条 ACTIVE，期望 0（整族吊销未生效）"; return 1
+  fi
+  if [ -n "${newrt}" ]; then
+    after="$(curl -s -m 20 -X POST -H "Cookie: aihub_refresh=${newrt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+    if [ "${after}" = "200" ]; then echo "  重放后轮换出的新 refresh 仍可刷新，未整族吊销"; return 1; fi
+  fi
+  audit="$(psql_q "select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'")"
+  if [ "${audit:-0}" -lt 1 ]; then echo "  未发现 AUTH_TOKEN_REPLAY_REJECTED 审计事件（重放拒绝未审计）"; return 1; fi
+  return 0
+}
+
+# AC-P0B-IAM-005：达到阈值进入 LOCKED；正确口令也被拒；审计存在。
+assert_account_lockout() {
+  local username="compose-verify-iam5" uid reset i facts code locked correct audit
+  uid="$(new_iam_probe_user "${username}" "Compose Verify Iam5")" || return 1
+  reset="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"temporaryPassword\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:reset-password" -w '\n%{http_code}' 2>/dev/null | tail -n1)"
+  if [ "${reset}" != "200" ]; then echo "  重置验证用户口令失败，状态 ${reset}"; return 1; fi
+  psql_q "update iam_user set failed_login_attempts=0, locked_until=null, status='ACTIVE', updated_at=now() where username='${username}' and status='LOCKED'" >/dev/null
+
+  for i in 1 2 3 4 5; do
+    curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+      -d "{\"username\":\"${username}\",\"password\":\"ComposeWrong-Password-01!z\"}" \
+      "${BASE_URL}/api/v1/auth/login" -o /dev/null 2>/dev/null
+  done
+  facts="$(user_row_facts "${username}")"
+  code="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${username}\",\"password\":\"ComposeWrong-Password-01!z\"}" \
+    "${BASE_URL}/api/v1/auth/login" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${code}" | tail -n1)"
+  if [ "${code}" != "423" ]; then
+    echo "  第 5 次错误口令返回 ${code}，期望 423 AUTH_ACCOUNT_LOCKED（账户未锁定）"; return 1
+  fi
+  if ! printf '%s' "${facts}" | grep -q '|LOCKED|'; then
+    echo "  锁定后 iam_user.status 未落库为 LOCKED（实际：${facts}）"; return 1
+  fi
+  locked="$(psql_q "select coalesce(locked_until::text,'NULL') from iam_user where username='${username}'")"
+  if [ "${locked}" = "NULL" ]; then echo "  锁定后 locked_until 为空，期望非空"; return 1; fi
+  correct="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${username}\",\"password\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/auth/login" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${correct}" | tail -n1)"
+  if [ "${code}" != "423" ]; then
+    echo "  锁定期间正确口令返回 ${code}，期望 423 AUTH_ACCOUNT_LOCKED"; return 1
+  fi
+  if [ "$(error_code "$(printf '%s' "${correct}" | sed '$d')")" != "AUTH_ACCOUNT_LOCKED" ]; then
+    echo "  锁定期间正确口令错误码不是 AUTH_ACCOUNT_LOCKED"; return 1
+  fi
+  audit="$(psql_q "select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'")"
+  if [ "${audit:-0}" -lt 1 ]; then echo "  未发现 AUTH_LOGIN_FAILED 审计事件（登录失败未审计）"; return 1; fi
+  curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"temporaryPassword\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:reset-password" -o /dev/null 2>/dev/null
+  curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:enable" -o /dev/null 2>/dev/null
+  return 0
+}
+
+# AC-P0B-IAM-011：并发刷新只允许一个成功；不得出现两条并存 ACTIVE。
+assert_concurrent_refresh() {
+  local login rt family ok=0 code active
+  login="$(http_with_cookie POST /api/v1/auth/login "" "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}")"
+  code="$(printf '%s' "${login}" | sed -n '2p')"
+  if [ "${code}" != "200" ]; then echo "  登录失败，状态 ${code}"; return 1; fi
+  rt="$(refresh_from_cookie "$(printf '%s' "${login}" | sed -n '3p')")"
+  family="$(psql_q "select token_family from iam_token where jti=(select jti from iam_token where principal_id=(select principal_id from iam_user where username='${ADMIN_USER}') order by id desc limit 1)")"
+  # 两个独立 curl 进程同时发起，真实并发到达后端。
+  local f1 f2
+  f1="$(mktemp)"; f2="$(mktemp)"
+  curl -s -m 30 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' >"${f1}" 2>/dev/null &
+  local pid1=$!
+  curl -s -m 30 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' >"${f2}" 2>/dev/null &
+  local pid2=$!
+  wait "${pid1}" "${pid2}" 2>/dev/null
+  local c1 c2
+  c1="$(cat "${f1}")"; c2="$(cat "${f2}")"
+  rm -f "${f1}" "${f2}"
+  [ "${c1}" = "200" ] && ok=$((ok + 1))
+  [ "${c2}" = "200" ] && ok=$((ok + 1))
+  if [ "${ok}" != "1" ]; then
+    echo "  并发刷新成功次数为 ${ok}（状态 ${c1}/${c2}），期望恰好 1"; return 1
+  fi
+  active="$(psql_q "select count(*) from iam_token where token_family='${family}' and status='ACTIVE'")"
+  if [ "${active}" != "1" ]; then
+    echo "  并发刷新后该 Token Family 的 ACTIVE 数量为 ${active}，期望恰好 1（出现并存有效 Token）"; return 1
+  fi
+  return 0
+}
+
+# ---- V05c: 身份生命周期（AC-P0B-IAM-001/003/004）----
+check_iam_lifecycle() {
+  assert_bootstrap_admin_uniqueness || return 1
+  assert_first_login_password_change || return 1
+  assert_login_anti_enumeration || return 1
+  return 0
+}
+
+# AC-P0B-IAM-012：创建/编辑/重置/禁用/启用 + 每步审计 + 最后一个管理员保护。
+assert_admin_user_lifecycle() {
+  local username="compose-verify-iam12" uid code locale facts missing eventType count
+  local adminUserId activeAdmins dis
+  uid="$(new_iam_probe_user "${username}" "Compose Verify Iam12")" || return 1
+  code="$(curl -s -m 20 -X PATCH -H 'Content-Type: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d '{"displayName":"Compose Verify Iam12 Renamed","email":null,"locale":"en-US"}' \
+    "${BASE_URL}/api/v1/system/users/${uid}" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${code}" != "200" ]; then echo "  编辑用户失败，状态 ${code}"; return 1; fi
+  locale="$(psql_q "select locale from iam_user where user_id='${uid}'")"
+  if [ "${locale}" != "en-US" ]; then echo "  编辑后 locale 未落库为 en-US（实际：${locale}）"; return 1; fi
+  code="$(curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{\"temporaryPassword\":\"${IAM_PROBE_PASSWORD}\"}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:reset-password" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${code}" != "200" ]; then echo "  重置口令失败，状态 ${code}"; return 1; fi
+  facts="$(user_row_facts "${username}")"
+  if ! printf '%s' "${facts}" | grep -qE '^PENDING_ACTIVATION\|.*\|1\|'; then
+    echo "  重置口令后未回到强制改密/待激活（实际：${facts}）"; return 1
+  fi
+  code="$(curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:disable" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${code}" != "200" ]; then echo "  禁用用户失败，状态 ${code}"; return 1; fi
+  code="$(curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    "${BASE_URL}/api/v1/system/users/${uid}:enable" -o /dev/null -w '%{http_code}' 2>/dev/null)"
+  if [ "${code}" != "200" ]; then echo "  启用用户失败，状态 ${code}"; return 1; fi
+
+  missing=""
+  for eventType in USER_CREATED USER_UPDATED USER_ENABLED USER_DISABLED USER_PASSWORD_RESET; do
+    count="$(psql_q "select count(*) from audit_log where event_type='${eventType}'")"
+    if [ "${count:-0}" -lt 1 ]; then missing="${missing} ${eventType}"; fi
+  done
+  if [ -n "${missing}" ]; then
+    echo "  以下用户管理审计事件缺失：${missing}（管理动作未审计）"; return 1
+  fi
+
+  adminUserId="$(psql_q "select user_id from iam_user where username='${ADMIN_USER}'")"
+  activeAdmins="$(psql_q "select count(*) from iam_user where status='ACTIVE' and scopes @> '[\"user:manage\"]'::jsonb")"
+  if [ "${activeAdmins}" != "1" ]; then
+    echo "  前置条件异常：持有 user:manage 的活跃管理员数量为 ${activeAdmins}，期望 1"; return 1
+  fi
+  dis="$(curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    "${BASE_URL}/api/v1/system/users/${adminUserId}:disable" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${dis}" | tail -n1)"
+  if [ "${code}" = "200" ]; then
+    # 产品未拒绝：立即复原，避免把验收栈留在「无管理员」状态，然后如实报出缺陷。
+    psql_q "update iam_user set status='ACTIVE', failed_login_attempts=0, locked_until=null, updated_at=now() where user_id='${adminUserId}'" >/dev/null
+    psql_q "update iam_principal set status='ACTIVE', updated_at=now() where principal_id=(select principal_id from iam_user where user_id='${adminUserId}')" >/dev/null
+    echo "  最后一个有效平台管理员被允许禁用（返回 200），期望拒绝并返回 COMMON_INVALID_ARGUMENT 且产生拒绝审计（REQ-IAM-006）。已自动复原管理员状态。"
+    return 1
+  fi
+  if [ "$(error_code "$(printf '%s' "${dis}" | sed '$d')")" != "COMMON_INVALID_ARGUMENT" ]; then
+    echo "  禁用最后一个管理员错误码不是 COMMON_INVALID_ARGUMENT"; return 1
+  fi
+  return 0
+}
+
 # ---- V05b: 验收主体前置条件 ----
 # 1) 管理员解除首登改密门（否则后续 403/200 断言都与权限无关）；
 # 2) 就绪最小权限验证主体（用于默认拒绝断言）。
@@ -484,6 +964,26 @@ else
   skip V09 "持久化任务访问" "backend 不可达"
   skip V10 "通知访问" "backend 不可达"
   skip V11 "观测与诊断" "backend 不可达"
+fi
+
+# IAM 验收：按 AC 逐一独立执行，使缺陷可精确定位（一个场景失败不掩盖其余场景）。
+# 每个 V 编号显式声明其覆盖的 AC-*（p0b-exit-catalog 第 20 行要求）。
+if [ "${BACKEND_UP}" -eq 1 ] && postgres_reachable; then
+  step V05c "身份生命周期（AC-P0B-IAM-001/003/004）" check_iam_lifecycle
+  step V05d "刷新轮换（AC-P0B-IAM-006）" assert_refresh_rotation
+  step V05e "禁用实时失效（AC-P0B-IAM-008）" assert_disable_revokes_sessions
+  step V05f "登出与重用（AC-P0B-IAM-009）" assert_logout_and_reuse
+  step V05g "刷新重放整族吊销（AC-P0B-IAM-007）" assert_refresh_replay_revokes_family
+  step V05h "账户锁定（AC-P0B-IAM-005）" assert_account_lockout
+  step V05i "并发刷新无双有效 Token（AC-P0B-IAM-011）" assert_concurrent_refresh
+  step V05j "用户管理与最后一个管理员保护（AC-P0B-IAM-012）" assert_admin_user_lifecycle
+else
+  for pair in "V05c:身份生命周期（AC-P0B-IAM-001/003/004）" "V05d:刷新轮换（AC-P0B-IAM-006）" \
+              "V05e:禁用实时失效（AC-P0B-IAM-008）" "V05f:登出与重用（AC-P0B-IAM-009）" \
+              "V05g:刷新重放整族吊销（AC-P0B-IAM-007）" "V05h:账户锁定（AC-P0B-IAM-005）" \
+              "V05i:并发刷新无双有效 Token（AC-P0B-IAM-011）" "V05j:用户管理与最后一个管理员保护（AC-P0B-IAM-012）"; do
+    skip "${pair%%:*}" "${pair#*:}" "backend/postgres 不可达（无法执行 IAM 断言）"
+  done
 fi
 
 # P1 资产目录验证

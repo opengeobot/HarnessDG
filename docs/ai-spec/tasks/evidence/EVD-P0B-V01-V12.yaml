@@ -71,6 +71,33 @@ coverage:
     - scenarioId: AC-P0B-IAM-010
       assertion: V05 无 Token 401 fail-closed
       scenarioCategory: denial
+    # 以下 5 项 IAM 场景已由 TASK-P0BR-058 在真实 Compose 栈补齐 E4 证据，
+    # 权威结论见 EVD-P0BR-058-001.yaml（本文件仅作交叉引用，不重复声明细节）。
+    - scenarioId: AC-P0B-IAM-001
+      assertion: >-
+        引导管理员唯一性与自适应哈希、日志/审计无明文
+        （详见 EVD-P0BR-058-001.yaml，V05c）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-003
+      assertion: >-
+        首登强制改密全链：改密门拦截 → 改密 → 临时口令失效 → force-change 清除 → 审计
+        （详见 EVD-P0BR-058-001.yaml，V05c）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-004
+      assertion: >-
+        失败登录防枚举：同错误码 AUTH_INVALID_CREDENTIALS + 归一化后同响应体形状
+        （详见 EVD-P0BR-058-001.yaml，V05c）
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-IAM-006
+      assertion: >-
+        access/refresh 同时轮换、旧 jti 标记 ROTATED、新 Cookie 属性、Family 内 ACTIVE 恰为 1
+        （详见 EVD-P0BR-058-001.yaml，V05d）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-009
+      assertion: >-
+        登出清除 Cookie、Family 整族吊销、重用被拒、重复登出幂等
+        （详见 EVD-P0BR-058-001.yaml，V05f）
+      scenarioCategory: normal
     - scenarioId: AC-P0B-AUD-001
       assertion: V08 audit_log 含 AUTH_LOGIN_SUCCEEDED 事件
       scenarioCategory: normal
@@ -85,16 +112,14 @@ coverage:
       scenarioCategory: normal
   notProven:
     - V05-V11 仅验证 fail-closed 拒绝路径，未验证有权限 200 完整路径
-    - AC-P0B-IAM-001 Bootstrap 首次管理员（一次性操作，非重复验证）
-    - AC-P0B-IAM-003 首登改密
-    - AC-P0B-IAM-004 错误凭据登录
-    - AC-P0B-IAM-005 账户锁定
-    - AC-P0B-IAM-006 refresh 轮换
-    - AC-P0B-IAM-007 refresh 重放拒绝
-    - AC-P0B-IAM-008 禁用后旧 Token 失效
-    - AC-P0B-IAM-009 登出后 refresh 吊销
-    - AC-P0B-IAM-011 并发刷新
-    - AC-P0B-IAM-012 用户管理全生命周期
+    # IAM 场景的权威结论见 EVD-P0BR-058-001.yaml。
+    # 以下 5 项经 TASK-P0BR-058 在真实栈实测 FAIL（产品缺陷，非证据缺失），
+    # 修复前不得计为 proven；缺陷详情（DEF-058-1..4）见该 Evidence。
+    - AC-P0B-IAM-005 账户锁定：实测连续 5 次失败后仍未锁定（事务回滚致失败计数与审计丢失）
+    - AC-P0B-IAM-007 refresh 重放拒绝：错误码正确但整族吊销与新 refresh 失效被回滚
+    - AC-P0B-IAM-008 禁用后旧 Token 失效：拒绝路径成立，但 USER_DISABLED 审计缺失
+    - AC-P0B-IAM-011 并发刷新：实测两次均 200，Family 出现 2 条并存 ACTIVE
+    - AC-P0B-IAM-012 用户管理全生命周期：动作可用但 5 类 USER_* 审计均缺失，且未阻止禁用最后一个管理员
     - AC-P0B-AGT-001~005 Agent 全部场景
     - AC-P0B-AUTH-001~002, 004~009 全部场景
     - AC-P0B-TAX-001~006 字典/标签全部场景

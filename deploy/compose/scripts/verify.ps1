@@ -56,33 +56,45 @@ function Skip-Step {
     $script:skipped++
 }
 
-# HTTP 请求：返回 @{ Status = <int>; Body = <string> }；网络错误返回 Status = -1。
+# HTTP 请求：返回 @{ Status = <int>; Body = <string>; SetCookie = <string> }；网络错误返回 Status = -1。
+# 使用 .NET HttpClient 而非 Invoke-WebRequest：后者对无请求体的 POST 会强制附加
+# Content-Type: application/x-www-form-urlencoded，无法精确模拟「浏览器仅凭 Cookie 刷新」的调用形状。
+# SetCookie 为 Set-Cookie 头原文（无该头时为空串），供刷新 Cookie 属性与轮换断言使用。
+Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
+
 function Invoke-Api {
-    param([string]$Method, [string]$Path, [hashtable]$Headers, [string]$Body)
-    $uri = "$BaseUrl$Path"
+    param([string]$Method, [string]$Path, [hashtable]$Headers, [string]$Body, [string]$RefreshCookie)
+    $handler = New-Object System.Net.Http.HttpClientHandler
+    $handler.UseCookies = $false
+    $client = New-Object System.Net.Http.HttpClient($handler)
+    $client.Timeout = [TimeSpan]::FromSeconds(20)
     try {
-        $params = @{ Method = $Method; Uri = $uri; UseBasicParsing = $true; TimeoutSec = 15 }
-        if ($Headers) { $params.Headers = $Headers }
-        if ($Body) { $params.Body = $Body; $params.ContentType = "application/json" }
-        $resp = Invoke-WebRequest @params
-        return @{ Status = [int]$resp.StatusCode; Body = $resp.Content }
-    } catch [System.Net.WebException] {
-        $r = $_.Exception.Response
-        if ($r -ne $null) {
-            $code = [int]$r.StatusCode
-            $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
-            $content = $reader.ReadToEnd()
-            return @{ Status = $code; Body = $content }
+        # .NET Framework 的 HttpMethod 无 PATCH 静态属性，统一按名构造以支持全部方法。
+        $httpMethod = New-Object System.Net.Http.HttpMethod($Method)
+        $request = New-Object System.Net.Http.HttpRequestMessage $httpMethod, "$BaseUrl$Path"
+        if ($Headers) {
+            foreach ($key in $Headers.Keys) {
+                [void]$request.Headers.TryAddWithoutValidation($key, "" + $Headers[$key])
+            }
         }
-        return @{ Status = -1; Body = $_.Exception.Message }
+        if (-not [string]::IsNullOrEmpty($RefreshCookie)) {
+            [void]$request.Headers.TryAddWithoutValidation("Cookie", "aihub_refresh=$RefreshCookie")
+        }
+        if ($Body) {
+            $request.Content = New-Object System.Net.Http.StringContent(
+                $Body, [System.Text.Encoding]::UTF8, "application/json")
+        }
+        $response = $client.SendAsync($request).GetAwaiter().GetResult()
+        $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        $setCookie = ""
+        if ($response.Headers.Contains("Set-Cookie")) {
+            $setCookie = ($response.Headers.GetValues("Set-Cookie") -join " ")
+        }
+        return @{ Status = [int]$response.StatusCode; Body = $content; SetCookie = $setCookie }
     } catch {
-        # PowerShell 5.1 下 HttpResponseException 也可能落到此分支。
-        $r = $_.Exception.Response
-        if ($r -ne $null) {
-            try { $code = [int]$r.StatusCode.value__ } catch { $code = [int]$r.StatusCode }
-            return @{ Status = $code; Body = "" }
-        }
-        return @{ Status = -1; Body = $_.Exception.Message }
+        return @{ Status = -1; Body = "$($_.Exception.Message)"; SetCookie = "" }
+    } finally {
+        $client.Dispose()
     }
 }
 
@@ -356,6 +368,506 @@ function Assert-Permitted {
     }
 }
 
+# ===========================================================================
+# IAM 验收辅助（AC-P0B-IAM-001/003/004/005/006/007/008/009/011/012）
+# 判据严格对齐 p0b-exit-catalog.md 第 3 节；不得为使用例变绿而放宽。
+# ===========================================================================
+
+# 从 Set-Cookie 头原文提取刷新 JWT 值；无则返回空串。
+function Get-RefreshFromSetCookie {
+    param([string]$SetCookie)
+    if ([string]::IsNullOrEmpty($SetCookie)) { return "" }
+    if ($SetCookie -match 'aihub_refresh=([^;]+)') { return $Matches[1] }
+    return ""
+}
+
+# 断言刷新 Cookie 的安全属性（AC-P0B-IAM-006：新 Cookie 属性正确）。
+# 本地 Compose 以 http 提供验收，故 Secure 由 aihub.security.cookie.secure 控制，此处只断言
+# 与运行环境无关的属性：HttpOnly、SameSite、受限 Path、有效期。
+function Assert-RefreshCookieAttributes {
+    param([string]$SetCookie, [string]$Context)
+    if ([string]::IsNullOrEmpty($SetCookie)) { throw "$Context 未下发 Set-Cookie，无法断言刷新 Cookie 属性" }
+    foreach ($attr in @("HttpOnly", "SameSite=Strict", "Path=/api/v1/auth")) {
+        if ($SetCookie -notmatch [regex]::Escape($attr)) {
+            throw "$Context 的 Set-Cookie 缺少属性 $attr（实际：$SetCookie）"
+        }
+    }
+    if ($SetCookie -notmatch 'Max-Age=\d+') {
+        throw "$Context 的 Set-Cookie 缺少 Max-Age 有效期（实际：$SetCookie）"
+    }
+}
+
+# 规范化登录失败响应体：仅 requestId/traceId 允许逐次不同，其余字段必须完全一致（AC-P0B-IAM-004 防枚举）。
+function Get-ComparableErrorShape {
+    param([string]$Body)
+    if ([string]::IsNullOrEmpty($Body)) { return "" }
+    return ($Body -replace '"requestId":"[^"]*"', '"requestId":"X"' -replace '"traceId":"[^"]*"', '"traceId":"X"')
+}
+
+# 读取用户行内断言值（状态/锁定/改密标记/Token 版本）。
+function Get-UserRowFacts {
+    param([string]$Username)
+    $sql = "select status || '|' || failed_login_attempts || '|' || " +
+        "coalesce(locked_until::text,'NULL') || '|' || must_change_password || '|' || token_version " +
+        "from iam_user where username='$Username'"
+    return (Invoke-Psql $sql)
+}
+
+# 重置账号锁定状态（仅在锁定断言使用，避免污染后续用例）。
+function Reset-UserLockState {
+    param([string]$Username)
+    [void](Invoke-Psql ("update iam_user set failed_login_attempts=0, locked_until=null, " +
+            "status='ACTIVE', updated_at=now() where username='$Username' and status='LOCKED'"))
+}
+
+# 创建（幂等）一个仅用于 IAM 断言的普通用户，返回 userId。
+# 口令为本地验收占位，符合平台默认策略（12-128 长度、至少三类字符）。
+$script:IamProbePassword = "ComposeIam-Probe-01!z"
+
+function New-IamProbeUser {
+    param([string]$Username, [string]$DisplayName)
+    $body = "{`"username`":`"$Username`",`"displayName`":`"$DisplayName`"," +
+        "`"email`":null,`"locale`":`"zh-CN`"," +
+        "`"temporaryPassword`":`"$($script:IamProbePassword)`"," +
+        "`"scopes`":[`"project:view`"]}"
+    $create = Invoke-Api -Method POST -Path "/api/v1/system/users" `
+        -Headers @{ Authorization = "Bearer $($script:accessToken)" } -Body $body
+    $code = Get-ErrorCode $create.Body
+    if ($create.Status -eq 409 -and $code -eq "USER_ALREADY_EXISTS") {
+        $row = Invoke-Psql "select user_id from iam_user where username='$Username'"
+        if ([string]::IsNullOrEmpty($row)) { throw "用户 $Username 已存在但无法读取 user_id" }
+        return $row
+    }
+    if ($create.Status -ne 201) {
+        throw "创建 IAM 验证用户 $Username 失败，状态 $($create.Status)，错误码 $code"
+    }
+    try { return "$((($create.Body | ConvertFrom-Json)).data.userId)" } catch { throw "创建响应缺少 userId" }
+}
+
+# ---------------------------------------------------------------------------
+# V05c: 身份生命周期（AC-P0B-IAM-001 引导唯一性、AC-P0B-IAM-003 首登改密、AC-P0B-IAM-004 防枚举）
+# ---------------------------------------------------------------------------
+function Assert-BootstrapAdminUniqueness {
+    # AC-P0B-IAM-001：引导只创建一次；口令仅存自适应哈希；日志/审计无明文。
+    $rows = Invoke-Psql "select count(*) from iam_user where username='$AdminUser'"
+    if ($rows -ne "1") { throw "引导管理员行数 $rows，期望恰好 1（不得重复创建）" }
+    $algo = Invoke-Psql "select password_algorithm from iam_user where username='$AdminUser'"
+    if ($algo -ne "BCRYPT") { throw "引导管理员口令算法为 $algo，期望自适应哈希 BCRYPT（不得存明文）" }
+    $prefix = Invoke-Psql "select left(password_hash, 4) from iam_user where username='$AdminUser'"
+    if ($prefix -notmatch '^\$2[aby]\$') { throw "引导管理员口令列不是 bcrypt 摘要（前缀 $prefix）" }
+    # 明文口令不得出现在审计正文与容器日志。
+    $leakAudit = Invoke-Psql "select count(*) from audit_log where request_summary::text like '%$AdminPass%'"
+    if ([int]$leakAudit -ne 0) { throw "审计正文出现引导管理员明文口令（脱敏失效）" }
+    $logs = ""
+    try { $logs = ("" + (docker compose logs backend --tail 400 2>&1)) } catch { }
+    if ($logs.Contains($AdminPass)) { throw "backend 容器日志出现引导管理员明文口令" }
+}
+
+function Assert-FirstLoginPasswordChange {
+    # AC-P0B-IAM-003：临时口令失效、新口令可登录、force-change 清除（AC-P0B-IAM-002 已证首登签发）。
+    $username = "compose-verify-iam3"
+    $temp = "ComposeIam3-Temp-01!z"
+    $new = "ComposeIam3-New-02!y"
+    $createBody = "{`"username`":`"$username`",`"displayName`":`"Compose Verify Iam3`"," +
+        "`"email`":null,`"locale`":`"zh-CN`"," +
+        "`"temporaryPassword`":`"$temp`",`"scopes`":[`"project:view`"]}"
+    $create = Invoke-Api -Method POST -Path "/api/v1/system/users" `
+        -Headers @{ Authorization = "Bearer $($script:accessToken)" } -Body $createBody
+    if ($create.Status -ne 201 -and -not ($create.Status -eq 409)) {
+        throw "创建首登改密验证用户失败，状态 $($create.Status)，错误码 $(Get-ErrorCode $create.Body)"
+    }
+    $userId = "$((($create.Body | ConvertFrom-Json)).data.userId)"
+    if ($create.Status -eq 409) {
+        $userId = Invoke-Psql "select user_id from iam_user where username='$username'"
+        # 已存在：先重置口令，回到「强制改密」前置状态，避免上一轮残留。
+        $reset = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:reset-password" `
+            -Headers @{ Authorization = "Bearer $($script:accessToken)" } `
+            -Body "{`"temporaryPassword`":`"$temp`"}"
+        if ($reset.Status -ne 200) { throw "重置首登改密验证用户口令失败，状态 $($reset.Status)" }
+    }
+    $facts = Get-UserRowFacts $username
+    if ($facts -notmatch '^PENDING_ACTIVATION\|.*\|1\|') {
+        throw "新建用户未处于强制改密前置状态（实际：$facts，期望 must_change_password=1）"
+    }
+
+    $login = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$username`",`"password`":`"$temp`"}"
+    if ($login.Status -ne 200) { throw "临时口令登录失败，状态 $($login.Status)" }
+    $token = "$((($login.Body | ConvertFrom-Json)).data.accessToken)"
+
+    # 改密门前置：未改密时业务端点必须被 403 PASSWORD_CHANGE_REQUIRED 阻断。
+    $gated = Invoke-Api -Method GET -Path "/api/v1/system/users" -Headers @{ Authorization = "Bearer $token" }
+    if ($gated.Status -ne 403 -or (Get-ErrorCode $gated.Body) -ne "PASSWORD_CHANGE_REQUIRED") {
+        throw "未改密主体访问业务端点返回 $($gated.Status)/$(Get-ErrorCode $gated.Body)，期望 403 PASSWORD_CHANGE_REQUIRED"
+    }
+
+    $chg = Invoke-Api -Method PUT -Path "/api/v1/me/password" -Headers @{ Authorization = "Bearer $token" } `
+        -Body "{`"currentPassword`":`"$temp`",`"newPassword`":`"$new`"}"
+    if ($chg.Status -ne 200) {
+        throw "首登改密失败，状态 $($chg.Status)，错误码 $(Get-ErrorCode $chg.Body)"
+    }
+    $factsAfter = Get-UserRowFacts $username
+    if ($factsAfter -notmatch '^ACTIVE\||\|0\|') {
+        throw "改密后 must_change_password 未清除或状态未激活（实际：$factsAfter）"
+    }
+    $oldLogin = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$username`",`"password`":`"$temp`"}"
+    if ($oldLogin.Status -ne 401 -or (Get-ErrorCode $oldLogin.Body) -ne "AUTH_INVALID_CREDENTIALS") {
+        throw "临时口令改密后仍可用，状态 $($oldLogin.Status)/$(Get-ErrorCode $oldLogin.Body)，期望 401 AUTH_INVALID_CREDENTIALS"
+    }
+    $newLogin = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$username`",`"password`":`"$new`"}"
+    if ($newLogin.Status -ne 200) { throw "新口令登录失败，状态 $($newLogin.Status)" }
+    $newToken = "$((($newLogin.Body | ConvertFrom-Json)).data.accessToken)"
+    $me = Invoke-Api -Method GET -Path "/api/v1/me" -Headers @{ Authorization = "Bearer $newToken" }
+    $force = $null
+    try { $force = [bool](($me.Body | ConvertFrom-Json)).data.forcePasswordChange } catch { }
+    if ($force -ne $false) { throw "/me 的 forcePasswordChange 为 $force，期望 false（改密后清除）" }
+    # 审计追加：USER_PASSWORD_CHANGED 必须存在（资源按 principalId 归属）。
+    $principalId = Invoke-Psql "select principal_id from iam_user where username='$username'"
+    $audit = Invoke-Psql "select count(*) from audit_log where event_type='USER_PASSWORD_CHANGED' and resource_id='$principalId'"
+    if ([int]$audit -lt 1) { throw "未发现该主体的 USER_PASSWORD_CHANGED 审计事件（改密未审计）" }
+}
+
+function Assert-LoginAntiEnumeration {
+    # AC-P0B-IAM-004：不存在用户名与错误口令返回同一错误码与同一响应体形状（仅追踪 ID 可不同）。
+    $unknownName = "compose-verify-nosuch-account"
+    $unknown = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$unknownName`",`"password`":`"$($script:IamProbePassword)`"}"
+    $wrong = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$AdminUser`",`"password`":`"ComposeWrong-Password-01!z`"}"
+    foreach ($pair in @(@("不存在的用户名", $unknown), @("错误口令", $wrong))) {
+        if ($pair[1].Status -ne 401) {
+            throw "$($pair[0])登录返回 $($pair[1].Status)，期望 401"
+        }
+        $code = Get-ErrorCode $pair[1].Body
+        if ($code -ne "AUTH_INVALID_CREDENTIALS") {
+            throw "$($pair[0])登录返回错误码 $code，期望 AUTH_INVALID_CREDENTIALS"
+        }
+    }
+    $shapeUnknown = Get-ComparableErrorShape $unknown.Body
+    $shapeWrong = Get-ComparableErrorShape $wrong.Body
+    if ($shapeUnknown -ne $shapeWrong) {
+        throw "两种失败登录的响应体形状不一致，暴露账号存在性：`n  不存在=$shapeUnknown`n  口令错=$shapeWrong"
+    }
+    # 失败审计存在且不含口令明文。
+    $failed = Invoke-Psql "select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'"
+    $leak = Invoke-Psql "select count(*) from audit_log where request_summary::text like '%ComposeWrong-Password-01!z%'"
+    if ([int]$leak -ne 0) { throw "登录失败审计出现口令明文（脱敏失效）" }
+    if ($script:iamLastShapeProbe -eq $true -and [int]$failed -lt 1) {
+        throw "未发现 AUTH_LOGIN_FAILED 审计事件（登录失败未审计）"
+    }
+}
+
+# ---------------------------------------------------------------------------
+# V05d: 会话轮换与失效（AC-P0B-IAM-006 轮换、AC-P0B-IAM-008 禁用实时失效、AC-P0B-IAM-009 登出）
+# ---------------------------------------------------------------------------
+function Assert-RefreshRotation {
+    # AC-P0B-IAM-006：access/refresh 同时轮换；旧 jti 标记失效；新 Cookie 属性正确。
+    $login = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$AdminUser`",`"password`":`"$AdminPass`"}"
+    if ($login.Status -ne 200) { throw "登录失败，状态 $($login.Status)（无法执行刷新轮换断言）" }
+    Assert-RefreshCookieAttributes -SetCookie $login.SetCookie -Context "登录"
+    $oldRefresh = Get-RefreshFromSetCookie $login.SetCookie
+    if ([string]::IsNullOrEmpty($oldRefresh)) { throw "登录未下发刷新 Cookie" }
+    $oldAccess = "$((($login.Body | ConvertFrom-Json)).data.accessToken)"
+    $principalId = Invoke-Psql "select principal_id from iam_user where username='$AdminUser'"
+
+    $refresh = Invoke-Api -Method POST -Path "/api/v1/auth/refresh" -RefreshCookie $oldRefresh
+    if ($refresh.Status -ne 200) {
+        throw "刷新失败，状态 $($refresh.Status)，错误码 $(Get-ErrorCode $refresh.Body)"
+    }
+    Assert-RefreshCookieAttributes -SetCookie $refresh.SetCookie -Context "刷新"
+    $newRefresh = Get-RefreshFromSetCookie $refresh.SetCookie
+    if ([string]::IsNullOrEmpty($newRefresh)) { throw "刷新未轮换出新刷新 Cookie" }
+    if ($newRefresh -eq $oldRefresh) { throw "刷新后 refresh 未轮换（Cookie 值与旧的相同）" }
+    $newAccess = "$((($refresh.Body | ConvertFrom-Json)).data.accessToken)"
+    if ([string]::IsNullOrEmpty($newAccess)) { throw "刷新响应缺少 accessToken" }
+    if ($newAccess -eq $oldAccess) { throw "刷新后 access 未轮换（响应体与旧的相同）" }
+    $newAccessStatus = (Invoke-Api -Method GET -Path "/api/v1/me" -Headers @{ Authorization = "Bearer $newAccess" }).Status
+    if ($newAccessStatus -ne 200) { throw "轮换出的新 access 访问 /me 返回 $newAccessStatus，期望 200" }
+
+    # 旧 jti 必须已标记为 ROTATED（不得仍为 ACTIVE）。
+    $family = Invoke-Psql ("select token_family from iam_token where jti=(select jti from iam_token " +
+        "where principal_id='$principalId' and status='ROTATED' order by id desc limit 1)")
+    if ([string]::IsNullOrEmpty($family) -or $family -eq "") {
+        throw "未发现 ROTATED 状态的旧 jti（刷新未把旧 jti 标记失效）"
+    }
+    $activeInFamily = Invoke-Psql "select count(*) from iam_token where token_family='$family' and status='ACTIVE'"
+    if ([int]$activeInFamily -ne 1) {
+        throw "轮换后该 Token Family 的 ACTIVE 数量为 $activeInFamily，期望恰好 1（无双有效 refresh）"
+    }
+}
+
+function Assert-RefreshReplayRevokesFamily {
+    # AC-P0B-IAM-007：重用已轮换 refresh → AUTH_REFRESH_REPLAYED；整族吊销；新 refresh 也失效；拒绝审计。
+    # 独立建立自己的 Token Family，不依赖其它用例的中间状态。
+    $login = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$AdminUser`",`"password`":`"$AdminPass`"}"
+    $liveRefresh = Get-RefreshFromSetCookie $login.SetCookie
+    $liveFamily = Invoke-Psql ("select token_family from iam_token where jti=(select jti from iam_token " +
+        "where principal_id=(select principal_id from iam_user where username='$AdminUser') order by id desc limit 1)")
+    $first = Invoke-Api -Method POST -Path "/api/v1/auth/refresh" -RefreshCookie $liveRefresh
+    if ($first.Status -ne 200) { throw "建立重放前置的首次刷新失败，状态 $($first.Status)" }
+    $rotatedRefresh = $liveRefresh
+    $liveNew = Get-RefreshFromSetCookie $first.SetCookie
+
+    $replay = Invoke-Api -Method POST -Path "/api/v1/auth/refresh" -RefreshCookie $rotatedRefresh
+    if ($replay.Status -ne 401) {
+        throw "重用已轮换 refresh 返回 $($replay.Status)，期望 401"
+    }
+    $replayCode = Get-ErrorCode $replay.Body
+    if ($replayCode -ne "AUTH_REFRESH_REPLAYED") {
+        throw "重用已轮换 refresh 返回错误码 $replayCode，期望 AUTH_REFRESH_REPLAYED"
+    }
+    # 整族吊销：该 Family 不得残留 ACTIVE，且轮换出的新 refresh 必须同样失效。
+    $activeAfter = Invoke-Psql "select count(*) from iam_token where token_family='$liveFamily' and status='ACTIVE'"
+    if ([int]$activeAfter -ne 0) {
+        throw "重放检测后 Token Family $liveFamily 仍残留 $activeAfter 条 ACTIVE，期望 0（整族吊销未生效）"
+    }
+    $newAfter = Invoke-Api -Method POST -Path "/api/v1/auth/refresh" -RefreshCookie $liveNew
+    if ($newAfter.Status -eq 200) {
+        throw "重放后轮换出的新 refresh 仍可刷新，未整族吊销"
+    }
+    # 拒绝审计必须存在。
+    $audit = Invoke-Psql "select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'"
+    if ([int]$audit -lt 1) { throw "未发现 AUTH_TOKEN_REPLAY_REJECTED 审计事件（重放拒绝未审计）" }
+}
+
+function Assert-DisableRevokesSessions {
+    # AC-P0B-IAM-008：旧 access 下一请求立即被拒；refresh 与凭据交换同样被拒；状态与审计一致。
+    $username = "compose-verify-iam8"
+    $userId = New-IamProbeUser -Username $username -DisplayName "Compose Verify Iam8"
+    $reset = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:reset-password" `
+        -Headers @{ Authorization = "Bearer $($script:accessToken)" } `
+        -Body "{`"temporaryPassword`":`"$($script:IamProbePassword)`"}"
+    if ($reset.Status -ne 200) { throw "重置验证用户口令失败，状态 $($reset.Status)" }
+    [void](Reset-UserLockState $username)
+
+    $login = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$username`",`"password`":`"$($script:IamProbePassword)`"}"
+    if ($login.Status -ne 200) { throw "验证用户登录失败，状态 $($login.Status)" }
+    $userAccess = "$((($login.Body | ConvertFrom-Json)).data.accessToken)"
+    $userRefresh = Get-RefreshFromSetCookie $login.SetCookie
+    $before = (Invoke-Api -Method GET -Path "/api/v1/me" -Headers @{ Authorization = "Bearer $userAccess" }).Status
+    if ($before -ne 200) { throw "禁用前 /me 返回 $before，期望 200（前置条件）" }
+
+    $disable = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:disable" `
+        -Headers @{ Authorization = "Bearer $($script:accessToken)" }
+    if ($disable.Status -ne 200) { throw "禁用用户失败，状态 $($disable.Status)" }
+    $facts = Get-UserRowFacts $username
+    if ($facts -notmatch '^DISABLED\|') { throw "禁用后 iam_user.status 未落库为 DISABLED（实际：$facts）" }
+
+    $afterStatus = (Invoke-Api -Method GET -Path "/api/v1/me" -Headers @{ Authorization = "Bearer $userAccess" }).Status
+    if ($afterStatus -ne 401) {
+        throw "禁用后旧 access 访问 /me 返回 $afterStatus，期望 401（未实时失效）"
+    }
+    if (-not [string]::IsNullOrEmpty($userRefresh)) {
+        $refreshStatus = (Invoke-Api -Method POST -Path "/api/v1/auth/refresh" -RefreshCookie $userRefresh).Status
+        if ($refreshStatus -eq 200) { throw "禁用后该用户 refresh 仍可刷新，期望被拒" }
+    }
+    $relogin = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$username`",`"password`":`"$($script:IamProbePassword)`"}"
+    if ($relogin.Status -ne 403 -or (Get-ErrorCode $relogin.Body) -ne "AUTH_ACCOUNT_DISABLED") {
+        throw "禁用用户重新登录返回 $($relogin.Status)/$(Get-ErrorCode $relogin.Body)，期望 403 AUTH_ACCOUNT_DISABLED"
+    }
+    # 状态与审计一致：USER_DISABLED 必须存在。
+    $audit = Invoke-Psql "select count(*) from audit_log where event_type='USER_DISABLED'"
+    if ([int]$audit -lt 1) { throw "未发现 USER_DISABLED 审计事件（禁用未审计）" }
+    # 复原：启用，避免影响后续用例。
+    $enable = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:enable" `
+        -Headers @{ Authorization = "Bearer $($script:accessToken)" }
+    if ($enable.Status -ne 200) { throw "复原启用用户失败，状态 $($enable.Status)" }
+}
+
+function Assert-LogoutAndReuse {
+    # AC-P0B-IAM-009：Cookie 清除；Token Family 吊销；重用被拒；重复登出幂等。
+    $login = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$AdminUser`",`"password`":`"$AdminPass`"}"
+    $access = "$((($login.Body | ConvertFrom-Json)).data.accessToken)"
+    $refresh = Get-RefreshFromSetCookie $login.SetCookie
+    if ([string]::IsNullOrEmpty($refresh)) { throw "登录未下发刷新 Cookie" }
+    $family = Invoke-Psql ("select token_family from iam_token where jti=(select jti from iam_token " +
+        "where principal_id=(select principal_id from iam_user where username='$AdminUser') order by id desc limit 1)")
+
+    $logout1 = Invoke-Api -Method POST -Path "/api/v1/auth/logout" `
+        -Headers @{ Authorization = "Bearer $access" } -RefreshCookie $refresh -Body "{}"
+    if ($logout1.Status -ne 200) { throw "登出失败，状态 $($logout1.Status)" }
+    if ($logout1.SetCookie -notmatch 'aihub_refresh=;\s' -or $logout1.SetCookie -notmatch 'Max-Age=0') {
+        throw "登出未下发清除 Cookie（实际：$($logout1.SetCookie)）"
+    }
+    $activeAfter = Invoke-Psql "select count(*) from iam_token where token_family='$family' and status='ACTIVE'"
+    if ([int]$activeAfter -ne 0) {
+        throw "登出后 Token Family $family 残留 $activeAfter 条 ACTIVE，期望 0（Family 未吊销）"
+    }
+    $reuse = Invoke-Api -Method POST -Path "/api/v1/auth/refresh" -RefreshCookie $refresh
+    if ($reuse.Status -eq 200) { throw "登出后重用 refresh 仍可刷新，期望被拒" }
+    $logout2 = Invoke-Api -Method POST -Path "/api/v1/auth/logout" `
+        -Headers @{ Authorization = "Bearer $access" } -RefreshCookie $refresh -Body "{}"
+    if ($logout2.Status -ne 200) { throw "重复登出返回 $($logout2.Status)，期望 200（登出必须幂等）" }
+    $logout3 = Invoke-Api -Method POST -Path "/api/v1/auth/logout" `
+        -Headers @{ Authorization = "Bearer $access" } -Body "{}"
+    if ($logout3.Status -ne 200) { throw "无 refresh 的登出返回 $($logout3.Status)，期望 200（登出必须幂等）" }
+}
+
+# ---------------------------------------------------------------------------
+# V05e: 锁定、重放（并入 V05d 断言）、并发刷新与管理审计
+# AC-P0B-IAM-005 / AC-P0B-IAM-011 / AC-P0B-IAM-012
+# ---------------------------------------------------------------------------
+function Assert-AccountLockout {
+    # AC-P0B-IAM-005：达到阈值进入 LOCKED；后续正确口令也返回 AUTH_ACCOUNT_LOCKED；审计存在。
+    $username = "compose-verify-iam5"
+    $userId = New-IamProbeUser -Username $username -DisplayName "Compose Verify Iam5"
+    $reset = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:reset-password" `
+        -Headers @{ Authorization = "Bearer $($script:accessToken)" } `
+        -Body "{`"temporaryPassword`":`"$($script:IamProbePassword)`"}"
+    if ($reset.Status -ne 200) { throw "重置验证用户口令失败，状态 $($reset.Status)" }
+    [void](Reset-UserLockState $username)
+
+    # 阈值与实现常量一致（LocalUser.MAX_FAILED_ATTEMPTS）：连续 5 次错误口令应在第 5 次锁定。
+    $threshold = 5
+    $lastStatus = 0
+    $lastCode = ""
+    for ($attempt = 1; $attempt -le $threshold; $attempt++) {
+        $resp = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+            -Body "{`"username`":`"$username`",`"password`":`"ComposeWrong-Password-01!z`"}"
+        $lastStatus = $resp.Status
+        $lastCode = Get-ErrorCode $resp.Body
+    }
+    $facts = Get-UserRowFacts $username
+    if ($lastCode -ne "AUTH_ACCOUNT_LOCKED") {
+        throw "第 $threshold 次错误口令返回 $lastStatus/$lastCode，期望 AUTH_ACCOUNT_LOCKED（账户未锁定）"
+    }
+    if ($facts -notmatch '\|LOCKED\|') {
+        throw "锁定后 iam_user.status 未落库为 LOCKED（实际：$facts）"
+    }
+    $lockedUntil = Invoke-Psql "select coalesce(locked_until::text,'NULL') from iam_user where username='$username'"
+    if ($lockedUntil -eq "NULL") { throw "锁定后 locked_until 为空，期望非空" }
+    # 锁定期间即使口令正确也必须被拒。
+    $correct = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$username`",`"password`":`"$($script:IamProbePassword)`"}"
+    if ($correct.Status -ne 423 -or (Get-ErrorCode $correct.Body) -ne "AUTH_ACCOUNT_LOCKED") {
+        throw "锁定期间正确口令返回 $($correct.Status)/$(Get-ErrorCode $correct.Body)，期望 423 AUTH_ACCOUNT_LOCKED"
+    }
+    $audit = Invoke-Psql "select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'"
+    if ([int]$audit -lt 1) { throw "未发现 AUTH_LOGIN_FAILED 审计事件（登录失败未审计）" }
+    # 复原：管理员重置口令并启用，解除锁定，避免影响后续用例。
+    [void](Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:reset-password" `
+            -Headers @{ Authorization = "Bearer $($script:accessToken)" } `
+            -Body "{`"temporaryPassword`":`"$($script:IamProbePassword)`"}")
+    [void](Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:enable" `
+            -Headers @{ Authorization = "Bearer $($script:accessToken)" })
+}
+
+function Assert-ConcurrentRefreshSingleActive {
+    # AC-P0B-IAM-011：同一 refresh JWT 并发刷新只允许一个成功；库中不得出现两条并存 ACTIVE。
+    $login = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+        -Body "{`"username`":`"$AdminUser`",`"password`":`"$AdminPass`"}"
+    $refresh = Get-RefreshFromSetCookie $login.SetCookie
+    if ([string]::IsNullOrEmpty($refresh)) { throw "登录未下发刷新 Cookie" }
+    $principalId = Invoke-Psql "select principal_id from iam_user where username='$AdminUser'"
+    $family = Invoke-Psql ("select token_family from iam_token where jti=(select jti from iam_token " +
+        "where principal_id='$principalId' order by id desc limit 1)")
+    if ([string]::IsNullOrEmpty($family)) { throw "无法确定并发刷新所使用的 Token Family" }
+
+    # 两个独立连接同时发出刷新请求，确保真实并发到达后端（而非串行两次调用）。
+    $handlerA = New-Object System.Net.Http.HttpClientHandler
+    $handlerA.UseCookies = $false
+    $handlerB = New-Object System.Net.Http.HttpClientHandler
+    $handlerB.UseCookies = $false
+    $clientA = New-Object System.Net.Http.HttpClient($handlerA)
+    $clientB = New-Object System.Net.Http.HttpClient($handlerB)
+    $clientA.Timeout = [TimeSpan]::FromSeconds(30)
+    $clientB.Timeout = [TimeSpan]::FromSeconds(30)
+    $statusA = -1
+    $statusB = -1
+    try {
+        $requestA = New-Object System.Net.Http.HttpRequestMessage ([System.Net.Http.HttpMethod]::Post), "$BaseUrl/api/v1/auth/refresh"
+        [void]$requestA.Headers.TryAddWithoutValidation("Cookie", "aihub_refresh=$refresh")
+        $requestB = New-Object System.Net.Http.HttpRequestMessage ([System.Net.Http.HttpMethod]::Post), "$BaseUrl/api/v1/auth/refresh"
+        [void]$requestB.Headers.TryAddWithoutValidation("Cookie", "aihub_refresh=$refresh")
+        $taskA = $clientA.SendAsync($requestA)
+        $taskB = $clientB.SendAsync($requestB)
+        [void][System.Threading.Tasks.Task]::WaitAll(@($taskA, $taskB), 30000)
+        if (-not $taskA.IsCompleted -or -not $taskB.IsCompleted) {
+            throw "并发刷新请求未在超时内完成，无法取得并发语义证据"
+        }
+        $statusA = [int]$taskA.Result.StatusCode
+        $statusB = [int]$taskB.Result.StatusCode
+        [void]$taskA.Result.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        [void]$taskB.Result.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+    } finally {
+        $clientA.Dispose()
+        $clientB.Dispose()
+    }
+    $successCount = 0
+    if ($statusA -eq 200) { $successCount++ }
+    if ($statusB -eq 200) { $successCount++ }
+    if ($successCount -ne 1) {
+        throw "并发刷新成功次数为 $successCount（状态 $statusA/$statusB），期望恰好 1"
+    }
+    $activeInFamily = Invoke-Psql "select count(*) from iam_token where token_family='$family' and status='ACTIVE'"
+    if ([int]$activeInFamily -ne 1) {
+        throw "并发刷新后该 Token Family 的 ACTIVE 数量为 $activeInFamily，期望恰好 1（出现并存有效 Token）"
+    }
+}
+
+function Assert-AdminUserLifecycle {
+    # AC-P0B-IAM-012：管理员创建/编辑/重置/禁用/启用用户，每步产生对应审计事件。
+    $username = "compose-verify-iam12"
+    $userId = New-IamProbeUser -Username $username -DisplayName "Compose Verify Iam12"
+    $authHeader = @{ Authorization = "Bearer $($script:accessToken)" }
+
+    $update = Invoke-Api -Method PATCH -Path "/api/v1/system/users/$userId" -Headers $authHeader `
+        -Body "{`"displayName`":`"Compose Verify Iam12 Renamed`",`"email`":null,`"locale`":`"en-US`"}"
+    if ($update.Status -ne 200) { throw "编辑用户失败，状态 $($update.Status)，错误码 $(Get-ErrorCode $update.Body)" }
+    $locale = Invoke-Psql "select locale from iam_user where user_id='$userId'"
+    if ($locale -ne "en-US") { throw "编辑后 locale 未落库为 en-US（实际：$locale）" }
+
+    $reset = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:reset-password" -Headers $authHeader `
+        -Body "{`"temporaryPassword`":`"$($script:IamProbePassword)`"}"
+    if ($reset.Status -ne 200) { throw "重置口令失败，状态 $($reset.Status)" }
+    $facts = Get-UserRowFacts $username
+    if ($facts -notmatch '^PENDING_ACTIVATION\|.*\|1\|') {
+        throw "重置口令后未回到强制改密/待激活（实际：$facts）"
+    }
+    $disable = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:disable" -Headers $authHeader
+    if ($disable.Status -ne 200) { throw "禁用用户失败，状态 $($disable.Status)" }
+    $enable = Invoke-Api -Method POST -Path "/api/v1/system/users/$userId`:enable" -Headers $authHeader
+    if ($enable.Status -ne 200) { throw "启用用户失败，状态 $($enable.Status)" }
+
+    # 每步审计：创建/编辑/禁用/启用/重置口令均须存在对应事件（OpenAPI x-audit-event）。
+    $required = @("USER_CREATED", "USER_UPDATED", "USER_ENABLED", "USER_DISABLED", "USER_PASSWORD_RESET")
+    $missing = @()
+    foreach ($eventType in $required) {
+        $count = Invoke-Psql "select count(*) from audit_log where event_type='$eventType'"
+        if ([int]$count -lt 1) { $missing += $eventType }
+    }
+    if ($missing.Count -gt 0) {
+        throw "以下用户管理审计事件缺失：$($missing -join '、')（管理动作未审计）"
+    }
+
+    # 不能禁用最后一个有效平台管理员：必须拒绝（REQ-IAM-006 / INV-IAM-006）。
+    $adminUserId = Invoke-Psql "select user_id from iam_user where username='$AdminUser'"
+    $activeAdmins = Invoke-Psql "select count(*) from iam_user where status='ACTIVE' and scopes @> '[`"user:manage`"]'::jsonb"
+    if ([int]$activeAdmins -ne 1) {
+        throw "前置条件异常：持有 user:manage 的活跃管理员数量为 $activeAdmins，期望 1"
+    }
+    $lastAdminDisable = Invoke-Api -Method POST -Path "/api/v1/system/users/$adminUserId`:disable" -Headers $authHeader
+    if ($lastAdminDisable.Status -eq 200) {
+        # 产品未拒绝：立即复原，避免把验收栈留在「无管理员」状态，然后如实报出缺陷。
+        [void](Invoke-Psql ("update iam_user set status='ACTIVE', failed_login_attempts=0, locked_until=null, " +
+                "updated_at=now() where user_id='$adminUserId'"))
+        [void](Invoke-Psql ("update iam_principal set status='ACTIVE', updated_at=now() " +
+                "where principal_id=(select principal_id from iam_user where user_id='$adminUserId')"))
+        throw ("最后一个有效平台管理员被允许禁用（返回 200），期望拒绝并返回 COMMON_INVALID_ARGUMENT" +
+               "且产生拒绝审计（REQ-IAM-006）。已自动复原管理员状态。")
+    }
+    if ((Get-ErrorCode $lastAdminDisable.Body) -ne "COMMON_INVALID_ARGUMENT") {
+        throw "禁用最后一个管理员返回错误码 $(Get-ErrorCode $lastAdminDisable.Body)，期望 COMMON_INVALID_ARGUMENT"
+    }
+}
+
 # ---------------------------------------------------------------------------
 # V06: 权限过滤（审计查询默认拒绝 + 有权限正向可达）
 # ---------------------------------------------------------------------------
@@ -449,6 +961,58 @@ if (-not $backendReachable) {
         Assert-DefaultDeny "/api/v1/system/dependencies"
         Assert-Permitted "/api/v1/system/dependencies"
     }
+}
+
+# ---------------------------------------------------------------------------
+# V05c: 身份生命周期（AC-P0B-IAM-001 引导唯一性、AC-P0B-IAM-003 首登改密、AC-P0B-IAM-004 防枚举）
+# 依赖 V05b 已解除管理员改密门并备好最小权限主体。
+# ---------------------------------------------------------------------------
+if (-not $backendReachable) {
+    Skip-Step "V05c" "身份生命周期（引导/首登改密/防枚举）" "backend 不可达"
+} elseif (-not $pgReachable) {
+    Skip-Step "V05c" "身份生命周期（引导/首登改密/防枚举）" "postgres 不可达（无法断言落库状态与审计）"
+} else {
+    Test-Step "V05c" "身份生命周期（AC-P0B-IAM-001/003/004）" {
+        Assert-BootstrapAdminUniqueness
+        Assert-FirstLoginPasswordChange
+        Assert-LoginAntiEnumeration
+    }
+}
+
+# ---------------------------------------------------------------------------
+# V05d–V05j: 按 AC 逐一独立执行，使缺陷可精确定位（一个场景失败不掩盖其余场景）
+# 每个 V 编号显式声明其覆盖的 AC-*（p0b-exit-catalog 第 20 行要求）。
+# ---------------------------------------------------------------------------
+if (-not $backendReachable) {
+    foreach ($case in @(
+            @("V05d", "刷新轮换（AC-P0B-IAM-006）"),
+            @("V05e", "禁用实时失效（AC-P0B-IAM-008）"),
+            @("V05f", "登出与重用（AC-P0B-IAM-009）"),
+            @("V05g", "刷新重放整族吊销（AC-P0B-IAM-007）"),
+            @("V05h", "账户锁定（AC-P0B-IAM-005）"),
+            @("V05i", "并发刷新无双有效 Token（AC-P0B-IAM-011）"),
+            @("V05j", "用户管理与最后一个管理员保护（AC-P0B-IAM-012）"))) {
+        Skip-Step $case[0] $case[1] "backend 不可达"
+    }
+} elseif (-not $pgReachable) {
+    foreach ($case in @(
+            @("V05d", "刷新轮换（AC-P0B-IAM-006）"),
+            @("V05e", "禁用实时失效（AC-P0B-IAM-008）"),
+            @("V05f", "登出与重用（AC-P0B-IAM-009）"),
+            @("V05g", "刷新重放整族吊销（AC-P0B-IAM-007）"),
+            @("V05h", "账户锁定（AC-P0B-IAM-005）"),
+            @("V05i", "并发刷新无双有效 Token（AC-P0B-IAM-011）"),
+            @("V05j", "用户管理与最后一个管理员保护（AC-P0B-IAM-012）"))) {
+        Skip-Step $case[0] $case[1] "postgres 不可达（无法断言 Token 与审计落库状态）"
+    }
+} else {
+    Test-Step "V05d" "刷新轮换（AC-P0B-IAM-006）" { Assert-RefreshRotation }
+    Test-Step "V05e" "禁用实时失效（AC-P0B-IAM-008）" { Assert-DisableRevokesSessions }
+    Test-Step "V05f" "登出与重用（AC-P0B-IAM-009）" { Assert-LogoutAndReuse }
+    Test-Step "V05g" "刷新重放整族吊销（AC-P0B-IAM-007）" { Assert-RefreshReplayRevokesFamily }
+    Test-Step "V05h" "账户锁定（AC-P0B-IAM-005）" { Assert-AccountLockout }
+    Test-Step "V05i" "并发刷新无双有效 Token（AC-P0B-IAM-011）" { Assert-ConcurrentRefreshSingleActive }
+    Test-Step "V05j" "用户管理与最后一个管理员保护（AC-P0B-IAM-012）" { Assert-AdminUserLifecycle }
 }
 
 Write-Host ""

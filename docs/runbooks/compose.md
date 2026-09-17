@@ -108,6 +108,34 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 | **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）：默认拒绝 + 管理员正向 200 | backend 就绪、V05b 通过 |
 | **V12** | `/system/alerts`（需 `system:observe`）返回告警列表；DEAD 任务/Outbox 积压/认证失败可触发告警 | backend 就绪 |
 
+### IAM 验收用例（V05c–V05j，各覆盖单一 AC）
+
+按 `p0b-exit-catalog.md` 第 20 行要求，每个 V 编号显式声明其覆盖的 `AC-*`。
+这批评例按 AC 逐一独立执行，使缺陷可精确定位（一个场景失败不掩盖其余场景），
+且判据严格对齐出口目录第 3 节，**不得为使用例变绿而放宽**。
+
+| 用例 | 覆盖 AC | 覆盖 | 前置 |
+| --- | --- | --- | --- |
+| **V05c** | `AC-P0B-IAM-001`、`AC-P0B-IAM-003`、`AC-P0B-IAM-004` | 引导管理员唯一性与自适应哈希、日志/审计无明文；首登改密全链（改密门拦截 → 改密 → 临时口令失效 → force-change 清除 → 审计）；失败登录防枚举（同错误码 + 归一化后同响应体形状） | V05b 通过、postgres 就绪 |
+| **V05d** | `AC-P0B-IAM-006` | access/refresh 同时轮换、旧 jti 标记 `ROTATED`、新 Cookie 属性（HttpOnly/SameSite=Strict/受限 Path/Max-Age）、Family 内 ACTIVE 恰好 1 | V05b 通过、postgres 就绪 |
+| **V05e** | `AC-P0B-IAM-008` | 禁用后旧 access 下一请求即 401、refresh 被拒、重新登录 403 `AUTH_ACCOUNT_DISABLED`、`iam_user.status` 落库 `DISABLED`、`USER_DISABLED` 审计存在 | V05b 通过、postgres 就绪 |
+| **V05f** | `AC-P0B-IAM-009` | 登出下发清除 Cookie、Family 整族吊销、重用被拒、重复登出与无 refresh 登出均幂等 | V05b 通过、postgres 就绪 |
+| **V05g** | `AC-P0B-IAM-007` | 重用已轮换 refresh → 401 `AUTH_REFRESH_REPLAYED`、Family 残留 ACTIVE 为 0、轮换出的新 refresh 亦失效、`AUTH_TOKEN_REPLAY_REJECTED` 审计存在 | V05b 通过、postgres 就绪 |
+| **V05h** | `AC-P0B-IAM-005` | 连续 5 次错误口令后第 5 次为 423 `AUTH_ACCOUNT_LOCKED`、`status=LOCKED` 且 `locked_until` 非空、锁定期间正确口令也被拒、`AUTH_LOGIN_FAILED` 审计存在 | V05b 通过、postgres 就绪 |
+| **V05i** | `AC-P0B-IAM-011` | 同一 refresh JWT 两路真实并发（两个独立连接）只允许 1 次成功、Family 内 ACTIVE 恰好 1 | V05b 通过、postgres 就绪 |
+| **V05j** | `AC-P0B-IAM-012` | 创建/编辑/重置/禁用/启用各步落库与错误码正确；`USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET` 审计均存在；不能禁用最后一个有效平台管理员 | V05b 通过、postgres 就绪 |
+
+> 上述用例在真实 Compose 栈的实测结果（含 4 项产品缺陷）见
+> `docs/ai-spec/tasks/evidence/EVD-P0BR-058-001.yaml`。
+> 结论：V05c/V05d/V05f PASS；V05e/V05g/V05h/V05i/V05j FAIL。
+> FAIL 为**产品缺陷**而非脚本问题，修复需改动 `backend/src/main/java`，须另立 Task Card。
+
+**并发与副作用说明**：V05i 使用两个独立 HTTP 连接同时发起刷新请求（非串行两次调用），
+以满足 `AC-P0B-IAM-011`「两个并发刷新请求」的字面要求。
+V05e–V05j 会创建 `compose-verify-iam3/iam5/iam8/iam12` 等专用验证主体，仅存在于本地验收栈；
+V05j 在检测到「最后一个管理员被允许禁用」时会先自动把该管理员复原为 `ACTIVE` 再报 FAIL，
+避免把验收栈留在无管理员状态。
+
 ### 前置：bootstrap 管理员凭据与验收主体
 
 V05-V08 需要一个可登录的管理员。Compose `backend` 服务通过 `.env` 的

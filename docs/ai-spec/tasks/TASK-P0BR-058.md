@@ -4,7 +4,7 @@ taskId: TASK-P0BR-058
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: aecc7b2f27559762fa52dadd85210a6754b05345
+baseCommit: ecbb246f911a76deba3331fcdcb5ff36d57b13d6
 stageGatePassed: true
 stageGateEvidence: 用户批准（AskUserQuestion 选择「批准并授权实施」）。依据 READY 需求 REQ-IAM-001~006（P0-B 身份与 JWT）与 ACCEPTED 决策 DEC-004、DEC-013，为 IAM 场景补齐 E4 级证据；属 ADR-0002 出口门禁要求的验证补全，不新增业务能力。
 stageGateEvidenceRefs:
