@@ -66,6 +66,9 @@ GOV（决策与基线）
 | `TASK-P0BR-048` | 资产表单受控字典选择恢复可用（dictCode 对齐 MVP Catalog） | AC-P0B-UI-004、AC-P0B-TAX-006 | GOV-002 |
 | `TASK-P0BR-049` | 资产 Facet 过滤条件下推，聚合计数与检索一致 | AC-P0B-AUTH-003、AC-DST-TAX-002 | GOV-002、P0BR-017 |
 | `TASK-P0BR-050` | 管理端页面可发现性与版本入口死链修复 | AC-P0B-UI-003/006、PAGE-ADM-004/008/009 | P0BR-041 |
+| `TASK-P0BR-051` | 修复可靠任务的 job_task 插入列/占位符不一致，恢复资产创建主链路 | AC-P0B-JOB-001、AC-P0B-UI-004 | GOV-002、P0BR-047 |
+| `TASK-P0BR-052` | 修复幂等存储的 Instant 绑定，恢复带 Idempotency-Key 的写接口 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-047 |
+| `TASK-P0BR-053` | 修复 verify 脚本默认拒绝断言无法区分权限拒绝与改密门（假阳性） | AC-P0B-AUTH-003、AC-P0B-AUTH-004 | GOV-002、P0BR-051/052 |
 
 ### 4.2 身份与授权纵向旅程
 
