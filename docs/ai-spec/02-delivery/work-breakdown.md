@@ -85,6 +85,7 @@ GOV（决策与基线）
 | `TASK-P0BR-015` | 授权从 Controller 布尔值收敛到可复用 Application Use Case | AUD-010、NFR-MNT-002 | P0BR-003 |
 | `TASK-P0BR-016` | 组织/项目/Team 成员和角色绑定成功/越权 E4 | AC-P0B-AUTH-001/002/004/008/009 | GOV-002、P0BR-015 |
 | `TASK-P0BR-017` | Scope+RBAC+ACL+资源策略组合及防枚举 SQL 下推 E4 | AC-P0B-AUTH-003/005..007 | P0BR-016 |
+| `TASK-P0BR-058` | 为 IAM 验收场景补齐 E4 证据（承载 P0BR-010/011/012/013 的验收断言） | AC-P0B-IAM-001/003..009/011/012 | P0BR-053 |
 
 ### 4.3 治理和运行平台
 
