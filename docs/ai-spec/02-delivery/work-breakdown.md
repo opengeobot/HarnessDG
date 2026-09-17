@@ -69,6 +69,9 @@ GOV（决策与基线）
 | `TASK-P0BR-051` | 修复可靠任务的 job_task 插入列/占位符不一致，恢复资产创建主链路 | AC-P0B-JOB-001、AC-P0B-UI-004 | GOV-002、P0BR-047 |
 | `TASK-P0BR-052` | 修复幂等存储的 Instant 绑定，恢复带 Idempotency-Key 的写接口 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-047 |
 | `TASK-P0BR-053` | 修复 verify 脚本默认拒绝断言无法区分权限拒绝与改密门（假阳性） | AC-P0B-AUTH-003、AC-P0B-AUTH-004 | GOV-002、P0BR-051/052 |
+| `TASK-P0BR-054` | 移除抢先回放的全局幂等拦截器，使摘要比对在 HTTP 层可达 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-052 |
+| `TASK-P0BR-055` | 修复资产模型扩展实体的列名转义，恢复资产详情读取 | AC-P0B-UI-004 | GOV-002、P0BR-051 |
+| `TASK-P0BR-056` | 将幂等键唯一约束对齐到含 principalId 的作用域 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-052 |
 
 ### 4.2 身份与授权纵向旅程
 
