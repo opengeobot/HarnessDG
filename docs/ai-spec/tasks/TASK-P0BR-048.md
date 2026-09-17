@@ -4,7 +4,7 @@ taskId: TASK-P0BR-048
 status: DRAFT
 implementationAuthorized: false
 phase: P0-B
-baseCommit: 67a0ec14230c41f8996272eefa6384f88df01c4b
+baseCommit: 4c14a9f1aacc7ef0e58d6d4a48ae41e526f69b3f
 stageGatePassed: false
 stageGateEvidence: 待用户批准。拟以 READY 需求 REQ-TAX-001/REQ-UI-001 与 ACCEPTED 决策 DEC-013 作为阶段依据；本卡为 P0-B 公共底座接入整改（受控选择器当前完全不可用），不新增业务能力。
 stageGateEvidenceRefs:
