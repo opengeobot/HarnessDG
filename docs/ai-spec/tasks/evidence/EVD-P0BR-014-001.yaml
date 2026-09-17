@@ -1,0 +1,124 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-014-001
+# 非 PASS：本卡 requiredEvidenceLevel 为 E3，本次仅取得 E2；不得据此声明完成。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-014
+  requirements: [REQ-AGT-001]
+  scenarios:
+    - AC-P0B-AGT-005
+    - AC-P0B-ENG-006
+    - AC-DST-AIW-002
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-014.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-014.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-014.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: a20c3fff43d5e657e9931a8f89187eff5cbe632c
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-09-17T10:21:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: "29.1.2 (CLI)"
+  composeProfiles: []
+  composeServices: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG/backend
+  command: >
+    ./mvnw.cmd -Dtest=com.aihub.mcp.** test；
+    ./mvnw.cmd verify；
+    npx --yes @redocly/cli lint contracts/openapi/aihub-v1.yaml；
+    ./docs/ai-spec/tools/validate-task-card.ps1 -CheckChangedPaths
+  startedAt: 2026-09-17T10:04:00+08:00
+  finishedAt: 2026-09-17T10:21:00+08:00
+  exitCode: 0
+  result: PARTIAL
+  evidenceLevel: E2
+  e3RealDependencies: []
+  e4EntryPoint: ""
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-AGT-005
+      assertion: >
+        McpControllerTest 证明 tools/call 在无已认证 Principal 时返回 isError 且 HTTP 401，
+        不再跳过 Tool 白名单；未授权 Tool 名称经 requireToolAllowed 拒绝，不泄露白名单细节。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >
+        静态审查确认 McpController、McpToolCatalog、McpResourceHandler 中的 "anonymous"
+        字面量降级路径已移除，改为 AuthorizationException / orElseThrow；
+        McpToolCatalogTest 6 项与 ConfirmationTokenTest 7 项通过，无空主体放行分支。
+      scenarioCategory: denial
+    - scenarioId: AC-DST-AIW-002
+      assertion: >
+        McpControllerTest.toolsListExcludesToolsNotGrantedToPrincipal 证明 tools/list 按主体过滤，
+        未授予的 Tool 不出现在列表中，与 tools/call 形成双重拒绝。
+      scenarioCategory: denial
+  notProven:
+    - AC-P0B-AGT-005 的拒绝审计（AGENT_ACCESS_DENIED）实际落库证据（需 E3/E4）
+    - AC-DST-AIW-002 的默认只读 Agent 端到端 MCP 客户端调用证据（需 E4）
+    - AC-P0B-ENG-006 的 deployable profile 扫描报告需在真实部署环境取得（需 E4）
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-014.md
+    - contracts/mcp/tools.yaml
+    - backend/target/surefire-reports/com.aihub.mcp.api.McpControllerTest.txt
+  logs: []
+  screenshots: []
+  traces: []
+  metrics:
+    - MCP 模块测试 23 项全通过（McpControllerTest 10 + McpToolCatalogTest 6 + ConfirmationTokenTest 7）
+    - OpenAPI lint：valid，1 个既存 no-unused-components warning
+  databaseQueries: []
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - 14 个 *IT 集成测试因 Testcontainers 无法连接 Docker 守护进程跳过，不计入 PASS
+  assumptions:
+    - fail-closed 语义结论基于单元测试与静态审查；拒绝审计落库与 MCP 端到端待 E3/E4 补证
+  environmentDifferences:
+    - Docker 守护进程在验证期间可用性不稳定；compose 栈启动失败（见下）
+    - 已确认 compose 中 backend 容器无法启动为既存缺陷（com.aihub.asset.discussion 的
+      DiscussionThreadMapper 不在 @MapperScan("com.aihub.*.infrastructure") 覆盖范围内），
+      该缺陷在本次变更前的 6bdbd51 同样存在，非本卡引入，故 E4 无法取得
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

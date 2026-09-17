@@ -1,0 +1,114 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-041-001
+# 非 PASS：本卡 requiredEvidenceLevel 为 E4，本次仅取得 E2；不得据此声明完成。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-041
+  requirements: [REQ-UI-001]
+  scenarios:
+    - AC-P0B-UI-005
+    - AC-P0B-TAX-006
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-041.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-041.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-041.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: f844aa583a578c09fa67af6c51578b129f6eec99
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-09-17T10:08:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: "29.1.2 (CLI)"
+  composeProfiles: []
+  composeServices: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG/frontend
+  command: >
+    pnpm lint；pnpm typecheck；pnpm test；pnpm build；
+    ./docs/ai-spec/tools/validate-task-card.ps1 -CheckChangedPaths
+  startedAt: 2026-09-17T10:03:00+08:00
+  finishedAt: 2026-09-17T10:08:00+08:00
+  exitCode: 0
+  result: PARTIAL
+  evidenceLevel: E2
+  e3RealDependencies: []
+  e4EntryPoint: ""
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-005
+      assertion: >
+        LanguageSwitcher 组件测试与 zustand/i18n 单测证明运行时切换入口存在并经唯一 changeLanguage
+        入口生效；导航标签由 labelKey 在渲染时求值，不再于模块加载时冻结。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-TAX-006
+      assertion: >
+        zh.json/en.json 双语文案齐备（含新增 layout.switchLanguage）；AppProviders 使用
+        resolvedLanguage 驱动 antd locale；client.ts 的 Accept-Language 改为 currentAcceptLanguage()
+        动态取值，与当前语言保持一致。
+      scenarioCategory: normal
+  notProven:
+    - AC-P0B-UI-005 的浏览器实际切换与刷新后保持截图/断言（需 E4 Playwright）
+    - AC-P0B-TAX-006 的登录后导航切换、字典与通知文案端到端验证及硬编码扫描报告（需 E4）
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: null
+  uiMatched: true
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-041.md
+    - frontend/e2e/i18n.spec.ts
+    - frontend/src/shared/components/LanguageSwitcher.test.tsx
+  logs: []
+  screenshots: []
+  traces: []
+  metrics:
+    - 前端单测 16 个文件 / 54 项全通过
+    - pnpm lint 无错误；pnpm typecheck 无错误；pnpm build 成功（25.82s）
+  databaseQueries: []
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - pnpm test:e2e（Playwright）未运行：需后端 Compose 栈可用，本次栈无法启动
+  assumptions:
+    - i18n 结论基于组件测试、lint/typecheck/build；浏览器端到端待 E4 补证
+  environmentDifferences:
+    - compose 中 backend 容器无法启动为既存缺陷（com.aihub.asset.discussion 的
+      DiscussionThreadMapper 不在 @MapperScan("com.aihub.*.infrastructure") 覆盖范围内），
+      该缺陷在本次变更前的 6bdbd51 同样存在，非本卡引入，故 E4 无法取得
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

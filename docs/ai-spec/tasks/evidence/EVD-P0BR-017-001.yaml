@@ -1,0 +1,129 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-017-001
+# 非 PASS：本卡 requiredEvidenceLevel 为 E4，本次仅取得 E2；不得据此声明完成。
+status: PARTIAL
+
+task:
+  taskId: TASK-P0BR-017
+  requirements: [REQ-AUTH-001, REQ-AUTH-002]
+  scenarios:
+    - AC-P0B-AUTH-003
+    - AC-P0B-AUTH-005
+    - AC-DST-DETAIL-003
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-017.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-017.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-017.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 974286795bd0a9811357206bd96cf1746be64a37
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-09-17T10:20:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: "29.1.2 (CLI; daemon 在 E4 阶段一度可用随后不可达)"
+  composeProfiles: []
+  composeServices: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG/backend
+  command: >
+    ./mvnw.cmd verify（482 项，含本卡新增 AssetAccessPolicyTest 10 项）；
+    ./mvnw.cmd -Dtest=AssetAccessPolicyTest,AssetApplicationServiceTest,AssetSearchPerformanceTest test；
+    ./docs/ai-spec/tools/validate-spec.ps1；
+    ./docs/ai-spec/tools/validate-task-card.ps1 -CheckChangedPaths
+  startedAt: 2026-09-17T09:58:00+08:00
+  finishedAt: 2026-09-17T10:21:00+08:00
+  exitCode: 1
+  result: PARTIAL
+  evidenceLevel: E2
+  e3RealDependencies: []
+  e4EntryPoint: ""
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >
+        AssetAccessPolicyTest 证明越权判定：同组织的 INTERNAL 可见、跨组织拒绝；
+        visibleVisibilities 按 Scope 收窄而非返回全部可见性；
+        PRIVATE 资产对同组织成员但无 ACL、无 Owner Team 关系时拒绝。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-AUTH-005
+      assertion: >
+        AssetAccessPolicyTest 覆盖 Scope 与可见性矩阵组合（PUBLIC/INTERNAL/PRIVATE ×
+        组织/项目/ACL/Team/platformAdmin）判定结果；platformAdmin 为唯一绕过路径。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >
+        AssetApplicationServiceTest 24 项证明详情与列表共用同一 AccessScope 计算路径
+        （computeAccessScope("ASSET", ASSET_READ)），无权时经 authorizeResourceOrNotFound
+        返回 ASSET_NOT_FOUND 而非 403，不泄露资源存在性。
+      scenarioCategory: denial
+  notProven:
+    - AC-P0B-AUTH-003 的真实数据库下推与查询计划证据（需 E3/E4）
+    - AC-P0B-AUTH-005 的拒绝审计事件实际落库证据（需 E3/E4）
+    - AC-DST-DETAIL-003 的 Facet 计数与匿名/无权响应对等性的端到端对比（需 E4）
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-017.md
+    - backend/target/surefire-reports/com.aihub.asset.application.AssetAccessPolicyTest.txt
+    - backend/target/surefire-reports/com.aihub.asset.application.AssetApplicationServiceTest.txt
+  logs: []
+  screenshots: []
+  traces: []
+  metrics:
+    - 后端全量 482 项：480 通过，2 项既存失败（PreviewJobHandlerTest CSV 解析，与本次变更无关）
+    - AssetAccessPolicyTest：10 项全通过（新增）
+    - AssetApplicationServiceTest：24 项全通过
+    - AssetSearchPerformanceTest：4 项跳过（Testcontainers 无法连接 Docker 守护进程）
+  databaseQueries: []
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - AssetSearchPerformanceTest 4 项因 Testcontainers 无法连接 Docker 守护进程跳过，不计入 PASS
+    - 14 个 *IT 集成测试同类原因跳过
+  assumptions:
+    - 可见性矩阵的语义结论基于单元测试与静态审查；真实 SQL 下推行为待 E3/E4 补证
+  environmentDifferences:
+    - Docker 守护进程在验证期间可用性不稳定；compose 栈启动失败（见下）
+    - 已确认 compose 中 backend 容器无法启动为既存缺陷（com.asset.discussion 的
+      DiscussionThreadMapper 不在 @MapperScan("com.aihub.*.infrastructure") 覆盖范围内），
+      该缺陷在本次变更前的 6bdbd51 同样存在，非本卡引入，故 E4 无法取得
+    - 既存失败 PreviewJobHandlerTest 2 项已在变更前基线复现，非本卡引入
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false
