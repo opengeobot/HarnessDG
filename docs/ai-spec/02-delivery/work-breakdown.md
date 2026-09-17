@@ -63,6 +63,9 @@ GOV（决策与基线）
 | `TASK-P0BR-003` | Permission Catalog、Java 常量、V4+ Seed、OpenAPI 和 UI 无漂移 | TERM-003、AUD-016 | GOV-002 |
 | `TASK-P0BR-004` | 内置角色按确认 Persona 最小权限重建 | AUD-017、personas matrix | P0BR-003 |
 | `TASK-P0BR-047` | 修复可部署 Profile 的 Mapper 扫描覆盖，恢复 Compose 栈启动与 E3/E4 可达性 | AC-P0B-ENG-004/006 | GOV-002 |
+| `TASK-P0BR-048` | 资产表单受控字典选择恢复可用（dictCode 对齐 MVP Catalog） | AC-P0B-UI-004、AC-P0B-TAX-006 | GOV-002 |
+| `TASK-P0BR-049` | 资产 Facet 过滤条件下推，聚合计数与检索一致 | AC-P0B-AUTH-003、AC-DST-TAX-002 | GOV-002、P0BR-017 |
+| `TASK-P0BR-050` | 管理端页面可发现性与版本入口死链修复 | AC-P0B-UI-003/006、PAGE-ADM-004/008/009 | P0BR-041 |
 
 ### 4.2 身份与授权纵向旅程
 
