@@ -6,6 +6,8 @@ import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.shared.api.CursorPage;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.version.application.VersionApplicationService;
@@ -67,6 +69,23 @@ public class McpToolCatalog {
     /** 列出所有已注册 Tool 定义。 */
     public List<ToolDefinition> listTools() {
         return Collections.unmodifiableList(tools.values().stream().toList());
+    }
+
+    /**
+     * 列出指定主体可见的 Tool 定义（AC-DST-AIW-002）。
+     *
+     * <p>写工具在总开关关闭时不下发；主体缺少该工具所需权限时不下发，避免向默认只读 Agent
+     * 暴露高风险工具的存在。未认证主体（principalId 为 null）仅得到公开只读集合之外的默认拒绝结果。
+     *
+     * @param principalId 主体 ID（可空 → 仅返回无需授权的公开只读工具）
+     * @param isToolAllowed 判断主体是否被显式授权调用该工具
+     * @return 可见 Tool 定义列表
+     */
+    public List<ToolDefinition> listTools(String principalId, java.util.function.Predicate<String> isToolAllowed) {
+        return Collections.unmodifiableList(tools.values().stream()
+                .filter(def -> !def.write() || writeToolsEnabled)
+                .filter(def -> principalId != null && isToolAllowed.test(def.name()))
+                .toList());
     }
 
     /** 调用指定 Tool。 */
@@ -201,10 +220,18 @@ public class McpToolCatalog {
         return s;
     }
 
+    /**
+     * 取当前已认证主体 ID；缺失时抛出授权异常（fail closed）。
+     *
+     * <p>历史实现以字面量 {@code "anonymous"} 兜底，会把匿名请求降级为伪造主体传入业务服务；
+     * {@code McpController} 已在入口拒绝无主体调用，此处再次默认拒绝以消除该降级路径（AC-P0B-ENG-006）。
+     */
     private static String currentPrincipalId() {
         return PrincipalContextHolder.current()
                 .map(c -> c.principalId())
-                .orElse("anonymous");
+                .filter(id -> id != null && !id.isBlank())
+                .orElseThrow(() -> new AuthorizationException(ErrorCode.AUTH_PERMISSION_DENIED,
+                        "no authenticated principal", Map.of()));
     }
 
     private static String str(Map<String, Object> args, String key) {

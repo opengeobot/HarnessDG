@@ -3,6 +3,8 @@ package com.aihub.mcp.application;
 import com.aihub.asset.application.AssetApplicationService;
 import com.aihub.asset.application.AssetView;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.version.application.VersionApplicationService;
 import com.aihub.version.application.VersionView;
@@ -57,9 +59,12 @@ public class McpResourceHandler {
 
     /** 读取指定 URI 的 Resource 内容。 */
     public Map<String, Object> readResource(String uri) {
+        // fail closed：缺少已认证主体时不得以字面量伪造身份传入业务服务（AC-P0B-ENG-006）。
         String principalId = PrincipalContextHolder.current()
                 .map(c -> c.principalId())
-                .orElse("anonymous");
+                .filter(id -> id != null && !id.isBlank())
+                .orElseThrow(() -> new AuthorizationException(ErrorCode.AUTH_PERMISSION_DENIED,
+                        "no authenticated principal", Map.of()));
 
         // asset/{id}/version/{v}
         Matcher versionMatcher = VERSION_URI.matcher(uri);

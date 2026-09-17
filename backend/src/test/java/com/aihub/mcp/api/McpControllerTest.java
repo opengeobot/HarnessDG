@@ -86,6 +86,8 @@ class McpControllerTest {
         given(roleBindingRepository.resolvePermissionCodes(any())).willReturn(Set.of());
         // 默认：所有工具允许
         given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(true);
+        // 默认空 Catalog：显式桩替代无参 listTools()，使 tools/list 走主体过滤路径。
+        given(toolCatalog.listTools(any(), any())).willReturn(List.of());
     }
 
     private String bearer(Set<String> scopes) {
@@ -116,7 +118,7 @@ class McpControllerTest {
 
     @Test
     void toolsListReturnsRegisteredTools() throws Exception {
-        given(toolCatalog.listTools()).willReturn(List.of(
+        given(toolCatalog.listTools(any(), any())).willReturn(List.of(
                 new McpToolCatalog.ToolDefinition("asset_search", "Search assets",
                         Map.of("type", "object"), false, "asset:read")));
         mockMvc.perform(post("/mcp")
@@ -125,6 +127,38 @@ class McpControllerTest {
                         .content(jsonRpc("tools/list")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.tools[0].name").value("asset_search"));
+    }
+
+    @Test
+    void toolsListExcludesToolsNotGrantedToPrincipal() throws Exception {
+        // 白名单为空：即使 Catalog 注册了工具，也不得下发给该主体（AC-DST-AIW-002）。
+        given(agentToolRepository.isToolAllowed(anyString(), anyString())).willReturn(false);
+        given(toolCatalog.listTools(any(), any())).willAnswer(invocation -> {
+            java.util.function.Predicate<String> allowed = invocation.getArgument(1);
+            List<McpToolCatalog.ToolDefinition> candidates = List.of(
+                    new McpToolCatalog.ToolDefinition("asset_search", "Search assets",
+                            Map.of("type", "object"), false, "asset:read"),
+                    new McpToolCatalog.ToolDefinition("asset_delete", "Delete asset",
+                            Map.of("type", "object"), true, "asset:delete"));
+            return candidates.stream().filter(def -> allowed.test(def.name())).toList();
+        });
+
+        mockMvc.perform(post("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("mcp:invoke")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpc("tools/list")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.tools").isEmpty());
+    }
+
+    @Test
+    void toolsCallRejectsWhenNoAuthenticatedPrincipal() throws Exception {
+        // 无 Authorization 头时 Security 层返回 401（fail closed），不得落到无主体放行分支。
+        mockMvc.perform(post("/mcp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonRpcWithParams("tools/call",
+                                "{\"name\":\"asset_search\",\"arguments\":{}}")))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -23,6 +23,16 @@ authorizationModel:
   dualConstraint:
     description: Tool 受 iam_agent_tool 白名单与 JWT Scope 双重约束，二者均通过才允许调用。
     failClosed: true
+  unauthenticated:
+    description: |
+      缺少已认证 Principal 时 tools/call 与 resources/read 一律拒绝（Authentication required），
+      绝不跳过 Tool Allowlist 校验、也不以字面量主体降级调用业务服务。
+      未认证主体在 tools/list 中不会看到任何 Tool。
+    errorCode: AUTH_PERMISSION_DENIED
+  toolListing:
+    description: |
+      tools/list 按主体过滤：仅返回该主体被显式授权且在开关内启用的 Tool；
+      写工具在 mcp.writeTools.enabled=false 时不下发，默认只读 Agent 不会看到高风险工具。
   deniedAudit:
     description: 被拒绝的高风险工具调用必须写审计（AGENT_ACCESS_DENIED），不记录 JWT/预签名 URL/凭据。
     errorCode: MCP_TOOL_NOT_ALLOWED

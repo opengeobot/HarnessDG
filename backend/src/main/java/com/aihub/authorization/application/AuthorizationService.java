@@ -179,6 +179,22 @@ public class AuthorizationService {
     }
 
     /**
+     * 判断 Agent 是否被授权调用某 MCP 工具（默认拒绝，不抛异常）。
+     *
+     * <p>供 {@code tools/list} 按主体过滤，避免向未授权主体暴露工具存在性（AC-DST-AIW-002）。
+     *
+     * @param agentId  Agent 业务 ID（可空 → 拒绝）
+     * @param toolCode MCP 工具编码（可空 → 拒绝）
+     * @return 是否被允许
+     */
+    public boolean isToolAllowed(String agentId, String toolCode) {
+        if (agentId == null || toolCode == null) {
+            return false;
+        }
+        return agentToolRepository.isToolAllowed(agentId, toolCode);
+    }
+
+    /**
      * 计算当前主体的访问作用域，供资产等列表查询在数据库阶段下推过滤（避免先全量查再 Java 过滤）。
      *
      * @param resourceType ACL 资源类型（如 ASSET）

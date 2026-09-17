@@ -81,7 +81,13 @@ public class McpController {
     }
 
     private Map<String, Object> handleToolsList() {
-        List<Map<String, Object>> tools = toolCatalog.listTools().stream()
+        // 按主体过滤：未认证主体不下发任何工具；已认证主体只看到被显式授权的 Tool（AC-DST-AIW-002）。
+        String principalId = PrincipalContextHolder.current()
+                .map(c -> c.principalId())
+                .orElse(null);
+        List<Map<String, Object>> tools = toolCatalog
+                .listTools(principalId, name -> authorizationService.isToolAllowed(principalId, name))
+                .stream()
                 .map(tool -> {
                     Map<String, Object> toolDef = new LinkedHashMap<>();
                     toolDef.put("name", tool.name());
@@ -100,17 +106,22 @@ public class McpController {
                     List.of(Map.of("type", "text", "text", "Missing tool name")));
         }
 
-        // 授权检查
+        // 授权检查：fail closed。缺少已认证主体时一律拒绝，绝不跳过 Tool Allowlist 校验。
+        // 判定同时要求 Tool 已注册（受控 Catalog）且主体被显式授权（AC-P0B-AGT-005）。
         String principalId = PrincipalContextHolder.current()
                 .map(c -> c.principalId())
                 .orElse(null);
-        if (principalId != null) {
-            try {
-                authorizationService.requireToolAllowed(principalId, toolName);
-            } catch (Exception e) {
-                return Map.of("isError", true, "content",
-                        List.of(Map.of("type", "text", "text", "Tool not allowed: " + toolName)));
-            }
+        if (principalId == null) {
+            LOG.warn("MCP tools/call rejected: no authenticated principal tool={}", toolName);
+            return Map.of("isError", true, "content",
+                    List.of(Map.of("type", "text", "text", "Authentication required")));
+        }
+        try {
+            authorizationService.requireToolAllowed(principalId, toolName);
+        } catch (Exception e) {
+            LOG.warn("MCP tools/call denied tool={} principal={}", toolName, principalId);
+            return Map.of("isError", true, "content",
+                    List.of(Map.of("type", "text", "text", "Tool not allowed: " + toolName)));
         }
 
         @SuppressWarnings("unchecked")
