@@ -34,13 +34,20 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 认证应用服务。
  *
  * <p>编排本地用户登录、刷新令牌轮换与重放检测、Agent/Service 凭据交换、登出、当前主体查询与改密。
  * 所有 JWT/口令/凭据明文仅在方法内短暂使用，绝不写入日志或审计正文。
+ *
+ * <p>登录失败路径使用独立事务（{@link #failureTransaction}）：认证失败最终以异常抛出，
+ * 若与成功路径共用事务，失败计数、锁定状态与失败审计会随异常回滚被一并撤销，
+ * 使账户锁定与失败沉淀整体失效。
  */
 @Service
 public class AuthenticationApplicationService {
@@ -58,6 +65,9 @@ public class AuthenticationApplicationService {
     private final Clock clock;
     private final AuditPort auditPort;
 
+    /** 登录失败副作用（计数/锁定/失败审计）专用事务模板，独立于调用方事务提交。 */
+    private final TransactionTemplate failureTransaction;
+
     public AuthenticationApplicationService(LocalUserRepository userRepository,
                                             AgentIdentityRepository agentRepository,
                                             RefreshTokenRepository refreshTokenRepository,
@@ -67,7 +77,8 @@ public class AuthenticationApplicationService {
                                             PasswordPolicy passwordPolicy,
                                             IdGenerator idGenerator,
                                             Clock clock,
-                                            AuditPort auditPort) {
+                                            AuditPort auditPort,
+                                            PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.agentRepository = agentRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -78,41 +89,41 @@ public class AuthenticationApplicationService {
         this.idGenerator = idGenerator;
         this.clock = clock;
         this.auditPort = auditPort;
+        this.failureTransaction = new TransactionTemplate(transactionManager);
+        this.failureTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /**
      * 本地用户登录：校验状态与口令，签发 access+refresh，记录刷新令牌族。
+     *
+     * <p>失败与拒绝路径的副作用经 {@link #failureTransaction} 独立提交后再抛出异常，
+     * 确保失败计数、锁定状态与 {@code AUTH_LOGIN_FAILED} 审计不被回滚。
      */
     @Transactional
     public TokenPairResult login(String username, String rawPassword) {
         LocalUser user = userRepository.findByUsername(username)
                 // 用户名不存在与口令错误统一返回 INVALID_CREDENTIALS，避免账号枚举。
                 .orElseThrow(() -> {
-                    audit("AUTH_LOGIN_FAILED", AuditResult.FAILED, null, null,
-                            ErrorCode.AUTH_INVALID_CREDENTIALS.name(), Map.of("username", username));
+                    recordDeniedInOwnTransaction(null, username, ErrorCode.AUTH_INVALID_CREDENTIALS,
+                            AuditResult.FAILED);
                     return invalidCredentials();
                 });
 
         if (user.isDisabled()) {
-            audit("AUTH_LOGIN_FAILED", AuditResult.DENIED, user.principalId(), user.principalId(),
-                    ErrorCode.AUTH_ACCOUNT_DISABLED.name(), Map.of("username", username));
+            recordDeniedInOwnTransaction(user.principalId(), username, ErrorCode.AUTH_ACCOUNT_DISABLED,
+                    AuditResult.DENIED);
             throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_DISABLED, "account disabled", Map.of());
         }
         if (user.isLocked(clock.instant())) {
-            audit("AUTH_LOGIN_FAILED", AuditResult.DENIED, user.principalId(), user.principalId(),
-                    ErrorCode.AUTH_ACCOUNT_LOCKED.name(), Map.of("username", username));
+            recordDeniedInOwnTransaction(user.principalId(), username, ErrorCode.AUTH_ACCOUNT_LOCKED,
+                    AuditResult.DENIED);
             throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_LOCKED, "account locked", Map.of());
         }
         if (!user.matchesPassword(rawPassword, passwordHasher)) {
-            user.recordLoginFailure(clock.instant());
-            userRepository.update(user);
-            if (user.isLocked(clock.instant())) {
-                audit("AUTH_LOGIN_FAILED", AuditResult.DENIED, user.principalId(), user.principalId(),
-                        ErrorCode.AUTH_ACCOUNT_LOCKED.name(), Map.of("username", username));
+            LocalUser updated = recordFailureInOwnTransaction(user, username);
+            if (updated.isLocked(clock.instant())) {
                 throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_LOCKED, "account locked", Map.of());
             }
-            audit("AUTH_LOGIN_FAILED", AuditResult.FAILED, user.principalId(), user.principalId(),
-                    ErrorCode.AUTH_INVALID_CREDENTIALS.name(), Map.of("username", username));
             throw invalidCredentials();
         }
 
@@ -124,6 +135,37 @@ public class AuthenticationApplicationService {
         audit("AUTH_LOGIN_SUCCEEDED", AuditResult.SUCCEEDED, user.principalId(), user.principalId(),
                 null, Map.of("username", username));
         return result;
+    }
+
+    /**
+     * 在独立事务中原子递增失败计数、按阈值锁定，并写入 {@code AUTH_LOGIN_FAILED} 审计。
+     *
+     * <p>计数与审计在同一事务内提交，保证「状态和审计一致」；事务在抛出认证异常前完成提交。
+     *
+     * @return 更新后的用户（含最新失败计数与锁定状态）
+     */
+    private LocalUser recordFailureInOwnTransaction(LocalUser user, String username) {
+        LocalUser updated = failureTransaction.execute(status ->
+                userRepository.recordLoginFailureAtomically(user.userId(), clock.instant()).orElse(user));
+        if (updated == null) {
+            return user;
+        }
+        boolean locked = updated.isLocked(clock.instant());
+        failureTransaction.executeWithoutResult(status -> audit("AUTH_LOGIN_FAILED",
+                locked ? AuditResult.DENIED : AuditResult.FAILED,
+                updated.principalId(), updated.principalId(),
+                (locked ? ErrorCode.AUTH_ACCOUNT_LOCKED : ErrorCode.AUTH_INVALID_CREDENTIALS).name(),
+                Map.of("username", username)));
+        return updated;
+    }
+
+    /**
+     * 在独立事务中写入拒绝审计（无状态变更的失败/拒绝路径：未知用户、禁用、锁定中）。
+     */
+    private void recordDeniedInOwnTransaction(String principalId, String username, ErrorCode errorCode,
+                                              AuditResult result) {
+        failureTransaction.executeWithoutResult(status -> audit("AUTH_LOGIN_FAILED", result,
+                principalId, principalId, errorCode.name(), Map.of("username", username)));
     }
 
     /**

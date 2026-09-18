@@ -22,6 +22,7 @@ import com.aihub.identity.domain.LocalUserRepository;
 import com.aihub.identity.domain.RefreshTokenRecord;
 import com.aihub.identity.domain.RefreshTokenRepository;
 import com.aihub.shared.error.AuthenticationException;
+import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.identity.PrincipalType;
 import com.aihub.shared.security.IssuedToken;
@@ -43,6 +44,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 class AuthenticationApplicationServiceTest {
@@ -67,14 +70,20 @@ class AuthenticationApplicationServiceTest {
     private IdGenerator idGenerator;
     @Mock
     private AuditPort auditPort;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private AuthenticationApplicationService service;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        // 失败/拒绝副作用走独立事务：mock 的事务模板须直接执行回调，
+        // 使单元测试仍能观察到「事务内做了什么」。
+        lenient().when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         service = new AuthenticationApplicationService(userRepository, agentRepository, refreshTokenRepository,
-                tokenSigner, tokenVerifier, passwordHasher, passwordPolicy, idGenerator, clock, auditPort);
+                tokenSigner, tokenVerifier, passwordHasher, passwordPolicy, idGenerator, clock, auditPort,
+                transactionManager);
     }
 
     private LocalUser activeUser() {
@@ -111,14 +120,41 @@ class AuthenticationApplicationServiceTest {
         LocalUser user = activeUser();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         when(passwordHasher.matches("bad", "$hash")).thenReturn(false);
+        // 失败计数走独立事务的原子递增，返回更新后的用户。
+        when(userRepository.recordLoginFailureAtomically(eq("usr_1"), any()))
+                .thenReturn(Optional.of(activeUser()));
 
         assertThatThrownBy(() -> service.login("alice", "bad"))
                 .isInstanceOf(AuthenticationException.class);
+
+        verify(userRepository).recordLoginFailureAtomically(eq("usr_1"), any());
 
         ArgumentCaptor<Map<String, Object>> attrs = ArgumentCaptor.forClass(Map.class);
         verify(auditPort).record(eq("AUTH_LOGIN_FAILED"), eq(AuditResult.FAILED),
                 eq("prn_1"), eq("prn_1"), eq("AUTH_INVALID_CREDENTIALS"), attrs.capture());
         assertNoSensitive(attrs.getValue());
+    }
+
+    @Test
+    void loginFailureReachingThresholdReportsLocked() {
+        LocalUser user = activeUser();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(passwordHasher.matches("bad", "$hash")).thenReturn(false);
+        // 已达阈值：仓储回读的用户处于锁定中。
+        LocalUser lockedUser = activeUser();
+        for (int i = 0; i < LocalUser.MAX_FAILED_ATTEMPTS; i++) {
+            lockedUser.recordLoginFailure(NOW);
+        }
+        when(userRepository.recordLoginFailureAtomically(eq("usr_1"), any()))
+                .thenReturn(Optional.of(lockedUser));
+
+        assertThatThrownBy(() -> service.login("alice", "bad"))
+                .isInstanceOfSatisfying(AuthenticationException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.AUTH_ACCOUNT_LOCKED));
+
+        // 计入锁定必须记为 DENIED 且带 AUTH_ACCOUNT_LOCKED 错误码。
+        verify(auditPort).record(eq("AUTH_LOGIN_FAILED"), eq(AuditResult.DENIED),
+                eq("prn_1"), eq("prn_1"), eq("AUTH_ACCOUNT_LOCKED"), any());
     }
 
     @Test

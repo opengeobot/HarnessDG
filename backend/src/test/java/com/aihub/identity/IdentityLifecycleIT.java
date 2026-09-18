@@ -18,6 +18,8 @@ import com.aihub.identity.application.IdentityCommands.UpdateUserCommand;
 import com.aihub.identity.application.TokenPairResult;
 import com.aihub.identity.application.UserManagementApplicationService;
 import com.aihub.identity.application.UserView;
+import com.aihub.identity.domain.LocalUser;
+import com.aihub.identity.domain.LocalUserRepository;
 import com.aihub.shared.error.AuthenticationException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.PlatformException;
@@ -33,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -77,6 +80,10 @@ class IdentityLifecycleIT {
     private TokenVerifier tokenVerifier;
     @Autowired
     private TokenRevocationChecker revocationChecker;
+    @Autowired
+    private LocalUserRepository userRepository;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private UserView createActiveUser(String username) {
         UserView created = userService.createUser(new CreateUserCommand(
@@ -270,6 +277,67 @@ class IdentityLifecycleIT {
         // 临时口令可登录。
         TokenPairResult tempLogin = authService.login("crud-user", tempPassword);
         assertThat(tempLogin.accessToken()).isNotBlank();
+    }
+
+    // ── AC-P0B-IAM-005: 连续失败达阈值后锁定，正确口令亦被拒 ──────────
+
+    @Test
+    void iam005_accountLocksAfterMaxFailedAttempts() {
+        createActiveUser("lock-user");
+        LocalUser before = userRepository.findByUsername("lock-user").orElseThrow();
+
+        // 前 N-1 次失败：仅计数递增，仍为 INVALID_CREDENTIALS。
+        for (int i = 1; i < LocalUser.MAX_FAILED_ATTEMPTS; i++) {
+            assertThatThrownBy(() -> authService.login("lock-user", "WrongPassword!9"))
+                    .isInstanceOfSatisfying(PlatformException.class,
+                            ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.AUTH_INVALID_CREDENTIALS));
+            LocalUser after = userRepository.findByUsername("lock-user").orElseThrow();
+            assertThat(after.failedLoginAttempts())
+                    .as("第 %d 次失败后计数必须已落库", i)
+                    .isEqualTo(i);
+        }
+
+        // 第 N 次失败：锁定，且返回 AUTH_ACCOUNT_LOCKED。
+        assertThatThrownBy(() -> authService.login("lock-user", "WrongPassword!9"))
+                .isInstanceOfSatisfying(PlatformException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.AUTH_ACCOUNT_LOCKED));
+
+        LocalUser locked = userRepository.findByUsername("lock-user").orElseThrow();
+        assertThat(locked.failedLoginAttempts()).isEqualTo(LocalUser.MAX_FAILED_ATTEMPTS);
+        assertThat(locked.status()).isEqualTo(com.aihub.identity.domain.UserStatus.LOCKED);
+        assertThat(locked.lockedUntil()).as("locked_until 必须非空").isNotNull();
+        assertThat(before.failedLoginAttempts()).isZero();
+
+        // 锁定期间即使口令正确也必须被拒。
+        assertThatThrownBy(() -> authService.login("lock-user", PASSWORD))
+                .isInstanceOfSatisfying(PlatformException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.AUTH_ACCOUNT_LOCKED));
+
+        // 失败审计必须存在（不得因异常回滚丢失）。
+        Integer failed = jdbcTemplate.queryForObject(
+                "select count(*) from audit_log where event_type = 'AUTH_LOGIN_FAILED'", Integer.class);
+        assertThat(failed).as("AUTH_LOGIN_FAILED 审计必须落库").isNotNull().isGreaterThan(0);
+    }
+
+    // ── AC-P0B-IAM-005: 启用（管理员解锁）后正确口令可登录 ──────────
+
+    @Test
+    void iam005_enableUnlocksAccountAndClearsFailures() {
+        UserView user = createActiveUser("unlock-user");
+        for (int i = 0; i < LocalUser.MAX_FAILED_ATTEMPTS; i++) {
+            assertThatThrownBy(() -> authService.login("unlock-user", "WrongPassword!9"))
+                    .isInstanceOf(PlatformException.class);
+        }
+        assertThat(userRepository.findByUsername("unlock-user").orElseThrow().status())
+                .isEqualTo(com.aihub.identity.domain.UserStatus.LOCKED);
+
+        userService.enableUser(user.userId());
+
+        LocalUser unlocked = userRepository.findByUsername("unlock-user").orElseThrow();
+        assertThat(unlocked.failedLoginAttempts()).isZero();
+        assertThat(unlocked.lockedUntil()).isNull();
+        assertThat(unlocked.status()).isEqualTo(com.aihub.identity.domain.UserStatus.ACTIVE);
+        assertThat(authService.login("unlock-user", PASSWORD).accessToken()).isNotBlank();
     }
 
     // ── AC-P0B-AGT-004: 尝试授予 Agent 高风险权限被拒绝 ──────────

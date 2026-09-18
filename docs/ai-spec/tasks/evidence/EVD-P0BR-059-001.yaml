@@ -1,0 +1,157 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-059-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得：
+# V05h 由 FAIL 转 PASS，锁定状态/失败计数/失败审计均按规格落库。
+# status 为 PASS：本卡 AC 已闭环。仍按规范交接为 IMPLEMENTED_UNVERIFIED，
+# 因为「完成」还需完成门禁通过并由验证责任方接受（review.accepted 仍为 false）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-059
+  requirements: [REQ-IAM-002]
+  scenarios:
+    - AC-P0B-IAM-005
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-059.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-059.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-059.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: bce7674f6b74ba285b7daa7b52e66b664b3de1b6
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java
+    - backend/src/main/java/com/aihub/identity/domain/LocalUserRepository.java
+    - backend/src/main/java/com/aihub/identity/infrastructure/MyBatisLocalUserRepository.java
+    - backend/src/test/java/com/aihub/identity/IdentityLifecycleIT.java
+    - backend/src/test/java/com/aihub/identity/application/AuthenticationApplicationServiceTest.java
+
+environment:
+  observedAt: 2026-09-18T00:40:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16（Compose 固定镜像）
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    docker compose -f deploy/compose/compose.yaml build backend;
+    docker compose -f deploy/compose/compose.yaml up -d backend;
+    powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
+  startedAt: 2026-09-18T00:36:00+08:00
+  finishedAt: 2026-09-18T00:40:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 16（真实容器，落库断言直连真实库）
+    - backend（真实容器，被测服务）
+  e4EntryPoint: Nginx/REST（http://localhost:8080）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-IAM-005
+      assertion: >-
+        V05h（E4，真实 Compose 栈）：对专用验证主体连续 5 次错误口令，
+        前 4 次均为 401 AUTH_INVALID_CREDENTIALS 且 failed_login_attempts 逐次递增（1..4 落库）；
+        第 5 次返回 423 AUTH_ACCOUNT_LOCKED；
+        iam_user.status 落库为 LOCKED 且 locked_until 非空；
+        锁定期间使用**正确**口令仍返回 423 AUTH_ACCOUNT_LOCKED；
+        audit_log 中 AUTH_LOGIN_FAILED 计数 >= 1（实测 DENIED=14 / FAILED=36）；
+        用例结束由管理员 reset-password + enable 复原，被锁定主体回到 ACTIVE|0|NULL。
+        用例断言按实现常量 LocalUser.MAX_FAILED_ATTEMPTS = 5 逐次校验，
+        未放宽为「任意次锁定」。
+      scenarioCategory: failure
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: true
+
+artifacts:
+  reports:
+    - backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java
+    - backend/src/main/java/com/aihub/identity/infrastructure/MyBatisLocalUserRepository.java
+    - .trae/evidence/verify-ps1-final.txt（V05h PASS）
+  logs:
+    - .trae/evidence/verify-ps1-full.txt（修复前：V05h FAIL 的原始输出）
+    - .trae/evidence/verify-ps1-final.txt（修复后：V05h PASS）
+  screenshots: []
+  traces: []
+  metrics:
+    - verify.ps1：V05h PASS；V01–V11、V05b、V05c–V05j 全部 PASS；VERIFY_EXIT=0
+    - 落库断言：锁定中断言 status=LOCKED、failed_login_attempts=5、locked_until 非空；
+      复原后为 ACTIVE|0|NULL
+    - audit_log AUTH_LOGIN_FAILED：DENIED=14、FAILED=36（修复前为 0）
+  databaseQueries:
+    - >-
+      select status,failed_login_attempts,locked_until from iam_user
+      where username='compose-verify-iam5'; -> 锁定中断言 LOCKED|5|非空
+    - select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'; -> 50
+  auditEvents:
+    - eventType: AUTH_LOGIN_FAILED
+      principal: 被尝试登录的主体 principalId
+      resource: 同上
+      result: FAILED / DENIED
+      note: >-
+        前 4 次为 FAILED/AUTH_INVALID_CREDENTIALS，第 5 次为 DENIED/AUTH_ACCOUNT_LOCKED；
+        审计与失败计数在同一独立事务内提交，异常抛出后仍持久化
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据不含任何明文口令、access/refresh JWT 原文或凭据。
+    - 失败审计的 attributes 只含 username；被提交的错误口令不入审计（已断言）。
+    - 脚本中对专用验证主体的口令为本地 Compose 验收栈专用值，不用于生产。
+
+limitations:
+  skippedTests:
+    - >-
+      本卡未 SKIP 任何场景：V05h 在真实栈上真实执行，修复前后均为真实运行结果。
+    - >-
+      Testcontainers 相关的 17 个 IT 在本机 Docker Desktop 29.x 下 Skipped（环境受限），
+      属既存状态；本卡结论以 Compose 栈 E4 为准。
+  assumptions:
+    - >-
+      锁定阈值取自实现常量 LocalUser.MAX_FAILED_ATTEMPTS = 5；
+      脚本按 5 次断言而非「任意次」，防止把阈值放宽当成通过。
+  environmentDifferences:
+    - >-
+      verify.sh 在本机因 core.autocrlf=true 呈 CRLF，容器内直接 bash -n 会报 $'\r'，
+      故 E4 以 verify.ps1 在宿主执行为主；等价 E4 仍待补。
+
+defects:
+  - id: DEF-059-1
+    scenario: AC-P0B-IAM-005
+    title: 验收脚本自身的 V05h 判据在 LOCKED 位于字段串首时漏判
+    status: FIXED_IN_TASK-P0BR-058
+    evidence: >-
+      原判据 `$facts -match 'LOCKED\|'` 隐含「LOCKED 前必有分隔符」，
+      而 Get-UserRowFacts 首列即 status（实际串形如 `LOCKED|5|...`），断言恒为假。
+    rootCause: 正则未兼容串首位置。
+    fixScope: deploy/compose/scripts（属 TASK-P0BR-058 的 allowedPaths）
+    note: 该缺陷为脚本缺陷而非产品缺陷，见 EVD-P0BR-058-001.yaml 的 DEF-058-6
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

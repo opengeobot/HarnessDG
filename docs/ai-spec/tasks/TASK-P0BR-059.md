@@ -4,7 +4,7 @@ taskId: TASK-P0BR-059
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 61528b85d93d75167341bc01178666ae6c8cd6ad
+baseCommit: bce7674f6b74ba285b7daa7b52e66b664b3de1b6
 stageGatePassed: true
 stageGateEvidence: 用户批准（AskUserQuestion 选择「批准全部三张（推荐）」）。依据 READY 需求 REQ-IAM-002「每次失败原子增加计数，达到配置阈值进入 LOCKED」与 ACCEPTED 决策 DEC-003、DEC-013，修复登录失败计数、锁定与失败审计因事务回滚而整体失效的缺陷（DEF-058-1）；属 ADR-0002 允许的安全整改，不新增业务能力。
 stageGateEvidenceRefs:
@@ -66,7 +66,7 @@ approvedAt: 2026-09-17T10:15:33Z
 
 # TASK-P0BR-059：修复登录失败计数、锁定与失败审计的事务回滚缺陷
 
-> 状态：`DRAFT`（AI 起草，待用户批准；不得由 AI 置为 READY）
+> 状态：`READY`（用户已批准；实现已提交，E4 证据已取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
@@ -109,6 +109,15 @@ flywayBaseline: V1
 
 **现有测试未能发现该缺陷**：`IdentityLifecycleIT` 无任何锁定用例；
 `AuthenticationApplicationServiceTest` 使用 mock 仓储，断言的是「调用了审计」而非「审计已提交」。
+
+### baseCommit 重绑说明（顺序边界）
+
+本卡与 `TASK-P0BR-058/060/061` 同批整改，四卡各自只拥有自己 `allowedPaths` 内的一部分文件，
+若共用同一起草时基准，逐卡 `-CheckChangedPaths` 会把兄弟卡文件视为越界而必然互相失败。
+故本卡 `baseCommit` 重绑为**上一顺序卡的实施提交** `bce7674f`
+（即 `TASK-P0BR-058` 的实施提交），使本卡在自己实施提交处的 `-CheckChangedPaths`
+恰好只看到本卡 `allowedPaths` 内的变更。沿用先例 `0b36a5e`，
+并在正文说明理由与交接状态。
 
 ## 3. 范围
 
@@ -177,14 +186,14 @@ flywayBaseline: V1
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试
-- [ ] Migration 及空库/升级迁移测试
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
-- [ ] Runbook/追踪矩阵
+- [ ] 契约及契约测试（本卡无契约变更）
+- [ ] Migration 及空库/升级迁移测试（本卡无迁移）
+- [x] Application/Domain 用例 —— 见 `EVD-P0BR-059-001.yaml`
+- [ ] REST/MCP/Worker Adapter（端点与错误码不变）
+- [ ] 前端页面与状态（不涉及）
+- [x] 正常/边界/失败/越权/恢复测试 —— 见 `EVD-P0BR-059-001.yaml` §coverage
+- [x] Compose Fixture/Verify —— V05h 由 FAIL 转 PASS，见 `EVD-P0BR-059-001.yaml` §metrics
+- [ ] Runbook/追踪矩阵（脚本与 runbook 属 `TASK-P0BR-058` 交付物）
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
 
@@ -203,6 +212,13 @@ flywayBaseline: V1
 5. 在 `AuthenticationApplicationServiceTest` 增加鉴别力断言：验证失败副作用在抛出异常后已完成
    （而非仅验证「调用了某个方法」）；
 6. 在真实 Compose 栈执行 `verify.ps1`，确认 V05h 由 FAIL 转 PASS，且 V05c–V05j 其余用例不回归。
+
+**实施结果（两方案同时采用）**：`login` 的失败/拒绝副作用改经 `failureTransaction`
+（`PROPAGATION_REQUIRES_NEW` 独立事务）提交（方案 1）；
+持久化层新增 `recordLoginFailureAtomically`，以单条 `UPDATE ... SET failed_login_attempts =
+failed_login_attempts + 1` 并在同一条内按阈值 `CASE WHEN` 置 `LOCKED` 与 `locked_until`（方案 2）。
+二者结合使「原子计数」与「异常前独立提交」同时成立，并保证并发失败不丢计数。
+第 1–6 步均已完成；V05h 由 FAIL 转 PASS，`VERIFY_EXIT=0`。
 
 ## 8. 验证命令
 
@@ -240,14 +256,44 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ```text
 Completed:
+  登录失败/拒绝副作用改经独立事务（failureTransaction）提交，并把失败计数与锁定收敛为
+  单条原子 UPDATE（recordLoginFailureAtomically），使失败计数、LOCKED 状态与
+  AUTH_LOGIN_FAILED 审计不再随认证异常回滚；V05h 由 FAIL 转 PASS。
 Changed files:
+  backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java；
+  backend/src/main/java/com/aihub/identity/domain/LocalUserRepository.java；
+  backend/src/main/java/com/aihub/identity/infrastructure/MyBatisLocalUserRepository.java；
+  backend/src/test/java/com/aihub/identity/IdentityLifecycleIT.java；
+  backend/src/test/java/com/aihub/identity/application/AuthenticationApplicationServiceTest.java；
+  docs/ai-spec/tasks/TASK-P0BR-059.md、
+  docs/ai-spec/tasks/evidence/EVD-P0BR-059-001.yaml、
+  docs/ai-spec/02-delivery/work-breakdown.md。
 Requirements and scenarios satisfied:
-Contract/database changes:
+  REQ-IAM-002；AC-P0B-IAM-005 共 1 项 proven（E4）。
+Contract/database changes: 无（无 OpenAPI、错误码、Migration 变更）。
 Validation run and results:
-Evidence artifacts:
+  powershell .../verify.ps1 -> exit 0（V05h PASS；V05c–V05j 无回归）；
+  ./docs/ai-spec/tools/validate-spec.ps1 -> PASS；
+  validate-task-card.ps1（无 flag）-> PASS；
+  validate-task-card.ps1 -CheckChangedPaths -> PASS；
+  validate-task-card.ps1 -CheckCompletion -> EXPECTED_FAIL（review.accepted 仍为 false）。
+Evidence artifacts: EVD-P0BR-059-001.yaml（E4，status: PASS）。
 Validation not run and reasons:
+  cd backend; ./mvnw.cmd verify 未能取得完整绿灯：Testcontainers 相关的 IT 在本机
+  Docker Desktop 29.x 下全部 Skipped（环境受限），PreviewJobHandlerTest 的 2 项 CSV
+  失败与本卡无关；本卡结论以真实 Compose 栈的 E4 为准。
 Remaining risks or follow-ups:
+  锁定阈值与时长仍取自 LocalUser 常量（未引入可绕过锁定的运行时可配置开关）；
+  失败审计只记录 username 等非敏感属性，明文口令不入审计。
 ```
 
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。
 必须给出 `verify.ps1` 中 V05h 的修复前后对照结果，以及 P0-B 出口 `proven` 覆盖计数的变化。
+
+**V05h 对照**：修复前 —— 连续 5 次错误口令后第 5 次仍为 `401 AUTH_INVALID_CREDENTIALS`，
+`iam_user` 为 `PENDING_ACTIVATION|0|NULL`，`AUTH_LOGIN_FAILED` 计数为 0，V05h **FAIL**；
+修复后 —— 第 5 次为 `423 AUTH_ACCOUNT_LOCKED`，落库 `LOCKED` 且 `locked_until` 非空，
+`AUTH_LOGIN_FAILED` 审计存在，正确口令亦被拒，V05h **PASS**。
+
+**覆盖计数**：随 `TASK-P0BR-058` 一并由 19/70 提升至 29/70（本卡贡献 `AC-P0B-IAM-005` 一项，
+该计入 058 的 10 项 delta 内）。

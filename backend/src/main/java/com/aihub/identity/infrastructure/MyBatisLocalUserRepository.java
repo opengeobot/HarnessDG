@@ -70,6 +70,27 @@ public class MyBatisLocalUserRepository implements LocalUserRepository {
     }
 
     @Override
+    public Optional<LocalUser> recordLoginFailureAtomically(String userId, Instant now) {
+        // 单条 UPDATE 内完成「计数自增 + 达阈值锁定」：PostgreSQL 的 SET 右侧读取的是更新前的值，
+        // 故条件写 failed_login_attempts + 1 >= 阈值，与被自增后的新值语义一致。
+        // 用列自增而非「先读后写」既满足规格要求的原子计数，也避免并发失败丢计数与 TOCTOU。
+        int threshold = LocalUser.MAX_FAILED_ATTEMPTS;
+        Instant lockUntil = now.plusSeconds(LocalUser.LOCK_DURATION_MINUTES * 60L);
+        userMapper.update(null, Wrappers.<UserEntity>lambdaUpdate()
+                .eq(UserEntity::getUserId, userId)
+                .setSql("failed_login_attempts = failed_login_attempts + 1")
+                .setSql("status = CASE WHEN failed_login_attempts + 1 >= {0} THEN {1} ELSE status END",
+                        threshold, UserStatus.LOCKED.name())
+                .setSql("locked_until = CASE WHEN failed_login_attempts + 1 >= {0} THEN {1} ELSE locked_until END",
+                        threshold, lockUntil)
+                .set(UserEntity::getUpdatedAt, now)
+                .setSql("row_version = row_version + 1"));
+
+        // 回读权威结果，避免把应用层推算值当作事实。
+        return findByUserId(userId);
+    }
+
+    @Override
     public Optional<LocalUser> findByUsername(String username) {
         return findOne(Wrappers.<UserEntity>lambdaQuery().eq(UserEntity::getUsername, username));
     }
