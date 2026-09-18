@@ -5,6 +5,7 @@
  */
 package com.aihub.identity.application;
 
+import com.aihub.audit.domain.AuditResult;
 import com.aihub.identity.application.IdentityCommands.CreateUserCommand;
 import com.aihub.identity.application.IdentityCommands.UpdateUserCommand;
 import com.aihub.identity.domain.LocalUser;
@@ -27,16 +28,25 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 用户管理应用服务。
  *
  * <p>管理端用例编排：创建用户（同时建立主体）、列表/详情、更新资料、启用/禁用（即时失效）、
  * 重置口令（强制下次修改）。临时口令明文绝不写日志或审计正文。
+ *
+ * <p>每个管理动作写入对应审计事件（{@code USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET}，
+ * 与 OpenAPI {@code x-audit-event} 一致）；禁用动作额外校验「不得禁用最后一个有效平台管理员」。
  */
 @Service
 public class UserManagementApplicationService {
+
+    /** 判定「平台管理员」所用的权限码；与 REQ-IAM-006 的 user:manage 一致。 */
+    private static final String USER_MANAGE_SCOPE = "user:manage";
 
     private final LocalUserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -44,19 +54,33 @@ public class UserManagementApplicationService {
     private final PasswordPolicy passwordPolicy;
     private final IdGenerator idGenerator;
     private final Clock clock;
+    private final AuditPort auditPort;
+
+    /**
+     * 拒绝审计专用事务模板（独立提交）。
+     *
+     * <p>拒绝路径最终以异常对外表达；若与调用方共用事务，拒绝审计会随异常回滚被撤销，
+     * 使「拒绝必须留痕」失效。
+     */
+    private final TransactionTemplate denialTransaction;
 
     public UserManagementApplicationService(LocalUserRepository userRepository,
                                             RefreshTokenRepository refreshTokenRepository,
                                             PasswordHasher passwordHasher,
                                             PasswordPolicy passwordPolicy,
                                             IdGenerator idGenerator,
-                                            Clock clock) {
+                                            Clock clock,
+                                            AuditPort auditPort,
+                                            PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordHasher = passwordHasher;
         this.passwordPolicy = passwordPolicy;
         this.idGenerator = idGenerator;
         this.clock = clock;
+        this.auditPort = auditPort;
+        this.denialTransaction = new TransactionTemplate(transactionManager);
+        this.denialTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     /**
@@ -99,6 +123,8 @@ public class UserManagementApplicationService {
                 .rowVersion(0L)
                 .build();
         userRepository.create(principal, user);
+        audit("USER_CREATED", AuditResult.SUCCEEDED, userId, user.principalId(),
+                Map.of("username", user.username()));
         return UserView.from(user);
     }
 
@@ -128,6 +154,8 @@ public class UserManagementApplicationService {
         LocalUser user = requireUser(userId);
         user.updateProfile(command.displayName(), command.email(), command.locale(), clock.instant());
         userRepository.update(user);
+        audit("USER_UPDATED", AuditResult.SUCCEEDED, user.userId(), user.principalId(),
+                Map.of("username", user.username()));
         return UserView.from(user);
     }
 
@@ -139,17 +167,34 @@ public class UserManagementApplicationService {
         LocalUser user = requireUser(userId);
         user.enable(clock.instant());
         userRepository.update(user);
+        audit("USER_ENABLED", AuditResult.SUCCEEDED, user.userId(), user.principalId(),
+                Map.of("username", user.username()));
     }
 
     /**
      * 禁用用户并吊销其全部刷新令牌（access 由 tokenVersion 递增自动失效）。
+     *
+     * <p>拒绝禁用最后一个有效平台管理员（REQ-IAM-006）：拒绝时返回
+     * {@link ErrorCode#COMMON_INVALID_ARGUMENT} 并写入拒绝审计。
      */
     @Transactional
     public void disableUser(String userId) {
         LocalUser user = requireUser(userId);
+        if (isLastActivePlatformAdmin(user)) {
+            // 拒绝审计必须独立提交：随后抛出的校验异常会回滚调用方事务。
+            denialTransaction.executeWithoutResult(status -> auditPort.record(
+                    "USER_DISABLED", AuditResult.DENIED, user.userId(), user.principalId(),
+                    ErrorCode.COMMON_INVALID_ARGUMENT.name(),
+                    Map.of("username", user.username(), "reason", "lastActivePlatformAdmin")));
+            throw new ValidationException(ErrorCode.COMMON_INVALID_ARGUMENT,
+                    "cannot disable the last active platform administrator",
+                    Map.of("userId", userId));
+        }
         user.disable(clock.instant());
         userRepository.update(user);
         refreshTokenRepository.revokeAllByPrincipal(user.principalId());
+        audit("USER_DISABLED", AuditResult.SUCCEEDED, user.userId(), user.principalId(),
+                Map.of("username", user.username()));
     }
 
     /**
@@ -166,6 +211,31 @@ public class UserManagementApplicationService {
         user.resetPassword(passwordHasher.hash(temporaryPassword), clock.instant());
         userRepository.update(user);
         refreshTokenRepository.revokeAllByPrincipal(user.principalId());
+        // 审计只记录目标身份，绝不记录临时口令。
+        audit("USER_PASSWORD_RESET", AuditResult.SUCCEEDED, user.userId(), user.principalId(),
+                Map.of("username", user.username()));
+    }
+
+    /**
+     * 判断目标用户是否为「当前唯一的活跃且持有 {@code user:manage} 的平台管理员」。
+     *
+     * <p>仅当该用户自身处于 ACTIVE 且持有该权限、且库中活跃管理员总数为 1 时成立。
+     */
+    private boolean isLastActivePlatformAdmin(LocalUser user) {
+        boolean isAdmin = user.scopes().contains(USER_MANAGE_SCOPE);
+        if (!isAdmin) {
+            return false;
+        }
+        long activeAdmins = userRepository.countActiveByScope(USER_MANAGE_SCOPE);
+        return activeAdmins <= 1;
+    }
+
+    /**
+     * 记录一条用户管理审计事件。attributes 只含非敏感身份字段，绝不含临时口令或哈希。
+     */
+    private void audit(String eventType, AuditResult result, String actorId, String targetId,
+                       Map<String, Object> attributes) {
+        auditPort.record(eventType, result, actorId, targetId, null, attributes);
     }
 
     private LocalUser requireUser(String userId) {

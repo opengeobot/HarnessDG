@@ -4,7 +4,7 @@ taskId: TASK-P0BR-061
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 61528b85d93d75167341bc01178666ae6c8cd6ad
+baseCommit: f892634c6f87f3e5331a558327340737b8f2ff27
 stageGatePassed: true
 stageGateEvidence: 用户批准（AskUserQuestion 选择「批准全部三张（推荐）」）。依据 READY 需求 REQ-IAM-006「USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET」「不能禁用最后一个有效平台管理员：拒绝并返回 COMMON_INVALID_ARGUMENT，同时产生拒绝审计」与 ACCEPTED 决策 DEC-003、DEC-013，补齐用户管理全链路审计落点并实现最后管理员保护（DEF-058-4）；属 ADR-0002 允许的审计与授权整改，不新增业务能力。
 stageGateEvidenceRefs:
@@ -70,7 +70,7 @@ approvedAt: 2026-09-17T10:15:33Z
 
 # TASK-P0BR-061：补齐用户管理审计落点并实现最后管理员保护
 
-> 状态：`DRAFT`（AI 起草，待用户批准；不得由 AI 置为 READY）
+> 状态：`READY`（用户已批准；实现已提交，E4 证据已取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
@@ -128,6 +128,15 @@ create / update / enable / disable / reset-password 均返回 2xx 且落库状�
 只断言各操作的返回视图与异常，**完全没有审计断言**，也无最后管理员用例。
 
 ## 3. 范围
+
+### baseCommit 重绑说明（顺序边界）
+
+本卡与 `TASK-P0BR-058/059/060` 同批整改，四卡各自只拥有自己 `allowedPaths` 内的一部分文件，
+若共用同一起草时基准，逐卡 `-CheckChangedPaths` 会把兄弟卡文件视为越界而必然互相失败。
+故本卡 `baseCommit` 重绑为**上一顺序卡的实施提交** `f892634`
+（即 `TASK-P0BR-060` 的实施提交），使本卡在自己实施提交处的 `-CheckChangedPaths`
+恰好只看到本卡 `allowedPaths` 内的变更。沿用先例 `0b36a5e`，
+并在正文说明理由与交接状态。
 
 ### 允许修改
 
@@ -200,14 +209,14 @@ create / update / enable / disable / reset-password 均返回 2xx 且落库状�
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试
-- [ ] Migration 及空库/升级迁移测试
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
-- [ ] Runbook/追踪矩阵
+- [ ] 契约及契约测试（本卡无契约变更，是让实现与既有契约一致）
+- [ ] Migration 及空库/升级迁移测试（本卡无迁移）
+- [x] Application/Domain 用例 —— 见 `EVD-P0BR-061-001.yaml` §coverage
+- [ ] REST/MCP/Worker Adapter（端点与错误码不变）
+- [ ] 前端页面与状态（不涉及，且不得用前端隐藏替代后端校验）
+- [x] 正常/边界/失败/越权/恢复测试 —— 见 `EVD-P0BR-061-001.yaml` §coverage
+- [x] Compose Fixture/Verify —— V05e 与 V05j 由 FAIL 转 PASS，见 §metrics
+- [ ] Runbook/追踪矩阵（脚本与 runbook 属 `TASK-P0BR-058` 交付物）
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
 
@@ -233,6 +242,13 @@ create / update / enable / disable / reset-password 均返回 2xx 且落库状�
    且 V05c/V05d/V05f/V05g/V05h/V05i 不回归。
    注意：断言最后管理员禁用被拒时，**不得**像 058 卡那样需要事后手工复原；
    正确的实现本身不会改变管理员状态。
+
+**实施结果**：第 1–5 步均已完成。5 类审计经 `AuditPort` 写入权威 `audit_log`，
+与状态变更同事务提交；最后管理员保护在后端前置校验并返回 `COMMON_INVALID_ARGUMENT`。
+拒绝审计经 `denialTransaction`（`REQUIRES_NEW`）**独立提交**——
+因为拒绝路径最终以异常表达，若与业务事务共用会随异常回滚而丢失拒绝记录；
+这是对第 2 步「同一事务内」的必要细化（写入方仍是同一个权威 `audit_log`，未新建第二套存储）。
+V05e 与 V05j 均由 FAIL 转 PASS，`VERIFY_EXIT=0`。
 
 ## 8. 验证命令
 
@@ -270,15 +286,62 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ```text
 Completed:
+  用户管理 5 类审计经 AuditPort 写入权威 audit_log（与状态变更同事务提交）；
+  实现「不得禁用最后一个有效平台管理员」的后端前置校验，
+  返回 COMMON_INVALID_ARGUMENT 并以独立事务提交拒绝审计；
+  V05j 与 V05e 由 FAIL 转 PASS。
 Changed files:
+  backend/src/main/java/com/aihub/identity/application/UserManagementApplicationService.java；
+  backend/src/test/java/com/aihub/identity/IdentityLifecycleIT.java；
+  docs/ai-spec/tasks/TASK-P0BR-061.md、
+  docs/ai-spec/tasks/evidence/EVD-P0BR-061-001.yaml。
 Requirements and scenarios satisfied:
+  REQ-IAM-006、REQ-AUD-001；AC-P0B-IAM-012、AC-P0B-IAM-008 共 2 项 proven（E4）。
 Contract/database changes:
+  无。契约已声明 5 个 x-audit-event 与 COMMON_INVALID_ARGUMENT，本卡是让实现与既有契约一致；
+  未新增迁移（audit_log 表与 iam_user.scopes 已存在）。
 Validation run and results:
-Evidence artifacts:
+  powershell .../verify.ps1 -> exit 0（V05e、V05j PASS；V05c–V05j 无回归）；
+  ./docs/ai-spec/tools/validate-spec.ps1 -> PASS；
+  validate-task-card.ps1（无 flag）-> PASS；
+  validate-task-card.ps1 -CheckChangedPaths -> PASS；
+  validate-task-card.ps1 -CheckCompletion -> EXPECTED_FAIL（review.accepted 仍为 false）。
+Evidence artifacts: EVD-P0BR-061-001.yaml（E4，status: PASS）。
 Validation not run and reasons:
+  cd backend; ./mvnw.cmd verify 未能取得完整绿灯：Testcontainers 相关的 IT 在本机
+  Docker Desktop 29.x 下全部 Skipped（环境受限）；本卡结论以真实 Compose 栈的 E4 为准。
 Remaining risks or follow-ups:
+  最后管理员保护的判定与禁用动作未加显式行锁：并发双禁用理论上存在窗口。
+  本卡按 allowedPaths 未引入锁或唯一约束，若出口要求覆盖该并发边界，需另立卡片。
 ```
 
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。
 必须给出 `verify.ps1` 中 V05j 与 V05e 的修复前后对照结果，
 说明最后管理员保护的并发处理方式，并给出 P0-B 出口 `proven` 覆盖计数的变化。
+
+**V05j / V05e 修复前后对照**
+
+```text
+V05j（用户管理与最后管理员保护）
+  修复前：create/update/enable/disable/reset 均 2xx 且落库正确；
+          USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET 计数均为 0；
+          仅剩 1 个活跃管理员时禁用该管理员返回 200 并被置为 DISABLED  → FAIL
+  修复后：五类审计计数 1 / 5 / 14 / 10 / 24；
+          禁用最后管理员被拒（COMMON_INVALID_ARGUMENT），管理员仍为 ACTIVE，
+          USER_DISABLED/DENIED（error_code=COMMON_INVALID_ARGUMENT，
+          resource_id=该管理员 principalId）落库，且 DENIED 总计数恰好 +1  → PASS
+
+V05e（禁用后状态与审计一致）
+  修复前：拒绝路径全部成立（旧 access 401、refresh 被拒、重登 403），
+          但 USER_DISABLED 审计缺失（计数为 0）                          → FAIL
+  修复后：上述拒绝路径成立，且 USER_DISABLED 审计落库（SUCCEEDED=10）  → PASS
+```
+
+**最后管理员保护的并发处理方式**：判定为「目标用户持有 `user:manage`、其自身可被禁用，
+且库中 `status='ACTIVE'` 且持有该权限的主体数 <= 1」，在后端前置执行；
+拒绝审计经 `denialTransaction`（`PROPAGATION_REQUIRES_NEW`）独立提交，
+避免随随后抛出的校验异常回滚。判定与禁用动作之间未加显式行锁或唯一约束，
+并发双禁用存在理论窗口（已记入 follow-ups）。
+
+**覆盖计数**：随 `TASK-P0BR-058` 一并由 19/70 提升至 29/70
+（本卡贡献 `AC-P0B-IAM-012`、`AC-P0B-IAM-008` 两项，计入 058 的 10 项 delta 内）。

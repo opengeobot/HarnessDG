@@ -22,6 +22,7 @@ import com.aihub.identity.domain.LocalUser;
 import com.aihub.identity.domain.LocalUserRepository;
 import com.aihub.identity.infrastructure.TokenEntity;
 import com.aihub.identity.infrastructure.TokenMapper;
+import com.aihub.audit.domain.AuditResult;
 import com.aihub.shared.error.AuthenticationException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.PlatformException;
@@ -304,6 +305,65 @@ class IdentityLifecycleIT {
         // 临时口令可登录。
         TokenPairResult tempLogin = authService.login("crud-user", tempPassword);
         assertThat(tempLogin.accessToken()).isNotBlank();
+    }
+
+    // ── AC-P0B-IAM-012: 每项用户管理动作产生对应审计 ──────────
+
+    @Test
+    void iam012_eachUserManagementActionWritesAudit() {
+        UserView user = createActiveUser("audit-user");
+        userService.updateUser(user.userId(),
+                new UpdateUserCommand("Audit User Renamed", null, "en-US"));
+        userService.resetPassword(user.userId(), "T3mpP@ssw0rd!2");
+        userService.disableUser(user.userId());
+        userService.enableUser(user.userId());
+
+        // OpenAPI 对这 5 个操作均声明 x-audit-event；缺任一即为实现与契约不一致。
+        for (String eventType : new String[] {
+                "USER_CREATED", "USER_UPDATED", "USER_ENABLED", "USER_DISABLED", "USER_PASSWORD_RESET" }) {
+            Integer count = jdbcTemplate.queryForObject(
+                    "select count(*) from audit_log where event_type = ?", Integer.class, eventType);
+            assertThat(count).as("审计事件 %s 必须存在", eventType).isNotNull().isGreaterThan(0);
+        }
+        // 临时口令绝不得进入审计正文。
+        Integer leak = jdbcTemplate.queryForObject(
+                "select count(*) from audit_log where request_summary::text like ?",
+                Integer.class, "%T3mpP@ssw0rd!2%");
+        assertThat(leak).as("临时口令不得出现在审计正文").isZero();
+    }
+
+    // ── AC-P0B-IAM-012: 不能禁用最后一个有效平台管理员 ──────────
+
+    @Test
+    void iam012_cannotDisableLastActivePlatformAdmin() {
+        String adminName = "last-admin-" + System.nanoTime();
+        UserView admin = userService.createUser(new CreateUserCommand(
+                adminName, "Last Admin", null, "zh-CN", PASSWORD, Set.of("user:manage")));
+        userService.enableUser(admin.userId());
+
+        // 仅剩 1 个活跃管理员（该用户）→ 必须拒绝禁用，且状态不变。
+        assertThatThrownBy(() -> userService.disableUser(admin.userId()))
+                .isInstanceOfSatisfying(PlatformException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.COMMON_INVALID_ARGUMENT));
+        assertThat(userService.getUser(admin.userId()).status())
+                .as("被拒绝后管理员必须保持 ACTIVE")
+                .isNotEqualTo(com.aihub.identity.domain.UserStatus.DISABLED);
+
+        // 拒绝必须留痕（DENIED）。
+        Integer denied = jdbcTemplate.queryForObject(
+                "select count(*) from audit_log where event_type = 'USER_DISABLED' and result = ?",
+                Integer.class, AuditResult.DENIED.name());
+        assertThat(denied).as("拒绝审计必须落库").isNotNull().isGreaterThan(0);
+
+        // 正向对照：再建一个活跃管理员后，禁用其中一个必须成功（防止保护被实现成一律禁止）。
+        String secondName = "second-admin-" + System.nanoTime();
+        UserView second = userService.createUser(new CreateUserCommand(
+                secondName, "Second Admin", null, "zh-CN", PASSWORD, Set.of("user:manage")));
+        userService.enableUser(second.userId());
+        userService.disableUser(second.userId());
+        assertThat(userService.getUser(second.userId()).status())
+                .as("存在两个管理员时必须允许禁用一个")
+                .isEqualTo(com.aihub.identity.domain.UserStatus.DISABLED);
     }
 
     // ── AC-P0B-IAM-005: 连续失败达阈值后锁定，正确口令亦被拒 ──────────
