@@ -4,7 +4,7 @@ taskId: TASK-P0BR-058
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: ecbb246f911a76deba3331fcdcb5ff36d57b13d6
+baseCommit: 8cff0d8b6df9c3e9cefaad5188eff2051a6db9d3
 stageGatePassed: true
 stageGateEvidence: 用户批准（AskUserQuestion 选择「批准并授权实施」）。依据 READY 需求 REQ-IAM-001~006（P0-B 身份与 JWT）与 ACCEPTED 决策 DEC-004、DEC-013，为 IAM 场景补齐 E4 级证据；属 ADR-0002 出口门禁要求的验证补全，不新增业务能力。
 stageGateEvidenceRefs:
@@ -86,7 +86,7 @@ approvedAt: 2026-09-17T09:12:44Z
 
 # TASK-P0BR-058：为 IAM 验收场景补齐 E4 证据（12 项中 10 项当前无证据）
 
-> 状态：`DRAFT`（AI 起草，待用户批准；不得由 AI 置为 READY）
+> 状态：`READY`（用户已批准；实现已提交，E4 证据已取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
@@ -149,6 +149,48 @@ IAM 组（12 项）仅 2 项有 `proven`：
 70 项中 50 项无证据意味着出口门禁客观上无法通过，且这一差距大于任何单个代码缺陷——
 前几轮修复的 `IdempotencyInterceptor`、`AssetModelEntity`、幂等键约束虽然都是真实缺陷，
 但它们各自只影响 1–2 个 AC，而 IAM 组一次可补齐 10 项。
+
+### baseCommit 重绑说明（顺序边界）
+
+本卡 `baseCommit` 于实施前曾为 `ecbb246f`（起草时 HEAD）。实施完成后，
+`-CheckChangedPaths` 的比对基准是「`baseCommit` 到 HEAD 的全部变更」，
+而本卡与其他三张同批整改卡（059/060/061）各自只拥有自己 `allowedPaths` 内的一部分文件；
+若四卡共用同一基准，每张卡都会把兄弟卡的文件视为越界，逐卡校验必然互相失败。
+
+故将本卡 `baseCommit` 重绑为**本卡实施提交之前一提交** `8cff0d8b6df9c3e9cefaad5188eff2051a6db9d3`，
+使「本卡实施提交」处的 `-CheckChangedPaths` 恰好只看到本卡 `allowedPaths` 内的变更。
+059/060/061 的 `baseCommit` 依同一规则顺序递推（059←本卡实施提交、060←059 实施提交、
+061←060 实施提交）。
+
+该处置沿用仓库既有先例 `0b36a5e`（"baseCommit 改为顺序边界……使逐卡 `-CheckChangedPaths`
+在各自实现提交处可判"），并在正文说明理由与交接状态。
+
+### 实施中登记的脚本修正（本卡交付物）
+
+`AC-P0B-IAM-005/011/012` 的取证依赖 `verify.ps1` / `verify.sh`，
+首轮执行时发现三处**脚本自身缺陷**（非产品缺陷）。这些修正属本卡 `allowedPaths`，
+随本卡提交：
+
+1. **V05h 正则漏判串首 `LOCKED`**（DEF-058-6）：`$facts -match 'LOCKED\|'` 隐含
+   「`LOCKED` 前必有分隔符」，而 `Get-UserRowFacts` 首列即 `status`，
+   实际串形如 `LOCKED|5|2026-09-17T...`，断言恒为假 →
+   改为 `(^|\|)LOCKED\|`；`verify.sh` 等价改为 `grep -qE '(^|\|)LOCKED\|'`。
+2. **V05i 的并发原语与断言**：`Task.WaitAll(Task[], int)` 重载在 PowerShell 中解析失败，
+   改为对两个 Task 逐个 `Wait(30000)`（保持两请求在途并发）；
+   同时把断言从「Family 内 ACTIVE 恰好 1」修正为「降为 0」——
+   输家复用的 jti 此时已为 `ROTATED`，按 REQ-IAM-004 必须整族 `REVOKED`；
+   并补「失败方错误码为 `AUTH_REFRESH_REPLAYED`」与拒绝审计断言。
+3. **V05j 管理员判定与拒绝审计**：`'["user:manage"]'::jsonb` 在 PowerShell 向 docker
+   传参时被吞掉内层双引号，退化为非法 JSON（`[user:manage]`）→
+   改用 `scopes @> jsonb_build_array('user:manage')`；
+   并补齐拒绝路径的权威审计断言（拒绝前取基线计数，拒绝后断言 `USER_DISABLED/DENIED`
+   恰好 +1，且 `resource_id` 按**目标 principalId** 关联——
+   `IdentityAuditAdapter` 以 `targetId` 落 `resource_id`，不是 `iam_user.user_id`）。
+   只断言「>= 1」无法鉴别本次拒绝是否落库，历史运行的行会让断言恒真。
+
+V05i 断言由 `== 1` 改为 `== 0` 属**收紧**（更强结论），依据 REQ-IAM-004 的重放语义，
+并已同步 `verify.sh`、`IdentityLifecycleIT.iam011`、`TASK-P0BR-060.md` 三处保持一致；
+不属于「为使用例变绿而放宽断言」。
 
 ## 3. 范围
 
@@ -232,14 +274,14 @@ IAM 组（12 项）仅 2 项有 `proven`：
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试
-- [ ] Migration 及空库/升级迁移测试
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
-- [ ] Runbook/追踪矩阵
+- [ ] 契约及契约测试（本卡无契约变更）
+- [ ] Migration 及空库/升级迁移测试（本卡无迁移）
+- [ ] Application/Domain 用例（本卡 `forbiddenPaths` 禁止改动）
+- [ ] REST/MCP/Worker Adapter（本卡 `forbiddenPaths` 禁止改动）
+- [ ] 前端页面与状态（本卡 `forbiddenPaths` 禁止改动）
+- [x] 正常/边界/失败/越权/恢复测试 —— 见 `EVD-P0BR-058-001.yaml` §coverage
+- [x] Compose Fixture/Verify —— 见 `EVD-P0BR-058-001.yaml` §metrics（20 项全 PASS，`VERIFY_EXIT=0`）
+- [x] Runbook/追踪矩阵 —— 见 `docs/runbooks/compose.md` 的 V05c–V05j 用例表
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
 
@@ -254,8 +296,15 @@ IAM 组（12 项）仅 2 项有 `proven`：
    `proven`/`notProven` 条目（新增已证明项、移除已不再成立的 notProven 项）；
 6. 同步 `docs/runbooks/compose.md` 的用例表。
 
+**实施结果**：第 1–4 步首轮暴露 4 项产品缺陷（DEF-058-1..4）与 1 项脚本缺陷（DEF-058-6）；
+前者按 §9 停止条件单独上报并另立 `TASK-P0BR-059/060/061` 修复，本卡未改动后端；
+后者（脚本正则/并发原语/JSON 传参/拒绝审计断言）已在本卡内修正。
+修复后重跑同一脚本，20 项用例全部 PASS，第 5–6 步完成。
+
 **关于并发刷新（`AC-P0B-IAM-011`）**：若 PowerShell/curl 无法产生真实并发，
 必须如实记为 `notProven` 并说明原因，**不得**用串行两次调用冒充并发。
+本次以 .NET `HttpClient`（`verify.ps1`）与双后台 `curl`（`verify.sh`）产生真实并发，
+两请求在途并发、非串行，故该场景计为 `proven`。
 
 ## 8. 验证命令
 
@@ -300,14 +349,38 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ```text
 Completed:
+  按 §4 在真实 Compose 栈为 IAM 10 项 MUST 场景取得 E4 证据；
+  verify.ps1 与 verify.sh 新增 V05c–V05j（判据一一对应）并修复 3 处脚本缺陷；
+  首轮暴露的 4 项产品缺陷按 §9 上报，另立 TASK-P0BR-059/060/061 修复后复跑全部 PASS。
 Changed files:
+  deploy/compose/scripts/verify.ps1、deploy/compose/scripts/verify.sh；
+  docs/runbooks/compose.md；
+  docs/ai-spec/tasks/evidence/EVD-P0BR-058-001.yaml、
+  docs/ai-spec/tasks/evidence/EVD-P0B-V01-V12.yaml；
+  docs/ai-spec/tasks/TASK-P0BR-058.md、docs/ai-spec/02-delivery/work-breakdown.md。
 Requirements and scenarios satisfied:
-Contract/database changes:
+  REQ-IAM-001/002/003/004/005/006；AC-P0B-IAM-001/003/004/005/006/007/008/009/011/012 共 10 项 proven。
+Contract/database changes: 无。
 Validation run and results:
-Evidence artifacts:
+  docker compose -f deploy/compose/compose.yaml config --quiet -> exit 0；
+  powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1 -> exit 0
+    （V01–V11、V05b、V05c–V05j 共 20 项 PASS，SKIP 0）；
+  ./docs/ai-spec/tools/validate-spec.ps1 -> PASS；
+  validate-task-card.ps1（无 flag）-> PASS；
+  validate-task-card.ps1 -CheckChangedPaths -> PASS；
+  validate-task-card.ps1 -CheckCompletion -> EXPECTED_FAIL（证据 review.accepted 仍为 false，
+    需验证责任方接受后方可声明完成）。
+Evidence artifacts: EVD-P0BR-058-001.yaml（E4，status: PASS）。
 Validation not run and reasons:
+  bash ./deploy/compose/scripts/verify.sh 的等价 E4 未取得：
+  容器内无法直连宿主 http://localhost:8080 入口，用例 SKIP（非产品缺陷，待补）。
 Remaining risks or follow-ups:
+  notProven 两项：AC-P0B-IAM-004 的 E2 负例对照未固化为回归门禁；
+  AC-P0B-IAM-001 的「日志无明文」未穷举镜像层与卷内历史日志；
+  41 项非 IAM 无证据场景各自独立成卡。
 ```
 
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。
 必须给出补齐后 P0-B 出口 MUST 场景的 `proven` 覆盖计数（当前 19/70，本卡预期 +10）。
+
+**最终覆盖计数：29/70（+10，达成预期）。**

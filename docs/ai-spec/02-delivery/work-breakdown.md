@@ -90,6 +90,11 @@ GOV（决策与基线）
 | `TASK-P0BR-060` | 修复 refresh 重放整族吊销被回滚与并发刷新双有效 Token（DEF-058-2/3） | AC-P0B-IAM-007/011 | P0BR-058 |
 | `TASK-P0BR-061` | 补齐用户管理审计落点并实现最后管理员保护（DEF-058-4） | AC-P0B-IAM-012/008 | P0BR-058 |
 
+> IAM 组 10 项 MUST 场景已由 `TASK-P0BR-058` 在真实 Compose 栈取得 E4 `proven`
+> （`EVD-P0BR-058-001.yaml`，`status: PASS`）；其中 5 项依赖
+> `TASK-P0BR-059/060/061` 修复 DEF-058-1..4 后方成立。
+> P0-B 出口 MUST 覆盖计数由 19/70 提升至 **29/70**。
+
 ### 4.3 治理和运行平台
 
 | Task 候选 | 结果 | 主要领取 | 依赖 |

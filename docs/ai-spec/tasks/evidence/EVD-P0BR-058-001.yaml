@@ -1,12 +1,20 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR-058-001
 # 本卡 requiredEvidenceLevel 为 E4。已在真实 Compose 栈取得 E4 证据：
-# IAM 12 项 MUST 中，AC-P0B-IAM-001/003/004/006/008/009 共 6 项取得 PASS 级 proven；
-# AC-P0B-IAM-005/007/011/012 共 4 项在真实栈上执行后 FAIL，
-# 失败原因经逐项定位为**产品缺陷**（见 notProven 与 defects），而非证据缺失。
-# 依据本卡 §9 停止条件第 1 条「若某场景在真实栈上行为与规格不符，不得改断言使其通过，
-# 须停止并单独上报」，AI 未修改后端代码、未放宽断言，故 status 为 PARTIAL。
-status: PARTIAL
+# IAM 10 项 MUST（AC-P0B-IAM-001/003/004/005/006/007/008/009/011/012）全部 PASS 级 proven。
+#
+# 取证分两阶段，均在同一真实栈完成：
+#  阶段一（2026-09-17 17:58–18:01）：首轮实测暴露 4 项产品缺陷（DEF-058-1..4），
+#    受影响场景按本卡 §9 停止条件记为 notProven 并单独上报，未改断言使其通过；
+#  阶段二（2026-09-18）：缺陷经 TASK-P0BR-059/060/061 修复后重跑同一脚本，
+#    20 项用例全部 PASS、VERIFY_EXIT=0，原 notProven 场景转为 proven。
+# 故 AC-P0B-IAM-005/007/008/011/012 的「修复」部分不属于本卡交付物
+#（本卡 forbiddenPaths 已禁止改动 backend/src/main/java），
+# 权威缺陷—修复—复验链见 EVD-P0BR-059-001 / 060-001 / 061-001。
+#
+# status 为 PASS：本卡 AC 已闭环。仍按规范交接为 IMPLEMENTED_UNVERIFIED，
+# 因为「完成」还需完成门禁通过并由验证责任方接受（review.accepted 仍为 false）。
+status: PASS
 
 task:
   taskId: TASK-P0BR-058
@@ -39,17 +47,29 @@ governance:
 
 source:
   branch: ai
-  commitSha: ecbb246f911a76deba3331fcdcb5ff36d57b13d6
+  commitSha: 8cff0d8b6df9c3e9cefaad5188eff2051a6db9d3
   dirtyWorktree: true
+  # E4 运行时的实际工作树状态：HEAD=8cff0d8，其上叠加了本卡与
+  # TASK-P0BR-059/060/061 的全部未提交改动（059/060/061 的修复是本轮 E4 转 PASS 的前提）。
+  # 为保证逐卡 `-CheckChangedPaths` 可判，四卡按 058→059→060→061 顺序分别提交，
+  # 故本列表中的 backend 文件属 059/060/061 的提交范围，不在本卡提交内。
   dirtyPaths:
     - deploy/compose/scripts/verify.ps1
     - deploy/compose/scripts/verify.sh
     - docs/runbooks/compose.md
     - docs/ai-spec/tasks/evidence/EVD-P0BR-058-001.yaml
     - docs/ai-spec/tasks/evidence/EVD-P0B-V01-V12.yaml
+    - backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java
+    - backend/src/main/java/com/aihub/identity/application/UserManagementApplicationService.java
+    - backend/src/main/java/com/aihub/identity/domain/LocalUserRepository.java
+    - backend/src/main/java/com/aihub/identity/domain/RefreshTokenRepository.java
+    - backend/src/main/java/com/aihub/identity/infrastructure/MyBatisLocalUserRepository.java
+    - backend/src/main/java/com/aihub/identity/infrastructure/MyBatisRefreshTokenRepository.java
+    - backend/src/test/java/com/aihub/identity/IdentityLifecycleIT.java
+    - backend/src/test/java/com/aihub/identity/application/AuthenticationApplicationServiceTest.java
 
 environment:
-  observedAt: 2026-09-17T18:01:00+08:00
+  observedAt: 2026-09-18T00:40:00+08:00
   os: Microsoft Windows NT 10.0.26200.0
   timezone: Asia/Shanghai
   java: openjdk 21.0.9 2025-10-21 LTS
@@ -68,10 +88,10 @@ execution:
     -v //var/run/docker.sock:/var/run/docker.sock alpine:3.20 sh -c
     "apk add --no-cache bash curl jq docker-cli docker-cli-compose; cp -r /src /work;
     cp /lf-verify.sh /work/scripts/verify.sh; cd /work; bash -n ./scripts/verify.sh; bash ./scripts/verify.sh"
-  startedAt: 2026-09-17T17:58:00+08:00
-  finishedAt: 2026-09-17T18:01:09+08:00
-  exitCode: 1
-  result: FAIL
+  startedAt: 2026-09-18T00:36:00+08:00
+  finishedAt: 2026-09-18T00:40:00+08:00
+  exitCode: 0
+  result: PASS
   evidenceLevel: E4
   e3RealDependencies:
     - PostgreSQL 16（真实容器，全部落库断言直连真实库）
@@ -83,8 +103,8 @@ coverage:
   proven:
     - scenarioId: AC-P0B-IAM-001
       assertion: >-
-        V05c: 真实栈上 iam_user 中引导管理员恰好 1 行；password_algorithm == BCRYPT 且
-        password_hash 前缀匹配 ^\$2[aby]\$（自适应哈希，非明文）；
+        V05c: 真实栈上 iam_user 中引导管理员恰好 1 行（实测 1）；password_algorithm == BCRYPT 且
+        password_hash 前缀匹配 ^\$2[aby]\$（实测 $2a$，自适应哈希，非明文）；
         audit_log 正文与该用户相关的明文口令命中数为 0；
         backend 容器最近 400 行日志不含该口令；
         backend 容器重启后（实测 8 秒内 healthy）该用户名仍只有 1 行、哈希前缀不变，
@@ -98,7 +118,7 @@ coverage:
         落库变为 ACTIVE + must_change_password=0；
         旧临时口令登录返回 401 AUTH_INVALID_CREDENTIALS（临时口令失效）；
         新口令登录返回 200；/me 的 forcePasswordChange 为 false；
-        audit_log 中该主体（按 principalId 归属）的 USER_PASSWORD_CHANGED 计数 >= 1。
+        audit_log 中该主体（按 principalId 归属）的 USER_PASSWORD_CHANGED 计数 >= 1（实测 23）。
       scenarioCategory: normal
     - scenarioId: AC-P0B-IAM-004
       assertion: >-
@@ -107,6 +127,16 @@ coverage:
         两响应体逐字节相同（details 为空对象，不暴露账号存在性）；
         审计中不出现被提交的错误口令明文。
       scenarioCategory: denial
+    - scenarioId: AC-P0B-IAM-005
+      assertion: >-
+        V05h: 对专用验证主体连续 5 次错误口令，第 5 次返回 423 AUTH_ACCOUNT_LOCKED；
+        iam_user.status 落库为 LOCKED 且 locked_until 非空
+        （脚本兼容 LOCKED 位于字段串首的匹配，见 DEF-058-6）；
+        锁定期间使用**正确**口令仍返回 423 AUTH_ACCOUNT_LOCKED；
+        audit_log 中 AUTH_LOGIN_FAILED 计数 >= 1（实测 DENIED=14 / FAILED=36），
+        证明失败审计与锁定状态不再随认证异常回滚。
+        根因与修复见 EVD-P0BR-059-001.yaml（DEF-058-1 → 独立事务提交失败副作用）。
+      scenarioCategory: failure
     - scenarioId: AC-P0B-IAM-006
       assertion: >-
         V05d: 登录与刷新下发的 Set-Cookie 均含 HttpOnly、SameSite=Strict、
@@ -117,6 +147,27 @@ coverage:
         iam_token 中新出现的旧 jti 状态为 ROTATED；
         该 Token Family 中 status='ACTIVE' 的行数恰好为 1（无双有效 refresh）。
       scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-007
+      assertion: >-
+        V05g: 重用已轮换的 refresh JWT 返回 401 AUTH_REFRESH_REPLAYED；
+        该 Token Family 中 status='ACTIVE' 行数降为 0（整族吊销生效）；
+        重放前刚轮换出的**新** refresh 亦失效（非 200）；
+        audit_log 中 AUTH_TOKEN_REPLAY_REJECTED 计数 >= 1（实测 23），且 result=DENIED。
+        根因与修复见 EVD-P0BR-060-001.yaml（DEF-058-2 → 独立事务提交吊销与拒绝审计）。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-IAM-008
+      assertion: >-
+        V05e: 管理员禁用持有有效 access 的用户后——旧 access 的**下一次** /me 请求立即返回 401
+        （不依赖 JWT 内旧状态）；禁用后该用户 refresh 刷新被拒（非 200）；
+        重新登录返回 403 AUTH_ACCOUNT_DISABLED；
+        iam_user.status 落库为 DISABLED；
+        audit_log 中 USER_DISABLED 计数 >= 1（实测 SUCCEEDED=10 / DENIED=3），
+        使该场景的「状态和审计一致」子判据成立。
+        审计落点由 EVD-P0BR-061-001.yaml 补齐（DEF-058-4）。
+        另：目录还要求「凭据交换被拒」，该分支针对 Agent 主体；
+        本场景的被禁用主体是本地用户（不持有 Agent 凭据），
+        故凭据交换分支未在本场景内构造，属场景适用范围（由 AC-P0B-AGT-003 承载）。
+      scenarioCategory: denial
     - scenarioId: AC-P0B-IAM-009
       assertion: >-
         V05f: 登出返回 200 并下发 aihub_refresh=; 且 Max-Age=0 的清除 Cookie；
@@ -125,76 +176,34 @@ coverage:
         重复登出（带 Cookie）返回 200；无 refresh 的登出返回 200；
         两次登出均未报错，证明登出幂等。
       scenarioCategory: normal
-  notProven:
-    - scenarioId: AC-P0B-IAM-008
-      assertion: >-
-        拒绝路径全部成立（禁用后旧 access 下一请求 401、refresh 被拒、
-        重新登录 403 AUTH_ACCOUNT_DISABLED、iam_user.status 落库 DISABLED），
-        但该场景的目录判据要求「状态**和审计**一致」，
-        而 USER_DISABLED 审计缺失（audit_log 计数为 0）。
-        因此 AC-P0B-IAM-008 **不计为 proven**，其审计缺口与 AC-P0B-IAM-012
-        同源（见 DEF-058-4）。
-        另：目录还要求「凭据交换被拒」，该分支针对 Agent 主体；
-        本场景的被禁用主体是本地用户（不持有 Agent 凭据），
-        故凭据交换分支未在本场景内构造，属场景适用范围。
-      scenarioCategory: denial
-    - scenarioId: AC-P0B-IAM-005
-      assertion: >-
-        真实栈实测账户锁定**未生效**：对同一用户连续 5 次错误口令，
-        第 5 次仍返回 401 AUTH_INVALID_CREDENTIALS（期望 423 AUTH_ACCOUNT_LOCKED）；
-        iam_user 中 failed_login_attempts 恒为 0、status 恒为 PENDING_ACTIVATION、
-        locked_until 恒为 NULL（连续 6 次失败后仍为 0|PENDING_ACTIVATION|NULL）；
-        之后使用**正确**口令仍返回 200（期望被拒）。
-        根因（代码定位）：AuthenticationApplicationService.login 标注 @Transactional，
-        口令不匹配分支中 user.recordLoginFailure(...) 后即抛出 AuthenticationException，
-        运行时异常触发事务回滚，使失败计数与锁定状态一并回滚；
-        audit("AUTH_LOGIN_FAILED"...) 同样在抛出前调用并被回滚，
-        故 audit_log 中 AUTH_LOGIN_FAILED 计数为 0（实测）。
-        这是产品缺陷，不是证据缺失。按本卡 §9，不得为使其通过而放宽断言，
-        停止受影响部分并上报。修复需修改 backend/src/main/java（本卡 forbiddenPaths）。
-    - scenarioId: AC-P0B-IAM-007
-      assertion: >-
-        真实栈实测重放**部分未生效**：重用已轮换 refresh 确实返回
-        401 AUTH_REFRESH_REPLAYED（错误码正确）；
-        但 Token Family **未整族吊销**——重放后该 Family 中
-        status='ACTIVE' 行数仍为 1（期望 0），
-        且重放前刚轮换出的**新 refresh 仍可刷新成功**（返回 200，期望失效）；
-        audit_log 中 AUTH_TOKEN_REPLAY_REJECTED 计数为 0（期望 >= 1）。
-        根因（代码定位）：refresh 方法标注 @Transactional，
-        非活跃分支中 refreshTokenRepository.revokeFamily(...) 与
-        audit("AUTH_TOKEN_REPLAY_REJECTED"...) 之后即抛出 AuthenticationException，
-        运行时异常回滚整个事务，使吊销与审计被一并撤销。
-        这是产品缺陷，不是证据缺失。修复需修改 backend/src/main/java。
     - scenarioId: AC-P0B-IAM-011
       assertion: >-
-        真实栈实测并发刷新**无双有效 Token 不成立**：两个独立 HTTP 连接
-        同时用同一 refresh JWT 调用 /auth/refresh，
-        实测**两次均返回 200**（期望恰好 1 次成功）；
-        数据库该 Token Family 出现 **2 条并存 ACTIVE** 记录（期望 <= 1）。
-        根因（代码定位）：refresh 只做「读取记录 → 判断 isActive →
-        插入新记录 + 标记旧记录 ROTATED」，标记旧记录使用普通 UPDATE
-        而未带 status='ACTIVE' 条件或行锁，两请求可在同一时间窗内都通过
-        isActive 检查（TOCTOU），各自签发新 refresh。
-        这是产品缺陷，不是证据缺失。修复需新增乐观/悲观并发控制，
-        涉及 backend/src/main/java 与可能的新 Flyway 迁移。
+        V05i: 两个**独立 HTTP 连接**同时用同一 refresh JWT 调用 /auth/refresh
+        （.NET HttpClient 并发发起，非串行两次调用）；
+        实测恰好 1 次返回 200、另 1 次返回 401 AUTH_REFRESH_REPLAYED；
+        因输家复用的 jti 此时已为 ROTATED，按 REQ-IAM-004「ROTATED jti 再用视为重放，
+        整个 Family REVOKED」该 Token Family 的 status='ACTIVE' 行数降为 0
+        （出口要求的「无双有效 Token」即 <= 1；== 0 是更强且符合规格重放语义的结论）；
+        audit_log 中 AUTH_TOKEN_REPLAY_REJECTED 计数 >= 1。
+        根因与修复见 EVD-P0BR-060-001.yaml（DEF-058-3 与 DEF-060-5）。
+      scenarioCategory: concurrency
     - scenarioId: AC-P0B-IAM-012
       assertion: >-
-        真实栈实测用户管理**动作本身可用但审计完全缺失，且最后一个管理员保护缺失**：
-        （a）PATCH /system/users/{id}、reset-password、disable、enable 均返回 200
-        且落库状态正确（locale 落库 en-US；reset 后回到 PENDING_ACTIVATION +
+        V05j: 创建/编辑/重置/禁用/启用各步均返回 200 且落库正确
+        （PATCH 后 locale 落库 en-US；reset-password 后回到 PENDING_ACTIVATION +
         must_change_password=1）；
-        （b）但 audit_log 中 USER_CREATED / USER_UPDATED / USER_ENABLED /
-        USER_DISABLED / USER_PASSWORD_RESET **计数均为 0**，
-        而 OpenAPI 对这 5 个操作均声明了 x-audit-event；
-        根因（代码定位）：UserManagementApplicationService 既不注入 identity 模块的
-        AuditPort 也不调用 auditService，整个用户管理用例链没有任何审计落点，
-        与 REQ-IAM-006「USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET」矛盾；
-        （c）「不能禁用最后一个有效平台管理员」未实现：
-        在仅剩 1 个持有 user:manage 的活跃管理员时，
-        POST /system/users/{adminUserId}:disable 返回 **200** 并将其置为 DISABLED
-        （期望拒绝并返回 COMMON_INVALID_ARGUMENT + 拒绝审计）。
-        脚本已在断言失败时自动复原管理员为 ACTIVE，未把验收栈留在无管理员状态。
-        这是产品缺陷，不是证据缺失。修复需修改 backend/src/main/java。
+        audit_log 中 USER_CREATED / USER_UPDATED / USER_ENABLED / USER_DISABLED /
+        USER_PASSWORD_RESET 五个事件计数均 >= 1（实测 1 / 5 / 14 / 10 / 24）；
+        在仅剩 1 个持有 user:manage 的活跃管理员时禁用该管理员被拒，
+        返回 COMMON_INVALID_ARGUMENT，且产生拒绝审计：
+        audit_log 中 USER_DISABLED/DENIED 且 error_code=COMMON_INVALID_ARGUMENT 且
+        resource_id=该管理员 principalId 的行数 >= 1，
+        并使该事件的 DENIED 总计数相对拒绝前基线**恰好 +1**
+        （只断言「>= 1」无法鉴别本次拒绝是否落库，历史行会让断言恒真）；
+        被拒后管理员仍为 ACTIVE。
+        审计落点与最后管理员保护由 EVD-P0BR-061-001.yaml 补齐（DEF-058-4）。
+      scenarioCategory: denial
+  notProven:
     - scenarioId: AC-P0B-IAM-004
       assertion: >-
         E2 级「脚本被误改为不比对响应形状时必须 FAIL」未固化为自动化回归门禁：
@@ -220,59 +229,71 @@ artifacts:
     - deploy/compose/scripts/verify.ps1
     - deploy/compose/scripts/verify.sh
     - docs/runbooks/compose.md
-    - .trae/capture-evidence-058.ps1
-    - .trae/evidence/verify-ps1-full.txt
+    - .trae/evidence/verify-ps1-final.txt（阶段二最终运行输出）
   logs:
-    - .trae/evidence/verify-ps1-full.txt（完整 verify.ps1 输出 + 15 条落库断言）
+    - .trae/evidence/verify-ps1-full.txt（阶段一首轮输出 + 落库断言）
+    - .trae/evidence/verify-ps1-final.txt（阶段二最终输出，VERIFY_EXIT=0）
   screenshots: []
   traces: []
   metrics:
-    - verify.ps1：V01–V11 与 V05b 全部 PASS；V05c/V05d/V05f PASS；
-      V05e/V05g/V05h/V05i/V05j FAIL；VERIFY_EXIT=1
-    - verify.sh（容器内，LF 归一化）：V05c/V05d/V05f PASS；
-      V05e/V05g/V05h/V05i/V05j FAIL，判据与 verify.ps1 逐项一致
+    - verify.ps1：V01–V11、V05b、V05c–V05j 共 20 项全部 PASS；SKIP 0 项；VERIFY_EXIT=0
+    - verify.sh（容器内，LF 归一化）：V05c–V05j 判据与 verify.ps1 逐项一致；
+      因容器内无法直接访问宿主 http://localhost:8080 入口而 SKIP，
+      详见 limitations.environmentDifferences（非产品缺陷，仍需补等价 E4）
     - 负例对照（NEGCTRL-IAM004）：把 Get-ComparableErrorShape 改为返回常量后
       V05c FAIL，证明防枚举断言具备鉴别力
-    - 落库断言：admin rows = 1；bcrypt 前缀 = $2a$；
-      USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET = 0/0/0/0/0；
-      AUTH_LOGIN_FAILED = 0；AUTH_TOKEN_REPLAY_REJECTED = 0；
+    - 落库断言（阶段二，真实栈实测）：admin rows = 1；bcrypt 前缀 = $2a$；
+      USER_CREATED / USER_UPDATED / USER_ENABLED / USER_DISABLED / USER_PASSWORD_RESET
+      = 1 / 5 / 14 / 10 / 24；
+      AUTH_LOGIN_FAILED DENIED=14、FAILED=36；
+      AUTH_TOKEN_REPLAY_REJECTED DENIED=23；
+      USER_DISABLED/DENIED（error_code=COMMON_INVALID_ARGUMENT）= 3；
       明文口令命中 audit_log = 0；
-      compose-verify-iam5 行 = PENDING_ACTIVATION|0|NULL（应锁定而未锁定）；
-      存在 ROTATED 记录的 Family 中 ACTIVE 行数 = 22（并发/重放后未收敛）
+      compose-verify-iam5 复原后 = ACTIVE|0|NULL（用例结束时已解锁，不污染后续）
   databaseQueries:
     - select count(*) from iam_user where username='admin'; -> 1
     - select left(password_hash,4) from iam_user where username='admin'; -> $2a$
-    - select status,failed_login_attempts,locked_until from iam_user where username='compose-verify-iam5'; -> PENDING_ACTIVATION|0|NULL
-    - select count(*) from audit_log where event_type='USER_DISABLED'; -> 0
-    - select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'; -> 0
-    - select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'; -> 0
-    - select count(*) from iam_token where status='ACTIVE' and token_family in (select token_family from iam_token where status='ROTATED'); -> 22
+    - select status,failed_login_attempts,locked_until from iam_user where username='compose-verify-iam5'; -> 锁定中断言 LOCKED|5|非空（用例结束时复原为 ACTIVE|0|NULL）
+    - select count(*) from audit_log where event_type='USER_DISABLED'; -> 13（SUCCEEDED=10 / DENIED=3）
+    - select count(*) from audit_log where event_type='AUTH_LOGIN_FAILED'; -> 50（DENIED=14 / FAILED=36）
+    - select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'; -> 23
+    - select count(*) from audit_log where event_type='USER_CREATED'; -> 1
+    - select count(*) from audit_log where event_type='USER_UPDATED'; -> 5
+    - select count(*) from audit_log where event_type='USER_ENABLED'; -> 14
+    - select count(*) from audit_log where event_type='USER_PASSWORD_RESET'; -> 24
+    - >-
+      select count(*) from audit_log where event_type='USER_DISABLED' and result='DENIED'
+      and error_code='COMMON_INVALID_ARGUMENT' and resource_id=<admin principalId>; -> >= 1
   auditEvents:
     - eventType: USER_PASSWORD_CHANGED
       principal: compose-verify-iam3
       resource: prn_（该主体 principalId）
       result: SUCCEEDED
       note: 改密审计存在且归属正确（resource_id 为 principalId）
-    - eventType: AUTH_TOKEN_REFRESHED
-      principal: bootstrap admin
-      resource: token family
-      result: SUCCEEDED
-      note: 刷新成功审计存在（实测计数 31，包含 V05d 轮换）
     - eventType: AUTH_LOGIN_FAILED
-      principal: null
-      resource: null
-      result: 缺失
-      note: 期望存在但计数为 0，属产品缺陷（见 notProven AC-P0B-IAM-005）
+      principal: 尝试登录的主体（未知用户为 null）
+      resource: 同上
+      result: DENIED / FAILED
+      note: 失败计数与锁定审计真实落库（阶段一为 0 行，DEF-058-1 修复后恢复）
     - eventType: AUTH_TOKEN_REPLAY_REJECTED
-      principal: null
-      resource: null
-      result: 缺失
-      note: 期望存在但计数为 0，属产品缺陷（见 notProven AC-P0B-IAM-007）
-    - eventType: USER_CREATED / USER_UPDATED / USER_ENABLED / USER_DISABLED / USER_PASSWORD_RESET
-      principal: null
-      resource: null
-      result: 缺失
-      note: 期望存在但计数均为 0，属产品缺陷（见 notProven AC-P0B-IAM-012）
+      principal: 被重放令牌的持有主体
+      resource: token family
+      result: DENIED
+      note: 重放与并发抢占失败的整族吊销均留痕（阶段一为 0 行，DEF-058-2/3 修复后恢复）
+    - eventType: USER_DISABLED
+      principal: 目标用户 principalId
+      resource: 目标用户 principalId
+      result: SUCCEEDED / DENIED
+      note: >-
+        DENIED 行 error_code=COMMON_INVALID_ARGUMENT、
+        request_summary={"reason": "lastActivePlatformAdmin", "username": "admin"}；
+        注意 IdentityAuditAdapter 以 (eventType,result,actorId=principal_id,targetId=resource_id)
+        落库，故按 principal_id 而非 iam_user.user_id 关联
+    - eventType: USER_CREATED / USER_UPDATED / USER_ENABLED / USER_PASSWORD_RESET
+      principal: 执行动作的管理员 principalId
+      resource: 目标用户 principalId
+      result: SUCCEEDED
+      note: 五类用户管理审计落点齐备（阶段一计数均为 0，DEF-058-4 修复后恢复）
 
 secrets:
   redactionChecked: true
@@ -287,11 +308,11 @@ secrets:
 limitations:
   skippedTests:
     - >-
-      本用例未 SKIP 任何 IAM 场景：backend 与 postgres 均可达，
-      V05c–V05j 全部真实执行，FAIL 均为真实运行结果而非跳过。
+      本卡未 SKIP 任何 IAM 场景：backend 与 postgres 均可达，
+      V05c–V05j 全部真实执行。阶段一的 FAIL 与阶段二的 PASS 均为真实运行结果而非跳过。
     - >-
       PreviewJobHandlerTest 的 2 项 CSV 失败与 Testcontainers 相关的
-      17 个 IT Skipped 与本卡无关（本卡不改 backend）。
+      17 个 IT Skipped 与本卡无关（本卡不改 backend 生产代码）。
   assumptions:
     - >-
       本地 Compose 以 http 提供验收入口，且 compose.yaml 明确设置
@@ -300,6 +321,11 @@ limitations:
     - >-
       锁定阈值取自实现常量 LocalUser.MAX_FAILED_ATTEMPTS = 5；
       脚本按 5 次断言而非「任意次」，防止把阈值放宽当成通过。
+    - >-
+      AC-P0B-IAM-011 的「无双有效 Token」按 REQ-IAM-004 的重放语义断言为 ACTIVE == 0
+      （而非出口目录字面的 <= 1）：并发抢占失败者复用的 jti 已为 ROTATED，
+      按规格必须整族 REVOKED。该断言比字面要求更强，且已同步写入
+      verify.ps1 / verify.sh / TASK-P0BR-060.md / IdentityLifecycleIT，四处一致。
   environmentDifferences:
     - >-
       verify.ps1 的 HTTP 辅助由 Invoke-WebRequest 改为 .NET HttpClient：
@@ -313,6 +339,12 @@ limitations:
       verify.sh 在本机因 core.autocrlf=true 呈 CRLF，直接 bash -n 会报 $'\r'。
       此为仓库既有状态（未新增 .gitattributes），故 E4 取「LF 归一化副本 +
       alpine:3.20 容器内真实执行」的方式取证，并在证据中明确该转换。
+      容器内因网络命名与宿主入口差异仍无法直连 http://localhost:8080，
+      故 verify.sh 的等价 E4 证据仍未取得，属待补项而非产品缺陷。
+    - >-
+      V05i 依赖 .NET 的 Task 并发原语：`Task.WaitAll(Task[], int)` 重载在 PowerShell 中
+      解析失败，改为对两个 Task 逐个 `Wait(30000)`；该写法保持两请求在途并发，
+      不改变并发语义。verify.sh 侧用 `curl ... &` 双后台进程等价实现。
     - >-
       验证过程中为建立 IAM 8/12 用例的前置状态，脚本会创建
       compose-verify-iam3/iam5/iam8/iam12 等专用主体；
@@ -326,6 +358,7 @@ defects:
   - id: DEF-058-1
     scenario: AC-P0B-IAM-005
     title: 登录失败计数与锁定因事务回滚而完全失效，且失败审计丢失
+    status: FIXED_BY_TASK-P0BR-059
     evidence: >-
       连续 6 次错误口令后 iam_user.failed_login_attempts 仍为 0、status 仍为
       PENDING_ACTIVATION、locked_until 仍为 NULL；第 5 次响应仍为
@@ -335,10 +368,12 @@ defects:
       AuthenticationApplicationService.login 的 @Transactional 与
       recordLoginFailure/audit 后抛 AuthenticationException 相互冲突：
       运行时异常回滚了失败计数、锁定状态与审计写入。
-    fixScope: backend/src/main/java（本卡 forbiddenPaths，需另立卡片）
+    fixScope: backend/src/main/java（本卡 forbiddenPaths，已由 TASK-P0BR-059 修复）
+    reverified: V05h 由 FAIL 转 PASS；修复证据见 EVD-P0BR-059-001.yaml
   - id: DEF-058-2
     scenario: AC-P0B-IAM-007
     title: 刷新重放虽返回正确错误码，但整族吊销与拒绝审计被事务回滚
+    status: FIXED_BY_TASK-P0BR-060
     evidence: >-
       重放返回 401 AUTH_REFRESH_REPLAYED；但该 Token Family 仍残留 1 条 ACTIVE；
       重放前轮换出的新 refresh 仍可刷新成功（200）；
@@ -349,10 +384,12 @@ defects:
     securityImpact: >-
       重放检测形同虚设：攻击者拿到已轮换的 refresh 后，
       合法用户手上的新 refresh 仍有效，被盗令牌未被切断。
-    fixScope: backend/src/main/java（本卡 forbiddenPaths，需另立卡片）
+    fixScope: backend/src/main/java（本卡 forbiddenPaths，已由 TASK-P0BR-060 修复）
+    reverified: V05g 由 FAIL 转 PASS；修复证据见 EVD-P0BR-060-001.yaml
   - id: DEF-058-3
     scenario: AC-P0B-IAM-011
     title: 并发刷新可产生两条并存 ACTIVE refresh（TOCTOU）
+    status: FIXED_BY_TASK-P0BR-060
     evidence: >-
       两个独立连接同时用同一 refresh JWT 刷新，两次均返回 200；
       该 Token Family 出现 2 条并存 ACTIVE 记录。
@@ -362,10 +399,12 @@ defects:
       两个请求可在同一时间窗内都通过检查。
     securityImpact: >-
       同一 refresh 可被并行放大为多个有效会话，削弱轮换的安全保证。
-    fixScope: backend/src/main/java + 可能的 Flyway 迁移（本卡 forbiddenPaths，需另立卡片）
+    fixScope: backend/src/main/java + 可能的 Flyway 迁移（本卡 forbiddenPaths，已由 TASK-P0BR-060 修复）
+    reverified: V05i 由 FAIL 转 PASS；修复证据见 EVD-P0BR-060-001.yaml
   - id: DEF-058-4
-    scenario: AC-P0B-IAM-012
+    scenario: AC-P0B-IAM-012、AC-P0B-IAM-008
     title: 用户管理全部动作无审计，且最后一个管理员保护缺失
+    status: FIXED_BY_TASK-P0BR-061
     evidence: >-
       create/update/enable/disable/reset-password 均返回 2xx 且落库状态正确，
       但 audit_log 中 USER_CREATED/USER_UPDATED/USER_ENABLED/USER_DISABLED/
@@ -375,18 +414,34 @@ defects:
       UserManagementApplicationService 未注入 AuditPort、未调用 auditService，
       用例链无审计落点；同时未实现 REQ-IAM-006 的
       「不能禁用最后一个有效平台管理员」前置校验。
-    fixScope: backend/src/main/java（本卡 forbiddenPaths，需另立卡片）
+    fixScope: backend/src/main/java（本卡 forbiddenPaths，已由 TASK-P0BR-061 修复）
+    reverified: V05e 与 V05j 由 FAIL 转 PASS；修复证据见 EVD-P0BR-061-001.yaml
+  - id: DEF-058-6
+    scenario: AC-P0B-IAM-005
+    title: 验收脚本自身的 V05h 判据在 LOCKED 位于字段串首时漏判（脚本缺陷，非产品缺陷）
+    status: FIXED_IN_TASK-P0BR-058
+    evidence: >-
+      原判据 `$facts -match 'LOCKED\|'` 隐含「LOCKED 前必有分隔符」；
+      而 Get-UserRowFacts 的首列即 status，实际串形如 `LOCKED|5|2026-09-17T...`，
+      LOCKED 位于串首时断言恒为假。
+    rootCause: 正则未兼容串首位置。
+    fixScope: deploy/compose/scripts（本卡 allowedPaths）
+    reverified: 判据改为 `(^|\|)LOCKED\|`；verify.sh 侧等价改为 grep -qE
 
 exitCoverageImpact:
   before: 19/70
-  afterProven: 24/70
-  delta: +5
+  afterProven: 29/70
+  delta: +10
   note: >-
-    AC-P0B-IAM-001/003/004/006/009 五项由「完全无证据」变为 proven；
-    AC-P0B-IAM-005/007/008/011/012 五项不可计为 proven
-    （008 仅审计子判据缺失，005/007/011/012 为实测 FAIL）。
-    本卡未达预期的 +10；差额 5 项全部由上述产品缺陷造成，
-    需先修复后端（DEF-058-1..4）方可再取证。
+    AC-P0B-IAM-001/003/004/005/006/007/008/009/011/012 共 10 项由
+    「完全无证据」或「实测不成立」变为 proven，恰好达成本卡预期 +10。
+    其中 001/003/004/006/009 五项仅依赖本卡交付物；
+    005/007/008/011/012 五项在阶段一实测为产品缺陷，
+    其 proven 结论建立在 TASK-P0BR-059/060/061 的修复之上
+    （本卡 forbiddenPaths 禁止改动 backend，修复不在本卡交付物内）；
+    逐项缺陷—修复—复验链见对应 Evidence，本卡不代其声明修复。
+    剩余 41 项无证据场景分属 AGT/AUTH/TAX/CFG/IDM/JOB/AUD/NOT/OBS/UI 各组，
+    各自独立成卡，不在本卡范围。
 
 review:
   recordedBy: Trae AI

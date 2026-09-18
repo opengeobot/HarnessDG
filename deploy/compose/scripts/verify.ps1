@@ -738,7 +738,8 @@ function Assert-AccountLockout {
     if ($lastCode -ne "AUTH_ACCOUNT_LOCKED") {
         throw "第 $threshold 次错误口令返回 $lastStatus/$lastCode，期望 AUTH_ACCOUNT_LOCKED（账户未锁定）"
     }
-    if ($facts -notmatch '\|LOCKED\|') {
+    # status 是 facts 首列，故 LOCKED 可能位于串首（前面没有分隔符），匹配需兼容两种位置。
+    if ($facts -notmatch '(^|\|)LOCKED\|') {
         throw "锁定后 iam_user.status 未落库为 LOCKED（实际：$facts）"
     }
     $lockedUntil = Invoke-Psql "select coalesce(locked_until::text,'NULL') from iam_user where username='$username'"
@@ -781,6 +782,8 @@ function Assert-ConcurrentRefreshSingleActive {
     $clientB.Timeout = [TimeSpan]::FromSeconds(30)
     $statusA = -1
     $statusB = -1
+    $bodyA = ""
+    $bodyB = ""
     try {
         $requestA = New-Object System.Net.Http.HttpRequestMessage ([System.Net.Http.HttpMethod]::Post), "$BaseUrl/api/v1/auth/refresh"
         [void]$requestA.Headers.TryAddWithoutValidation("Cookie", "aihub_refresh=$refresh")
@@ -788,14 +791,16 @@ function Assert-ConcurrentRefreshSingleActive {
         [void]$requestB.Headers.TryAddWithoutValidation("Cookie", "aihub_refresh=$refresh")
         $taskA = $clientA.SendAsync($requestA)
         $taskB = $clientB.SendAsync($requestB)
-        [void][System.Threading.Tasks.Task]::WaitAll(@($taskA, $taskB), 30000)
-        if (-not $taskA.IsCompleted -or -not $taskB.IsCompleted) {
-            throw "并发刷新请求未在超时内完成，无法取得并发语义证据"
+        # 逐个 Wait 而非 Task.WaitAll：PowerShell 对 WaitAll 的 (Task[], int) 重载解析会失败。
+        foreach ($task in @($taskA, $taskB)) {
+            if (-not $task.Wait(30000)) {
+                throw "并发刷新请求未在超时内完成，无法取得并发语义证据"
+            }
         }
         $statusA = [int]$taskA.Result.StatusCode
         $statusB = [int]$taskB.Result.StatusCode
-        [void]$taskA.Result.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        [void]$taskB.Result.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        $bodyA = $taskA.Result.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        $bodyB = $taskB.Result.Content.ReadAsStringAsync().GetAwaiter().GetResult()
     } finally {
         $clientA.Dispose()
         $clientB.Dispose()
@@ -806,10 +811,21 @@ function Assert-ConcurrentRefreshSingleActive {
     if ($successCount -ne 1) {
         throw "并发刷新成功次数为 $successCount（状态 $statusA/$statusB），期望恰好 1"
     }
+    # 输家复用的 jti 此刻已为 ROTATED，按 REQ-IAM-004「ROTATED jti 再用视为重放，
+    # 整个 Family REVOKED」必须整族吊销，故该 Family 的 ACTIVE 为 0。
+    # 出口要求「无双有效 Token」即 ACTIVE <= 1；== 0 是更强且符合规格重放语义的结论。
     $activeInFamily = Invoke-Psql "select count(*) from iam_token where token_family='$family' and status='ACTIVE'"
-    if ([int]$activeInFamily -ne 1) {
-        throw "并发刷新后该 Token Family 的 ACTIVE 数量为 $activeInFamily，期望恰好 1（出现并存有效 Token）"
+    if ([int]$activeInFamily -ne 0) {
+        throw "并发刷新后该 Token Family 的 ACTIVE 数量为 $activeInFamily，期望 0（输家触发重放 → 整族吊销）"
     }
+    # 输家必须返回定义好的重放语义，且留有拒绝审计。
+    $loserCode = ""
+    if ($statusA -ne 200) { $loserCode = Get-ErrorCode $bodyA } else { $loserCode = Get-ErrorCode $bodyB }
+    if ($loserCode -ne "AUTH_REFRESH_REPLAYED") {
+        throw "并发刷新失败方错误码为 $loserCode，期望 AUTH_REFRESH_REPLAYED"
+    }
+    $replayAudit = Invoke-Psql "select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'"
+    if ([int]$replayAudit -lt 1) { throw "未发现 AUTH_TOKEN_REPLAY_REJECTED 审计事件（并发拒绝未审计）" }
 }
 
 function Assert-AdminUserLifecycle {
@@ -849,10 +865,15 @@ function Assert-AdminUserLifecycle {
 
     # 不能禁用最后一个有效平台管理员：必须拒绝（REQ-IAM-006 / INV-IAM-006）。
     $adminUserId = Invoke-Psql "select user_id from iam_user where username='$AdminUser'"
-    $activeAdmins = Invoke-Psql "select count(*) from iam_user where status='ACTIVE' and scopes @> '[`"user:manage`"]'::jsonb"
+    # 用 jsonb_build_array 构造数组字面量：避免 PowerShell 向 docker 传参时吞掉双引号，
+    # 使 '["user:manage"]'::jsonb 退化成非法 JSON（[user:manage]）。
+    $activeAdmins = Invoke-Psql "select count(*) from iam_user where status='ACTIVE' and scopes @> jsonb_build_array('user:manage')"
     if ([int]$activeAdmins -ne 1) {
         throw "前置条件异常：持有 user:manage 的活跃管理员数量为 $activeAdmins，期望 1"
     }
+    # 拒绝审计必须真实落库。先取基线计数，拒绝后再断言恰好 +1：
+    # 只写「>= 1」无法鉴别本次拒绝是否落库（历史运行的行会让断言恒真）。
+    $deniedBefore = [int](Invoke-Psql "select count(*) from audit_log where event_type='USER_DISABLED' and result='DENIED'")
     $lastAdminDisable = Invoke-Api -Method POST -Path "/api/v1/system/users/$adminUserId`:disable" -Headers $authHeader
     if ($lastAdminDisable.Status -eq 200) {
         # 产品未拒绝：立即复原，避免把验收栈留在「无管理员」状态，然后如实报出缺陷。
@@ -865,6 +886,19 @@ function Assert-AdminUserLifecycle {
     }
     if ((Get-ErrorCode $lastAdminDisable.Body) -ne "COMMON_INVALID_ARGUMENT") {
         throw "禁用最后一个管理员返回错误码 $(Get-ErrorCode $lastAdminDisable.Body)，期望 COMMON_INVALID_ARGUMENT"
+    }
+    # 拒绝路径必须有独立提交的拒绝审计：否则「拒绝」既无权威记录也不可追溯（REQ-IAM-006）。
+    # 注意 resource_id 落的是目标 principalId（IdentityAuditAdapter 传 targetId=principalId），
+    # 不是 iam_user.user_id，故须按 principal_id 关联。
+    $adminPrincipalId = Invoke-Psql "select principal_id from iam_user where user_id='$adminUserId'"
+    $deniedForAdmin = [int](Invoke-Psql ("select count(*) from audit_log where event_type='USER_DISABLED' " +
+            "and result='DENIED' and error_code='COMMON_INVALID_ARGUMENT' and resource_id='$adminPrincipalId'"))
+    if ($deniedForAdmin -lt 1) {
+        throw "禁用最后一个管理员被拒后未落库 USER_DISABLED/DENIED 审计（拒绝路径无权威审计记录）"
+    }
+    $deniedTotalAfter = [int](Invoke-Psql "select count(*) from audit_log where event_type='USER_DISABLED' and result='DENIED'")
+    if ($deniedTotalAfter -ne ($deniedBefore + 1)) {
+        throw "USER_DISABLED/DENIED 审计计数由 $deniedBefore 变为 $deniedTotalAfter，期望恰好 +1（本次拒绝未审计或重复审计）"
     }
 }
 

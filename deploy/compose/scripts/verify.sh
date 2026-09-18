@@ -568,7 +568,8 @@ assert_account_lockout() {
   if [ "${code}" != "423" ]; then
     echo "  第 5 次错误口令返回 ${code}，期望 423 AUTH_ACCOUNT_LOCKED（账户未锁定）"; return 1
   fi
-  if ! printf '%s' "${facts}" | grep -q '|LOCKED|'; then
+  # status 是 facts 首列，故 LOCKED 可能位于串首（前面没有分隔符），匹配需兼容两种位置。
+  if ! printf '%s' "${facts}" | grep -qE '(^|\|)LOCKED\|'; then
     echo "  锁定后 iam_user.status 未落库为 LOCKED（实际：${facts}）"; return 1
   fi
   locked="$(psql_q "select coalesce(locked_until::text,'NULL') from iam_user where username='${username}'")"
@@ -602,24 +603,43 @@ assert_concurrent_refresh() {
   rt="$(refresh_from_cookie "$(printf '%s' "${login}" | sed -n '3p')")"
   family="$(psql_q "select token_family from iam_token where jti=(select jti from iam_token where principal_id=(select principal_id from iam_user where username='${ADMIN_USER}') order by id desc limit 1)")"
   # 两个独立 curl 进程同时发起，真实并发到达后端。
-  local f1 f2
-  f1="$(mktemp)"; f2="$(mktemp)"
-  curl -s -m 30 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' >"${f1}" 2>/dev/null &
+  local f1 f2 b1 b2
+  f1="$(mktemp)"; f2="$(mktemp)"; b1="$(mktemp)"; b2="$(mktemp)"
+  curl -s -m 30 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" \
+    -o "${b1}" -w '%{http_code}' >"${f1}" 2>/dev/null &
   local pid1=$!
-  curl -s -m 30 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" -o /dev/null -w '%{http_code}' >"${f2}" 2>/dev/null &
+  curl -s -m 30 -X POST -H "Cookie: aihub_refresh=${rt}" "${BASE_URL}/api/v1/auth/refresh" \
+    -o "${b2}" -w '%{http_code}' >"${f2}" 2>/dev/null &
   local pid2=$!
   wait "${pid1}" "${pid2}" 2>/dev/null
   local c1 c2
   c1="$(cat "${f1}")"; c2="$(cat "${f2}")"
-  rm -f "${f1}" "${f2}"
   [ "${c1}" = "200" ] && ok=$((ok + 1))
   [ "${c2}" = "200" ] && ok=$((ok + 1))
   if [ "${ok}" != "1" ]; then
+    rm -f "${f1}" "${f2}" "${b1}" "${b2}"
     echo "  并发刷新成功次数为 ${ok}（状态 ${c1}/${c2}），期望恰好 1"; return 1
   fi
+  # 输家复用的 jti 此刻已为 ROTATED，按 REQ-IAM-004「ROTATED jti 再用视为重放，
+  # 整个 Family REVOKED」必须整族吊销，故该 Family 的 ACTIVE 为 0。
+  # 出口要求「无双有效 Token」即 ACTIVE <= 1；== 0 是更强且符合规格重放语义的结论。
   active="$(psql_q "select count(*) from iam_token where token_family='${family}' and status='ACTIVE'")"
-  if [ "${active}" != "1" ]; then
-    echo "  并发刷新后该 Token Family 的 ACTIVE 数量为 ${active}，期望恰好 1（出现并存有效 Token）"; return 1
+  # 输家必须返回定义好的重放语义（与 verify.ps1 的 Get-ErrorCode 断言等价）。
+  local loserCode
+  if [ "${c1}" != "200" ]; then
+    loserCode="$(error_code "$(cat "${b1}")")"
+  else
+    loserCode="$(error_code "$(cat "${b2}")")"
+  fi
+  rm -f "${f1}" "${f2}" "${b1}" "${b2}"
+  if [ "${active}" != "0" ]; then
+    echo "  并发刷新后该 Token Family 的 ACTIVE 数量为 ${active}，期望 0（输家触发重放 → 整族吊销）"; return 1
+  fi
+  if [ "${loserCode}" != "AUTH_REFRESH_REPLAYED" ]; then
+    echo "  并发刷新失败方错误码为 ${loserCode}，期望 AUTH_REFRESH_REPLAYED"; return 1
+  fi
+  if [ "$(psql_q "select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'")" -lt 1 ]; then
+    echo "  未发现 AUTH_TOKEN_REPLAY_REJECTED 审计事件（并发拒绝未审计）"; return 1
   fi
   return 0
 }
@@ -635,7 +655,7 @@ check_iam_lifecycle() {
 # AC-P0B-IAM-012：创建/编辑/重置/禁用/启用 + 每步审计 + 最后一个管理员保护。
 assert_admin_user_lifecycle() {
   local username="compose-verify-iam12" uid code locale facts missing eventType count
-  local adminUserId activeAdmins dis
+  local adminUserId activeAdmins dis deniedBefore adminPrincipalId deniedForAdmin deniedTotalAfter
   uid="$(new_iam_probe_user "${username}" "Compose Verify Iam12")" || return 1
   code="$(curl -s -m 20 -X PATCH -H 'Content-Type: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -d '{"displayName":"Compose Verify Iam12 Renamed","email":null,"locale":"en-US"}' \
@@ -672,6 +692,9 @@ assert_admin_user_lifecycle() {
   if [ "${activeAdmins}" != "1" ]; then
     echo "  前置条件异常：持有 user:manage 的活跃管理员数量为 ${activeAdmins}，期望 1"; return 1
   fi
+  # 拒绝审计必须真实落库。先取基线计数，拒绝后再断言恰好 +1：
+  # 只写「>= 1」无法鉴别本次拒绝是否落库（历史运行的行会让断言恒真）。
+  deniedBefore="$(psql_q "select count(*) from audit_log where event_type='USER_DISABLED' and result='DENIED'")"
   dis="$(curl -s -m 20 -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     "${BASE_URL}/api/v1/system/users/${adminUserId}:disable" -w '\n%{http_code}' 2>/dev/null)"
   code="$(printf '%s' "${dis}" | tail -n1)"
@@ -684,6 +707,18 @@ assert_admin_user_lifecycle() {
   fi
   if [ "$(error_code "$(printf '%s' "${dis}" | sed '$d')")" != "COMMON_INVALID_ARGUMENT" ]; then
     echo "  禁用最后一个管理员错误码不是 COMMON_INVALID_ARGUMENT"; return 1
+  fi
+  # 拒绝路径必须有独立提交的拒绝审计：否则「拒绝」既无权威记录也不可追溯（REQ-IAM-006）。
+  # 注意 resource_id 落的是目标 principalId（IdentityAuditAdapter 传 targetId=principalId），
+  # 不是 iam_user.user_id，故须按 principal_id 关联。
+  adminPrincipalId="$(psql_q "select principal_id from iam_user where user_id='${adminUserId}'")"
+  deniedForAdmin="$(psql_q "select count(*) from audit_log where event_type='USER_DISABLED' and result='DENIED' and error_code='COMMON_INVALID_ARGUMENT' and resource_id='${adminPrincipalId}'")"
+  if [ "${deniedForAdmin:-0}" -lt 1 ]; then
+    echo "  禁用最后一个管理员被拒后未落库 USER_DISABLED/DENIED 审计（拒绝路径无权威审计记录）"; return 1
+  fi
+  deniedTotalAfter="$(psql_q "select count(*) from audit_log where event_type='USER_DISABLED' and result='DENIED'")"
+  if [ "${deniedTotalAfter}" != "$((deniedBefore + 1))" ]; then
+    echo "  USER_DISABLED/DENIED 审计计数由 ${deniedBefore} 变为 ${deniedTotalAfter}，期望恰好 +1（本次拒绝未审计或重复审计）"; return 1
   fi
   return 0
 }
