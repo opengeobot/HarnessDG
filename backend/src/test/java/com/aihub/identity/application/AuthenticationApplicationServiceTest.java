@@ -182,6 +182,32 @@ class AuthenticationApplicationServiceTest {
     }
 
     @Test
+    void refreshRotationRecordsSucceededEventAndMarksOldJtiRotated() {
+        JwtClaims refreshClaims = new JwtClaims("iss", "aud", "prn_1", PrincipalType.USER, "jti_1",
+                0L, Set.of("asset:read"), NOW, NOW.plusSeconds(3600), TokenType.REFRESH);
+        when(tokenVerifier.verify("rt")).thenReturn(refreshClaims);
+        // markRotated 需要解析新签发的 refresh 以取其后继 jti。
+        lenient().when(tokenVerifier.verify("token")).thenReturn(refreshClaims);
+        when(refreshTokenRepository.findByJti("jti_1")).thenReturn(Optional.of(new RefreshTokenRecord.Builder()
+                .tokenId("tk_1").jti("jti_1").tokenFamily("tkf_1").principalId("prn_1")
+                .principalType(PrincipalType.USER).scopes(Set.of("asset:read"))
+                .issuedAt(NOW).expiresAt(NOW.plusSeconds(3600)).build()));
+        // 原子 CAS 抢占成功 → 本请求为唯一胜者。
+        when(refreshTokenRepository.claimForRotation("jti_1")).thenReturn(true);
+        when(userRepository.findByPrincipalId("prn_1")).thenReturn(Optional.of(activeUser()));
+        stubTokenIssuance();
+
+        TokenPairResult result = service.refresh("rt");
+
+        assertThat(result.accessToken()).isNotNull();
+        // 正常路径不得触发整族吊销——否则合法刷新会把用户自己踢下线。
+        verify(refreshTokenRepository, never()).revokeFamily(anyString());
+        verify(refreshTokenRepository).markRotated("jti_1", "jti_1");
+        verify(auditPort).record(eq("AUTH_TOKEN_REFRESHED"), eq(AuditResult.SUCCEEDED),
+                eq("prn_1"), eq("tkf_1"), eq(null), any());
+    }
+
+    @Test
     void refreshReplayRecordsDeniedEvent() {
         JwtClaims refreshClaims = new JwtClaims("iss", "aud", "prn_1", PrincipalType.USER, "jti_old",
                 0L, Set.of(), NOW, NOW.plusSeconds(3600), TokenType.REFRESH);
@@ -193,10 +219,14 @@ class AuthenticationApplicationServiceTest {
                 .status(com.aihub.identity.domain.RefreshTokenStatus.ROTATED)
                 .build();
         when(refreshTokenRepository.findByJti("jti_old")).thenReturn(Optional.of(rotated));
+        // 原子 CAS 抢占失败 → 该 jti 已被消费，按重放处理。
+        when(refreshTokenRepository.claimForRotation("jti_old")).thenReturn(false);
 
         assertThatThrownBy(() -> service.refresh("rt"))
-                .isInstanceOf(AuthenticationException.class);
+                .isInstanceOfSatisfying(AuthenticationException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.AUTH_REFRESH_REPLAYED));
 
+        // 整族吊销与拒绝审计必须发生（且位于独立事务，不随异常回滚）。
         verify(refreshTokenRepository).revokeFamily("tkf_1");
         verify(auditPort).record(eq("AUTH_TOKEN_REPLAY_REJECTED"), eq(AuditResult.DENIED),
                 eq("prn_1"), eq("tkf_1"), eq("AUTH_REFRESH_REPLAYED"), any());

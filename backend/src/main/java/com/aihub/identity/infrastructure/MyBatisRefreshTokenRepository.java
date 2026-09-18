@@ -41,12 +41,23 @@ public class MyBatisRefreshTokenRepository implements RefreshTokenRepository {
     }
 
     @Override
+    public boolean claimForRotation(String jti) {
+        // 原子 compare-and-set：带 status='ACTIVE' 谓词的 UPDATE 由数据库保证唯一胜者。
+        // 并发刷新时只有一个请求能影响 1 行，其余得到 0 行 → 按重放语义处理。
+        int affected = tokenMapper.update(null, Wrappers.<TokenEntity>lambdaUpdate()
+                .eq(TokenEntity::getJti, jti)
+                .eq(TokenEntity::getStatus, RefreshTokenStatus.ACTIVE.name())
+                .set(TokenEntity::getStatus, RefreshTokenStatus.ROTATED.name())
+                .set(TokenEntity::getLastUsedAt, Instant.now())
+                .set(TokenEntity::getUpdatedAt, Instant.now()));
+        return affected > 0;
+    }
+
+    @Override
     public void markRotated(String jti, String replacedByJti) {
         tokenMapper.update(null, Wrappers.<TokenEntity>lambdaUpdate()
                 .eq(TokenEntity::getJti, jti)
-                .set(TokenEntity::getStatus, RefreshTokenStatus.ROTATED.name())
                 .set(TokenEntity::getReplacedByJti, replacedByJti)
-                .set(TokenEntity::getLastUsedAt, Instant.now())
                 .set(TokenEntity::getUpdatedAt, Instant.now()));
     }
 

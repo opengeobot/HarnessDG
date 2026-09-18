@@ -1,0 +1,186 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-060-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得：
+# V05g（重放整族吊销）与 V05i（并发刷新无双有效 Token）由 FAIL 转 PASS。
+# status 为 PASS：本卡 AC 已闭环。仍按规范交接为 IMPLEMENTED_UNVERIFIED，
+# 因为「完成」还需完成门禁通过并由验证责任方接受（review.accepted 仍为 false）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-060
+  requirements: [REQ-IAM-004]
+  scenarios:
+    - AC-P0B-IAM-007
+    - AC-P0B-IAM-011
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-060.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-060.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-060.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 1ab23c1975999bbfc5bdea6777ce3713ac165fcd
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java
+    - backend/src/main/java/com/aihub/identity/domain/RefreshTokenRepository.java
+    - backend/src/main/java/com/aihub/identity/infrastructure/MyBatisRefreshTokenRepository.java
+    - backend/src/test/java/com/aihub/identity/IdentityLifecycleIT.java
+    - backend/src/test/java/com/aihub/identity/application/AuthenticationApplicationServiceTest.java
+
+environment:
+  observedAt: 2026-09-18T00:40:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: pgvector/pgvector:pg16（Compose 固定镜像）
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG
+  command: >-
+    docker compose -f deploy/compose/compose.yaml build backend;
+    docker compose -f deploy/compose/compose.yaml up -d backend;
+    powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1
+  startedAt: 2026-09-18T00:36:00+08:00
+  finishedAt: 2026-09-18T00:40:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 16（真实容器，Token Family 状态与审计断言直连真实库）
+    - Nginx（真实容器，E4 入口）
+    - backend（真实容器，被测服务）
+  e4EntryPoint: Nginx/REST（http://localhost:8080）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-IAM-007
+      assertion: >-
+        V05g（E4）：重用已轮换的 refresh JWT 返回 401 AUTH_REFRESH_REPLAYED；
+        该 Token Family 中 status='ACTIVE' 行数降为 0（整族吊销真实落库）；
+        重放前刚轮换出的**新** refresh 亦失效（非 200）；
+        audit_log 中 AUTH_TOKEN_REPLAY_REJECTED 计数 >= 1（实测 23）且 result=DENIED。
+        根因（吊销与审计随异常回滚）经 failureTransaction 独立事务提交修复。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-IAM-011
+      assertion: >-
+        V05i（E4）：两个独立 HTTP 连接同时用同一 refresh JWT 调用 /auth/refresh，
+        实测恰好 1 次 200、另 1 次 401 AUTH_REFRESH_REPLAYED（.NET HttpClient 真实并发；
+        verify.sh 侧为双后台 curl）；
+        因输家复用的 jti 此时已为 ROTATED，按 REQ-IAM-004 该 Family 的
+        status='ACTIVE' 行数降为 0（出口要求 <= 1，此处为更强且符合规格重放语义的结论）；
+        audit_log 中 AUTH_TOKEN_REPLAY_REJECTED 计数 >= 1。
+        原子 CAS（claimForRotation）由数据库保证唯一胜者，消除 TOCTOU。
+      scenarioCategory: concurrency
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: true
+
+artifacts:
+  reports:
+    - backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java
+    - backend/src/main/java/com/aihub/identity/infrastructure/MyBatisRefreshTokenRepository.java
+    - .trae/evidence/verify-ps1-final.txt（V05g、V05i PASS）
+  logs:
+    - .trae/evidence/verify-ps1-full.txt（修复前：V05g/V05i FAIL 的原始输出）
+    - .trae/evidence/verify-ps1-final.txt（修复后：V05g/V05i PASS）
+  screenshots: []
+  traces: []
+  metrics:
+    - verify.ps1：V05g、V05i PASS；V01–V11、V05b、V05c–V05j 全部 PASS；VERIFY_EXIT=0
+    - audit_log AUTH_TOKEN_REPLAY_REJECTED：DENIED=23（修复前为 0）
+    - 并发断言：成功次数实测 1（期望恰好 1）；该 Family ACTIVE 实测 0
+    - 修复前对照：两次均 200，该 Family 出现 2 条并存 ACTIVE
+  databaseQueries:
+    - >-
+      select count(*) from iam_token where token_family='<family>' and status='ACTIVE';
+      -> 重放后 / 并发后均为 0
+    - select count(*) from audit_log where event_type='AUTH_TOKEN_REPLAY_REJECTED'; -> 23
+  auditEvents:
+    - eventType: AUTH_TOKEN_REPLAY_REJECTED
+      principal: 被重放/被抢占令牌的持有主体 principalId
+      resource: token family
+      result: DENIED
+      note: >-
+        error_code=AUTH_REFRESH_REPLAYED；审计与整族吊销在同一独立事务内提交，
+        异常抛出后仍持久化（修复前为 0 行）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据不含 refresh JWT 原文、jti 原文或 Cookie 值；只记录 Token Family 业务 ID 与错误码。
+    - 脚本输出的 FAIL 消息只含 Family ID 与错误码。
+
+limitations:
+  skippedTests:
+    - >-
+      本卡未 SKIP 任何场景：V05g、V05i 在真实栈上真实执行（含两路真实并发），
+      修复前后均为真实运行结果。
+    - >-
+      Testcontainers 相关的 17 个 IT 在本机 Docker Desktop 29.x 下 Skipped（环境受限），
+      属既存状态；本卡结论以 Compose 栈 E4 为准。
+  assumptions:
+    - >-
+      AC-P0B-IAM-011 的「无双有效 Token」按 REQ-IAM-004 的重放语义断言为 ACTIVE == 0
+      （而非出口目录字面的 <= 1）：并发抢占失败者复用的 jti 已为 ROTATED，
+      按规格必须整族 REVOKED。四处（verify.ps1 / verify.sh / 本卡 / IdentityLifecycleIT）一致。
+    - >-
+      未新增 Flyway 迁移：原子性由带 status='ACTIVE' 谓词的 CAS UPDATE 达成，
+      不需要额外的数据库级唯一约束（本卡 allowedPaths 中的 V27 保留未用）。
+  environmentDifferences:
+    - >-
+      verify.ps1 的并发由 .NET HttpClient 两个独立连接发起；
+      Task.WaitAll(Task[], int) 重载在 PowerShell 中解析失败，故对两个 Task 逐个 Wait(30000)，
+      两请求仍在途并发，不改变并发语义。
+    - >-
+      verify.sh 侧以 `curl ... &` 双后台进程 + 临时文件收集状态码与响应体实现等价并发。
+    - >-
+      verify.sh 在本机因 core.autocrlf=true 呈 CRLF，容器内直接 bash -n 会报 $'\r'，
+      故 E4 以 verify.ps1 在宿主执行为主；等价 E4 仍待补。
+
+defects:
+  - id: DEF-060-5
+    scenario: AC-P0B-IAM-011
+    title: 引入 CAS 与 REQUIRES_NEW 后出现同线程自锁，并发刷新请求挂起
+    status: FIXED_IN_TASK-P0BR-060
+    evidence: >-
+      首次修复尝试后 verify.ps1 的 V05i 挂在超时；pg_stat_activity 显示
+      pid A 在 Lock/transactionid 上等待 UPDATE iam_token SET status='REVOKED'，
+      pid B 为 idle in transaction 且持有 UPDATE ... SET status='ROTATED' WHERE jti=... AND status='ACTIVE'；
+      pg_locks 证实 A 的 revokeFamily 在等 B 的事务，而 B 即 A 自身线程的外层事务；
+      backend 日志出现 HikariPool Connection leak detection triggered，
+      位于 AuthenticationApplicationService.revokeFamilyInOwnTransaction。
+    rootCause: >-
+      refresh 仍被 @Transactional 包裹时，抢占失败的 CAS 会阻塞在胜者持有的行锁上，
+      使该线程的外层事务保留该行锁；此时同线程再开 REQUIRES_NEW（新连接、独立事务）
+      去 UPDATE 同一行，内层永远等待外层，外层又在等内层返回——自锁。
+    fixScope: backend/src/main/java（本卡 allowedPaths）
+    resolution: >-
+      把「CAS + 同 Family 新摘要落库 + 成功审计」收敛进短事务 rotationTransaction
+      （REQ-IAM-004 要求 CAS 与新摘要同事务），使 CAS 不再处于跨步骤的长事务中；
+      抢占失败在外层事务已结束、行锁已释放后才发起独立的整族吊销事务。
+    reverified: V05i 由挂起转为 PASS，且 V05c–V05j 无回归
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

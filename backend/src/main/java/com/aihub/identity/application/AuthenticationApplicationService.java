@@ -68,6 +68,17 @@ public class AuthenticationApplicationService {
     /** 登录失败副作用（计数/锁定/失败审计）专用事务模板，独立于调用方事务提交。 */
     private final TransactionTemplate failureTransaction;
 
+    /**
+     * 令牌轮换专用事务模板：在**单一事务**内完成「jti 的原子 CAS + 同 Family 新摘要落库」
+     * （REQ-IAM-004 要求二者同事务）。
+     *
+     * <p>轮换抢占失败者要另行开启事务做整族吊销，故 CAS 不得处于外层长事务中：
+     * 抢占失败的 CAS 会阻塞在胜者的行锁上，使外层事务保留该行锁；
+     * 此时若在同一线程内嵌套 {@code REQUIRES_NEW} 事务去更新同一行，
+     * 内层将永远等待外层持有的锁（自锁），请求既不返回也不释放连接。
+     */
+    private final TransactionTemplate rotationTransaction;
+
     public AuthenticationApplicationService(LocalUserRepository userRepository,
                                             AgentIdentityRepository agentRepository,
                                             RefreshTokenRepository refreshTokenRepository,
@@ -91,6 +102,7 @@ public class AuthenticationApplicationService {
         this.auditPort = auditPort;
         this.failureTransaction = new TransactionTemplate(transactionManager);
         this.failureTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.rotationTransaction = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -170,8 +182,14 @@ public class AuthenticationApplicationService {
 
     /**
      * 刷新令牌轮换：校验 refresh JWT，检测重放（整族吊销），轮换旧 jti 并签发新令牌对。
+     *
+     * <p>轮换在 {@link #rotationTransaction} 的单一事务内完成「jti 原子 CAS + 同 Family 新摘要落库
+     * + 成功审计」（REQ-IAM-004）；重放检测的整族吊销与拒绝审计经 {@link #failureTransaction} 独立提交，
+     * 既不随随后抛出的认证异常回滚，也不会与轮换事务互相持锁（详见 {@link #rotationTransaction}）。
+     *
+     * <p>抢占失败一律按重放处理：无论原因是攻击者重放还是并发竞争，此时该 jti 均已不是 ACTIVE，
+     * 与状态机「ROTATED jti 再次使用触发 Family 全部 REVOKED」一致，不引入可绕过重放检测的时间窗。
      */
-    @Transactional
     public TokenPairResult refresh(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new AuthenticationException(ErrorCode.AUTH_UNAUTHENTICATED, "missing refresh token", Map.of());
@@ -185,32 +203,52 @@ public class AuthenticationApplicationService {
                 .orElseThrow(() -> new AuthenticationException(
                         ErrorCode.AUTH_UNAUTHENTICATED, "unknown refresh token", Map.of()));
 
-        if (!record.isActive()) {
-            // 已轮换/已吊销的 refresh 再次出现 → 重放：吊销整族，拒绝。
-            refreshTokenRepository.revokeFamily(record.tokenFamily());
-            LOG.warn("refresh token replay detected, revoking family. principalId={}", record.principalId());
-            audit("AUTH_TOKEN_REPLAY_REJECTED", AuditResult.DENIED, record.principalId(), record.tokenFamily(),
-                    ErrorCode.AUTH_REFRESH_REPLAYED.name(), Map.of("tokenFamily", record.tokenFamily()));
+        // 以原子 CAS 抢占该 jti：只有把 ACTIVE 成功翻转为 ROTATED 的请求才是唯一胜者。
+        // 抢占失败意味着该 jti 已被消费/吊销 → 按重放处理（整族吊销）。
+        // 抢占成功后须与新摘要落库同事务（REQ-IAM-004），故轮换全过程在 rotationTransaction 内执行。
+        TokenPairResult result = rotationTransaction.execute(status -> {
+            if (!refreshTokenRepository.claimForRotation(record.jti())) {
+                return null;
+            }
+            LocalUser owner = userRepository.findByPrincipalId(record.principalId())
+                    .orElseThrow(() -> new AuthenticationException(
+                            ErrorCode.AUTH_UNAUTHENTICATED, "principal not found", Map.of()));
+            if (owner.isDisabled()) {
+                throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_DISABLED, "account disabled", Map.of());
+            }
+            // 改密后 tokenVersion 递增，旧 refresh 立即失效。
+            if (claims.tokenVersion() < owner.tokenVersion()) {
+                throw new AuthenticationException(ErrorCode.AUTH_UNAUTHENTICATED,
+                        "refresh token superseded", Map.of());
+            }
+            TokenPairResult pair = issueUserTokenPair(owner, record.tokenFamily());
+            // 记录后继 jti，便于审计与排障（状态已由 claimForRotation 原子置为 ROTATED）。
+            refreshTokenRepository.markRotated(record.jti(), jtiOf(pair.refreshToken()));
+            audit("AUTH_TOKEN_REFRESHED", AuditResult.SUCCEEDED, owner.principalId(), record.tokenFamily(),
+                    null, Map.of("tokenFamily", record.tokenFamily()));
+            return pair;
+        });
+        if (result == null) {
+            revokeFamilyInOwnTransaction(record);
             throw new AuthenticationException(ErrorCode.AUTH_REFRESH_REPLAYED, "refresh token replayed", Map.of());
         }
-
-        LocalUser user = userRepository.findByPrincipalId(record.principalId())
-                .orElseThrow(() -> new AuthenticationException(
-                        ErrorCode.AUTH_UNAUTHENTICATED, "principal not found", Map.of()));
-        if (user.isDisabled()) {
-            throw new AuthenticationException(ErrorCode.AUTH_ACCOUNT_DISABLED, "account disabled", Map.of());
-        }
-        // 改密后 tokenVersion 递增，旧 refresh 立即失效。
-        if (claims.tokenVersion() < user.tokenVersion()) {
-            throw new AuthenticationException(ErrorCode.AUTH_UNAUTHENTICATED, "refresh token superseded", Map.of());
-        }
-
-        TokenPairResult result = issueUserTokenPair(user, record.tokenFamily());
-        // 轮换：旧 jti 标记 ROTATED，记录后继 jti（新 refresh 的 jti）。
-        refreshTokenRepository.markRotated(record.jti(), jtiOf(result.refreshToken()));
-        audit("AUTH_TOKEN_REFRESHED", AuditResult.SUCCEEDED, user.principalId(), record.tokenFamily(),
-                null, Map.of("tokenFamily", record.tokenFamily()));
         return result;
+    }
+
+    /**
+     * 在独立事务中吊销整个 Token Family 并写入 {@code AUTH_TOKEN_REPLAY_REJECTED} 审计。
+     *
+     * <p>重放检测最终以异常对外表达，若与调用方共用事务，吊销与拒绝审计会随异常回滚，
+     * 使「被盗令牌被切断」这一安全保证失效。
+     */
+    private void revokeFamilyInOwnTransaction(RefreshTokenRecord record) {
+        failureTransaction.executeWithoutResult(status -> {
+            int revoked = refreshTokenRepository.revokeFamily(record.tokenFamily());
+            LOG.warn("refresh token replay detected, revoked family. principalId={} revokedRows={}",
+                    record.principalId(), revoked);
+            audit("AUTH_TOKEN_REPLAY_REJECTED", AuditResult.DENIED, record.principalId(), record.tokenFamily(),
+                    ErrorCode.AUTH_REFRESH_REPLAYED.name(), Map.of("tokenFamily", record.tokenFamily()));
+        });
     }
 
     /**

@@ -4,7 +4,7 @@ taskId: TASK-P0BR-060
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 61528b85d93d75167341bc01178666ae6c8cd6ad
+baseCommit: 1ab23c1975999bbfc5bdea6777ce3713ac165fcd
 stageGatePassed: true
 stageGateEvidence: 用户批准（AskUserQuestion 选择「批准全部三张（推荐）」）。依据 READY 需求 REQ-IAM-004「以原子 compare-and-set 将 jti 从 ACTIVE 置为 ROTATED」「只有一个并发请求可以成功」「ROTATED jti 再用视为重放，整个 Family REVOKED」与 ACCEPTED 决策 DEC-003、DEC-013，修复重放整族吊销与并发刷新双有效 Token 缺陷（DEF-058-2/3）及其失效的拒绝审计；属 ADR-0002 允许的安全整改，不新增业务能力。
 stageGateEvidenceRefs:
@@ -70,7 +70,7 @@ approvedAt: 2026-09-17T10:15:33Z
 
 # TASK-P0BR-060：修复 refresh 重放整族吊销被回滚与并发刷新双有效 Token
 
-> 状态：`DRAFT`（AI 起草，待用户批准；不得由 AI 置为 READY）
+> 状态：`READY`（用户已批准；实现已提交，E4 证据已取得，交接状态 `IMPLEMENTED_UNVERIFIED`）
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
@@ -131,6 +131,15 @@ audit_log AUTH_TOKEN_REPLAY_REJECTED = 0 行                  （期望 >= 1）
 
 ## 3. 范围
 
+### baseCommit 重绑说明（顺序边界）
+
+本卡与 `TASK-P0BR-058/059/061` 同批整改，四卡各自只拥有自己 `allowedPaths` 内的一部分文件，
+若共用同一起草时基准，逐卡 `-CheckChangedPaths` 会把兄弟卡文件视为越界而必然互相失败。
+故本卡 `baseCommit` 重绑为**上一顺序卡的实施提交** `1ab23c1`
+（即 `TASK-P0BR-059` 的实施提交），使本卡在自己实施提交处的 `-CheckChangedPaths`
+恰好只看到本卡 `allowedPaths` 内的变更。沿用先例 `0b36a5e`，
+并在正文说明理由与交接状态。
+
 ### 允许修改
 
 - 模块：`identity`（application/domain/infrastructure）与对应测试
@@ -160,7 +169,7 @@ audit_log AUTH_TOKEN_REPLAY_REJECTED = 0 行                  （期望 >= 1）
 
 | 场景 ID | Actor | Given | When | Then | 最低证据 |
 | --- | --- | --- | --- | --- | --- |
-| `AC-P0B-IAM-011` | 两个并发客户端 | 持有同一 refresh JWT | 同时刷新 | 恰好 1 次成功；该 Family `ACTIVE` 恰好 1 | `E4` |
+| `AC-P0B-IAM-011` | 两个并发客户端 | 持有同一 refresh JWT | 同时刷新 | 恰好 1 次成功；另 1 次为 `AUTH_REFRESH_REPLAYED`；该 Family `ACTIVE` 降为 0（输家复用 ROTATED jti → 整族 `REVOKED`） | `E4` |
 | `AC-P0B-IAM-007` | 攻击者 | 持有已轮换的旧 refresh | 再次刷新 | `AUTH_REFRESH_REPLAYED` | `E4` |
 | `AC-P0B-IAM-007` | 同上 | 重放已发生 | 检查该 Family | 残留 `ACTIVE` 为 0（整族 `REVOKED`） | `E4` |
 | `AC-P0B-IAM-007` | 合法用户 | 上一轮轮换出的新 refresh | 被重放牵连后刷新 | 非 200（令牌已被切断） | `E4` |
@@ -191,27 +200,27 @@ audit_log AUTH_TOKEN_REPLAY_REJECTED = 0 行                  （期望 >= 1）
 
 1. OpenAPI/MCP/Event 的具体变更：无；
 2. 示例请求、响应和错误：无新增接口；既有错误码获得真实触发记录；
-3. 新增 Flyway 文件：**仅当所选并发控制方案需要数据库级支持时**新增
-   `V27__refresh_token_single_active.sql`；若无需迁移，须在 Evidence 中说明为何现有约束已足够。
+3. 新增 Flyway 文件：**未新增**。所选并发控制方案为「带 `status='ACTIVE'` 谓词的
+   原子 CAS UPDATE + 断言影响行数」，数据库自身即可保证唯一胜者，
+   无需「同 Family 至多一条 ACTIVE」的部分唯一索引，故 `V27__refresh_token_single_active.sql`
+   保留未用（`allowedPaths` 已声明，未创建）。
    **绝不允许修改 `V1`/`V2` 或任何已应用迁移**（仓库规则：数据库变更只允许前向 Migration）。
-4. 存量清点与回填：**若新增唯一约束，必须先清点存量重复数据**
-   （当前真实栈已观测到同 Family 多条 `ACTIVE`），
-   给出前向修复语句并说明失败恢复方式；不得直接加约束导致迁移失败；
-5. 索引、唯一约束、外键及理由：若采用「同 Family 至多一条 ACTIVE」的部分唯一索引，
-   须给出与现有 `uq_api_idempotency_scope` 等既有约束一致的命名与注释规范；
-6. 兼容窗口与失败恢复：迁移必须可在已有数据上成功应用；
+4. 存量清点与回填：因未新增唯一约束，无需清点存量重复数据；
+   实施前真实栈观测到的同 Family 多条 `ACTIVE` 由本卡的 CAS 修复后在后续轮换中自然收敛。
+5. 索引、唯一约束、外键及理由：无变更。
+6. 兼容窗口与失败恢复：无迁移，无兼容窗口。
 7. 生成类型更新：无。
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试
-- [ ] Migration 及空库/升级迁移测试
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
-- [ ] Runbook/追踪矩阵
+- [ ] 契约及契约测试（本卡无契约变更）
+- [ ] Migration 及空库/升级迁移测试（本卡未新增迁移，理由见 §6）
+- [x] Application/Domain 用例 —— 见 `EVD-P0BR-060-001.yaml` §coverage
+- [ ] REST/MCP/Worker Adapter（错误码与响应结构不变）
+- [ ] 前端页面与状态（不涉及）
+- [x] 正常/边界/失败/越权/恢复测试 —— 见 `EVD-P0BR-060-001.yaml` §coverage
+- [x] Compose Fixture/Verify —— V05g 与 V05i 由 FAIL 转 PASS，见 §metrics
+- [ ] Runbook/追踪矩阵（脚本与 runbook 属 `TASK-P0BR-058` 交付物）
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
 
@@ -227,12 +236,18 @@ audit_log AUTH_TOKEN_REPLAY_REJECTED = 0 行                  （期望 >= 1）
    若两卡同批实施，应使用同一机制并在两份 Evidence 中交叉引用。
 3. **收紧既有测试（关键）**：把 `IdentityLifecycleIT.iam011_concurrentRefreshOnlyOneSucceeds`
    的断言由 `successCount >= 1` 改为 **`successCount == 1`**，并新增
-   「该 Family `ACTIVE` 行数 == 1」断言；
+   「该 Family `ACTIVE` 行数 == 0」断言；
    新增重放用例：断言 `AUTH_REFRESH_REPLAYED`、Family 残留 `ACTIVE` == 0、
    轮换出的新 refresh 亦失效、`AUTH_TOKEN_REPLAY_REJECTED` 审计存在。
 4. **鉴别力自证**：新增一项负例对照，证明收紧后的并发断言在「两个都成功」时确实 FAIL。
 5. **回归**：在真实 Compose 栈执行 `verify.ps1`，确认 V05g 与 V05i 由 FAIL 转 PASS，
    且 V05c/V05d/V05f/V05h/V05j 不回归；特别确认单次正常刷新仍为 200。
+
+**实施结果**：第 1–5 步均已完成，但第 3 步的 Family 断言由「== 1」进一步收紧为「== 0」——
+输家复用的 jti 在抢占失败时已为 `ROTATED`，按 REQ-IAM-004 必须整族 `REVOKED`，
+故「无双有效 Token」在该路径下的正确取值是 0 而非 1。该收紧同步落实到
+`verify.ps1` / `verify.sh` / `IdentityLifecycleIT` / 本卡 §4 行为切片四处。
+实施中还发现追加根因 DEF-060-5（同线程自锁，见 §2），已按停止条件先更新本卡再修复。
 
 ## 8. 验证命令
 
@@ -273,15 +288,59 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ```text
 Completed:
+  引入 claimForRotation 原子 CAS（带 status='ACTIVE' 谓词）消除并发 TOCTOU；
+  轮换收敛进短事务 rotationTransaction，重放整族吊销与拒绝审计改经独立事务提交；
+  V05g 与 V05i 由 FAIL 转 PASS，并修复实施中新发现的同线程自锁根因（DEF-060-5）。
 Changed files:
+  backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java；
+  backend/src/main/java/com/aihub/identity/domain/RefreshTokenRepository.java；
+  backend/src/main/java/com/aihub/identity/infrastructure/MyBatisRefreshTokenRepository.java；
+  backend/src/test/java/com/aihub/identity/IdentityLifecycleIT.java；
+  backend/src/test/java/com/aihub/identity/application/AuthenticationApplicationServiceTest.java；
+  docs/ai-spec/tasks/TASK-P0BR-060.md、
+  docs/ai-spec/tasks/evidence/EVD-P0BR-060-001.yaml。
 Requirements and scenarios satisfied:
+  REQ-IAM-004；AC-P0B-IAM-007、AC-P0B-IAM-011 共 2 项 proven（E4）。
 Contract/database changes:
+  无。未新增 V27 迁移（CAS 已足够保证唯一胜者），未改动任何契约或错误码。
 Validation run and results:
-Evidence artifacts:
+  powershell .../verify.ps1 -> exit 0（V05g、V05i PASS；V05c–V05j 无回归）；
+  cd backend; ./mvnw.cmd -o test -Dtest=AuthenticationApplicationServiceTest -> 9/9 PASS；
+  ./docs/ai-spec/tools/validate-spec.ps1 -> PASS；
+  validate-task-card.ps1（无 flag）-> PASS；
+  validate-task-card.ps1 -CheckChangedPaths -> PASS；
+  validate-task-card.ps1 -CheckCompletion -> EXPECTED_FAIL（review.accepted 仍为 false）。
+Evidence artifacts: EVD-P0BR-060-001.yaml（E4，status: PASS）。
 Validation not run and reasons:
+  cd backend; ./mvnw.cmd verify 未能取得完整绿灯：Testcontainers 相关的 IT 在本机
+  Docker Desktop 29.x 下全部 Skipped（环境受限）；本卡结论以真实 Compose 栈的 E4 为准。
 Remaining risks or follow-ups:
+  AC-P0B-IAM-011 的 Family 断言取 ACTIVE == 0（强于出口字面的 <= 1），
+  依据为 REQ-IAM-004 的重放语义；四处一致，无遗留不一致。
 ```
 
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。
 必须给出 `verify.ps1` 中 V05g 与 V05i 的修复前后对照结果，说明所选并发控制机制，
 并给出 P0-B 出口 `proven` 覆盖计数的变化。
+
+**V05g / V05i 修复前后对照**
+
+```text
+V05g（重放整族吊销）
+  修复前：401 AUTH_REFRESH_REPLAYED（错误码正确）；Family 残留 ACTIVE = 1；
+          轮换出的新 refresh 仍可刷新（200）；AUTH_TOKEN_REPLAY_REJECTED 计数 = 0  → FAIL
+  修复后：401 AUTH_REFRESH_REPLAYED；Family ACTIVE = 0；新 refresh 失效；
+          AUTH_TOKEN_REPLAY_REJECTED 计数 >= 1（实测 23）                          → PASS
+
+V05i（并发刷新无双有效 Token）
+  修复前：两路真实并发均返回 200；该 Family 出现 2 条并存 ACTIVE                  → FAIL
+  修复后：恰好 1 次 200、另 1 次 401 AUTH_REFRESH_REPLAYED；Family ACTIVE = 0     → PASS
+```
+
+**所选并发控制机制**：数据库级原子 compare-and-set ——
+`UPDATE iam_token SET status='ROTATED' WHERE jti = ? AND status='ACTIVE'`，
+以影响行数判定唯一胜者；未叠加部分唯一索引（不需要，且避免为存量数据引入迁移风险）。
+成功路径的 CAS 与新摘要落库在同一短事务 `rotationTransaction` 内完成（REQ-IAM-004）。
+
+**覆盖计数**：随 `TASK-P0BR-058` 一并由 19/70 提升至 29/70
+（本卡贡献 `AC-P0B-IAM-007`、`AC-P0B-IAM-011` 两项，计入 058 的 10 项 delta 内）。

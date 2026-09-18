@@ -20,12 +20,15 @@ import com.aihub.identity.application.UserManagementApplicationService;
 import com.aihub.identity.application.UserView;
 import com.aihub.identity.domain.LocalUser;
 import com.aihub.identity.domain.LocalUserRepository;
+import com.aihub.identity.infrastructure.TokenEntity;
+import com.aihub.identity.infrastructure.TokenMapper;
 import com.aihub.shared.error.AuthenticationException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.PlatformException;
 import com.aihub.shared.security.JwtClaims;
 import com.aihub.shared.security.TokenRevocationChecker;
 import com.aihub.shared.security.TokenVerifier;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -80,6 +83,8 @@ class IdentityLifecycleIT {
     private TokenVerifier tokenVerifier;
     @Autowired
     private TokenRevocationChecker revocationChecker;
+    @Autowired
+    private TokenMapper tokenMapper;
     @Autowired
     private LocalUserRepository userRepository;
     @Autowired
@@ -228,10 +233,32 @@ class IdentityLifecycleIT {
         doneLatch.await();
         executor.shutdown();
 
-        // 至少一个成功，且不能两个都成功（轮换语义：第一个成功后第二个为重放）。
-        // 注：由于数据库行锁，实际上可能 1 成功 + 1 失败（重放）。
-        assertThat(successCount.get()).isGreaterThanOrEqualTo(1);
-        assertThat(successCount.get() + failCount.get()).isEqualTo(threads);
+        // 轮换语义：同一 refresh 只能被消费一次，故**恰好**一个成功。
+        // 断言必须为 ==1：若写成 >=1，两个请求都成功（并发双有效 Token）时也会通过，
+        // 该缺陷正由此逃过检测（见 EVD-P0BR-058-001 的 DEF-058-3）。
+        assertThat(successCount.get())
+                .as("同一 refresh 并发刷新必须恰好一个成功（2 个成功即出现并存有效 Token）")
+                .isEqualTo(1);
+        assertThat(failCount.get()).isEqualTo(threads - 1);
+
+        // 输家复用的 jti 此刻已为 ROTATED，按 REQ-IAM-004「ROTATED jti 再用视为重放，
+        // 整个 Family REVOKED」必须整族吊销，故该 Family 的 ACTIVE 为 0。
+        // 出口要求「无双有效 Token」即 ACTIVE <= 1；== 0 是更强且符合规格重放语义的结论。
+        long activeInFamily = tokenMapper.selectCount(Wrappers.<TokenEntity>lambdaQuery()
+                .eq(TokenEntity::getTokenFamily, familyOf(refreshToken))
+                .eq(TokenEntity::getStatus, "ACTIVE"));
+        assertThat(activeInFamily)
+                .as("并发刷新后同一 Token Family 不得残留 ACTIVE（输家触发重放 → 整族 REVOKED）")
+                .isZero();
+    }
+
+    /** 读取指定 refresh JWT 所属的 Token Family（仅测试用，不记录 jti 原文）。 */
+    private String familyOf(String refreshToken) {
+        String jti = tokenVerifier.verify(refreshToken).jwtId();
+        TokenEntity entity = tokenMapper.selectOne(Wrappers.<TokenEntity>lambdaQuery()
+                .eq(TokenEntity::getJti, jti));
+        assertThat(entity).as("refresh JWT 必须已落库").isNotNull();
+        return entity.getTokenFamily();
     }
 
     // ── AC-P0B-IAM-012: 管理员创建、编辑、重置、禁用和启用用户 ──────────
@@ -338,6 +365,42 @@ class IdentityLifecycleIT {
         assertThat(unlocked.lockedUntil()).isNull();
         assertThat(unlocked.status()).isEqualTo(com.aihub.identity.domain.UserStatus.ACTIVE);
         assertThat(authService.login("unlock-user", PASSWORD).accessToken()).isNotBlank();
+    }
+
+    // ── AC-P0B-IAM-007: 重放整族吊销，轮换出的新 refresh 亦失效 ──────────
+
+    @Test
+    void iam007_replayRevokesWholeFamilyIncludingNewestRefresh() {
+        createActiveUser("replay-user");
+        TokenPairResult login = authService.login("replay-user", PASSWORD);
+        String rotatedAway = login.refreshToken();
+        String family = familyOf(rotatedAway);
+
+        // 正常轮换一次，得到新 refresh。
+        TokenPairResult rotated = authService.refresh(rotatedAway);
+        String newestRefresh = rotated.refreshToken();
+
+        // 重放旧的已轮换 refresh → 必须拒绝并整族吊销。
+        assertThatThrownBy(() -> authService.refresh(rotatedAway))
+                .isInstanceOfSatisfying(PlatformException.class,
+                        ex -> assertThat(ex.errorCode()).isEqualTo(ErrorCode.AUTH_REFRESH_REPLAYED));
+
+        long activeInFamily = tokenMapper.selectCount(Wrappers.<TokenEntity>lambdaQuery()
+                .eq(TokenEntity::getTokenFamily, family)
+                .eq(TokenEntity::getStatus, "ACTIVE"));
+        assertThat(activeInFamily)
+                .as("重放后整族不得残留 ACTIVE（被盗令牌必须被切断）")
+                .isZero();
+
+        // 轮换出的新 refresh 也必须已失效。
+        assertThatThrownBy(() -> authService.refresh(newestRefresh))
+                .isInstanceOf(AuthenticationException.class);
+
+        // 拒绝审计必须落库（不得因异常回滚丢失）。
+        Integer rejected = jdbcTemplate.queryForObject(
+                "select count(*) from audit_log where event_type = 'AUTH_TOKEN_REPLAY_REJECTED'",
+                Integer.class);
+        assertThat(rejected).as("AUTH_TOKEN_REPLAY_REJECTED 审计必须落库").isNotNull().isGreaterThan(0);
     }
 
     // ── AC-P0B-AGT-004: 尝试授予 Agent 高风险权限被拒绝 ──────────

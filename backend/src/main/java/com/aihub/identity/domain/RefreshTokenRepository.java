@@ -22,6 +22,17 @@ public interface RefreshTokenRepository {
     Optional<RefreshTokenRecord> findByJti(String jti);
 
     /**
+     * 以原子 compare-and-set 抢占轮换权：仅当该 jti 仍为 ACTIVE 时将其置为 ROTATED。
+     *
+     * <p>并发刷新时只有把 ACTIVE 成功翻转的请求成为唯一胜者；返回 {@code false} 表示
+     * 该 jti 已被消费或吊销，调用方须按重放语义处理（REQ-IAM-004「以原子 compare-and-set
+     * 将 jti 从 ACTIVE 置为 ROTATED」「只有一个并发请求可以成功」）。
+     *
+     * @return 是否抢占成功（true 表示本次调用是唯一胜者）
+     */
+    boolean claimForRotation(String jti);
+
+    /**
      * 将旧 jti 标记为已轮换并记录后继 jti。
      */
     void markRotated(String jti, String replacedByJti);
