@@ -122,6 +122,10 @@ services:
       AIHUB_BOOTSTRAP_ADMIN_PASSWORD: ${AIHUB_BOOTSTRAP_ADMIN_PASSWORD}
       # 本地 http 场景关闭刷新 Cookie 的 Secure 标志，便于 verify 脚本走 http 验证 JWT 生命周期。
       AIHUB_REFRESH_COOKIE_SECURE: "false"
+      # 显式接通真实 Gitea：本 Profile 是可部署基线，不得以未声明的 Noop 开通器冒充建仓。
+      # 前置条件：.env 的 GITEA_SERVICE_TOKEN 必须是真实服务账号 Token（见 bootstrap.ps1 提示）；
+      # 未配置时建仓会按可重试依赖错误失败，这是预期行为，不得回退为 Noop。
+      AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
       AIHUB_MINIO_ENDPOINT: http://minio:9000
@@ -148,6 +152,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # 与 backend 一致：Worker 是可部署 Profile 的一部分，必须显式接通真实 Gitea。
+      AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
       AIHUB_MINIO_ENDPOINT: http://minio:9000

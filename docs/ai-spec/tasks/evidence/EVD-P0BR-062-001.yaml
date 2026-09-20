@@ -1,0 +1,229 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-062-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈（Gitea 已接通）取得 E4。
+# status 为 PASS：两个 AC 均已闭环，并以「缺陷前后对照」与「修复前后 E4 对照」证明断言具备判别力。
+# 仍按规范交接为 IMPLEMENTED_UNVERIFIED：完成门禁还需验证责任方接受（review.accepted 仍为 false）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-062
+  requirements: [REQ-JOB-001, REQ-IAM-001]
+  scenarios:
+    - AC-P0B-JOB-003
+    - AC-P0B-ENG-006
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-062.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-062.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-062.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 941ab67e1e8648df67b0d3bd7280a51a540aa741
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/GiteaAssetRepositoryProvisioner.java
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/GiteaCardProjection.java
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/GiteaProperties.java
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/GiteaRepoPath.java
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/GiteaRestClientFactory.java
+    - backend/src/test/java/com/aihub/integration/gitea/infrastructure/GiteaAssetRepositoryAdapterTest.java
+    - deploy/compose/.env.example
+    - deploy/compose/compose.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+
+environment:
+  observedAt: 2026-09-20T16:30:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: "29.1.2 (Docker Desktop, Linux engine)"
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    gitea: 内置 Gitea 容器（真实 REST API，经 http://localhost:8080/git/ 暴露）
+    postgres: docker.m.daocloud.io/library/postgres:17.2-alpine
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG
+  command: >-
+    cd backend; ./mvnw.cmd -o test "-Dtest=GiteaAssetRepositoryAdapterTest"（18 项）；
+    docker compose -f deploy/compose/compose.yaml build backend worker；
+    docker compose -f deploy/compose/compose.yaml up -d --force-recreate backend worker；
+    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/evidence/gitea-e4-062.ps1（E4，24 项断言）；
+    docker compose -f deploy/compose/compose.yaml config --quiet；
+    powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1；
+    cd backend; ./mvnw.cmd -o verify；
+    ./docs/ai-spec/tools/validate-spec.ps1；validate-task-card.ps1（含 -CheckChangedPaths）
+  startedAt: 2026-09-20T15:20:00+08:00
+  finishedAt: 2026-09-20T16:32:00+08:00
+  # exitCode=1 来自「后端全量 verify 的 2 项既存失败」这一组合命令；本卡自身的全部验证命令均为 0：
+  # GiteaAssetRepositoryAdapterTest 18/18 通过、E4 脚本 24/24 断言 PASS（RESULT: 0 FAILED）、
+  # compose config 通过、validator 通过。2 项既存失败已在变更前基线的已提交证据中记录（见 limitations），
+  # 按规范不记为 PASS，故此处如实记录组合退出码而非改写为 0。
+  exitCode: 1
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - 真实 Gitea 容器（REST API，非 Mock/桩；base64 contents 读写与仓库创建均为真实副作用）
+    - 真实 PostgreSQL 17（job_task/job_attempt/asset 状态与审计直连真实库读取）
+    - 真实 Worker 调度（aihub-backend-1 与 aihub-worker-1 均运行 JobWorker，tick=5s）
+  e4EntryPoint: Nginx/REST（http://localhost:8080）+ 容器内直连 Gitea API（http://gitea:3000）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-JOB-003
+      assertion: >-
+        E4（.trae/evidence/gitea-e4-062.txt，真实 Compose 栈，24 项断言全 PASS / RESULT: 0 FAILED）：
+        场景 A（建仓完整成功）：A1 资产登记 201；A2 作业 SUCCEEDED 且 provisioning_status=COMPLETED；
+        A3 repo_full_name 形如 owner/repo；A4 直连真实 Gitea 的
+        GET /api/v1/repos/{owner}/{repo}/contents/asset.yaml?ref=main 返回 200；
+        A5 解出的 asset.yaml 明文含 namespace=e4g620920162514 与 name=provok-0920162514
+        （内容与 AssetCard 渲染一致：schemaVersion: aihub/v1 / kind: Model / metadata / spec）；
+        A6 README 已被资产卡片覆盖（157 字节，含资产名，不再等于 Gitea 的 auto_init 默认内容）；
+        A7/A8 attempt 记录数与 attempt_no 唯一数一致且存在 SUCCESS 的 attempt。
+        场景 B（依赖恢复后自行成功）：B0 以 docker pause 注入真实故障且确认 state=paused；
+        B1 停机期间资产登记仍 201（接受意图，不阻塞 HTTP）；B2 落入 RETRY_WAIT 且 attempts>=1；
+        B3 error_code=ASSET_REPOSITORY_PROVISION_FAILED（可重试码）；
+        B4 退避间隔 1994ms 落在 full jitter 区间 [1000, 2000]（attempt=1，与 BackoffCalculator 闭式一致）；
+        B5 unpause 后 API 就绪；B6 **无人工干预自行 SUCCEEDED** 且 provisioning_status=COMPLETED；
+        B7 恢复后 asset.yaml 真实落库（200）；B8 attempt_no 无重复（INV-JOB-005）；
+        B9 全部历史失败均为可重试码。
+        场景 C（建仓幂等）：C1/C2 首次建仓 SUCCEEDED；
+        C3 在「Gitea 已有仓库但本地状态退回 PENDING 且 repo_full_name 已清空」的真实重试现场下
+        重跑仍收敛为 SUCCEEDED；
+        C3b 复用日志计数由 1 增至 2，证明确实走了「已存在即复用」分支而非 Handler 的幂等短路；
+        C4 复用同一仓库引用；C5/C5b 该全名仓库按名可读且搜索仅命中一条，未产生第二个仓库。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-003
+      assertion: >-
+        判别力反向对照（同一测试类、同一夹具，仅把 writeFile 恢复为缺陷形态后重跑）：
+        缺陷形态下 16 项中 9 项失败（2 Failures + 7 Errors），其中 FileWriteVerb 全 3 项失败；
+        恢复修复实现后 18/18 全 PASS。该对照证明「新建走 POST / 更新走 PUT 且带 sha」与
+        「不以 %2F 编码」等断言确实能判别本卡的缺陷，而不是恒真。
+        对照原始输出：.trae/evidence/gitea-062-BASELINE-upsert.txt；早前 URL 编码切片的对照见
+        .trae/evidence/gitea-062-BASELINE.txt（缺陷态 7/13 报错）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-ENG-006
+      assertion: >-
+        E4（同一次 gitea-e4-062.ps1 运行）：
+        D1 `docker compose config` 输出中 AIHUB_GITEA_ENABLED: "true" 命中 2 次（backend 与 worker）；
+        D2 backend 容器 printenv AIHUB_GITEA_ENABLED=true；
+        D3 worker 容器 printenv AIHUB_GITEA_ENABLED=true；
+        D4 运行日志出现真实 Gitea 调用痕迹（falling back to user repo creation /
+        gitea repository already exists / repository provisioned successfully），
+        证明生效实现是 GiteaAssetRepositoryProvisioner 而不是 Noop 静默成功。
+        另以「Gitea 容器内直连 API 读到真实 asset.yaml 内容」作为写路径确实生效的独立证据（A4/A5），
+        该证据不依赖平台自述，因此无法由 Noop 开通器伪造。
+      scenarioCategory: normal
+  notProven:
+    - >-
+      本卡不覆盖 Gitea 组织（organization）的自动创建与权限投影：compose 基线中命名空间不是
+      Gitea 组织，因此 POST /api/v1/orgs/{namespace}/repos 恒为 404 并回退到服务账号用户名下建仓
+      （E4 中 repo_full_name 均为 aihub-svc/<name>）。组织路径的 409 复用分支由 E2 单测
+      （existingRepoUnderOrgIsReusedInsteadOfFailing）覆盖，仅有 E2 级证据。
+    - >-
+      仓库删除路径（PhysicalRecycleJobHandler.deleteGiteaRepository）仍为 TODO，不在本卡范围。
+    - >-
+      跨系统强一致开通（Saga/Outbox 对账）属 P2 范围；本卡只保证外部调用成功判定正确
+      与部分成功后的重试可收敛。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - backend/src/test/java/com/aihub/integration/gitea/infrastructure/GiteaAssetRepositoryAdapterTest.java
+    - backend/target/surefire-reports/com.aihub.integration.gitea.infrastructure.GiteaAssetRepositoryAdapterTest.txt
+  logs:
+    - .trae/evidence/gitea-e4-062.txt（修复后 E4 全文；RESULT: 0 FAILED）
+    - .trae/evidence/gitea-062-BASELINE-upsert.txt（写入动词切片的鉴别力对照；缺陷态 9/16 失败）
+    - .trae/evidence/gitea-062-BASELINE.txt（URL 编码切片的鉴别力对照；缺陷态 7/13 报错）
+    - .trae/evidence/verify-ps1-062.txt（Compose 验收脚本全文）
+    - .trae/evidence/mvn-verify-062.log（后端全量 verify 日志）
+  screenshots: []
+  traces: []
+  metrics:
+    - GiteaAssetRepositoryAdapterTest：18 项全通过（PathComposition 5 / CreateIdempotency 5 / FileWriteVerb 3 / BoundedCall 2 / RequestShape 3）
+    - 后端全量 ./mvnw -o verify：520 项，2 项失败、6 项跳过；2 项失败均为既存（见 limitations）
+    - E4 脚本：24 项断言全部 PASS，RESULT: 0 FAILED
+    - compose config --quiet：退出码 0
+  databaseQueries:
+    - "SELECT provisioning_status || '|' || COALESCE(repo_full_name,'') FROM asset WHERE asset_id=? -> 驱动 A2/A3/C2/C4"
+    - "SELECT status FROM job_task WHERE asset_id=? -> 判定作业终态（SUCCEEDED/DEAD）"
+    - "SELECT attempts, (next_run_at - updated_at) FROM job_task WHERE asset_id=? -> 校验退避区间 B4"
+    - "SELECT COUNT(*) = COUNT(DISTINCT attempt_no) FROM job_attempt -> 校验 INV-JOB-005（A7/B8）"
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据不含任何口令、Token、Secret 或预签名 URL。
+    - Gitea 服务 Token 仅由 E4 脚本从 deploy/compose/.env（gitignored）读取，脚本只向容器内传递，
+      落盘日志只记录状态码、计数与内容长度，不记录 Token 或其长度以外的特征。
+    - 新增单测使用固定字面量 test-token，并在 tokenIsSentAsHeaderNotInUrl 中断言其不出现在请求 URL 中。
+    - 新增代码不记录 Token；GiteaRestClientFactory 的 javadoc 明确 Token 只作为请求头下发。
+
+limitations:
+  skippedTests:
+    - >-
+      PreviewJobHandlerTest 2 项 CSV 解析失败（csvExceedingFiftyColumnsShouldMarkColumnTruncated:135、
+      csvMixedQuotedAndUnquoted:278）为既存缺陷：已提交的 EVD-P0BR-049-001（基线 3b527e0）
+      的 limitations 与 environmentDifferences 中已记录同一对失败，本卡未触碰 preview/CSV 相关代码。
+    - >-
+      verify 中的 6 项 Skipped 为既存跳过（依赖不可用的条件跳过），与本卡无关；
+      本卡新增的 18 项均为真实运行，无 SKIP。
+  assumptions:
+    - >-
+      「一次尝试内最多 4 次串行 HTTP 调用」是超时上界推导的依据（建组织仓库 → 回退用户仓库 →
+      读 sha + 写 asset.yaml → 读 sha + 覆盖 README）。若后续在 provision 内增加调用，
+      必须同步复核 4 × readTimeoutMillis < lease-seconds 这一不等式。
+    - >-
+      E4 中 repo_full_name 落在服务账号用户名下（aihub-svc/<name>）是当前 Compose 基线的正常结果：
+      namespace 不是 Gitea 组织，故走既有回退分支；这不影响本卡要验证的写路径正确性。
+  environmentDifferences:
+    - >-
+      **取证过程中发现并修复的第 4 个缺陷（无界调用）**：Gitea RestClient 原先未设置任何超时，
+      Gitea 处于 pause 状态时单次尝试阻塞 122717ms（超过 60s 租约），导致租约到期后被第二个
+      Worker 重新领取并重复执行，进而抛出 ASSET_CONCURRENT_MODIFICATION 伪冲突
+      （实测 job_attempt 记录 attempt #1 dur=122717ms，随后出现 ConflictException）。
+      修复后同一场景单次尝试耗时为 20095ms，且 ASSET_CONCURRENT_MODIFICATION 不再出现。
+      该缺陷不在原卡 §2 记录的四条事实之内，是 E4 取证暴露的关联缺陷，
+      与「使 AC-P0B-JOB-003 可达」直接相关，故一并修复并在此如实登记。
+    - >-
+      **首次 E4 误判的成因（已排除，非产品缺陷）**：docker compose build backend 不会重建
+      worker 目标，导致 aihub-worker:latest 为过期镜像（比 backend 早 1 小时），
+      运行中的 Worker 仍是修复前代码，表现为「首个 attempt 必然失败、第二次才成功」。
+      以 `build backend worker` 同时重建后消失。此处记录以免后续复现时误判为产品缺陷。
+    - >-
+      E4 脚本以 docker pause 注入故障（而非 stop）：pause 保留 TCP 监听，
+      是最严苛的「依赖无响应」形态，正好用于验证超时上界；早期以 docker compose start 恢复
+      会重新解析 depends_on 并等待健康检查而阻塞，故改为 docker unpause。
+    - >-
+      Gitea 的 contents 接口语义经实测确立：PUT 无论文件是否存在都要求 sha
+      （缺失返回 422 {"message":"[SHA]: Required"}），POST 不带 sha 新建返回 201、
+      对已存在路径返回 409。本卡据此实现 upsert，并以单测固化。
+    - >-
+      E4 脚本 wget 取证的两个坑已修正并注释：`-O -` 直接作为 PowerShell 参数会与
+      -OutVariable/-OutBuffer 二义性冲突（须整体交给容器内 sh -c）；
+      `wget -S` 的响应头走 stderr，与 `2>&1` 交织会打断 >1KB 的响应体，
+      故状态码与响应体必须分两次取（前者 -O /dev/null，后者不带 -S）。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

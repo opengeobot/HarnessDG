@@ -8,6 +8,7 @@ package com.aihub.integration.gitea.infrastructure;
 import com.aihub.asset.domain.AssetCardProjectionPort;
 import com.aihub.shared.error.DependencyException;
 import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.ValidationException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
@@ -37,10 +38,7 @@ public class GiteaCardProjection implements AssetCardProjectionPort {
 
     public GiteaCardProjection(RestClient.Builder restClientBuilder, GiteaProperties properties) {
         this.properties = properties;
-        this.restClient = restClientBuilder
-                .baseUrl(properties.baseUrl())
-                .defaultHeader("Authorization", "token " + properties.token())
-                .build();
+        this.restClient = GiteaRestClientFactory.create(restClientBuilder, properties);
     }
 
     @Override
@@ -60,8 +58,10 @@ public class GiteaCardProjection implements AssetCardProjectionPort {
     @SuppressWarnings("unchecked")
     private String fetchFileContent(String repoFullName, String path, String ref) {
         try {
+            GiteaRepoPath repoPath = GiteaRepoPath.parse(repoFullName);
             Map<String, Object> file = restClient.get()
-                    .uri("/api/v1/repos/{full}/contents/{path}?ref={ref}", repoFullName, path, ref)
+                    .uri("/api/v1/repos/{owner}/{repo}/contents/{path}?ref={ref}",
+                            repoPath.owner(), repoPath.repo(), path, ref)
                     .retrieve()
                     .body(Map.class);
             if (file == null || file.get("content") == null) {
@@ -69,7 +69,7 @@ public class GiteaCardProjection implements AssetCardProjectionPort {
             }
             String encoded = String.valueOf(file.get("content"));
             return new String(Base64.getMimeDecoder().decode(encoded), StandardCharsets.UTF_8);
-        } catch (RestClientException ex) {
+        } catch (RestClientException | ValidationException ex) {
             LOG.debug("file not found: {}/{} at {}", repoFullName, path, ref);
             return null;
         }
@@ -78,15 +78,17 @@ public class GiteaCardProjection implements AssetCardProjectionPort {
     @SuppressWarnings("unchecked")
     private String fetchHeadCommit(String repoFullName, String branch) {
         try {
+            GiteaRepoPath repoPath = GiteaRepoPath.parse(repoFullName);
             Map<String, Object> branchInfo = restClient.get()
-                    .uri("/api/v1/repos/{full}/branches/{branch}", repoFullName, branch)
+                    .uri("/api/v1/repos/{owner}/{repo}/branches/{branch}",
+                            repoPath.owner(), repoPath.repo(), branch)
                     .retrieve()
                     .body(Map.class);
             if (branchInfo != null && branchInfo.get("commit") instanceof Map<?, ?> commitMap) {
                 return (String) commitMap.get("id");
             }
             return null;
-        } catch (RestClientException ex) {
+        } catch (RestClientException | ValidationException ex) {
             return null;
         }
     }
