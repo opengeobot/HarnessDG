@@ -1,0 +1,238 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-050-001
+# 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得：
+# AC-P0B-UI-006 的可发现性与死链回归由 Chromium 在 http://localhost:8080（Nginx 网关 + 构建产物）
+# 以三个权限不同的真实主体执行；AC-P0B-UI-003 的五态交互同栈注入 HTTP 边界故障后取得。
+# status 为 PASS：本卡 AC 已闭环。仍按规范交接为 IMPLEMENTED_UNVERIFIED，
+# 因为「完成」还需完成门禁通过并由验证责任方接受（review.accepted 仍为 false）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-050
+  requirements: [REQ-UI-001]
+  scenarios:
+    - AC-P0B-UI-003
+    - AC-P0B-UI-006
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-050.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-050.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-050.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: ff8fb69ed9f4719d3c31f4e38d8b35a3297e74dd
+  dirtyWorktree: true
+  dirtyPaths:
+    - frontend/e2e/admin-states.spec.ts
+    - frontend/e2e/admin.spec.ts
+    - frontend/e2e/auth.spec.ts
+    - frontend/e2e/discoverability.spec.ts
+    - frontend/e2e/i18n.spec.ts
+    - frontend/e2e/permission.spec.ts
+    - frontend/e2e/support.ts
+    - frontend/src/app/layout/navigation.test.ts
+    - frontend/src/app/layout/navigation.ts
+    - frontend/src/app/router/routes.tsx
+    - frontend/src/features/admin/index.ts
+    - frontend/src/features/admin/pages/ResourceAclsPage.test.tsx
+    - frontend/src/features/admin/pages/ResourceAclsPage.tsx
+    - frontend/src/features/admin/pages/RoleBindingsPage.test.tsx
+    - frontend/src/features/admin/pages/RoleBindingsPage.tsx
+    - frontend/src/features/admin/pages/TeamsPage.test.tsx
+    - frontend/src/features/admin/pages/TeamsPage.tsx
+    - frontend/src/features/admin/pages/index.ts
+    - frontend/src/features/version/VersionListPanel.tsx
+    - frontend/src/features/version/index.ts
+    - frontend/src/shared/i18n/en.json
+    - frontend/src/shared/i18n/zh.json
+    - docs/ai-spec/tasks/TASK-P0BR-050.md
+
+environment:
+  observedAt: 2026-09-18T09:20:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2 (Docker Desktop, Linux engine)
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    playwright: 1.56.x（项目锁定版本）
+    chromium: Playwright 自带 Desktop Chrome 通道
+
+execution:
+  workingDirectory: d:\workspace\opengeobot\HarnessDG\frontend
+  command: >-
+    $env:E2E_ADMIN_USERNAME / $env:E2E_ADMIN_PASSWORD（运行环境注入，不入库）;
+    $env:E2E_BASE_URL='http://localhost:8080';
+    npx playwright test --reporter=line
+  startedAt: 2026-09-18T09:19:00+08:00
+  finishedAt: 2026-09-18T09:20:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 16（真实容器，夹具主体/组织/Team/资产经真实 REST 写入并落库）
+    - backend（真实容器，被测授权与列表服务）
+    - Nginx（真实容器，E4 入口）
+    - frontend（真实容器，构建产物，非 dev server）
+  e4EntryPoint: Nginx/Browser（Chromium 经 http://localhost:8080 访问构建产物）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4（Chromium，5 例 discoverability）：① 具备 authorization:read 的管理主体展开侧边导航后
+        「角色绑定」「资源 ACL」入口可见，点击后 URL 分别到达 /admin/role-bindings 与
+        /admin/resource-acls，且 .ant-table 渲染、无 .ant-result-error；
+        ② 具备 project:view 的资产主体可见「团队管理」入口，点击到达 /admin/teams，
+        无路由参数时展示组织选择提示且不出现 404 文案；
+        ③ 不具备 authorization:read 的主体看不到两个授权类入口（同时以可见的「团队管理」为锚，
+        证明菜单确实展开，避免断言空洞成立），直接访问 /admin/role-bindings 展示拒绝文案，
+        且以该主体独立 API 会话直连 /system/role-bindings 返回 403；
+        ④ 不具备 project:view 的主体看不到「团队管理」，但具备 authorization:read 时
+        「角色绑定」仍可见（证明是逐项按 Scope 过滤，而非整体开关）；
+        ⑤ 从资产目录点入详情后点击版本列表「查看全部」，URL 到达
+        /assets/<assetId>/versions 且不出现全局 404 文案、.ant-table 可见。
+        另 E2（Vitest，8 例 navigation.test）：以真实 router.routes 与 NAV_ITEMS 断言
+        三个新入口存在且 Scope 正确、每个导航叶子路径都有非空 Scope、无重复导航路径、
+        全部导航叶子路径均已在路由表注册（累积父前缀还原完整路径）、
+        /assets/:assetId/versions 与 /assets/:assetId/versions/:versionId 均已注册且 /* 兜底仍在。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4（denial）：无 authorization:read 的主体在 UI 上被 RouteGuard 拒绝展示，
+        同时后端独立拒绝（直连 REST 返回 403）——
+        证明前端过滤不作为安全边界，UI 与后端两层判定均生效。
+        另 E2（Vitest）：RoleBindingsPage/ResourceAclsPage 的受控字段断言
+        （#roleId/#scopeType/#resourceType/#permissionCodes 均为 combobox 且不出现在文本框集合中）
+        排除了用自由文本提交受控值的退化形态。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4（Chromium，7 例 admin-states）：在真实栈上以 HTTP 边界注入制造确定性状态——
+        角色绑定页：延迟注入下 .ant-skeleton 可见（Loading）；空数组响应下展示
+        「暂无角色绑定」且无错误态（Empty）；500 响应下展示「加载失败」与「重试」按钮，
+        解除注入后点击重试命中真实后端并渲染出数据行（Error → Retry → Success）；
+        资源 ACL 页：Empty 同上；Error → 解除注入 → 重试后 .ant-table 可见且无错误态；
+        版本列表页：延迟注入下展示骨架，解除后进入 .ant-table（Success）；
+        Error 态下解除注入点击重试后恢复 .ant-table。
+        另 E2（Vitest，13 例）：RoleBindingsPage 6 例、ResourceAclsPage 6 例覆盖
+        Success/Empty/Error+Retry/Loading/受控字段/PLATFORM 提交 null，
+        TeamsPage 新增 1 例覆盖「导航直入时展示组织选择器并选定后加载列表」。
+      scenarioCategory: recovery
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: true
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - frontend/src/app/layout/navigation.test.ts（8 例）
+    - frontend/src/features/admin/pages/RoleBindingsPage.test.tsx（6 例）
+    - frontend/src/features/admin/pages/ResourceAclsPage.test.tsx（6 例）
+    - frontend/src/features/admin/pages/TeamsPage.test.tsx（5 例）
+    - frontend/e2e/discoverability.spec.ts（5 例）
+    - frontend/e2e/admin-states.spec.ts（7 例）
+    - frontend/e2e/support.ts（共享夹具与登录支撑）
+  logs:
+    - .trae/evidence/e2e-050-final.txt（Playwright 全量 28 passed 的原始输出）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright：28 passed / 0 failed（32.6s），含本轮新增 12 例与既有 4 个规格的 16 例
+    - >-
+      Vitest 子集 `pnpm vitest run src/features/admin src/app` 与逐文件运行：全部通过；
+      本卡新增 20 例（navigation 8 / RoleBindingsPage 6 / ResourceAclsPage 6 + TeamsPage 新增 1 例中的 1 例）
+      在两轮环境中均稳定通过
+    - >-
+      全量 `pnpm test`：本机存在既存抖动（失败集中在「文件首个用例 5s 超时」，失败文件随机漂移，
+      含未触碰的 AuditLogsPage/DiscussionPanel）；基线对照同样失败，故不记为 PASS，见 limitations
+    - ESLint：exit 0，无告警
+    - tsc -b --noEmit：exit 0
+    - vite build：exit 0（built in 18.49s）
+    - validate-spec.ps1：PASS（documents 36 / stable IDs 650）
+  databaseQueries:
+    - >-
+      select asset_id, namespace, name from asset where name='e2e050-version-target';
+      -> 夹具资产由 E2E 经真实 REST 幂等创建/查回
+  auditEvents:
+    - eventType: ASSET_CREATED（夹具准备阶段创建资产，沿用后端既有审计）
+      principal: e2e050-asset-owner 的 principalId
+      resource: 夹具资产 assetId
+      result: SUCCEEDED
+      note: 本卡未新增审计事件类型；上述为夹具准备的副作用，非本卡交付物
+
+secrets:
+  redactionChecked: true
+  findings:
+    - >-
+      引导管理员凭据一律从运行环境变量 E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD 读取，
+      仓库内不含该口令；未提供时各规格显式 skip，绝不以仓库内口令冒充凭据。
+    - >-
+      夹具主体口令（e2e050-asset-owner / e2e050-admin / e2e050-authz-reader）为本地 Compose
+      验收栈专用测试夹具值，不属于平台 Secret，仅存在于 e2e/support.ts 的夹具常量中。
+    - 证据不含任何 access Token、refresh Token 或 presigned URL。
+
+limitations:
+  skippedTests:
+    - >-
+      本卡未 SKIP 任何场景：28 例 Playwright 全部真实执行并通过；未提供凭据时的 skip 分支
+      在本次取证中未触发（凭据已由运行环境注入）。
+    - >-
+      Testcontainers 相关的后端 IT 本机 Skip 属既存状态，与本卡前端结论无关，本卡不以其为依据。
+  assumptions:
+    - >-
+      「可发现」判定取「侧边导航中该入口对具备相应 Scope 的主体可见，且点击后到达已注册路由并
+      渲染出列表容器」；不要求列表非空（空数据是合法的 Empty 态）。
+    - >-
+      资源 ACL 页面的资源类型仅暴露 ASSET：AuthorizationService.isResourcePermitted 的生产调用方
+      按 ASSET 校验，未列出的取值即使入库也不产生授权效果，故不作为可选项暴露。
+  environmentDifferences:
+    - >-
+      【既有缺陷，本卡未处置】前端容器 frontend/nginx/default.conf 的 `location /assets/`
+      静态资源规则遮蔽了 SPA 路由：实测 GET /assets => 301 且 Location 为
+      http://localhost/assets/（丢失 8080 端口），GET /assets/ => 403，
+      GET /assets/<assetId> => 404；而 GET /admin/role-bindings => 200 正常。
+      后果是资产目录与详情的整页加载/深链在 Compose 网关下不可用。
+      该文件不在本卡 allowedPaths 内（本卡仅允许 frontend/e2e 与列明的 frontend/src 路径），
+      且属基础设施配置而非页面可发现性范围，故本卡不修改。
+      本卡的 E2E 因此统一经侧边导航进入资产目录与详情（走用户在应用内真实可行的路径），
+      该缺陷未被掩盖、未被记为 PASS，需另立任务修复。
+    - >-
+      Playwright 默认 baseURL 已改为 Compose 网关 http://localhost:8080（被测物为构建产物，
+      与 verify 的 E4 入口一致），可由 E2E_BASE_URL 覆盖为 dev server。
+    - >-
+      antd 会在仅两个中文字符的按钮文案间插入空格（「重试」渲染为「重 试」），
+      故测试定位器使用允许空白的正则；这是定位器修正，不是断言放宽。
+    - >-
+      page.request 不复用浏览器内存中的 access Token（与架构要求的「JWT 只存内存」一致），
+      故需要后端独立拒绝的断言改用独立 API 会话重新取证。
+    - >-
+      【既存本机抖动，与本卡无关】本机全量 `pnpm test` 会随机出现 1–2 个「文件首个用例
+      5000ms 超时」失败，失败文件每次不同（含本卡从未触碰的 AuditLogsPage、DiscussionPanel）。
+      已用 `git stash push -u` 把本卡全部改动暂存后跑基线复现：基线同样失败
+      （DiscussionPanel + AssetsPage，2 failed / 56 passed），
+      故该抖动先于本卡存在，非本卡引入；单文件运行与 `src/features/admin`、`src/app`
+      子集运行均稳定全绿（本卡新增的 20 例在其中）。
+      本卡结论不依赖该不稳定的全量运行结果。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

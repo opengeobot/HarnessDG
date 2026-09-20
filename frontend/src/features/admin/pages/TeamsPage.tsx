@@ -1,5 +1,7 @@
 /**
  * 功能: Team 管理页面。在组织上下文下列出 Team 列表，支持创建 Team、编辑、成员管理（添加/移除）。
+ *       组织可来自路由参数（从组织页进入）或页面内选择器（从侧边导航直接进入），
+ *       使该页面在不依赖组织列表跳转的情况下也可被发现与使用。
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
@@ -29,6 +31,7 @@ import { useDocumentTitle } from '@/shared/hooks';
 import {
   addTeamMember,
   createTeam,
+  listOrganizations,
   listTeamMembers,
   listTeams,
   removeTeamMember,
@@ -48,7 +51,11 @@ export function TeamsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { orgId } = useParams<{ orgId: string }>();
+  const { orgId: routeOrgId } = useParams<{ orgId: string }>();
+
+  // 组织来源二选一：路由参数优先（从组织页进入），否则用页面内选择器（从导航直接进入）。
+  const [selectedOrgId, setSelectedOrgId] = useState<string | undefined>();
+  const orgId = routeOrgId ?? selectedOrgId;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTeam, setEditTeam] = useState<TeamView | null>(null);
@@ -56,6 +63,13 @@ export function TeamsPage() {
   const [createForm] = Form.useForm<CreateTeamRequest>();
   const [editForm] = Form.useForm<UpdateTeamRequest>();
   const [memberForm] = Form.useForm<AddTeamMemberRequest>();
+
+  const orgsQuery = useQuery({
+    queryKey: ['admin', 'organizations'],
+    queryFn: listOrganizations,
+    // 已有路由参数时无需再拉组织列表。
+    enabled: !routeOrgId,
+  });
 
   const teamsQuery = useQuery({
     queryKey: ['admin', 'organizations', orgId, 'teams'],
@@ -183,26 +197,44 @@ export function TeamsPage() {
             {t('admin.teams.title')}
           </Typography.Title>
         </Space>
-        <Space>
+        <Space wrap>
+          {/* 从侧边导航直接进入时没有路由组织参数，用选择器显式选定组织上下文 */}
+          {!routeOrgId && (
+            <Select
+              style={{ width: 260 }}
+              placeholder={t('admin.projects.selectOrg')}
+              loading={orgsQuery.isLoading}
+              value={selectedOrgId}
+              onChange={setSelectedOrgId}
+              options={(orgsQuery.data ?? []).map((org) => ({
+                value: org.organizationId,
+                label: `${org.name} (${org.code})`,
+              }))}
+            />
+          )}
           <Button onClick={() => teamsQuery.refetch()}>{t('common.refresh')}</Button>
-          <Button type="primary" onClick={() => setCreateOpen(true)}>
+          <Button type="primary" disabled={!orgId} onClick={() => setCreateOpen(true)}>
             {t('admin.teams.createTeam')}
           </Button>
         </Space>
       </Flex>
 
-      <QueryBoundary
-        isLoading={teamsQuery.isLoading}
-        isError={teamsQuery.isError}
-        error={teamsQuery.error}
-        onRetry={() => teamsQuery.refetch()}
-      >
-        <Table<TeamView>
-          rowKey="teamId"
-          columns={columns}
-          dataSource={teamsQuery.data ?? []}
-        />
-      </QueryBoundary>
+      {orgId ? (
+        <QueryBoundary
+          isLoading={teamsQuery.isLoading}
+          isError={teamsQuery.isError}
+          error={teamsQuery.error}
+          onRetry={() => teamsQuery.refetch()}
+        >
+          <Table<TeamView>
+            rowKey="teamId"
+            columns={columns}
+            dataSource={teamsQuery.data ?? []}
+          />
+        </QueryBoundary>
+      ) : (
+        <Typography.Text type="secondary">{t('admin.teams.selectOrgHint')}</Typography.Text>
+      )}
 
       {/* 创建 Team */}
       <Modal

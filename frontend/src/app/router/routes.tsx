@@ -9,7 +9,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/app/layout/AppLayout';
 import { RouteGuard } from '@/app/permission';
 import { AssetsPage, AssetDetailPage, AssetSettingsPage } from '@/features/assets';
-import { VersionPage, VersionDetailPage, ReviewPage } from '@/features/version';
+import { VersionPage, VersionDetailPage, VersionListPage, ReviewPage } from '@/features/version';
 import { UploadPage } from '@/features/upload';
 import { AccessPage } from '@/features/access';
 import { IntegrationsPage } from '@/features/integrations';
@@ -25,6 +25,8 @@ import {
   OrganizationsPage,
   PermissionsPage,
   ProjectsPage,
+  ResourceAclsPage,
+  RoleBindingsPage,
   RolesPage,
   TagsPage,
   TeamsPage,
@@ -52,6 +54,7 @@ export const router = createBrowserRouter([
       { path: 'assets/:assetId', element: guarded(<AssetDetailPage />, ['asset:read']) },
       { path: 'assets/:assetId/settings', element: guarded(<AssetSettingsPage />, ['asset:write']) },
       { path: 'version', element: guarded(<VersionPage />, ['asset:read']) },
+      { path: 'assets/:assetId/versions', element: guarded(<VersionListPage />, ['asset:read']) },
       { path: 'assets/:assetId/versions/:versionId', element: guarded(<VersionDetailPage />, ['asset:read']) },
       { path: 'upload', element: guarded(<UploadPage />, ['asset:write']) },
       { path: 'review', element: guarded(<ReviewPage />, ['asset:manage']) },
@@ -65,9 +68,12 @@ export const router = createBrowserRouter([
           { path: 'users', element: guarded(<UsersPage />, ['user:read']) },
           { path: 'agents', element: guarded(<AgentsPage />, ['authorization:read']) },
           { path: 'organizations', element: guarded(<OrganizationsPage />, ['project:view']) },
+          { path: 'teams', element: guarded(<TeamsPage />, ['project:view']) },
           { path: 'organizations/:orgId/teams', element: guarded(<TeamsPage />, ['project:view']) },
           { path: 'projects', element: guarded(<ProjectsPage />, ['project:view']) },
           { path: 'roles', element: guarded(<RolesPage />, ['authorization:read']) },
+          { path: 'role-bindings', element: guarded(<RoleBindingsPage />, ['authorization:read']) },
+          { path: 'resource-acls', element: guarded(<ResourceAclsPage />, ['authorization:read']) },
           { path: 'permissions', element: guarded(<PermissionsPage />, ['authorization:read']) },
           { path: 'dictionaries', element: guarded(<DictionariesPage />, ['dictionary:read']) },
           { path: 'tags', element: guarded(<TagsPage />, ['tag:read']) },

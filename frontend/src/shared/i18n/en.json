@@ -42,8 +42,11 @@
     "userManagement": "User Management",
     "agentManagement": "Agent Management",
     "orgManagement": "Organization Management",
+    "teamManagement": "Team Management",
     "projectManagement": "Project Management",
     "roleManagement": "Role Management",
+    "roleBindingManagement": "Role Bindings",
+    "resourceAclManagement": "Resource ACLs",
     "permissionList": "Permissions",
     "dictManagement": "Dictionary Management",
     "tagManagement": "Tag Management",
@@ -393,7 +396,8 @@
       "principalId": "Principal ID",
       "role": "Role",
       "joinedAt": "Joined At",
-      "confirmRemoveMember": "Remove this member from the team?"
+      "confirmRemoveMember": "Remove this member from the Team?",
+      "selectOrgHint": "Select an organization to view its Teams."
     },
     "roles": {
       "title": "Role Management",
@@ -413,6 +417,41 @@
       "roleName": "Role Name",
       "permissionSet": "Permission Set",
       "selectPermissionCodes": "Select permission codes"
+    },
+    "roleBindings": {
+      "title": "Role Bindings",
+      "bindingCreated": "Role binding created",
+      "bindingDeleted": "Role binding deleted",
+      "principalId": "Principal ID",
+      "principalIdPlaceholder": "e.g. an ID starting with usr_ or prn_",
+      "role": "Role",
+      "rolePlaceholder": "Select an existing role",
+      "scopeType": "Scope Type",
+      "scopeId": "Scope ID",
+      "scopeIdPlaceholder": "Leave empty for platform scope",
+      "createdAt": "Created At",
+      "createBinding": "Create Binding",
+      "confirmDelete": "Delete this role binding?",
+      "empty": "No role bindings",
+      "selectRoleRequired": "Please select a role"
+    },
+    "resourceAcls": {
+      "title": "Resource ACLs",
+      "aclCreated": "Resource ACL created",
+      "aclDeleted": "Resource ACL deleted",
+      "principalId": "Principal ID",
+      "principalIdPlaceholder": "e.g. an ID starting with usr_",
+      "resourceType": "Resource Type",
+      "resourceTypePlaceholder": "Select a resource type",
+      "resourceId": "Resource ID",
+      "resourceIdPlaceholder": "Target resource business ID",
+      "permissions": "Permissions",
+      "permissionPlaceholder": "Select permission codes",
+      "createdAt": "Created At",
+      "createAcl": "Create ACL",
+      "confirmDelete": "Delete this resource ACL?",
+      "empty": "No resource ACLs",
+      "selectPermissionsRequired": "Select at least one permission"
     },
     "projects": {
       "title": "Project Management",

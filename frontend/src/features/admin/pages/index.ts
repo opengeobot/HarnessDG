@@ -8,6 +8,8 @@ export { AgentsPage } from './AgentsPage';
 export { OrganizationsPage } from './OrganizationsPage';
 export { ProjectsPage } from './ProjectsPage';
 export { RolesPage } from './RolesPage';
+export { RoleBindingsPage } from './RoleBindingsPage';
+export { ResourceAclsPage } from './ResourceAclsPage';
 export { PermissionsPage } from './PermissionsPage';
 export { DictionariesPage } from './DictionariesPage';
 export { TagsPage } from './TagsPage';

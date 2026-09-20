@@ -9,6 +9,8 @@ export {
   OrganizationsPage,
   ProjectsPage,
   RolesPage,
+  RoleBindingsPage,
+  ResourceAclsPage,
   PermissionsPage,
   DictionariesPage,
   TagsPage,

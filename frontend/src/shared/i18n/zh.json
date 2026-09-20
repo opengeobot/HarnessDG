@@ -42,8 +42,11 @@
     "userManagement": "用户管理",
     "agentManagement": "Agent 管理",
     "orgManagement": "组织管理",
+    "teamManagement": "团队管理",
     "projectManagement": "项目管理",
     "roleManagement": "角色管理",
+    "roleBindingManagement": "角色绑定",
+    "resourceAclManagement": "资源 ACL",
     "permissionList": "权限清单",
     "dictManagement": "字典管理",
     "tagManagement": "标签管理",
@@ -393,7 +396,8 @@
       "principalId": "主体 ID",
       "role": "角色",
       "joinedAt": "加入时间",
-      "confirmRemoveMember": "确认从 Team 中移除该成员？"
+      "confirmRemoveMember": "确认从 Team 中移除该成员？",
+      "selectOrgHint": "请先选择组织以查看其 Team。"
     },
     "roles": {
       "title": "角色管理",
@@ -413,6 +417,41 @@
       "roleName": "角色名称",
       "permissionSet": "权限集合",
       "selectPermissionCodes": "选择权限编码"
+    },
+    "roleBindings": {
+      "title": "角色绑定",
+      "bindingCreated": "角色绑定已创建",
+      "bindingDeleted": "角色绑定已删除",
+      "principalId": "主体 ID",
+      "principalIdPlaceholder": "例如 usr_ 或 prn_ 开头的主体 ID",
+      "role": "角色",
+      "rolePlaceholder": "选择已有角色",
+      "scopeType": "作用域类型",
+      "scopeId": "作用域 ID",
+      "scopeIdPlaceholder": "平台级作用域留空",
+      "createdAt": "创建时间",
+      "createBinding": "创建绑定",
+      "confirmDelete": "确认删除该角色绑定？",
+      "empty": "暂无角色绑定",
+      "selectRoleRequired": "请选择角色"
+    },
+    "resourceAcls": {
+      "title": "资源 ACL",
+      "aclCreated": "资源 ACL 已创建",
+      "aclDeleted": "资源 ACL 已删除",
+      "principalId": "主体 ID",
+      "principalIdPlaceholder": "例如 usr_ 开头的主体 ID",
+      "resourceType": "资源类型",
+      "resourceTypePlaceholder": "选择资源类型",
+      "resourceId": "资源 ID",
+      "resourceIdPlaceholder": "目标资源业务 ID",
+      "permissions": "权限",
+      "permissionPlaceholder": "选择权限编码",
+      "createdAt": "创建时间",
+      "createAcl": "创建 ACL",
+      "confirmDelete": "确认删除该资源 ACL？",
+      "empty": "暂无资源 ACL",
+      "selectPermissionsRequired": "请至少选择一个权限"
     },
     "projects": {
       "title": "项目管理",

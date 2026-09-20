@@ -1,15 +1,21 @@
 /*
  * 功能: AC-P0B-UI-001 E2E 测试——登录/重定向/Token 存储。
+ *       引导凭据一律从环境变量读取，缺失时显式 skip，不得以仓库内口令充当凭据。
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
 import { test, expect } from '@playwright/test';
+import { bootstrapCredentials, login, loginButton } from './support';
 
-/**
- * 默认管理员凭据（与 docker-compose 初始化一致）。
- */
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+let credentials: { username: string; password: string } | null = null;
+
+test.beforeAll(() => {
+  credentials = bootstrapCredentials();
+});
+
+test.beforeEach(() => {
+  test.skip(!credentials, '未提供 E2E_ADMIN_USERNAME/E2E_ADMIN_PASSWORD，无法登录真实栈');
+});
 
 test.describe('AC-P0B-UI-001: 登录与 Token 生命周期', () => {
   test('未登录用户被重定向到登录页', async ({ page }) => {
@@ -19,13 +25,7 @@ test.describe('AC-P0B-UI-001: 登录与 Token 生命周期', () => {
   });
 
   test('登录成功后重定向到主页', async ({ page }) => {
-    await page.goto('/login');
-
-    // 填写凭据。
-    await page.getByLabel(/用户名|username/i).fill(ADMIN_USERNAME);
-    await page.getByLabel(/密码|password/i).fill(ADMIN_PASSWORD);
-    await page.getByRole('button', { name: /登录|login|sign in/i }).click();
-
+    await login(page, credentials!.username, credentials!.password);
     // 登录成功后不在 /login 页。
     await expect(page).not.toHaveURL(/\/login/);
   });
@@ -35,10 +35,13 @@ test.describe('AC-P0B-UI-001: 登录与 Token 生命周期', () => {
 
     await page.getByLabel(/用户名|username/i).fill('wrong-user');
     await page.getByLabel(/密码|password/i).fill('wrong-password');
-    await page.getByRole('button', { name: /登录|login|sign in/i }).click();
+    await loginButton(page).click();
 
     // 应显示错误提示且不泄露用户是否存在。
-    const errorText = await page.locator('.ant-message-error, .ant-alert-error, [role="alert"]').textContent();
+    const errorText = await page
+      .locator('.ant-message-error, .ant-alert-error, [role="alert"]')
+      .first()
+      .textContent();
     expect(errorText).toBeTruthy();
     // 不应暴露 "user not found" 等存在性信息。
     expect(errorText?.toLowerCase()).not.toContain('user not found');
@@ -46,23 +49,11 @@ test.describe('AC-P0B-UI-001: 登录与 Token 生命周期', () => {
   });
 
   test('登出后 Token 被清除并重定向到登录页', async ({ page }) => {
-    // 先登录。
-    await page.goto('/login');
-    await page.getByLabel(/用户名|username/i).fill(ADMIN_USERNAME);
-    await page.getByLabel(/密码|password/i).fill(ADMIN_PASSWORD);
-    await page.getByRole('button', { name: /登录|login|sign in/i }).click();
-    await expect(page).not.toHaveURL(/\/login/);
+    await login(page, credentials!.username, credentials!.password);
 
-    // 点击登出（通常在用户菜单下拉中）。
-    const logoutTrigger = page.getByText(/登出|logout|sign out|退出/i).first();
-    if (await logoutTrigger.isVisible()) {
-      await logoutTrigger.click();
-    } else {
-      // 可能需要先点击头像/用户名打开下拉菜单。
-      const userMenu = page.locator('.ant-dropdown-trigger, [data-testid="user-menu"]').first();
-      await userMenu.click();
-      await page.getByText(/登出|logout|sign out|退出/i).first().click();
-    }
+    // 顶栏有两个 Dropdown（语言切换器与用户菜单），登出入口只在后者。
+    await page.locator('.ant-layout-header .ant-dropdown-trigger').last().click();
+    await page.getByText(/登\s*出|log\s*out|sign\s*out|退出/i).first().click();
 
     // 登出后重定向到登录页。
     await expect(page).toHaveURL(/\/login/);

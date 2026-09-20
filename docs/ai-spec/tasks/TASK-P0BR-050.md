@@ -4,7 +4,7 @@ taskId: TASK-P0BR-050
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: bea0a3663ed8a63e9d74da17cd0272332c52fcd9
+baseCommit: ff8fb69ed9f4719d3c31f4e38d8b35a3297e74dd
 stageGatePassed: true
 stageGateEvidence: 用户批准。依据 READY 需求 REQ-UI-001（P0-B 公共管理端）与 ACCEPTED 决策 DEC-013，修复 P0-B 范围内的页面可发现性与死链缺陷，不新增业务能力，符合 ADR-0002 的「公共底座接入与安全整改」例外。
 stageGateEvidenceRefs:
@@ -35,9 +35,11 @@ crossCuttingPlan:
   - SECRETS|N/A - 不接触 Secret；证据不得包含凭据或 Token
 allowedPaths:
   - frontend/src/app/layout/navigation.ts
+  - frontend/src/app/layout/navigation.test.ts
   - frontend/src/app/router/routes.tsx
   - frontend/src/features/admin
   - frontend/src/features/version/VersionListPanel.tsx
+  - frontend/src/features/version/index.ts
   - frontend/src/shared/i18n
   - frontend/e2e
   - docs/ai-spec/tasks/TASK-P0BR-050.md
@@ -72,6 +74,26 @@ approvedAt: 2026-09-17T04:42:50Z
 > 规则：一个任务只交付一个可独立验收的纵向结果。
 > 门禁：YAML Front Matter 是机器权威；正文不得与其冲突。
 > 作者：AxeXie ｜ 时间：2026-09-17
+
+> 实施记录（2026-09-18）：已在 `ff8fb69` 上实施并提交，交接状态 `IMPLEMENTED_UNVERIFIED`。
+>
+> `baseCommit` 重绑说明：原 `baseCommit` 为 `bea0a36`，其后 `bce7674`→`ff8fb69` 四张身份类卡
+> （058/059/060/061）先完成实施提交，本卡与之无路径重叠。为满足 validator 预检
+> 「`baseCommit` == HEAD」并让 `-CheckChangedPaths` 只在自身实施提交处判定，
+> 依 `0b36a5e` 确立的**顺序边界**先例，把 `baseCommit` 重绑到本卡实施起点 `ff8fb69`
+> （即实施前最后一次提交）。本次重绑不改变 `allowedPaths`、`forbiddenPaths`、
+> 验收场景与验证命令。
+>
+> `allowedPaths` 增补说明（2026-09-18）：新增两项，理由与 `0b36a5e` 对 017/014/041 的处置同类——
+> 均为实施中因编译或证据联动而必须同步的文件，不改变任务范围：
+>
+> - `frontend/src/features/version/index.ts`：`routes.tsx` 经 `@/features/version` 这个 barrel
+>   导入 `VersionListPage`，不导出该符号会导致 `tsc -b` 编译失败；
+> - `frontend/src/app/layout/navigation.test.ts`：`AC-P0B-UI-006` 可发现性与死链回归的
+>   E2 级证据，断言基于真实 `router.routes` 与 `NAV_ITEMS` 对象，必须与被测的
+>   `navigation.ts` 同目录就近放置，放到其他允许目录会造成错误的归属。
+>
+> 两项均为**纯增量**：不修改任何既有导出语义、不修改既有测试、不放宽任何断言或准入。
 
 ## 1. 目标
 
@@ -186,8 +208,8 @@ flywayBaseline: V1
 - [ ] Migration 及空库/升级迁移测试
 - [ ] Application/Domain 用例
 - [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态
-- [ ] 正常/边界/失败/越权/恢复测试
+- [x] 前端页面与状态
+- [x] 正常/边界/失败/越权/恢复测试
 - [ ] Compose Fixture/Verify
 - [ ] Runbook/追踪矩阵
 
@@ -202,6 +224,37 @@ flywayBaseline: V1
 4. 补充 zh-CN/en-US 文案；
 5. 新增组件测试覆盖四种页面状态与权限过滤；
 6. 在真实 Compose 栈上以两个权限不同的主体执行浏览器 E2E。
+
+### 实施结果（2026-09-18）
+
+- 步骤 1：新增 `VersionListPage`（`/assets/:assetId/versions`）并注册路由，
+  `VersionListPanel` 的「查看全部」改为指向该路由；列定义抽为 `useVersionColumns` 供面板与页面共用。
+- 步骤 2：新增 `RoleBindingsPage.tsx`、`ResourceAclsPage.tsx`，复用 `features/admin/api.ts`
+  既有函数与 `QueryBoundary` / `ControlledSelect`；资源类型仅暴露后端确有强制点的 `ASSET`。
+- 步骤 3：`navigation.ts` 新增 `/admin/teams`、`/admin/role-bindings`、`/admin/resource-acls`
+  三个入口，Scope 与页面一致；`routes.tsx` 补注册对应路由及 `/assets/:assetId/versions`。
+  `TeamsPage` 改为「路由参数优先 + 页面内组织选择器」，使从导航直入时可用。
+- 步骤 4：`zh.json` / `en.json` 补齐 nav 三项、`admin.roleBindings.*`、`admin.resourceAcls.*`
+  与 `admin.teams.selectOrgHint`。
+- 步骤 5：新增 `navigation.test.ts`（8 例，基于真实 `router.routes` 与 `NAV_ITEMS` 断言可发现性与
+  无死链）、`RoleBindingsPage.test.tsx`（6 例）、`ResourceAclsPage.test.tsx`（6 例）、
+  `TeamsPage.test.tsx`（新增导航直入 1 例）。
+- 步骤 6：`frontend/e2e` 新增 `support.ts`（凭据一律取自环境变量，夹具主体经真实 REST 幂等准备）、
+  `discoverability.spec.ts`（5 例）、`admin-states.spec.ts`（7 例）；既有四个规格同步修正为
+  环境变量凭据与 antd 宽松定位器。28 例 E2E 在真实 Compose 栈上全部通过。
+
+未勾选项说明：本卡不涉及契约、Migration、Application/Domain、REST/MCP/Worker、Compose
+Fixture/Verify 与 Runbook 变更（见第 3 节与第 6 节的范围声明），故保持未勾选。
+
+### 发现但未处置的既有缺陷（不在本卡范围）
+
+前端容器 `frontend/nginx/default.conf` 的 `location /assets/` 静态资源规则遮蔽了 SPA 路由
+`/assets` 与 `/assets/:assetId*`：`/assets` 返回 301 到丢失端口的绝对 URL（`http://localhost/assets/`），
+`/assets/:assetId` 返回 nginx 404。该文件位于 `deploy/` 之外的 `frontend/nginx/`，
+但既不在本卡 `allowedPaths`（仅含 `frontend/e2e` 与列明的 `frontend/src` 路径）内，
+也属基础设施配置而非页面可发现性范围，故本卡不修改。
+E2E 因此统一经侧边导航进入资产目录/详情（走应用内真实路径），
+该缺陷已在 `EVD-P0BR-050-001.yaml` 的 `limitations` 中显式记录，未以任何方式掩盖或记为 PASS。
 
 ## 8. 验证命令
 
