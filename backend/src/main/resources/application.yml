@@ -108,6 +108,19 @@ aihub:
     secret-key: ${AIHUB_MINIO_SECRET_KEY:minioadmin}
     secure: ${AIHUB_MINIO_SECURE:false}
     external-endpoint: ${AIHUB_MINIO_EXTERNAL_ENDPOINT:}
+  # 可靠任务 Worker 配置。默认值保持既有生产语义；缩短租约仅用于本地/验收的租约恢复取证。
+  job:
+    worker:
+      # Worker 调度开关（默认开启）。
+      enabled: ${AIHUB_JOB_WORKER_ENABLED:true}
+      # 每次 tick 的调度间隔（秒）。
+      interval-seconds: ${AIHUB_JOB_WORKER_INTERVAL_SECONDS:5}
+      # 任务租约时长（秒）。必须显著大于单次 Handler 的最大执行时间，否则任务会被重复领取。
+      lease-seconds: ${AIHUB_JOB_LEASE_SECONDS:60}
+    backoff:
+      # 指数退避基数与上限（毫秒）。
+      base-millis: ${AIHUB_JOB_BACKOFF_BASE_MILLIS:2000}
+      cap-millis: ${AIHUB_JOB_BACKOFF_CAP_MILLIS:300000}
 
 ---
 #
@@ -156,3 +169,9 @@ spring:
   flyway:
     enabled: true
     clean-disabled: true
+# 集成测试直接驱动仓储与应用服务，不让后台 Worker 并发领取任务，
+# 避免用例之间互相抢走对方刚写入的行。
+aihub:
+  job:
+    worker:
+      enabled: false

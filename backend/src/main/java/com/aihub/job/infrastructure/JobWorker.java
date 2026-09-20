@@ -9,11 +9,13 @@ import com.aihub.job.application.BackoffCalculator;
 import com.aihub.job.application.JobNotificationPort;
 import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobAttempt;
+import com.aihub.job.domain.JobAttemptRepository;
+import com.aihub.job.domain.JobClaim;
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
 import com.aihub.job.domain.JobRepository;
-import com.aihub.job.domain.JobAttemptRepository;
 import com.aihub.shared.error.PlatformException;
+import com.aihub.shared.logging.SensitiveDataMasker;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
@@ -23,19 +25,35 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.stereotype.Component;
 
 /**
  * 可靠任务 Worker。
  *
  * <p>每次 {@link #tick()} 领取一个待执行任务（FOR UPDATE SKIP LOCKED），调用幂等 Handler；
- * 成功置 SUCCEEDED；失败按指数退避+抖动置 RETRY_WAIT，超 max_attempts 置 DEAD 并触发 JOB_DEAD 通知。
- * 全链路透传 traceId/principalId/assetId。tick 内部捕获所有异常，绝不向外抛出导致调度中断。
+ * 成功置 SUCCEEDED；失败时按 {@link com.aihub.shared.error.ErrorCode#retryable()} 区分：可重试错误
+ * 按指数退避+抖动置 RETRY_WAIT，不可重试错误或已达 max_attempts 置 DEAD 并触发 JOB_DEAD 通知。
+ * 全链路透传 traceId/principalId/assetId。
+ *
+ * <p><b>异常边界</b>：{@link #tick()} 捕获自身全部异常（含领取与落库失败）。调度器以
+ * {@code scheduleAtFixedRate} 驱动本方法，若异常逸出，{@code ScheduledThreadPoolExecutor} 会静默
+ * 取消该周期任务且无 error handler，Worker 将永久停摆；因此这里绝不允许异常逸出。
+ *
+ * <p><b>租约恢复</b>：若领取前该行处于 RUNNING，说明上一个持有者未正常结束（进程被强制终止或
+ * 租约超时），本次为租约恢复。此时为被终止的那次尝试补写 attempt 记录（错误码
+ * {@code JOB_LEASE_EXPIRED}），使该事实可观测。
+ *
+ * <p>本类不作为组件被扫描，由 {@link JobConfiguration} 显式装配。
  */
-@Component
 public class JobWorker {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobWorker.class);
+
+    /** 被强制终止的尝试所使用的错误码（不新增 ErrorCode 枚举项）。 */
+    static final String LEASE_EXPIRED_ERROR_CODE = "JOB_LEASE_EXPIRED";
+    /** 未注册 Handler 时的错误码。 */
+    static final String HANDLER_NOT_FOUND_ERROR_CODE = "JOB_HANDLER_NOT_FOUND";
+    /** 无法归类异常时使用的错误码。 */
+    static final String INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
 
     private final JobRepository jobRepository;
     private final JobAttemptRepository jobAttemptRepository;
@@ -43,6 +61,8 @@ public class JobWorker {
     private final BackoffCalculator backoff;
     private final ObjectProvider<JobNotificationPort> notificationPortProvider;
     private final Clock clock;
+    private final SensitiveDataMasker masker;
+    private final long leaseSeconds;
     private final String workerId;
     private final Counter jobsClaimed;
     private final Counter jobsSucceeded;
@@ -55,13 +75,17 @@ public class JobWorker {
                      BackoffCalculator backoff,
                      ObjectProvider<JobNotificationPort> notificationPortProvider,
                      Clock clock,
-                     ObjectProvider<MeterRegistry> meterRegistryProvider) {
+                     ObjectProvider<MeterRegistry> meterRegistryProvider,
+                     SensitiveDataMasker masker,
+                     long leaseSeconds) {
         this.jobRepository = jobRepository;
         this.jobAttemptRepository = jobAttemptRepository;
         this.handlerRegistry = handlerRegistry;
         this.backoff = backoff;
         this.notificationPortProvider = notificationPortProvider;
         this.clock = clock;
+        this.masker = masker;
+        this.leaseSeconds = leaseSeconds;
         this.workerId = "worker-" + Integer.toHexString((int) ProcessHandle.current().pid());
         MeterRegistry registry = meterRegistryProvider.getIfAvailable();
         if (registry != null) {
@@ -78,20 +102,36 @@ public class JobWorker {
     }
 
     /**
-     * 领取并执行一个任务。无任务时直接返回。
+     * 领取并执行一个任务。无任务时直接返回。本方法不向外抛出异常，保证调度周期不被取消。
      */
     public void tick() {
+        try {
+            executeOnce();
+        } catch (Exception ex) {
+            // 领取或落库失败（如数据库瞬时不可用）不得取消调度任务；下一 tick 自愈重试。
+            LOG.error("job worker tick failed; scheduling continues", ex);
+        }
+    }
+
+    private void executeOnce() {
         Instant now = clock.instant();
-        Optional<Job> claimed = jobRepository.claimNext(workerId, now, 60);
+        Optional<JobClaim> claimed = jobRepository.claimNext(workerId, now, leaseSeconds);
         if (claimed.isEmpty()) {
             return;
         }
-        Job job = claimed.get();
+        JobClaim claim = claimed.get();
+        Job job = claim.job();
         jobsClaimed.increment();
-        int attemptNo = job.attempts() + 1;
+
+        // attempts 已在领取时递增，故当前尝试序号即 jobs.attempts()。
+        int attemptNo = job.attempts();
         Instant startedAt = now;
         JobContext context = new JobContext(job.jobId(), job.type(), job.payload(), job.attempts(),
                 job.principalId(), job.traceId(), job.assetId());
+
+        if (claim.recoveredFromAbandonedLease()) {
+            recordAbandonedAttempt(job, claim.previousUpdatedAt());
+        }
 
         Optional<JobHandler> handler = handlerRegistry.resolve(job.type());
         if (handler.isEmpty()) {
@@ -103,8 +143,9 @@ public class JobWorker {
             handler.get().handle(context);
             Instant endedAt = clock.instant();
             jobRepository.markSucceeded(job.jobId(), endedAt);
-            jobAttemptRepository.insert(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
-                    "SUCCESS", null, null, Duration.between(startedAt, endedAt).toMillis()));
+            recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
+                    "SUCCESS", null, null, Duration.between(startedAt, endedAt).toMillis(),
+                    job.traceId()));
             jobsSucceeded.increment();
             LOG.info("job succeeded jobId={} type={} attempt={}", job.jobId(), job.type(), attemptNo);
         } catch (Exception ex) {
@@ -112,55 +153,114 @@ public class JobWorker {
         }
     }
 
+    /**
+     * 为被强制终止的上一次尝试补写记录。
+     *
+     * <p>被终止的进程不会留下 attempt 行；恢复方以 {@link #LEASE_EXPIRED_ERROR_CODE} 明确标注，
+     * 使「领取后被终止」可查询。{@code abandonedAt} 取领取前该行的 {@code updated_at}
+     * （即上一次领取的时刻），因为 {@code job_attempt.started_at} 是 NOT NULL，
+     * 无法用 null 表达「未知开始时间」。若该序号已有记录
+     * （例如持有者已写入失败行但未及更新状态），则保留既有记录，不覆盖、不冲突。
+     */
+    private void recordAbandonedAttempt(Job job, Instant abandonedAt) {
+        int abandonedAttemptNo = job.attempts() - 1;
+        if (abandonedAttemptNo < 1) {
+            return;
+        }
+        recordAttempt(new JobAttempt(null, job.jobId(), abandonedAttemptNo,
+                abandonedAt == null ? job.updatedAt() : abandonedAt, job.updatedAt(),
+                "FAILED", "previous holder was terminated before completing the attempt",
+                LEASE_EXPIRED_ERROR_CODE, null, job.traceId()));
+        LOG.warn("job lease expired; abandoned attempt recorded jobId={} attempt={}",
+                job.jobId(), abandonedAttemptNo);
+    }
+
     private void handleNoHandler(Job job, int attemptNo, Instant startedAt) {
         Instant endedAt = clock.instant();
-        String errorCode = "JOB_HANDLER_NOT_FOUND";
-        jobRepository.markDead(job.jobId(), errorCode, endedAt);
-        jobAttemptRepository.insert(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
-                "DEAD", "no handler registered for type " + job.type(), errorCode,
-                Duration.between(startedAt, endedAt).toMillis()));
+        jobRepository.markDead(job.jobId(), HANDLER_NOT_FOUND_ERROR_CODE, endedAt);
+        recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
+                "DEAD", "no handler registered for type " + job.type(), HANDLER_NOT_FOUND_ERROR_CODE,
+                Duration.between(startedAt, endedAt).toMillis(), job.traceId()));
         jobsDead.increment();
-        notifyJobDead(job, attemptNo, errorCode);
+        notifyJobDead(job, attemptNo, HANDLER_NOT_FOUND_ERROR_CODE);
         LOG.warn("job dead (no handler) jobId={} type={}", job.jobId(), job.type());
     }
 
     private void handleFailure(Job job, int attemptNo, Instant startedAt, Exception ex) {
         Instant endedAt = clock.instant();
         long durationMs = Duration.between(startedAt, endedAt).toMillis();
-        String errorCode = ex instanceof PlatformException pe ? pe.errorCode().name() : "INTERNAL_ERROR";
+        String errorCode = resolveErrorCode(ex);
         String message = maskMessage(ex.getMessage());
-        int newAttempts = attemptNo;
-        if (newAttempts >= job.maxAttempts()) {
+
+        if (isTerminalFailure(ex, attemptNo, job.maxAttempts())) {
             jobRepository.markDead(job.jobId(), errorCode, endedAt);
-            jobAttemptRepository.insert(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
-                    "DEAD", message, errorCode, durationMs));
+            recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
+                    "DEAD", message, errorCode, durationMs, job.traceId()));
             jobsDead.increment();
-            notifyJobDead(job, newAttempts, errorCode);
-            LOG.warn("job dead jobId={} type={} attempts={} error={}", job.jobId(), job.type(), newAttempts, errorCode);
+            notifyJobDead(job, attemptNo, errorCode);
+            LOG.warn("job dead jobId={} type={} attempts={} error={}",
+                    job.jobId(), job.type(), attemptNo, errorCode);
         } else {
-            Instant nextRunAt = backoff.nextRunAt(newAttempts, endedAt);
-            jobRepository.markRetryWait(job.jobId(), newAttempts, nextRunAt, endedAt);
-            jobAttemptRepository.insert(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
-                    "FAILED", message, errorCode, durationMs));
+            Instant nextRunAt = backoff.nextRunAt(attemptNo, endedAt);
+            jobRepository.markRetryWait(job.jobId(), nextRunAt, endedAt);
+            recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
+                    "FAILED", message, errorCode, durationMs, job.traceId()));
             jobsFailed.increment();
             LOG.info("job retry_wait jobId={} type={} attempts={} nextRunAt={} error={}",
-                    job.jobId(), job.type(), newAttempts, nextRunAt, errorCode);
+                    job.jobId(), job.type(), attemptNo, nextRunAt, errorCode);
         }
     }
 
-    private void notifyJobDead(Job job, int retryCount, String errorCode) {
+    /**
+     * 判定本次失败是否为终态（DEAD）。
+     *
+     * <p>不可重试错误立即终止，不再消耗剩余重试预算（{@code INV-JOB-006}）；可重试错误在达到
+     * max_attempts 时终止。非 {@link PlatformException} 的异常无法归类，按可重试处理，
+     * 以免把瞬时故障误判为终态。
+     */
+    private static boolean isTerminalFailure(Exception ex, int attemptNo, int maxAttempts) {
+        if (ex instanceof PlatformException pe && !pe.errorCode().retryable()) {
+            return true;
+        }
+        return attemptNo >= maxAttempts;
+    }
+
+    private static String resolveErrorCode(Exception ex) {
+        return ex instanceof PlatformException pe ? pe.errorCode().name() : INTERNAL_ERROR_CODE;
+    }
+
+    /**
+     * 写入一条 attempt 记录；若该序号已有记录则跳过。
+     *
+     * <p>唯一约束 {@code uq_job_attempt_job_no} 是真正的门禁；此处的探测避免把「人工重试后
+     * 复用已耗尽的尝试序号」这类可预期情形升级为异常（该语义由 TASK-P0BR-024 明确定义）。
+     */
+    private void recordAttempt(JobAttempt attempt) {
+        if (attempt.attemptNo() >= 1 && jobAttemptRepository.exists(attempt.jobId(), attempt.attemptNo())) {
+            LOG.warn("attempt record already exists; skipped jobId={} attempt={}",
+                    attempt.jobId(), attempt.attemptNo());
+            return;
+        }
+        jobAttemptRepository.insert(attempt);
+    }
+
+    private void notifyJobDead(Job job, int attemptNo, String errorCode) {
         JobNotificationPort port = notificationPortProvider.getIfAvailable();
         if (port != null) {
-            port.notifyJobDead(job.jobId(), job.type(), retryCount, errorCode, job.principalId());
+            port.notifyJobDead(job.jobId(), job.type(), attemptNo, errorCode, job.principalId());
         }
     }
 
-    private static String maskMessage(String message) {
+    /**
+     * 错误摘要脱敏：截断到列宽上限，并经共享 {@link SensitiveDataMasker} 清除
+     * Bearer/JWT/预签名串等敏感片段，避免凭据随错误信息进入 {@code job_attempt.error_message}。
+     */
+    private String maskMessage(String message) {
         if (message == null) {
             return null;
         }
-        // 错误信息可能含敏感片段，截断并仅保留概要，避免泄露密钥/凭据。
-        return message.length() > 1000 ? message.substring(0, 1000) : message;
+        String masked = masker.maskValue(message);
+        return masked.length() > 1000 ? masked.substring(0, 1000) : masked;
     }
 
     /** 空计数器兜底（无 Micrometer 时，如单元测试）。 */

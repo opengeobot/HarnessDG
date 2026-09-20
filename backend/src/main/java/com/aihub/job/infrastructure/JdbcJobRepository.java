@@ -6,6 +6,7 @@
 package com.aihub.job.infrastructure;
 
 import com.aihub.job.domain.Job;
+import com.aihub.job.domain.JobClaim;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobStatus;
 import java.sql.ResultSet;
@@ -107,22 +108,40 @@ public class JdbcJobRepository implements JobRepository {
     }
 
     @Override
-    public Optional<Job> claimNext(String workerId, Instant now, long leaseSeconds) {
+    public Optional<JobClaim> claimNext(String workerId, Instant now, long leaseSeconds) {
         Instant leasedUntil = now.plusSeconds(leaseSeconds);
-        List<Job> rows = jdbcTemplate.query("""
-                UPDATE job_task
-                SET status = 'RUNNING', leased_by = ?, leased_until = ?, updated_at = ?, row_version = row_version + 1
-                WHERE id = (
-                    SELECT id FROM job_task
+        // attempts 在领取时递增（上限为 max_attempts），使 attempt 序号与「已开始的尝试次数」一致，
+        // 从而在租约恢复后不再复用同一个 attempt_no（INV-JOB-005）。
+        // RETURNING 读回的是更新后的行，因此用 CTE 在更新前捕获状态与尝试次数，随结果一并返回，
+        // 使调用方能区分「首次执行」与「租约恢复」（INV-JOB-005 / INV-JOB-007）。
+        List<JobClaim> rows = jdbcTemplate.query("""
+                WITH candidate AS (
+                    SELECT id, status, attempts, max_attempts, updated_at FROM job_task
                     WHERE (status IN ('PENDING','RETRY_WAIT') AND next_run_at <= ?)
                        OR (status = 'RUNNING' AND leased_until < ?)
                     ORDER BY next_run_at
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
+                ), previous AS (
+                    SELECT id, status AS previous_status, attempts AS previous_attempts,
+                           updated_at AS previous_updated_at
+                    FROM candidate
                 )
-                RETURNING *
-                """, JOB_MAPPER, workerId, Timestamp.from(leasedUntil), Timestamp.from(now),
-                Timestamp.from(now), Timestamp.from(now));
+                UPDATE job_task
+                SET status = 'RUNNING', leased_by = ?, leased_until = ?, updated_at = ?,
+                    attempts = CASE WHEN attempts < max_attempts THEN attempts + 1 ELSE attempts END,
+                    row_version = row_version + 1
+                WHERE id = (SELECT id FROM candidate)
+                RETURNING *, (SELECT previous_status FROM previous) AS previous_status,
+                          (SELECT previous_attempts FROM previous) AS previous_attempts,
+                          (SELECT previous_updated_at FROM previous) AS previous_updated_at
+                """, (rs, rowNum) -> new JobClaim(
+                        mapJob(rs),
+                        JobStatus.valueOf(rs.getString("previous_status")),
+                        rs.getInt("previous_attempts"),
+                        getInstant(rs, "previous_updated_at")),
+                Timestamp.from(now), Timestamp.from(now), workerId, Timestamp.from(leasedUntil),
+                Timestamp.from(now));
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
@@ -135,12 +154,14 @@ public class JdbcJobRepository implements JobRepository {
     }
 
     @Override
-    public void markRetryWait(String jobId, int attempts, Instant nextRunAt, Instant now) {
+    public void markRetryWait(String jobId, Instant nextRunAt, Instant now) {
+        // 不修改 attempts：尝试次数已在领取时递增，失败路径重复计数会与
+        // uq_job_attempt_job_no 唯一约束冲突，并破坏 attempt 单调语义。
         jdbcTemplate.update(
-                "UPDATE job_task SET status = 'RETRY_WAIT', attempts = ?, next_run_at = ?, "
+                "UPDATE job_task SET status = 'RETRY_WAIT', next_run_at = ?, "
                         + "leased_until = NULL, leased_by = NULL, updated_at = ?, row_version = row_version + 1 "
                         + "WHERE job_id = ?",
-                attempts, Timestamp.from(nextRunAt), Timestamp.from(now), jobId);
+                Timestamp.from(nextRunAt), Timestamp.from(now), jobId);
     }
 
     @Override

@@ -27,11 +27,20 @@ public class JdbcJobAttemptRepository implements JobAttemptRepository {
     public void insert(JobAttempt attempt) {
         jdbcTemplate.update("""
                 INSERT INTO job_attempt (job_id, attempt_no, started_at, ended_at, status,
-                    error_message, error_code, duration_ms)
-                VALUES (?,?,?,?,?,?,?,?)
+                    error_message, error_code, duration_ms, trace_id)
+                VALUES (?,?,?,?,?,?,?,?,?)
                 """,
                 attempt.jobId(), attempt.attemptNo(), Timestamp.from(attempt.startedAt()),
                 attempt.endedAt() == null ? null : Timestamp.from(attempt.endedAt()),
-                attempt.status(), attempt.errorMessage(), attempt.errorCode(), attempt.durationMs());
+                attempt.status(), attempt.errorMessage(), attempt.errorCode(), attempt.durationMs(),
+                attempt.traceId());
+    }
+
+    @Override
+    public boolean exists(String jobId, int attemptNo) {
+        Boolean found = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM job_attempt WHERE job_id = ? AND attempt_no = ?)",
+                Boolean.class, jobId, attemptNo);
+        return Boolean.TRUE.equals(found);
     }
 }

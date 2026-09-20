@@ -15,6 +15,9 @@ import java.util.Optional;
  * <p>领取采用 {@code FOR UPDATE SKIP LOCKED}，保证多 Worker 并发不重复领取；
  * 租约到期（{@code leased_until < now} 且仍 RUNNING）可重新领取（租约恢复）。
  * 领域端口不感知 SQL/MyBatis，由基础设施层提供 JDBC 实现。
+ *
+ * <p>尝试次数语义：{@code attempts} 表示<b>已开始的尝试次数</b>。领取新尝试时递增，
+ * 因此同一任务内 attempt 序号严格递增且不超过 {@code max_attempts}（{@code INV-JOB-005}）。
  */
 public interface JobRepository {
 
@@ -37,20 +40,26 @@ public interface JobRepository {
 
     /**
      * 领取一个待执行任务（PENDING/RETRY_WAIT 且 next_run_at<=now，或租约到期的 RUNNING）。
-     * 以 FOR UPDATE SKIP LOCKED 加锁并置为 RUNNING，设置租约与领取者。
+     * 以 FOR UPDATE SKIP LOCKED 加锁并置为 RUNNING，设置租约与领取者，并把 {@code attempts}
+     * 递增到本次尝试序号（余额耗尽时保持不变，由调用方判定 DEAD）。
      *
      * @param workerId    Worker 实例标识
      * @param now         当前时间
      * @param leaseSeconds 租约时长（秒）
-     * @return 领取到的任务，无任务时为空
+     * @return 领取到的任务及领取前状态，无任务时为空
      */
-    Optional<Job> claimNext(String workerId, Instant now, long leaseSeconds);
+    Optional<JobClaim> claimNext(String workerId, Instant now, long leaseSeconds);
 
     /** 标记任务成功（SUCCEEDED）。 */
     void markSucceeded(String jobId, Instant now);
 
-    /** 标记任务进入退避等待（RETRY_WAIT），更新 attempts 与 next_run_at。 */
-    void markRetryWait(String jobId, int attempts, Instant nextRunAt, Instant now);
+    /**
+     * 标记任务进入退避等待（RETRY_WAIT），更新 next_run_at。
+     *
+     * <p>不修改 {@code attempts}：尝试次数已在领取时递增，失败路径不得重复计数，
+     * 否则租约恢复后会与唯一约束冲突。
+     */
+    void markRetryWait(String jobId, Instant nextRunAt, Instant now);
 
     /** 标记任务放弃（DEAD），记录错误码。 */
     void markDead(String jobId, String errorCode, Instant now);

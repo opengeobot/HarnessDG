@@ -4,7 +4,7 @@ taskId: TASK-P0BR-023
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 8ed02ef7e2664b09d878c69f09506027696a764b
+baseCommit: 9823c10afc8f2e665742747deec7f7f4fcaa775c
 stageGatePassed: true
 stageGateEvidence: 用户批准方向。依据 READY 需求 REQ-JOB-001（PostgreSQL 可靠任务）与 ACCEPTED 决策 DEC-003（P0-B 必须逐项重验）、DEC-013（Compose 为功能验收环境），补齐可靠任务的崩溃恢复与重试正确性；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
 stageGateEvidenceRefs:

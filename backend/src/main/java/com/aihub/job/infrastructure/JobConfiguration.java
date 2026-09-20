@@ -6,12 +6,17 @@
 package com.aihub.job.infrastructure;
 
 import com.aihub.job.application.BackoffCalculator;
+import com.aihub.job.application.JobNotificationPort;
+import com.aihub.job.domain.JobAttemptRepository;
 import com.aihub.job.domain.JobRepository;
+import com.aihub.shared.logging.SensitiveDataMasker;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.ScheduledFuture;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
@@ -30,11 +35,13 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 public class JobConfiguration {
 
     /**
-     * @return 指数退避计算器（base 2s，上限 5min）
+     * @return 指数退避计算器（base/cap 由受控配置提供，默认 2s / 5min）
      */
     @Bean
-    public BackoffCalculator backoffCalculator() {
-        return new BackoffCalculator(2000L, 300_000L);
+    public BackoffCalculator backoffCalculator(
+            @Value("${aihub.job.backoff.base-millis:2000}") long baseMillis,
+            @Value("${aihub.job.backoff.cap-millis:300000}") long capMillis) {
+        return new BackoffCalculator(baseMillis, capMillis);
     }
 
     /**
@@ -61,32 +68,58 @@ public class JobConfiguration {
     }
 
     /**
+     * Worker：领取、执行、退避重试与租约恢复。
+     *
+     * <p>显式装配而非组件扫描：需要注入租约时长与脱敏器等受控配置。
+     */
+    @Bean
+    public JobWorker jobWorker(JobRepository jobRepository,
+                               JobAttemptRepository jobAttemptRepository,
+                               JobHandlerRegistry handlerRegistry,
+                               BackoffCalculator backoff,
+                               ObjectProvider<JobNotificationPort> notificationPortProvider,
+                               Clock clock,
+                               ObjectProvider<MeterRegistry> meterRegistryProvider,
+                               SensitiveDataMasker sensitiveDataMasker,
+                               @Value("${aihub.job.worker.lease-seconds:60}") long leaseSeconds) {
+        return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
+                notificationPortProvider, clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds);
+    }
+
+    /**
      * Worker 调度器：以受管 schedulerExecutor 定时驱动 {@link JobWorker#tick()}。
      */
     @Bean
     @ConditionalOnProperty(name = "aihub.job.worker.enabled", havingValue = "true", matchIfMissing = true)
-    public JobWorkerScheduler jobWorkerScheduler(JobWorker jobWorker,
-                                                  ThreadPoolTaskScheduler schedulerExecutor) {
-        return new JobWorkerScheduler(jobWorker, schedulerExecutor);
+    public JobWorkerScheduler jobWorkerScheduler(
+            JobWorker jobWorker,
+            ThreadPoolTaskScheduler schedulerExecutor,
+            @Value("${aihub.job.worker.interval-seconds:5}") long intervalSeconds) {
+        return new JobWorkerScheduler(jobWorker, schedulerExecutor, Duration.ofSeconds(intervalSeconds));
     }
 
     /**
      * Worker 调度器实现。应用就绪后以固定速率调度 tick；销毁时取消调度。
+     *
+     * <p>{@link JobWorker#tick()} 自身已捕获全部异常，异常不会逸出到调度器；此处不再依赖
+     * {@code ScheduledThreadPoolExecutor} 的默认行为，避免周期任务被静默取消后永久停摆。
      */
     public static class JobWorkerScheduler implements ApplicationListener<ApplicationReadyEvent> {
 
         private final JobWorker jobWorker;
         private final ThreadPoolTaskScheduler scheduler;
+        private final Duration interval;
         private ScheduledFuture<?> scheduledFuture;
 
-        JobWorkerScheduler(JobWorker jobWorker, ThreadPoolTaskScheduler scheduler) {
+        JobWorkerScheduler(JobWorker jobWorker, ThreadPoolTaskScheduler scheduler, Duration interval) {
             this.jobWorker = jobWorker;
             this.scheduler = scheduler;
+            this.interval = interval;
         }
 
         @Override
         public void onApplicationEvent(ApplicationReadyEvent event) {
-            scheduledFuture = scheduler.scheduleAtFixedRate(jobWorker::tick, Duration.ofSeconds(5));
+            scheduledFuture = scheduler.scheduleAtFixedRate(jobWorker::tick, interval);
         }
 
         public void stop() {
