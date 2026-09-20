@@ -5,6 +5,7 @@
  */
 package com.aihub.asset.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
@@ -43,9 +44,11 @@ import com.aihub.shared.security.TokenType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Configuration;
@@ -143,6 +146,46 @@ class AssetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].assetId").value("ast_demo"))
                 .andExpect(jsonPath("$.data.items[0].tagIds[0]").value("tag_001"));
+    }
+
+    @Test
+    void getAssetFacetsBindsFullFilterSetIntoQuery() throws Exception {
+        given(assetService.getAssetFacets(any())).willReturn(
+                new com.aihub.asset.application.AssetFacetView(
+                        Map.of("DATASET", 2L), Map.of(), Map.of(), Map.of("PARQUET", 2L),
+                        Map.of("IMAGE", 2L), Map.of(), 2L));
+
+        ArgumentCaptor<com.aihub.asset.application.AssetSearchQuery> captor =
+                ArgumentCaptor.forClass(com.aihub.asset.application.AssetSearchQuery.class);
+
+        mockMvc.perform(get("/api/v1/assets/facets")
+                        .header(HttpHeaders.AUTHORIZATION, bearer())
+                        .param("type", "DATASET")
+                        .param("sensitivity", "INTERNAL")
+                        .param("tagId", "tag_001")
+                        .param("framework", "pytorch")
+                        .param("namespace", "vision"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalCount").value(2))
+                .andExpect(jsonPath("$.data.types.DATASET").value(2));
+
+        org.mockito.Mockito.verify(assetService).getAssetFacets(captor.capture());
+        com.aihub.asset.application.AssetSearchQuery captured = captor.getValue();
+        // 过滤位必须完整透传到应用层，而不是只保留 keyword/type（TASK-P0BR-049 回归点）。
+        assertThat(captured.type()).isEqualTo(AssetType.DATASET);
+        assertThat(captured.sensitivity()).isEqualTo("INTERNAL");
+        assertThat(captured.tagId()).isEqualTo("tag_001");
+        assertThat(captured.framework()).isEqualTo("pytorch");
+        assertThat(captured.namespace()).isEqualTo("vision");
+        // Facet 不使用分页，游标必须为空以免误用列表分页语义。
+        assertThat(captured.cursor()).isNull();
+    }
+
+    @Test
+    void getAssetFacetsRequiresAuthentication() throws Exception {
+        // 未认证访问 Facet 必须 fail closed 返回 401，不得匿名返回聚合计数。
+        mockMvc.perform(get("/api/v1/assets/facets"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -4,7 +4,7 @@ taskId: TASK-P0BR-049
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: bea0a3663ed8a63e9d74da17cd0272332c52fcd9
+baseCommit: 3b527e05890e004ed62d226ddfd1b16299d644f1
 stageGatePassed: true
 stageGateEvidence: 用户批准。依据 READY 需求 REQ-AUTH-002/REQ-TAX-001（P0-B 列表权限下推与字典）与 ACCEPTED 决策 DEC-008，修复 facet 忽略已传入 type 的正确性缺陷；本卡不新增业务能力，符合 ADR-0002 的「公共底座接入与安全整改」例外。用户明确选择「严格守门：先完成 P0-B 出口」，故 REQ-DST-TAX-001（P1）的 matchedFields/排序白名单/新 Facet 维度不在本卡范围。
 stageGateEvidenceRefs:
@@ -202,13 +202,13 @@ flywayBaseline: V1
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试
-- [ ] Migration 及空库/升级迁移测试
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
+- [x] 契约及契约测试
+- [ ] Migration 及空库/升级迁移测试（本卡无 Migration）
+- [x] Application/Domain 用例
+- [x] REST/MCP/Worker Adapter
+- [ ] 前端页面与状态（本卡不接线前端）
+- [x] 正常/边界/失败/越权/恢复测试
+- [ ] Compose Fixture/Verify（未改动 deploy 脚本；E4 以独立取证脚本执行）
 - [ ] Runbook/追踪矩阵
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
@@ -220,6 +220,57 @@ flywayBaseline: V1
 3. 扩展 `getAssetFacets` 签名与 `AssetController` 参数，使过滤条件完整下推；
 4. 新增回归测试：对每个过滤维度断言「Facet 计数 == 同条件 search 的可达总数」；
 5. 在真实 Compose 栈上以两个权限不同的主体验证授权隔离。
+
+## 7.1 实施结果（2026-09-20）
+
+1. **契约先行**：`contracts/openapi/aihub-v1.yaml` 的 `getAssetFacets` 补齐与 `searchAssets`
+   一致的受控过滤参数（keyword/type/namespace/organizationId/framework/task/format/modality/
+   tagId/owner/sensitivity），并在 description 声明「同维度多值 OR、跨维度 AND」与
+   「计数在数据库阶段完成授权/状态/敏感度过滤」。改动为纯增量（17 增 1 改，原有参数与响应结构未变）。
+2. **共享过滤下推**：`AssetSearchDao` 抽出 `appendFieldFilters(sql, params, criteria)`，
+   `search` 与 `facet` 均调用同一实现。修复前 `facet` 只下推 statuses/visibilities/keyword/
+   AccessScope，忽略 type/sensitivity/tagId/tagIds/分类维度与 owner；
+   修复后两处过滤语义由同一段代码保证，结构上不再可能漂移。
+3. **应用层**：`getAssetFacets(AssetSearchQuery)` 复用与 `searchAssets` 相同的
+   `visibleVisibilities`、状态集合与 `computeAccessScope`，不再丢弃过滤位；
+   `includeArchived` 语义与检索对齐。
+4. **REST 适配器**：`AssetController.getAssetFacets` 参数面扩展为与 `searchAssets` 一致，
+   经 `AssetRequestMapper.toSearchQuery` 构造查询（cursor=null，分页字段在 Facet 不生效）。
+5. **测试**：
+   - 新增 `AssetFacetConsistencyIT`（E3，Testcontainers 真实 PostgreSQL 17，9 项全通过）：
+     type/sensitivity/tagId/framework/format 五个维度分别断言
+     「Facet.totalCount == 同条件 search 可达总数」；跨维度 AND；未知受控值返回 0；
+     ARCHIVED 默认排除；两个权限不同主体的计数隔离；缺少 asset:read 时 fail closed。
+   - `AssetControllerTest` 新增 2 项（E2）：新参数完整透传到应用层（ArgumentCaptor）、匿名访问 401。
+6. **E4 取证**：在真实 Compose 栈经 Nginx 入口，以真实 REST 创建 2 个 MODEL + 1 个 DATASET
+   并经真实建仓 Saga 推进到 COMPLETED，验证六处「Facet 计数 == search 可达总数」全部成立；
+   并做了判别力对照（恢复修复前源码重建镜像后，同一脚本六处 MATCH 全部为 False）。
+   另：`verify.ps1` 的 V01–V11 与 V05b–V05j 共 19 步全部 PASS，无回归。
+
+**baseCommit 重绑说明**：本卡原 `baseCommit` 为 `bea0a36`（重绑三张 DRAFT 卡时的 HEAD）。
+TASK-P0BR-050 已于 `3b527e0` 提交，`bea0a36` 不再是 HEAD。按既有先例（`0b36a5e` 对
+017/014/041 的处置），在实施起点把 `baseCommit` 重绑到当前 HEAD `3b527e0`，
+使「允许路径比对」以本卡实施起点为边界；本卡未扩大 `allowedPaths`。
+
+## 7.2 发现但未处置的既有缺陷（不在本卡范围，需独立任务治理）
+
+以下三项均在变更前的 `3b527e0` 基线上以 `git stash` 暂存本卡全部改动后复现，非本卡引入；
+按第 9 节停止条件不擅自扩大 `allowedPaths`：
+
+1. **16 个既有 `@SpringBootTest` 集成测试无法定位 `@SpringBootConfiguration`**：
+   这些 IT 位于各自模块包（如 `com.aihub.asset`），Spring Boot 的向上搜索无法到达
+   `com.aihub.bootstrap.AihubApplication`，故在 Docker 可用时报
+   「Unable to find a @SpringBootConfiguration」错误（而非跳过）。
+   此前因 Docker/Testcontainers 不可达而表现为 Skipped，问题被掩盖。
+   本卡新增的 `AssetFacetConsistencyIT` 以 `@SpringBootTest(classes = AihubApplication.class)`
+   显式声明绕开该问题。
+2. **契约破坏检查命令不存在**：任务卡与 `.github/workflows/ci.yml` 声明的
+   `npx @redocly/cli diff ... --fail-on-breaking` 在 @redocly/cli 1.0.0 / 1.34.5 / latest
+   上均无 `diff` 子命令，即该 CI 步骤从未真正执行过破坏性变更拦截。
+3. **Testcontainers 与 Docker 29.x 的 API 版本协商失败**：docker-java 默认探测到
+   1.32/1.41，守护进程对这些版本返回 HTTP 400；需以 `-Dapi.version=1.44` 运行。
+   另需预拉取 `postgres:17-alpine` 与 `testcontainers/ryuk:0.11.0`，否则拉取超时导致 IT 跳过。
+
 
 ## 8. 验证命令
 

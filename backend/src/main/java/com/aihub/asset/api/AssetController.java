@@ -101,13 +101,27 @@ public class AssetController {
 
     /**
      * 查询资产 Facet 统计（按维度分组计数，经权限过滤）。
+     *
+     * <p>过滤参数与 {@link #searchAssets} 一致，使计数与同条件检索的可达总数对齐。
      */
     @GetMapping("/facets")
     public ApiResponse<AssetFacetView> getAssetFacets(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) AssetType type) {
-        return AssetApiContext.respond(
-                assetService.getAssetFacets(keyword, type, AssetApiContext.principalId()));
+            @RequestParam(required = false) AssetType type,
+            @RequestParam(required = false) String namespace,
+            @RequestParam(required = false) String organizationId,
+            @RequestParam(required = false) String framework,
+            @RequestParam(required = false) String task,
+            @RequestParam(required = false) String format,
+            @RequestParam(required = false) String modality,
+            @RequestParam(required = false) String tagId,
+            @RequestParam(required = false) String owner,
+            @RequestParam(required = false) String language,
+            @RequestParam(required = false) String sensitivity,
+            @RequestParam(required = false, defaultValue = "false") boolean includeArchived) {
+        return AssetApiContext.respond(assetService.getAssetFacets(AssetRequestMapper.toSearchQuery(
+                keyword, type, namespace, organizationId, framework, task, format, modality, tagId, owner,
+                language, sensitivity, includeArchived, null, 0, AssetApiContext.principalId())));
     }
 
     /**

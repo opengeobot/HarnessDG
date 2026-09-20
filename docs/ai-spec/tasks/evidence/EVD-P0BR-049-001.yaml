@@ -1,0 +1,216 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-049-001
+# 本卡 requiredEvidenceLevel 为 E3，已取得 E3（真实 PostgreSQL）并额外取得 E4（真实 Compose 栈）。
+# status 为 PASS：本卡 AC 已闭环，且以「缺陷前后对照」证明断言具备判别力。
+# 仍按规范交接为 IMPLEMENTED_UNVERIFIED：完成门禁还需验证责任方接受（review.accepted 仍为 false）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-049
+  requirements: [REQ-AUTH-002, REQ-TAX-001]
+  scenarios:
+    - AC-P0B-AUTH-003
+    - AC-DST-TAX-002
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-049.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-049.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-049.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 3b527e05890e004ed62d226ddfd1b16299d644f1
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/asset/api/AssetController.java
+    - backend/src/main/java/com/aihub/asset/application/AssetApplicationService.java
+    - backend/src/main/java/com/aihub/asset/infrastructure/AssetSearchDao.java
+    - backend/src/test/java/com/aihub/asset/AssetFacetConsistencyIT.java
+    - backend/src/test/java/com/aihub/asset/api/AssetControllerTest.java
+    - contracts/openapi/aihub-v1.yaml
+    - docs/ai-spec/tasks/TASK-P0BR-049.md
+
+environment:
+  observedAt: 2026-09-20T11:10:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  node: v20.19.2
+  docker: "29.1.2 (Docker Desktop, Linux engine)"
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, minio-init, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: docker.m.daocloud.io/library/postgres:17.2-alpine（Testcontainers 用 postgres:17-alpine）
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG
+  command: >-
+    cd backend; ./mvnw.cmd -Dapi.version=1.44 -Dtest=AssetFacetConsistencyIT test（9 项）；
+    cd backend; ./mvnw.cmd -Dapi.version=1.44 verify（488 项）；
+    docker compose -f deploy/compose/compose.yaml build backend;
+    docker compose -f deploy/compose/compose.yaml up -d --force-recreate backend;
+    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/evidence/facet-e4-049.ps1（E4）；
+    powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy/compose/scripts/verify.ps1；
+    npx --yes @redocly/cli lint --config contracts/openapi/redocly.yaml contracts/openapi/aihub-v1.yaml
+  startedAt: 2026-09-20T10:04:00+08:00
+  finishedAt: 2026-09-20T11:12:00+08:00
+  # exitCode=1 来自「后端全量 verify 的 4 项既存失败」这一组合命令；本卡自身的全部验证命令均为 0：
+  # AssetFacetConsistencyIT 9/9 通过、AssetControllerTest 通过、verify.ps1 19 步全 PASS、
+  # OpenAPI lint valid、validator 三连 PASS。4 项既存失败已在变更前基线复现（见 limitations），
+  # 按规范不记为 PASS，故此处如实记录组合退出码而非改写为 0。
+  exitCode: 1
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - PostgreSQL 17（Testcontainers 真实容器；Facet 与 search 计数一致性直连真实库）
+    - 真实组织/Team/主体（满足 asset.owner_team_id 外键与 INTERNAL 行级可见性前提）
+    - RepositoryProvisionJobHandler（真实建仓 Saga，使资产进入 provisioning_status=COMPLETED）
+  e4EntryPoint: Nginx/REST（http://localhost:8080）
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-TAX-002
+      assertion: >-
+        E3（AssetFacetConsistencyIT，9 项全通过）：对 type、sensitivity、tagId、framework、
+        format 五个过滤维度分别断言「Facet.totalCount == 同条件 search 的可达总数 == 期望值」，
+        并断言被过滤维度的桶计数等于该总数；type=DATASET 且 framework=PYTORCH 无交集时返回 0，
+        证明不同维度之间为 AND 而不是并集；未知 tagId 与未知 sensitivity 返回 0，
+        证明非法/未知受控值不回退全量；ARCHIVED 默认不进入计数、includeArchived=true 时计入，
+        且两种状态都与 search 一致。
+        E4（.trae/evidence/facet-e4-049.txt，真实 Compose 栈经 Nginx 入口）：
+        以真实 REST 创建 2 个 MODEL（PYTORCH/TENSORFLOW）+ 1 个 DATASET（PARQUET）并经真实建仓
+        Saga 推进到 COMPLETED 后——
+        type=MODEL facet.totalCount=2 / types[MODEL]=2 / search.items=2（MATCH=True）；
+        type=DATASET facet.totalCount=1 / types[DATASET]=1 / search.items=1（MATCH=True）；
+        未过滤时 totalCount=3 且 types buckets = {"DATASET":1,"MODEL":2}；
+        跨维度 AND（type=DATASET&framework=PYTORCH）=0；
+        未知 tagId=0；匿名访问 401。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-TAX-002
+      assertion: >-
+        判别力反向对照（同一 E4 脚本、同一夹具，仅把三处源码恢复到修复前状态并重建镜像）：
+        缺陷存在时 facet 忽略全部过滤位——type=MODEL 与 type=DATASET 的 totalCount 均为 3
+        （等于全量）、sensitivity=INTERNAL 返回 3 而 search 返回 0、未知 tagId 返回 3、
+        跨维度 AND 返回 3，六处 MATCH 全部为 False。
+        该对照证明上述断言确实能判别本卡的缺陷，而不是恒真。
+        对照原始输出：.trae/evidence/facet-e4-049-BASELINE.txt。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-AUTH-003
+      assertion: >-
+        E3（AssetFacetConsistencyIT#facetCountsAreIsolatedPerPrincipal）：同一命名空间下创建
+        1 个 PUBLIC + 1 个同组织 INTERNAL 资产后——
+        组织成员主体（具备 asset:read/manage 但**不含** authorization:manage，即非平台管理员，
+        可见性经真实组织成员关系与行级 INTERNAL 过滤得出）看到 totalCount=2、frameworks[PYTORCH]=2；
+        非组织成员主体（无组织/项目/ACL/Team 作用域）看到 totalCount=1 且与同条件 search 的
+        items 数一致，INTERNAL 资产不进入任何维度计数（types[MODEL]=1、frameworks[PYTORCH]=1）。
+        Facet 与 search 在两种主体下都使用同一授权谓词。
+        失败路径（facetWithoutReadPermissionFailsClosed）：仅有 project:view 的主体调用
+        getAssetFacets 与 searchAssets 均抛 AuthorizationException，
+        证明缺少 asset:read 时 fail closed，而不是静默返回空 Facet 冒充成功；
+        E4 补充：匿名访问 /api/v1/assets/facets 返回 401。
+      scenarioCategory: denial
+  notProven:
+    - >-
+      AC-P0B-AUTH-003 更细的跨组织/跨项目与 PRIVATE(ACL/Owner Team) 可见性矩阵在 Facet 上的端到端隔离，
+      由 TASK-P0BR-017 的 AssetAccessPolicyTest 与后续 E4 场景承载；本卡只证明 Facet 与 search
+      共用同一谓词（PUBLIC vs 同组织 INTERNAL 两种可见性），未逐格覆盖 6 种可见性来源。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - backend/src/test/java/com/aihub/asset/AssetFacetConsistencyIT.java
+    - backend/src/test/java/com/aihub/asset/api/AssetControllerTest.java
+    - backend/target/surefire-reports/com.aihub.asset.AssetFacetConsistencyIT.txt
+  logs:
+    - .trae/evidence/facet-e4-049.txt（修复后 E4 全文；六处 MATCH 全部 True）
+    - .trae/evidence/facet-e4-049-BASELINE.txt（缺陷存在时的 E4 全文；六处 MATCH 全部 False）
+    - .trae/evidence/facet-e4-049-fixture.txt（夹具准备：组织/Team/3 个资产 + 公开/SECRET/格式）
+    - .trae/evidence/verify-ps1-049.txt（Compose 验收 V01–V11 + V05b–V05j 全 PASS）
+  screenshots: []
+  traces: []
+  metrics:
+    - AssetFacetConsistencyIT：9 项全通过（Testcontainers PostgreSQL 17，真实建仓 Saga）
+    - AssetControllerTest：新增 2 项（新参数完整透传、匿名 401），与既有用例合计 43 项通过
+    - 后端全量 ./mvnw verify：488 项，4 项失败；4 项均在变更前基线复现（见 limitations）
+    - Compose 验收 verify.ps1：V01–V11 + V05b–V05j 共 19 步全部 PASS，无 FAIL/SKIP
+    - OpenAPI lint：valid，1 warning（TagReference 未被引用，既存且与本卡无关）
+    - 契约 breaking diff：本卡改为纯增量（新增 11 个可选 query 参数），无破坏变更；
+      详见 limitations 中的工具说明
+  databaseQueries:
+    - "SELECT asset_id FROM asset WHERE provisioning_status='PENDING' AND namespace=? -> 用于驱动真实建仓 Saga"
+    - "E4：GET /api/v1/assets/facets?type=MODEL -> totalCount=2, types{MODEL:2}"
+    - "E4：GET /api/v1/assets?type=MODEL&limit=100 -> items=2（与上者一致）"
+    - "E4：GET /api/v1/assets/facets?type=DATASET&framework=PYTORCH -> totalCount=0（AND 语义）"
+    - "E4：GET /api/v1/assets/facets?tagId=tag_does_not_exist -> totalCount=0（不回退全量）"
+  auditEvents: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据不含任何口令、Token、Secret 或预签名 URL。
+    - E4 脚本引用的本地 Compose 开发区口令（AIHUB_BOOTSTRAP_ADMIN_PASSWORD 默认值）
+      仅为本地验收栈占位，未写入仓库文件；E4 脚本落盘日志只记录状态码与计数。
+    - 新增测试使用 Compose/Testcontainers 专用夹具主体，口令为本地专用值。
+
+limitations:
+  skippedTests:
+    - >-
+      Testcontainers 的 16 个既有 @SpringBootTest IT（含 AssetCatalogIT、OrganizationIT、AuthorizationIT 等）
+      在本机 Docker Desktop 29.x 下**报错而非跳过**：它们位于各自模块包内，
+      Spring Boot 的 @SpringBootConfiguration 向上搜索无法到达 com.aihub.bootstrap.AihubApplication。
+      该缺陷在变更前的 3b527e0 基线上以 git stash 暂存本卡全部改动后复现（TaxonomyIT 同样报
+      «Unable to find a @SpringBootConfiguration»），非本卡引入；
+      本卡新增的 AssetFacetConsistencyIT 显式声明 @SpringBootTest(classes = AihubApplication.class)
+      绕开该问题，因此其 9 项为真实运行结果而非 SKIP。该既有缺陷应由独立任务治理。
+    - >-
+      AssetSearchPerformanceTest、DownloadTicketPerformanceTest 因同一原因在 verify 中报错（2 项 Error）；
+      PreviewJobHandlerTest 2 项 CSV 解析失败亦为既存（变更前基线复现，见 environmentDifferences）。
+  assumptions:
+    - >-
+      「Facet 各维度计数 == 同条件 search 可达总数」作为本卡的核心不变量，
+      以 search 作为同一授权与过滤语义的参照实现；该参照本身的正确性由 TASK-P0BR-017 覆盖。
+    - >-
+      facet 的 _total 以聚合查询返回的行数计算（与 search 的可见性谓词一致），
+      因此 totalCount 与 items 可达总数在未分页截断时相等；E3 用例使用小基数夹具保证不分页截断。
+  environmentDifferences:
+    - >-
+      Testcontainers 1.21 的 docker-java 与 Docker 29.x 协商到过低的 API 版本（1.32/1.41），
+      守护进程对这些版本返回 HTTP 400 «API returned a 400 (Bad Request) but provided no error-message»，
+      表现为 «Could not find a valid Docker environment»。
+      实测 docker info 在 API 1.32/1.41 下失败、在 1.44/1.51 下成功；
+      故本次 E3 以 -Dapi.version=1.44 运行（命令行开关，未改动仓库文件）。
+      另需预先 docker pull postgres:17-alpine 与 testcontainers/ryuk:0.11.0
+      （经 docker.m.daocloud.io 镜像源拉取后重打 tag），否则拉取超时导致 IT 被跳过。
+    - >-
+      后端全量 verify 的 4 项失败（AssetSearchPerformanceTest、DownloadTicketPerformanceTest、
+      PreviewJobHandlerTest×2）已在变更前基线上以 git stash 暂存本卡改动后复现，
+      确认非本卡引入；其中前 2 项属上述 Spring 配置搜索的既有缺陷。
+    - >-
+      任务卡第 8 节声明的契约破坏检查命令
+      «npx --yes @redocly/cli diff <base> <head> --fail-on-breaking» 在 @redocly/cli 1.0.0、1.34.5
+      与 latest 上均不存在 diff 子命令（help 中无该项，实测报 «Unknown arguments: fail-on-breaking, diff»）；
+      .github/workflows/ci.yml 第 154/156 行使用了同一命令，属既存工具链缺陷。
+      本卡以「git diff 逐行核对」替代取证：改动为 17 增 1 改，仅新增 11 个可选 query 参数并扩展
+      description/summary，原有 keyword/type 参数与响应结构未变，故为纯增量、无破坏变更。
+      该工具链缺陷应由独立任务治理，本卡不擅自扩大 allowedPaths 修改 CI。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

@@ -78,28 +78,7 @@ public class AssetSearchDao {
         StringBuilder sql = new StringBuilder(BASE_SELECT);
         MapSqlParameterSource params = new MapSqlParameterSource();
 
-        sql.append(" AND a.status IN (:statuses)");
-        params.addValue("statuses", criteria.statusNames());
-        sql.append(" AND a.visibility IN (:visibilities)");
-        params.addValue("visibilities", criteria.visibilityNames());
-
-        appendEquals(sql, params, "a.type", "type", typeName(criteria.type()));
-        appendEquals(sql, params, "a.namespace", "namespace", criteria.namespace());
-        appendEquals(sql, params, "a.organization_id", "organizationId", criteria.organizationId());
-        appendEquals(sql, params, "am.framework", "framework", criteria.framework());
-        appendEquals(sql, params, "am.task", "task", criteria.task());
-        appendEquals(sql, params, "ad.format", "format", criteria.format());
-        appendEquals(sql, params, "ad.modality", "modality", criteria.modality());
-        appendKeyword(sql, params, criteria.keyword());
-        appendTagIdFilter(sql, params, criteria.tagId());
-        appendMultiTagIdFilter(sql, params, criteria.tagIds());
-        appendJsonContains(sql, params, "a.owners", "owner", criteria.owner());
-        appendJsonArrayContains(sql, params, "ad.task_codes", "taskCodes", criteria.taskCodes());
-        appendJsonArrayContains(sql, params, "ad.modality_codes", "modalityCodes", criteria.modalityCodes());
-        appendJsonArrayContains(sql, params, "ad.format_codes", "formatCodes", criteria.formatCodes());
-        appendJsonArrayContains(sql, params, "ad.language_codes", "languageCodes", criteria.languageCodes());
-        appendEquals(sql, params, "COALESCE(am.sensitivity_code, ad.sensitivity_code)", "sensitivity", criteria.sensitivity());
-        appendAccessScopeFilter(sql, params, criteria.accessScope());
+        appendFieldFilters(sql, params, criteria);
         appendCursor(sql, params, criteria.cursor());
 
         sql.append(" ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END, a.created_at DESC, a.id DESC LIMIT :limit");
@@ -111,6 +90,9 @@ public class AssetSearchDao {
 
     /**
      * 按维度统计资产数量（Facet），应用与 search 相同的访问作用域过滤。
+     *
+     * <p>过滤条件下推与 {@link #search(AssetSearchCriteria)} 共用 {@link #appendFieldFilters}，
+     * 避免两处各自拼装导致计数与检索结果漂移。
      *
      * @param criteria 检索条件（仅使用过滤和权限部分，忽略分页）
      * @return 各维度计数映射
@@ -126,13 +108,7 @@ public class AssetSearchDao {
                 """);
         MapSqlParameterSource params = new MapSqlParameterSource();
 
-        sql.append(" AND a.status IN (:statuses)");
-        params.addValue("statuses", criteria.statusNames());
-        sql.append(" AND a.visibility IN (:visibilities)");
-        params.addValue("visibilities", criteria.visibilityNames());
-
-        appendKeyword(sql, params, criteria.keyword());
-        appendAccessScopeFilter(sql, params, criteria.accessScope());
+        appendFieldFilters(sql, params, criteria);
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params);
         Map<String, Map<String, Long>> result = new LinkedHashMap<>();
@@ -159,6 +135,38 @@ public class AssetSearchDao {
         result.put("licenses", licenses);
         result.put("_total", Map.of("count", (long) rows.size()));
         return result;
+    }
+
+    /**
+     * 拼装 search 与 facet 共用的过滤条件（状态、可见性、字段与分类维度、访问作用域）。
+     *
+     * <p>两处调用方必须共享本方法，使 Facet 计数与检索结果在同一过滤条件下保持一致；
+     * 权限可见性经 {@link #appendAccessScopeFilter} 在 SQL {@code WHERE} 阶段下推。
+     */
+    private void appendFieldFilters(StringBuilder sql, MapSqlParameterSource params,
+                                    AssetSearchCriteria criteria) {
+        sql.append(" AND a.status IN (:statuses)");
+        params.addValue("statuses", criteria.statusNames());
+        sql.append(" AND a.visibility IN (:visibilities)");
+        params.addValue("visibilities", criteria.visibilityNames());
+
+        appendEquals(sql, params, "a.type", "type", typeName(criteria.type()));
+        appendEquals(sql, params, "a.namespace", "namespace", criteria.namespace());
+        appendEquals(sql, params, "a.organization_id", "organizationId", criteria.organizationId());
+        appendEquals(sql, params, "am.framework", "framework", criteria.framework());
+        appendEquals(sql, params, "am.task", "task", criteria.task());
+        appendEquals(sql, params, "ad.format", "format", criteria.format());
+        appendEquals(sql, params, "ad.modality", "modality", criteria.modality());
+        appendKeyword(sql, params, criteria.keyword());
+        appendTagIdFilter(sql, params, criteria.tagId());
+        appendMultiTagIdFilter(sql, params, criteria.tagIds());
+        appendJsonContains(sql, params, "a.owners", "owner", criteria.owner());
+        appendJsonArrayContains(sql, params, "ad.task_codes", "taskCodes", criteria.taskCodes());
+        appendJsonArrayContains(sql, params, "ad.modality_codes", "modalityCodes", criteria.modalityCodes());
+        appendJsonArrayContains(sql, params, "ad.format_codes", "formatCodes", criteria.formatCodes());
+        appendJsonArrayContains(sql, params, "ad.language_codes", "languageCodes", criteria.languageCodes());
+        appendEquals(sql, params, "COALESCE(am.sensitivity_code, ad.sensitivity_code)", "sensitivity", criteria.sensitivity());
+        appendAccessScopeFilter(sql, params, criteria.accessScope());
     }
 
     private void countIfNotNull(Map<String, Long> map, Object value) {

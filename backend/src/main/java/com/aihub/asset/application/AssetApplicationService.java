@@ -280,19 +280,29 @@ public class AssetApplicationService {
     }
 
     /**
-     * 查询资产 Facet 统计（按维度分组计数，应用与 search 相同的权限过滤）。
+     * 查询资产 Facet 统计（按维度分组计数，应用与 search 相同的过滤与权限下推）。
+     *
+     * <p>过滤条件、状态集合与访问作用域均来自同一 {@link AssetSearchQuery} 语义，
+     * 因此每个维度的计数与施加同一过滤条件后的 {@link #searchAssets(AssetSearchQuery)}
+     * 可达总数一致；分页字段（cursor/limit）在此不生效。
      */
     @Transactional(readOnly = true)
-    public AssetFacetView getAssetFacets(String keyword, AssetType type, String principalId) {
+    public AssetFacetView getAssetFacets(AssetSearchQuery query) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
         Set<Visibility> allowed = accessPolicy.visibleVisibilities(accessScope);
-        Set<AssetStatus> statuses = Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
+        Set<AssetStatus> statuses = query.includeArchived()
+                ? Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED, AssetStatus.ARCHIVED)
+                : Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
         AssetSearchCriteria criteria = new AssetSearchCriteria(
-                keyword, type, null, null, null, null, null, null,
-                null, null, statuses, allowed, accessScope,
-                null, null, null, null, null,
-                null, null, AssetSearchCriteria.MAX_LIMIT);
+                query.keyword(), query.type(), query.namespace(), query.organizationId(),
+                query.framework(), query.task(), query.format(), query.modality(),
+                query.tagId(), query.owner(), statuses, allowed, accessScope,
+                null, null, null,
+                query.language() != null ? java.util.List.of(query.language()) : null,
+                null,
+                query.sensitivity(),
+                null, AssetSearchCriteria.MAX_LIMIT);
         Map<String, Map<String, Long>> raw = assetRepository.facet(criteria);
         long total = raw.containsKey("_total") ? raw.get("_total").getOrDefault("count", 0L) : 0L;
         return new AssetFacetView(

@@ -1589,10 +1589,26 @@ paths:
     get:
       operationId: getAssetFacets
       summary: 获取资产 Facet 聚合统计
-      description: 返回各维度（type/framework/task/modality/format）的聚合计数，用于搜索侧栏过滤。
+      description: >
+        返回各维度（type/framework/task/modality/format/license）的聚合计数，用于搜索侧栏过滤。
+        查询参数与 `searchAssets` 使用同一套受控过滤语义：同一维度多值为 OR，不同维度之间为 AND。
+        计数在数据库阶段完成授权可见性、状态与敏感度过滤，因此每个维度计数与施加同一过滤条件后的
+        检索结果可达总数一致；无权资产不进入任何维度计数，`totalCount` 亦不泄漏其数量。
       tags: [assets]
       x-implementation-status: implemented
       x-required-permissions: [asset:read]
+      parameters:
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/AssetType' } }
+        - { name: namespace, in: query, schema: { type: string } }
+        - { name: organizationId, in: query, schema: { type: string } }
+        - { name: framework, in: query, schema: { type: string } }
+        - { name: task, in: query, schema: { type: string } }
+        - { name: format, in: query, schema: { type: string } }
+        - { name: modality, in: query, schema: { type: string } }
+        - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
+        - { name: owner, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
       responses:
         '200':
           description: Facet 聚合成功
