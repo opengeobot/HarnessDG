@@ -4,7 +4,7 @@ taskId: TASK-P0BR-023
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 9823c10afc8f2e665742747deec7f7f4fcaa775c
+baseCommit: c6b9e2cc2bf80bf92059dbc6bd8c81f40e8a283e
 stageGatePassed: true
 stageGateEvidence: 用户批准方向。依据 READY 需求 REQ-JOB-001（PostgreSQL 可靠任务）与 ACCEPTED 决策 DEC-003（P0-B 必须逐项重验）、DEC-013（Compose 为功能验收环境），补齐可靠任务的崩溃恢复与重试正确性；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
 stageGateEvidenceRefs:
@@ -123,7 +123,38 @@ flywayBaseline: V27
    `JobWorkerTest` 为纯 Mockito（backoff 被 mock），`JdbcJobRepositoryIT`
    只验证首次领取，没有任何测试覆盖租约过期重领或生产参数下的退避时序。
 
+10. **trace 上下文在本链路上从未被填充（E4 取证新增事实，超出本卡 allowedPaths）**：
+    在真实 Compose 栈上直接查询数据库，**全部 19 条 `job_attempt` 与全部 `job_task`
+    的 `trace_id` 均为 NULL**。根因在 `com.aihub.asset`：
+    `AssetApplicationService.createProvisionJob`（第 478-480 行）构造 `Job` 时把
+    `traceId` 实参写成 `null`，而 `JobApplicationService.enqueue(...)` 虽有 `traceId` 形参，
+    `RepositoryProvisionJobHandler` 与 `JobWorker` 的透传链路本身是正确的
+    （`context.traceId()` → attempt 落库）。因此 `REQ-JOB-001`
+    「任务传递 trace/principal/resource context」在本链路上实际未满足。
+
+    该缺陷此前被**空洞断言**掩盖：本卡 E4 脚本原先只断言
+    `a.trace_id IS DISTINCT FROM j.trace_id` 的失配数为 0，
+    而 `NULL IS DISTINCT FROM NULL` 为 false，于是「两侧都为 NULL」也判为 PASS。
+    现已补充「trace_id 必须已填充」的独立断言使其显式失败（`populatedRows=0`），
+    不再允许以空洞一致冒充满足。
+
+    **范围冲突**：根因文件 `backend/src/main/java/com/aihub/asset/application/AssetApplicationService.java`
+    不在本卡 `allowedPaths`（本卡只允许 `com.aihub.job` 与 `application.yml`）内，
+    故按本卡 §9 停止条件与仓库规则「不得擅自扩大 allowedPaths」，本卡**不修复该缺陷**，
+    仅如实登记为未决项并交接给独立任务。
+
 ## 3. 范围
+
+### baseCommit 重绑说明（顺序边界）
+
+本卡起草时的基准为 `9823c10`。但本卡的真实栈 E4 取证被 `TASK-P0BR-062` 阻塞：
+062 修复 Gitea 写路径缺陷前，「依赖恢复后成功」在该基线上不可达，且 062 触及的
+`backend/src/main/java/com/aihub/integration/gitea` 不在本卡 `allowedPaths` 内。
+
+062 已实施并提交为 `c6b9e2c`，本卡 E4 在其之上复验通过。故把 `baseCommit`
+重绑为 **`TASK-P0BR-062` 的实施提交** `c6b9e2c`，使本卡在自己实施提交处的
+`-CheckChangedPaths` 恰好只看到本卡 `allowedPaths` 内的变更，而不把
+062 的文件误判为越界。沿用先例 `f892634`（`TASK-P0BR-061` 的重绑）与 `0b36a5e`。
 
 ### 允许修改
 
@@ -211,16 +242,44 @@ flywayBaseline: V27
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试（本卡无契约变更）
-- [ ] Migration 及空库/升级迁移测试
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
+- [x] 契约及契约测试（本卡无契约变更）
+- [x] Migration 及空库/升级迁移测试
+- [x] Application/Domain 用例
+- [x] REST/MCP/Worker Adapter
 - [ ] 前端页面与状态（本卡不接线前端）
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
-- [ ] Runbook/追踪矩阵
+- [x] 正常/边界/失败/越权/恢复测试
+- [x] Compose Fixture/Verify
+- [x] Runbook/追踪矩阵
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
+以下每个勾选项均对应 `EVD-P0BR-023-001.yaml` 的 `coverage.proven` 条目与
+`.trae/evidence/job-e4-023.txt`（E4）中的具体断言。
+
+**未勾选项说明**：`前端页面与状态` 保留未勾选，因本卡不接线前端（`JobView` 未变，
+前端任务管理页面改动明确不在范围）。该项为「本卡不涉及」而非「未完成」，
+保留未勾选以免以勾选冒充交付。
+
+**不得声明完成**：`AC-P0B-JOB-003` 的「Trace/attempt 完整」子判据未满足
+（详见 §2 第 10 条与 `EVD-P0BR-023-001.yaml` 的 `notProven`），
+根因在 `com.aihub.asset` 且不在本卡 `allowedPaths` 内，已交接 `TASK-P0BR-063`。
+本卡状态为 `IMPLEMENTED_UNVERIFIED`，待 063 完成后回栈复验。
+
+### §7.1 已实施内容与对应证据
+
+| 实施项 | 证据来源 | 等级 |
+| --- | --- | --- |
+| 租约时长与退避参数改为受控配置项（安全默认值不变） | `application.yml` 的 `aihub.job.worker.lease-seconds` 等；E4 以覆盖置 45s/2s 观察到重领 | E4 |
+| 抽离可重试判定，按 `ErrorCode.retryable()` 决定 RETRY_WAIT 或 DEAD | `JobWorkerTest`；E4 B1 断言 `ASSET_REPOSITORY_PROVISION_FAILED` 进入 RETRY_WAIT | E4 |
+| attempt 记账：领取时递增而非复用 `attempt_no`，被终止的尝试留下记录 | `V27` 唯一约束；E4 A4 断言 `JOB_LEASE_EXPIRED` 补写且 `attempt_no` 无重复 | E4 |
+| `tick()` 建立异常边界，避免周期任务被静默取消 | E4 C1：stop postgres 覆盖至少一个 tick 后 worker 自愈并继续处理新任务 | E4 |
+| attempt 摘要落库前经共享 `SensitiveDataMasker` 脱敏 | `JobWorkerTest` 脱敏断言 | E2 |
+| 崩溃恢复全链路（强杀 → 租约到期 → 重领 → 幂等 → SUCCEEDED） | E4 A1–A5 | E4 |
+
+### §7.2 未闭环项与交接
+
+- `AC-P0B-JOB-003`「Trace/attempt 完整」：`trace_id` 恒为 NULL，根因在
+  `com.aihub.asset.application.AssetApplicationService.createProvisionJob`（不在本卡范围），
+  交接 `TASK-P0BR-063`。本卡 E4 已新增断言使其显式 FAIL 而非空洞通过。
 
 实施路径：
 
@@ -281,13 +340,65 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ```text
 Completed:
+  可靠任务的崩溃恢复与退避重试正确性已实施并在真实 Compose 栈取得 E4：
+  被强杀的任务经租约到期后被重新领取并最终 SUCCEEDED（attempt 记账完整、Handler 幂等）；
+  可重试依赖错误按指数退避+抖动进入 RETRY_WAIT，依赖恢复后无人工干预自行 SUCCEEDED；
+  tick 异常不再使调度停摆。
+  但 AC-P0B-JOB-003 的「Trace/attempt 完整」子判据未满足（trace_id 恒为 NULL），
+  根因不在本卡 allowedPaths 内，已交接 TASK-P0BR-063。本卡交接为 IMPLEMENTED_UNVERIFIED。
+
 Changed files:
+  实施提交 941ab67（TASK-P0BR-023 实施）：
+  - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java
+  - backend/src/main/java/com/aihub/job/infrastructure/JdbcJobRepository.java
+  - backend/src/main/java/com/aihub/job/infrastructure/JobClaim.java（新增）
+  - backend/src/main/java/com/aihub/job/**（可重试判定、配置绑定、attempt 记录）
+  - backend/src/main/resources/application.yml（租约与退避受控配置项）
+  - backend/src/main/resources/db/migration/V27__job_attempt_trace.sql（新增）
+  - backend/src/test/java/com/aihub/job/**（JobWorkerTest、JdbcJobRepositoryIT）
+  本次收尾提交：
+  - docs/ai-spec/tasks/TASK-P0BR-023.md（baseCommit 重绑、§2 第 10 条、§7/§7.1/§7.2、§10）
+  - docs/ai-spec/tasks/evidence/EVD-P0BR-023-001.yaml（新增，E4）
+
 Requirements and scenarios satisfied:
+  - AC-P0B-JOB-002（E4）：强杀 → 租约到期 → 重新领取 → 幂等短路 → SUCCEEDED；
+    被终止的尝试补记为 JOB_LEASE_EXPIRED；attempt_no 无重复；不产生第二个仓库。
+  - AC-P0B-JOB-003（E4，部分满足）：退避重试区间正确、依赖恢复后自行成功、
+    并发不重叠、调度自愈。**「Trace/attempt 完整」未满足**（trace_id 恒为 NULL），
+    见 notProven 与 §7.2。
+
 Contract/database changes:
+  - 新增 Flyway 前向迁移 V27__job_attempt_trace.sql：job_attempt 增加 trace_id 列，
+    并补 (job_id, attempt_no) 唯一约束（含存量重复的确定性消歧）。
+  - 无契约变更：JobView 与 /system/jobs 的请求/响应结构与错误码集合未变。
+
 Validation run and results:
+  - ./docs/ai-spec/tools/validate-spec.ps1 -> PASS
+  - validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-023.md -> PASS
+  - validate-task-card.ps1 ... -CheckChangedPaths -> PASS
+  - E4 .trae/evidence/job-e4-023.ps1（真实 Compose 栈）-> 28 项断言，27 PASS、1 FAIL
+    （FAIL 为 trace 未填充，见 notProven；非本卡逻辑缺陷）
+  - cd backend; ./mvnw.cmd -o verify -> 520 项，2 失败、6 跳过；2 项失败均为既存
+    PreviewJobHandlerTest CSV 解析（不记为 PASS）
+  - docker compose -f deploy/compose/compose.yaml config --quiet -> 退出码 0
+  - ./deploy/compose/scripts/verify.ps1 -> V01–V11 + V05b–V05j 共 19 步全部 PASS
+
 Evidence artifacts:
+  - docs/ai-spec/tasks/evidence/EVD-P0BR-023-001.yaml（E4）
+  - .trae/evidence/job-e4-023.txt（E4 全文）
+  - .trae/evidence/job-e4-023-override.yaml（E4 环境覆盖）
+
 Validation not run and reasons:
+  - 契约破坏检查（@redocly/cli diff）：本卡无契约变更，未运行；该子命令在
+    @redocly/cli 各版本均不存在，属已登记的既有工具链缺陷。
+  - pnpm lint / typecheck / test / build：本卡未触碰 frontend/。
+
 Remaining risks or follow-ups:
+  - **AC-P0B-JOB-003 未完全闭环**：trace_id 未填充，交接 TASK-P0BR-063；063 完成后
+    本卡须回栈复验并撤销 notProven。
+  - DEAD 终态的审计落点、人工 retry/cancel 的状态前置条件与审计属 TASK-P0BR-024。
+  - 告警规则与 Grafana 指标名对齐属 TASK-P0BR-030。
+  - Gitea 组织的自动创建（REQ-AST-008）与仓库删除（deleteGiteaRepository TODO）仍为未决项。
 ```
 
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。
