@@ -1,7 +1,7 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P0BR-024-001
 # 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈取证：
-# job-e4-024.ps1 20/20 断言 ALL PASS（修复形态），同一脚本对缺陷基线（移除三处审计落点）
+# job-e4-024.ps1 24/24 断言 ALL PASS（修复形态），同一脚本对缺陷基线（移除三处审计落点）
 # 复跑为 5 FAILED——证明断言具备判别力，PASS 不是空洞通过。
 # AC-P0B-JOB-004（DEAD 三渠道 + attempts 冻结）与 AC-P0B-JOB-005（越权/前置条件/幂等/审计）
 # 的全部行为切片均已闭环；重试预算语义按 §6.6 固定为「不重置」并有可观察证据。
@@ -63,12 +63,12 @@ execution:
     docker compose build backend worker；
     docker compose -f deploy/compose/compose.yaml -f .trae/evidence/job-e4-024-override.yaml
     up -d --force-recreate backend worker（告警 5s / 阈值 1 / 退避 1s-2s / 仅 worker 领取）；
-    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/evidence/job-e4-024.ps1（E4，20 项断言）；
+    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/evidence/job-e4-024.ps1（E4，24 项断言）；
     缺陷基线对照：临时移除三处审计落点后重建镜像复跑同一脚本（5 FAILED）；
     cd backend; ./mvnw.cmd -o verify（E2 全量）
   startedAt: 2026-09-21T11:50:00+08:00
   finishedAt: 2026-09-21T12:30:00+08:00
-  # E4 修复形态 exit 0（20/20）；缺陷基线 exit 1（5 FAILED，见 coverage 的判别力条目）。
+  # E4 修复形态 exit 0（24/24）；缺陷基线 exit 1（5 FAILED，见 coverage 的判别力条目）。
   # 后端全量 verify 的 2 项既存 IT 失败与本卡无关（见 limitations），不冒充 PASS。
   exitCode: 0
   result: PASS
@@ -119,7 +119,7 @@ coverage:
         判别力反向对照（缺陷基线）：临时移除三处审计落点（JobWorker.auditJobDead、
         retryJob/cancelJob 的 auditPort.record）后重建镜像复跑同一 E4 脚本 -> 5 FAILED
         （S1 JOB_DEAD 审计缺失、S2a 两项、S2b RESOLVED 前值异常、S3 取消审计缺失）；
-        恢复修复形态后 20/20 ALL PASS。E2 同法验证：ManualOpsTest 3/5 FAIL、
+        恢复修复形态后 24/24 ALL PASS。E2 同法验证：ManualOpsTest 3/5 FAIL、
         JobWorkerTest 2/16 FAIL（仅审计相关项）。审计断言非空洞通过。
       scenarioCategory: failure
     - scenarioId: AC-P0B-JOB-004
@@ -145,13 +145,13 @@ artifacts:
     - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java（DEAD 审计 + 事务边界）
     - backend/src/main/java/com/aihub/platform/observability/application/AlertService.java（JOB_DEAD 检查 + 阈值受控）
   logs:
-    - .trae/evidence/job-e4-024.txt（修复形态 E4 全文：20 PASS / 0 FAIL）
+    - .trae/evidence/job-e4-024.txt（修复形态 E4 全文：24 PASS / 0 FAIL）
     - .trae/evidence/job-e4-024-defectbaseline.txt（缺陷基线 E4 全文：5 FAILED）
     - .trae/evidence/job-e4-024-override.yaml（E4 覆盖：告警 5s / 阈值 1 / 退避 1s-2s / 仅 worker）
   screenshots: []
   traces: []
   metrics:
-    - E4 脚本：20 项断言，修复形态 20 PASS、缺陷基线 5 FAIL（判别力自证）
+    - E4 脚本：24 项断言，修复形态 24 PASS、缺陷基线 5 FAIL（判别力自证）
     - JobWorkerTest：16 项 PASS（含 3 项新审计断言）
     - JobApplicationServiceManualOpsTest：5 项 PASS（新增）
     - 后端全量 ./mvnw -o verify（024 镜像）：531 项，2 失败、6 跳过；
@@ -195,7 +195,7 @@ limitations:
     - >-
       首次修复形态复跑出现 1 项假失败（S2a RETRIED 审计 0）：根因是对同一文件的
       两处并行恢复编辑只有一处最终生效（retryJob 仍是 TEMP-DEFECT-BASELINE 分支），
-      镜像按含缺陷的源码构建。以 Grep 全库确认哨兵标记清零、重建后复跑 20/20 全绿。
+      镜像按含缺陷的源码构建。以 Grep 全库确认哨兵标记清零、重建后复跑 24/24 全绿。
       固化教训：鉴别力自证恢复后必须先 Grep 哨兵标记、再串行编辑同文件、后 build。
 
 review:
