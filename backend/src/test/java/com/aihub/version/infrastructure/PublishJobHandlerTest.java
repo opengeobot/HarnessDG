@@ -1,6 +1,7 @@
 /*
- * 功能: PublishJobHandler 单元测试，覆盖正向发布流程、Saga 补偿重试、补偿失败及 Tag 冲突。
- * 时间: 2026-07-30
+ * 功能: PublishJobHandler 单元测试——正向发布、Saga 补偿、补偿失败、Tag 冲突，
+ *       并固化 TASK-P0BR-064 修复：时间列一律由 SQL now() 求值，禁止再绑定 Instant 参数。
+ * 时间: 2026-09-21
  * 作者: AxeXie
  */
 package com.aihub.version.infrastructure;
@@ -11,9 +12,9 @@ import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,17 +25,19 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.doAnswer;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -62,6 +65,7 @@ class PublishJobHandlerTest {
         lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any())).thenReturn(1);
         lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+        lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
         lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
     }
@@ -105,10 +109,34 @@ class PublishJobHandlerTest {
                 0, "usr_01", "trace_01", "ast_01");
     }
 
+    /**
+     * TASK-P0BR-064 防回归守卫：任何 UPDATE/INSERT 都不得把 java.time.Instant 作为
+     * 参数绑定（PG JDBC 无法推断其 SQL 类型——真实栈上 UPDATE 必失败、被 catch 的
+     * INSERT 会静默丢行）；涉及 decided_at/fired_at/occurred_at 的语句必须由数据库求值。
+     */
+    private void assertNoInstantBindingAndDbEvaluatedTimestamps() {
+        List<String> timestamped = new java.util.ArrayList<>();
+        List<org.mockito.invocation.Invocation> updates = mockingDetails(jdbcTemplate)
+                .getInvocations().stream()
+                .filter(i -> "update".equals(i.getMethod().getName()))
+                .toList();
+        assertThat(updates).isNotEmpty();
+        for (org.mockito.invocation.Invocation inv : updates) {
+            Object[] args = inv.getArguments();
+            assertThat(args).noneMatch(a -> a instanceof Instant);
+            String sql = String.valueOf(args[0]);
+            if (sql.contains("decided_at") || sql.contains("fired_at") || sql.contains("occurred_at")) {
+                assertThat(sql).contains("now()");
+                timestamped.add(sql);
+            }
+        }
+        assertThat(timestamped).isNotEmpty();
+    }
+
     // ---- 正向流程测试 ----
 
     @Test
-    @DisplayName("forwardFlowSuccess: P1-P7 全部成功")
+    @DisplayName("forwardFlowSuccess: P1-P7 全部成功，时间列由数据库求值")
     void forwardFlowSuccess() throws Exception {
         Version version = buildPendingReviewVersion(VERSION_ID, "ast_01", GIT_TAG, DIGEST, "usr_01");
         setupPublishPrerequisites(version);
@@ -119,17 +147,20 @@ class PublishJobHandlerTest {
         // 验证版本状态推进到 PUBLISHED
         verify(versionRepository).update(eq(version));
 
-        // 验证请求状态更新为 PUBLISHED
+        // 验证请求状态更新为 PUBLISHED（decided_at 由 SQL now() 求值，无 Instant 参数）
         verify(jdbcTemplate).update(
-                eq("UPDATE publish_request SET status = 'PUBLISHED', decided_at = ? WHERE request_id = ?"),
-                any(Instant.class), eq(REQUEST_ID));
+                eq("UPDATE publish_request SET status = 'PUBLISHED', decided_at = now() WHERE request_id = ?"),
+                eq(REQUEST_ID));
 
         // 验证审计日志记录 PUBLISH_SUCCEEDED
-        // recordAuditEvent 传参: auditId, eventType, principalId, eventType, requestId, result, errorCode, requestSummary, traceId, occurred_at
+        // recordAuditEvent 传参: auditId, eventType, principalId, action(eventType), requestId,
+        //                        result, errorCode, requestSummary, traceId（occurred_at 由 SQL 求值）
         verify(jdbcTemplate).update(
                 org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("INSERT INTO audit_log")),
                 any(), eq("PUBLISH_SUCCEEDED"), any(), eq("PUBLISH_SUCCEEDED"),
-                eq(REQUEST_ID), eq("SUCCEEDED"), eq((String) null), any(), any(), any());
+                eq(REQUEST_ID), eq("SUCCEEDED"), isNull(), any(), any());
+
+        assertNoInstantBindingAndDbEvaluatedTimestamps();
     }
 
     // ---- 补偿重试成功 ----
@@ -156,10 +187,9 @@ class PublishJobHandlerTest {
                 .thenReturn(0L);
 
         // 模拟 P7 (publish_request PUBLISHED update) 第一次失败、第二次成功
-        // 使用 thenThrow().thenReturn() 模式，第一次调用抛出异常，第二次正常返回
         when(jdbcTemplate.update(
-                eq("UPDATE publish_request SET status = 'PUBLISHED', decided_at = ? WHERE request_id = ?"),
-                any(Instant.class), eq(REQUEST_ID)))
+                eq("UPDATE publish_request SET status = 'PUBLISHED', decided_at = now() WHERE request_id = ?"),
+                eq(REQUEST_ID)))
                 .thenThrow(new RuntimeException("PG connection timeout"))
                 .thenReturn(1);
 
@@ -171,15 +201,17 @@ class PublishJobHandlerTest {
 
         // 验证 PUBLISH 状态最终更新成功（第 2 次调用）
         verify(jdbcTemplate, times(2)).update(
-                eq("UPDATE publish_request SET status = 'PUBLISHED', decided_at = ? WHERE request_id = ?"),
-                any(Instant.class), eq(REQUEST_ID));
+                eq("UPDATE publish_request SET status = 'PUBLISHED', decided_at = now() WHERE request_id = ?"),
+                eq(REQUEST_ID));
 
         // 验证补偿重试成功审计
         verify(jdbcTemplate).update(
                 org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("INSERT INTO audit_log")),
                 any(), eq("PUBLISH_COMPENSATION_RETRY_SUCCEEDED"), any(),
                 eq("PUBLISH_COMPENSATION_RETRY_SUCCEEDED"), eq(REQUEST_ID), eq("SUCCEEDED"),
-                eq((String) null), any(), any(), any());
+                isNull(), any(), any());
+
+        assertNoInstantBindingAndDbEvaluatedTimestamps();
     }
 
     // ---- 补偿失败 ----
@@ -216,21 +248,23 @@ class PublishJobHandlerTest {
 
         // 验证 SAGA_COMPENSATION_FAILED 状态更新
         verify(jdbcTemplate).update(
-                eq("UPDATE publish_request SET status = 'SAGA_COMPENSATION_FAILED', decided_at = ? WHERE request_id = ?"),
-                any(Instant.class), eq(REQUEST_ID));
+                eq("UPDATE publish_request SET status = 'SAGA_COMPENSATION_FAILED', decided_at = now() WHERE request_id = ?"),
+                eq(REQUEST_ID));
 
         // 验证审计记录 SAGA_COMPENSATION_FAILED
         verify(jdbcTemplate).update(
-                org.mockito.ArgumentMatchers.argThat(sql -> ((String) sql).contains("INSERT INTO audit_log")),
+                org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("INSERT INTO audit_log")),
                 any(), eq("SAGA_COMPENSATION_FAILED"), any(),
                 eq("SAGA_COMPENSATION_FAILED"), eq(REQUEST_ID), eq("FAILED"),
                 org.mockito.ArgumentMatchers.argThat(ec -> ec != null && ((String) ec).contains("RuntimeException")),
-                any(), any(), any());
+                any(), any());
 
-        // 验证告警触发（sql, alertId, title, detail, fired_at, trace_id = 6 args）
+        // 验证告警触发（alertId, title, detail, trace_id = 4 args，fired_at 由 SQL 求值）
         verify(jdbcTemplate).update(
-                org.mockito.ArgumentMatchers.argThat(sql -> ((String) sql).contains("INSERT INTO system_alert")),
-                any(), anyString(), anyString(), any(Instant.class), any());
+                org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("INSERT INTO system_alert")),
+                any(), anyString(), anyString(), any());
+
+        assertNoInstantBindingAndDbEvaluatedTimestamps();
     }
 
     // ---- Tag 冲突 ----
@@ -259,10 +293,16 @@ class PublishJobHandlerTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("git tag conflict");
 
-        // 验证请求状态更新为 FAILED
+        // 验证请求状态更新为 FAILED（markFailed：decided_at 由 SQL now() 求值）
         verify(jdbcTemplate).update(
-                eq("UPDATE publish_request SET status = 'FAILED', decided_at = ? WHERE request_id = ?"),
-                any(Instant.class), eq(REQUEST_ID));
+                eq("UPDATE publish_request SET status = 'FAILED', decided_at = now() WHERE request_id = ?"),
+                eq(REQUEST_ID));
+
+        // 验证 PUBLISH_FAILED 审计真实落写（修复前该 INSERT 因 Instant 绑定被吞 → 静默丢行）
+        verify(jdbcTemplate).update(
+                org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("INSERT INTO audit_log")),
+                any(), eq("PUBLISH_FAILED"), any(), eq("PUBLISH_FAILED"),
+                eq(REQUEST_ID), eq("FAILED"), isNull(), any(), any());
 
         // 验证版本未被发布
         verify(versionRepository, never()).update(any(Version.class));
@@ -270,6 +310,8 @@ class PublishJobHandlerTest {
         // 验证 PUBLISH_SUCCEEDED 审计日志未被记录
         verify(jdbcTemplate, never()).update(
                 org.mockito.ArgumentMatchers.argThat(sql -> sql.contains("INSERT INTO audit_log")),
-                any(), eq("PUBLISH_SUCCEEDED"), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), eq("PUBLISH_SUCCEEDED"), any(), any(), any(), any(), any(), any(), any());
+
+        assertNoInstantBindingAndDbEvaluatedTimestamps();
     }
 }

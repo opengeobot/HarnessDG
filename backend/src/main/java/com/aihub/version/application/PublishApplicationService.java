@@ -4,6 +4,7 @@ import com.aihub.audit.application.AuditEvent;
 import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.application.JobApplicationService;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
@@ -64,7 +65,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public String submitPublishRequest(String versionId) {
-        authorizationService.requirePermission("asset:write");
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
 
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
@@ -120,7 +121,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public void submitDecision(String requestId, String decision, String comments) {
-        authorizationService.requirePermission("asset:publish");
+        authorizationService.requirePermission(Permissions.ASSET_PUBLISH);
 
         String reviewerId = PrincipalContextHolder.current()
                 .map(c -> c.principalId())
@@ -201,7 +202,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public void deprecateVersion(String versionId) {
-        authorizationService.requirePermission("asset:write");
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
                         "version not found", Map.of("versionId", versionId)));
@@ -219,7 +220,7 @@ public class PublishApplicationService {
      */
     @Transactional
     public void archiveVersion(String versionId) {
-        authorizationService.requirePermission("asset:write");
+        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
                         "version not found", Map.of("versionId", versionId)));

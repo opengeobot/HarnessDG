@@ -118,8 +118,9 @@ public class PhysicalRecycleJobHandler implements JobHandler {
         }
 
         // 4. 标记 recycled_at（在删除前记录回收时间）
-        jdbcTemplate.update("UPDATE asset SET recycled_at = ? WHERE asset_id = ?",
-                Instant.now(), assetId);
+        // recycled_at 由数据库 now() 求值：JdbcTemplate 无法为 java.time.Instant
+        // 实参推断 SQL 类型（TASK-P0BR-063 §2 事实 7 同型缺陷）。
+        jdbcTemplate.update("UPDATE asset SET recycled_at = now() WHERE asset_id = ?", assetId);
 
         // 5. 级联删除 DB 记录（关键路径）
         deleteDbRecords(assetId);

@@ -12,7 +12,6 @@ import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,8 +115,10 @@ public class PublishJobHandler implements JobHandler {
             versionRepository.update(version);
 
             // P7: 更新请求状态
-            jdbcTemplate.update("UPDATE publish_request SET status = 'PUBLISHED', decided_at = ? WHERE request_id = ?",
-                    Instant.now(), requestId);
+            // decided_at 由数据库 now() 求值：JdbcTemplate 无法为 java.time.Instant
+            // 实参推断 SQL 类型（TASK-P0BR-063 §2 事实 7 同型缺陷）。
+            jdbcTemplate.update("UPDATE publish_request SET status = 'PUBLISHED', decided_at = now() WHERE request_id = ?",
+                    requestId);
 
             // 记录审计事件
             recordAuditEvent(requestId, versionId, context.principalId(),
@@ -139,8 +140,8 @@ public class PublishJobHandler implements JobHandler {
                 retryVersion.publish(retryVersion.manifestDigest(), gitTag, context.principalId());
                 versionRepository.update(retryVersion);
 
-                jdbcTemplate.update("UPDATE publish_request SET status = 'PUBLISHED', decided_at = ? WHERE request_id = ?",
-                        Instant.now(), requestId);
+                jdbcTemplate.update("UPDATE publish_request SET status = 'PUBLISHED', decided_at = now() WHERE request_id = ?",
+                        requestId);
 
                 recordAuditEvent(requestId, versionId, context.principalId(),
                         context.traceId(), "PUBLISH_COMPENSATION_RETRY_SUCCEEDED", null, "SUCCEEDED");
@@ -156,8 +157,8 @@ public class PublishJobHandler implements JobHandler {
     }
 
     private void markFailed(String requestId, String versionId, String principalId) {
-        jdbcTemplate.update("UPDATE publish_request SET status = 'FAILED', decided_at = ? WHERE request_id = ?",
-                Instant.now(), requestId);
+        jdbcTemplate.update("UPDATE publish_request SET status = 'FAILED', decided_at = now() WHERE request_id = ?",
+                requestId);
         recordAuditEvent(requestId, versionId, principalId, null,
                 "PUBLISH_FAILED", null, "FAILED");
     }
@@ -175,8 +176,8 @@ public class PublishJobHandler implements JobHandler {
         // 1. 更新请求状态
         try {
             jdbcTemplate.update(
-                    "UPDATE publish_request SET status = 'SAGA_COMPENSATION_FAILED', decided_at = ? WHERE request_id = ?",
-                    Instant.now(), requestId);
+                    "UPDATE publish_request SET status = 'SAGA_COMPENSATION_FAILED', decided_at = now() WHERE request_id = ?",
+                    requestId);
         } catch (Exception ex) {
             LOG.error("Failed to update publish_request to SAGA_COMPENSATION_FAILED requestId={}", requestId, ex);
         }
@@ -193,51 +194,68 @@ public class PublishJobHandler implements JobHandler {
 
     /**
      * 触发 Saga 补偿失败告警到 system_alert 表。
+     *
+     * <p>{@code fired_at} 由数据库 {@code now()} 求值（Instant 参数绑定在 PG JDBC 下
+     * 必然抛类型推断异常）。写入失败不再被吞：告警丢失必须能被观察，
+     * 对齐 REQ-AUD-001「任何分类都不允许仅 warn 后静默丢失」。
+     * 调用点（sagaCompensationFailed）本身处于异常处理路径，此处抛出将使任务
+     * 进入重试/DEAD，由 JOB_DEAD 审计与告警兜住，而非静默成功。
      */
     private void triggerCompensationAlert(String requestId, String versionId,
                                           String traceId, Exception cause) {
-        try {
-            String alertId = "alt_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 24);
-            String detail = cause.getClass().getSimpleName() + ": " +
-                    (cause.getMessage() != null ? cause.getMessage() : "");
-            jdbcTemplate.update(
-                    "INSERT INTO system_alert (alert_id, alert_type, severity, title, detail, status, fired_at, trace_id) " +
-                            "VALUES (?, 'SAGA_COMPENSATION_FAILED', 'CRITICAL', ?, ?, 'FIRING', ?, ?)",
-                    alertId,
-                    "Publish Saga compensation failed: " + requestId,
-                    detail,
-                    Instant.now(),
-                    traceId != null ? traceId : "");
-            LOG.info("compensation alert fired alertId={} requestId={}", alertId, requestId);
-        } catch (Exception ex) {
-            LOG.error("Failed to trigger compensation alert requestId={}", requestId, ex);
-        }
+        String alertId = "alt_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        String detail = cause.getClass().getSimpleName() + ": " +
+                (cause.getMessage() != null ? cause.getMessage() : "");
+        jdbcTemplate.update(
+                "INSERT INTO system_alert (alert_id, alert_type, severity, title, detail, status, fired_at, trace_id) " +
+                        "VALUES (?, 'SAGA_COMPENSATION_FAILED', 'CRITICAL', ?, ?, 'FIRING', now(), ?)",
+                alertId,
+                "Publish Saga compensation failed: " + requestId,
+                detail,
+                traceId != null ? traceId : "");
+        LOG.info("compensation alert fired alertId={} requestId={}", alertId, requestId);
     }
 
     /**
      * 记录审计事件到 audit_log 表。
+     *
+     * <p>{@code occurred_at} 由数据库 {@code now()} 求值。审计写入失败上抛（不再静默丢行）：
+     * 发布属高风险写，REQ-AUD-001 要求「成功写操作必须与结果一致」；
+     * Handler 非事务执行，抛出将使 Worker 重试整个 Saga，
+     * P1 的状态守卫与幂等 UPDATE 保证重放安全。
+     *
+     * <p>直写 audit_log 而非经共享 AuditService 属旁路缺陷，收敛登记为后续任务（卡 §2 事实 6）。
      */
     private void recordAuditEvent(String requestId, String versionId,
                                   String principalId, String traceId,
                                   String eventType, String errorCode,
                                   String result) {
+        String auditId = "aud_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        String requestSummary;
         try {
-            String auditId = "aud_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 24);
-            String requestSummary = objectMapper.writeValueAsString(Map.of(
+            requestSummary = objectMapper.writeValueAsString(Map.of(
                     "requestId", requestId,
                     "versionId", versionId,
                     "eventType", eventType));
-
-            jdbcTemplate.update(
-                    "INSERT INTO audit_log (audit_id, event_type, principal_id, principal_type, action, " +
-                            "resource_type, resource_id, result, error_code, request_summary, trace_id, occurred_at) " +
-                            "VALUES (?, ?, ?, 'SYSTEM', ?, 'PUBLISH_REQUEST', ?, ?, ?, ?, ?, ?)",
-                    auditId, eventType, principalId != null ? principalId : "system",
-                    eventType, requestId, result,
-                    errorCode, requestSummary,
-                    traceId != null ? traceId : "", Instant.now());
-        } catch (Exception ex) {
-            LOG.error("Failed to record audit event", ex);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize audit request summary", e);
         }
+
+        jdbcTemplate.update(
+                "INSERT INTO audit_log (audit_id, event_type, principal_id, principal_type, action, " +
+                        "resource_type, resource_id, result, error_code, request_summary, trace_id, occurred_at) " +
+                        "VALUES (?, ?, ?, 'SYSTEM', ?, 'PUBLISH_REQUEST', ?, ?, ?, ?::jsonb, ?, now())",
+                auditId, eventType, principalId != null ? principalId : "system",
+                eventType, requestId, result,
+                truncate(errorCode, 64), requestSummary,
+                traceId != null ? traceId : "");
+    }
+
+    /** audit_log.error_code 为 VARCHAR(64)：超长必须截断，否则审计写入失败连带任务失败。 */
+    private static String truncate(String value, int max) {
+        if (value == null || value.length() <= max) {
+            return value;
+        }
+        return value.substring(0, max);
     }
 }

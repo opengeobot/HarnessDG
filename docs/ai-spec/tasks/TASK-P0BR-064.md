@@ -4,7 +4,7 @@ taskId: TASK-P0BR-064
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 9316c7d8baab2f99d3202dbc6c280cca87ec0ad5
+baseCommit: bbc170ba6be6c14c709672b512584c2e889abb11
 stageGatePassed: true
 stageGateEvidence: 用户批准（AskUserQuestion 选择「批准立卡并实施（推荐）」）。依据 READY 需求 REQ-AUTH-001（统一实时授权判定）与 REQ-AUD-001（不可变业务审计，明确「任何分类都不允许仅 warn 后静默丢失」），以及 ACCEPTED 决策 DEC-003（P0-B 必须逐项重验）、DEC-013（Compose 为功能验收环境），修复 TASK-P0BR-063 的 E4 暴露的发布链路缺陷簇：未注册权限码 asset:write 使三处入口对任何主体恒 403、Handler 内 Instant 参数绑定使 decided_at 更新失败并使审计/告警 INSERT 被 catch 静默丢弃；属 ADR-0002 允许的「合同、授权、治理、审计、一致性整改」，不新增业务能力。
 stageGateEvidenceRefs:
@@ -137,6 +137,12 @@ flywayBaseline: "无（本卡无迁移；权限码与列均已由既有迁移注
 6. **旁路审计写入（本卡不重构，仅登记）**：`recordAuditEvent` 直插 `audit_log`，
    绕过 `AuditService` 这一唯一持久化入口（REQ-AUD-001 首条），因此不参与统一脱敏与
    trace/request 补全。本卡只让它「不再失败」，把旁路收敛到共享入口作为后续任务。
+7. **实施中确认的两个连带修复点（属本卡已改文件，随修复一并处理）**：
+   审计 INSERT 一旦不再被吞，`request_summary`（JSONB 列）以 String 绑定必须显式
+   `?::jsonb` 转型（PG 驱动对 String→JSONB 的默认绑定报类型错——权威
+   `JdbcAuditRepository` 用 `setObject(..., Types.OTHER)` 是同一原因）；
+   `error_code` 列为 VARCHAR(64)，`sagaCompensationFailed` 传入的
+   `异常类名: message` 可能超长，超长会使审计写入失败连带任务失败，故绑定前截断到 64。
 
 ## 3. 范围
 
@@ -212,16 +218,28 @@ flywayBaseline: "无（本卡无迁移；权限码与列均已由既有迁移注
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试（本卡无契约变更；`publish:approve` 口径差异登记 §2 事实 5）
-- [ ] Migration 及空库/升级迁移测试（本卡无迁移）
-- [ ] Application/Infrastructure：三处权限码取齐 + 7 处 Instant 绑定改数据库求值
-- [ ] E2：更正 `PublishJobHandlerTest` 被固化的缺陷断言；新增时间列 `now()` 防回归断言、
-      `markFailed` 路径断言、`PhysicalRecycleJobHandler` 的 recycled_at 断言、
-      `PublishApplicationService` 三处入口的授权正/反路径断言
-- [ ] 鉴别力自证：对缺陷基线（还原 asset:write 与 Instant 绑定）跑 E4，必须显式 FAIL，
-      恢复后 Grep 哨兵清零再重建镜像复跑全绿
-- [ ] E4 取证：`.trae/evidence/publish-e4-064.ps1` 在真实栈跑通完整发布链路 + 审计行对照
-- [ ] Runbook/追踪矩阵：更新 `work-breakdown.md` 的 064 行；在 §9 交接后续任务
+- [x] 契约及契约测试（本卡无契约变更；`publish:approve` 口径差异登记 §2 事实 5）
+- [x] Migration 及空库/升级迁移测试（本卡无迁移）
+- [x] Application/Infrastructure：三处权限码取齐 + 7 处 Instant 绑定改数据库求值
+      （含被 catch 吞掉的 audit_log/system_alert INSERT 改为失败可观察 + JSONB `?::jsonb`
+      显式转型 + error_code 超长截断）
+- [x] E2：更正 `PublishJobHandlerTest` 被固化的缺陷 SQL 断言并加防回归守卫（遍历 update
+      调用：无 Instant 绑定、时间列必含 `now()`）；新增
+      `PublishApplicationServiceAuthorizationTest`（7 项：三处 asset:manage、
+      submitDecision asset:publish、deny 路径零副作用）与
+      `PhysicalRecycleJobHandlerTest`（2 项：recycled_at=now() 与保留期前置）
+- [x] 鉴别力自证：`git stash` 回退实施改动 → 重建镜像 → E4 复跑 **17 FAILED**
+      （S1 提交发布请求真实 403 `requiredPermission=asset:write`、S3 审批链路断、
+      S4 弃用/归档 403、PUBLISH_SUCCEEDED 审计行恒 0）；E2 的判别力来自实施期真实观察
+      ——主代码三处编辑一度未生效（仍 asset:write）时
+      `PublishApplicationServiceAuthorizationTest` 3 项显式 FAIL
+      （Wanted asset:manage / Actual asset:write），生效后 7/7 PASS；
+      恢复后 Grep 哨兵清零 → 重建复跑全绿
+- [x] E4 取证：`.trae/evidence/publish-e4-064.ps1` 在真实栈（交付基线，Gitea 接通）
+      跑通完整发布链路（提交→审批→VERSION_PUBLISH SUCCEEDED→PUBLISHED→弃用→归档）
+      + 审计行对照，修复形态 **26/26 ALL PASS**（首轮与恢复复跑各一次）
+- [x] Runbook/追踪矩阵：`work-breakdown.md` 的 064 行已在立卡提交登记；
+      后续任务交接见 §9 与 EVD environmentDifferences
 
 ## 8. 验证命令
 
@@ -263,6 +281,79 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ## 10. 完成报告
 
-（实施后填写：Completed / Changed files / Requirements and scenarios satisfied /
-Contract/database changes / Validation run and results / Evidence artifacts /
-Validation not run and reasons / Remaining risks or follow-ups）
+```text
+Completed:
+  发布链路在真实 Compose 栈（交付基线，Gitea 接通）上端到端可用，且发布成功
+  的审计与失败告警真实落库：
+  - 三处入口（submitPublishRequest/deprecateVersion/archiveVersion）的权限判定由
+    未注册的 asset:write 取齐到契约声明的 asset:manage；submitDecision 的字面量
+    asset:publish 改为 Permissions.ASSET_PUBLISH 常量（语义不变）。
+  - PublishJobHandler 的 4 处 decided_at + system_alert.fired_at + audit_log.occurred_at
+    共 6 处时间参数改由数据库 now() 求值；PhysicalRecycleJobHandler.recycled_at 同法。
+    两处原被 catch 吞掉的 INSERT 改为失败可观察（不再静默丢审计/告警行），
+    并连带处理 JSONB 显式转型与 error_code 超长截断（§2 事实 7）。
+  真实栈 E4（publish-e4-064）修复形态 26/26 断言 ALL PASS：S1 admin 经 REST 提交发布
+  请求 200（修复前恒 403）、S2 READER 提交/弃用仍 403 且零副作用（反空洞授权守卫）、
+  S3 APPROVE→VERSION_PUBLISH 由 Worker 执行至 SUCCEEDED→版本 PUBLISHED、
+  audit_log 存在该 requestId 的 PUBLISH_SUCCEEDED 行（主体/trace/时间/摘要齐备，
+  trace 等于审批请求 traceparent，063 链路保持）、S4 弃用/归档各 200。
+  同一脚本对缺陷基线（git stash 回退实施改动、重建镜像）复跑 17 FAILED / 9 PASS——
+  证明断言具备判别力；恢复后 Grep 哨兵清零、重建复跑再次 26/26 全绿。
+
+Changed files:
+  - backend/src/main/java/com/aihub/version/application/PublishApplicationService.java
+    （三处 asset:manage + asset:publish 常量化）
+  - backend/src/main/java/com/aihub/version/infrastructure/PublishJobHandler.java
+    （6 处时间列改 now()；两处 INSERT 失败上抛；?::jsonb；error_code 截断；删未用 Instant import）
+  - backend/src/main/java/com/aihub/asset/infrastructure/PhysicalRecycleJobHandler.java
+    （recycled_at 改 now()）
+  - backend/src/test/java/com/aihub/version/infrastructure/PublishJobHandlerTest.java
+    （重写：更正被固化的缺陷 SQL 断言 + 无 Instant 绑定/时间列必含 now() 的防回归守卫）
+  - backend/src/test/java/com/aihub/version/application/PublishApplicationServiceAuthorizationTest.java
+    （新增，7 项：三处 asset:manage、submitDecision asset:publish、deny 零副作用）
+  - backend/src/test/java/com/aihub/asset/infrastructure/PhysicalRecycleJobHandlerTest.java
+    （新增，2 项：recycled_at=now()、保留期前置）
+  - docs/ai-spec/tasks/TASK-P0BR-064.md（本卡）
+  - docs/ai-spec/tasks/evidence/EVD-P0BR-064-001.yaml（新增，E4）
+
+Requirements and scenarios satisfied:
+  - REQ-AUTH-001 / AC-P0B-AUTH-004（E4）：授权码取齐后成功路径真实通过，
+    且无 asset:manage 主体仍 fail-closed 403（不是放宽）；
+  - REQ-AUD-001 / AC-P0B-AUD-001（E4）：发布成功审计 PUBLISH_SUCCEEDED 真实落行，
+    缺陷基线恒 0 行对照成立。
+
+Contract/database changes:
+  - 无契约、无迁移、无配置项变更；仅使实现权限码取齐既有 OpenAPI 声明、
+    时间列改数据库求值。行为变化：三处入口由「任何主体恒 403」修复为按 asset:manage 判定；
+    发布 Saga 的 decided_at/审计/告警由「失败/静默丢行」修复为可用。
+
+Validation run and results:
+  - validate-spec.ps1 -> PASS；validate-task-card.ps1（本卡）-> PASS；-CheckChangedPaths -> PASS
+  - cd backend; ./mvnw.cmd -o verify -> 540 项，2 失败、6 跳过：
+    PreviewJobHandlerTest 的 2 项既存 CSV 解析缺陷（024 轮同样出现，本卡未触碰 preview），
+    与本卡无关，不记为 PASS。本卡相关套件：PublishJobHandlerTest 4/4、
+    AuthorizationTest 7/7、PhysicalRecycleJobHandlerTest 2/2、VersionApplicationServiceTest 12/12。
+  - .trae/evidence/publish-e4-064.ps1（交付基线）-> 修复形态 26/26 ALL PASS（exit 0）；
+    缺陷基线 17 FAILED（exit 1，判别力自证）；恢复后复跑再次 26/26 ALL PASS
+  - docker compose config --quiet -> exit 0
+  - deploy/compose/scripts/verify.ps1 -> 20 步全 PASS（V01..V11 + V05b..V05j）
+
+Evidence artifacts:
+  - docs/ai-spec/tasks/evidence/EVD-P0BR-064-001.yaml（E4）
+  - .trae/evidence/publish-e4-064.txt、-restored.txt、-defectbaseline.txt、verify-ps-064.txt
+
+Validation not run and reasons:
+  - 契约破坏检查：本卡无契约变更；@redocly/cli diff 为已登记工具链缺陷。
+  - pnpm lint/typecheck/test/build：未触碰 frontend/。
+
+Remaining risks or follow-ups:
+  - submitDecision 契约声明 publish:approve（未注册）vs 实现 asset:publish 的口径统一，
+    需权限 Catalog 层契约决策，属 TASK-P0BR-003（§2 事实 5）。
+  - recordAuditEvent/triggerCompensationAlert 旁路直写 audit_log/system_alert，
+    应收敛到共享 AuditService/AlertService（§2 事实 6）。
+  - 全库仍有其它把 java.time.Instant 作为 JdbcTemplate 参数绑定的调用点需排查
+    （本卡覆盖已知的 063/064 共 7 处 + JdbcIdempotencyStore 的 OffsetDateTime 经
+    NamedParameter 已正常）；建议独立治理任务扫描全库时间列绑定写法。
+  - AssetCatalogIT / TaxonomyIT 的 @SpringBootConfiguration 搜索缺陷与
+    AssetFacetConsistencyIT flake 同属既有测试治理任务范围。
+```
