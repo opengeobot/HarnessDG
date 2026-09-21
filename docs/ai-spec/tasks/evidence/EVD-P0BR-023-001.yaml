@@ -3,9 +3,10 @@ evidenceId: EVD-P0BR-023-001
 # 本卡 requiredEvidenceLevel 为 E4，已在真实 Compose 栈取得 E4。
 # status 为 PASS：AC-P0B-JOB-002 与 AC-P0B-JOB-003 的崩溃恢复、退避重试、依赖恢复成功、
 # 调度自愈四条路径均已闭环，并以「缺陷前后对照」证明断言具备判别力。
-# 但 AC-P0B-JOB-003 的「Trace/attempt 完整」子判据**未满足**（trace_id 恒为 NULL），
-# 其根因文件不在本卡 allowedPaths 内，已交接 TASK-P0BR-063。故按规范交接为
-# IMPLEMENTED_UNVERIFIED：completionValidation 为 EXPECTED_FAIL，且 notProven 如实保留该项。
+# AC-P0B-JOB-003 的「Trace/attempt 完整」子判据最初未满足（trace_id 恒为 NULL，
+# 根因文件不在本卡 allowedPaths），经用户批准另立 TASK-P0BR-063 修复；
+# 063 落地后本卡 E4 脚本回栈复跑 28/28 ALL PASS（trace 断言由 FAIL 转 PASS，见 proven 的
+# revalidation 条目与 EVD-P0BR-063-001.yaml）。本卡不再交接 IMPLEMENTED_UNVERIFIED。
 status: PASS
 
 task:
@@ -59,11 +60,11 @@ execution:
     cd backend; ./mvnw.cmd -o test "-Dtest=JobWorkerTest,JdbcJobRepositoryIT"（E2/E3）；
     cd backend; ./mvnw.cmd -o verify
   startedAt: 2026-09-20T16:30:00+08:00
-  finishedAt: 2026-09-20T16:50:00+08:00
-  # exitCode=1 来自 E4 脚本的 1 项未决断言（trace 未填充，见 notProven）与后端全量 verify 的
-  # 2 项既存失败；本卡自身已闭环的 27 项断言全部 PASS。按规范不把未决项改写成 PASS，
-  # 故如实记录非零退出码。
-  exitCode: 1
+  finishedAt: 2026-09-21T10:05:00+08:00
+  # 首次运行（2026-09-20）exitCode=1：1 项 trace 未填充断言 FAIL（后由 063 修复）。
+  # 063 落地后复跑（2026-09-21，同一脚本、023 覆盖、063 实施后镜像）：28/28 ALL PASS，
+  # exitCode=0。此处记录最终复跑结果；历史 FAIL→PASS 对照见 proven 的 revalidation 条目。
+  exitCode: 0
   result: PASS
   evidenceLevel: E4
   e3RealDependencies:
@@ -110,15 +111,20 @@ coverage:
         trace 断言为 1 FAILED）。该对照证明本卡断言确实能判别租约恢复与退避重试的真实行为。
         对照原始输出：.trae/evidence/job-e4-023.txt 的历史运行记录。
       scenarioCategory: failure
-  notProven:
-    - >-
-      **AC-P0B-JOB-003 的「Trace/attempt 完整」子判据未满足**：真实栈上
-      `job_task.trace_id` 与 `job_attempt.trace_id` 全部为 NULL（实测 19/19 条 attempt 均为空）。
-      根因是 `com.aihub.asset.application.AssetApplicationService.createProvisionJob`
-      构造 Job 时 traceId 传 null；JobWorker 与 RepositoryProvisionJobHandler 的透传链路本身正确。
-      该子判据由本卡 E4 新增的「trace_id 必须已填充」断言显式暴露为 FAIL（populatedRows=0）。
-      根因文件不在本卡 allowedPaths 内，已交接 TASK-P0BR-063，不在本卡修复。
-      **因此本卡不得声明完成**；AC-P0B-JOB-003 的完整闭环依赖 063 完成后回栈复验。
+    - scenarioId: AC-P0B-JOB-003
+      assertion: >-
+        **trace 子判据回栈复验（TASK-P0BR-063 落地后，原 notProven 项撤销）**：
+        063 把 trace 填充收敛到 JobApplicationService.enqueue（显式 > 共享
+        PrincipalContext > 32-hex 兜底生成），AssetApplicationService 建仓任务改经
+        enqueue 入队。以 063 实施后镜像重跑本卡 E4（023 覆盖，租约 45s）：
+        28/28 断言 ALL PASS；「A4 attempt 与任务的 trace_id 均已填充（非空洞一致）」
+        由上次的 FAIL(populatedRows=0) 转 PASS(populatedRows=2)，
+        两条 attempt（JOB_LEASE_EXPIRED 补记与 SUCCESS）均携带同一 trace。
+        063 独立取证 trace-e4-063.ps1 另证：注入 traceparent 时
+        job_task.trace_id 等于该值、未注入时等于响应 X-Trace-Id（32-hex）、
+        VERSION_PUBLISH 审批路径同样贯通、Outbox 事件携带同一 trace。
+      scenarioCategory: recovery
+  notProven: []
 
 contractConsistency:
   openapiMatched: true
@@ -134,12 +140,12 @@ artifacts:
     - backend/src/main/java/com/aihub/job/infrastructure/JobClaim.java
     - backend/src/main/resources/db/migration/V27__job_attempt_trace.sql
   logs:
-    - .trae/evidence/job-e4-023.txt（E4 全文：27 PASS / 1 FAIL，FAIL 项为 trace 未填充）
+    - .trae/evidence/job-e4-023.txt（E4 全文：063 落地后复跑 28 PASS / 0 FAIL）
     - .trae/evidence/job-e4-023-override.yaml（E4 覆盖：租约 45s / tick 2s / 退避 2s-8s / 仅 worker 启用）
   screenshots: []
   traces: []
   metrics:
-    - E4 脚本：28 项断言，27 PASS、1 FAIL（FAIL 为 trace 未填充，见 notProven）
+    - E4 脚本：28 项断言，063 落地后复跑 28 PASS、0 FAIL（首跑为 27 PASS、1 FAIL=trace 未填充）
     - JobWorkerTest：15 项（含租约恢复 NPE 回归、可重试判定、异常边界、摘要脱敏）
     - JdbcJobRepositoryIT：7 项（真实 PostgreSQL，含租约过期重领与 attempt 单调性）
     - 后端全量 ./mvnw -o verify：520 项，2 失败、6 跳过；2 项失败均为既存 PreviewJobHandlerTest

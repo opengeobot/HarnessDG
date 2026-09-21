@@ -25,7 +25,7 @@ import com.aihub.asset.domain.ProvisioningStatus;
 import com.aihub.asset.domain.Visibility;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
-import com.aihub.job.domain.JobRepository;
+import com.aihub.job.application.JobApplicationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.NotFoundException;
@@ -65,7 +65,7 @@ class AssetApplicationServiceTest {
     @Mock private DictionaryValidationPort dictionaryValidationPort;
     @Mock private TagValidationService tagValidationService;
     @Mock private AuditService auditService;
-    @Mock private JobRepository jobRepository;
+    @Mock private JobApplicationService jobApplicationService;
     @Mock private ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
 
     private AssetApplicationService service;
@@ -74,7 +74,7 @@ class AssetApplicationServiceTest {
     void setUp() {
         service = new AssetApplicationService(assetRepository,
                 new AssetAccessPolicy(), idGenerator, authorizationService,
-                dictionaryValidationPort, tagValidationService, auditService, jobRepository,
+                dictionaryValidationPort, tagValidationService, auditService, jobApplicationService,
                 cardProjectionPortProvider);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("ast_generated");
         when(assetRepository.existsByCoordinate(any(), any(), any())).thenReturn(false);
@@ -111,7 +111,8 @@ class AssetApplicationServiceTest {
         assertThat(view.provisioningStatus()).isEqualTo(ProvisioningStatus.PENDING);
         verify(authorizationService).requirePermission("asset:manage");
         verify(assetRepository).insert(any(Asset.class));
-        verify(jobRepository).insert(any());
+        verify(jobApplicationService).enqueue(eq("REPOSITORY_PROVISION"), any(), eq("usr_01"), any(),
+                eq("ast_generated"), eq(5));
         verify(auditService).record(any());
     }
 

@@ -14,11 +14,16 @@ import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.shared.identity.PrincipalContext;
+import com.aihub.shared.identity.PrincipalContextHolder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,6 +34,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class JobApplicationService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(JobApplicationService.class);
 
     private final JobRepository jobRepository;
     private final IdGenerator idGenerator;
@@ -89,14 +96,43 @@ public class JobApplicationService {
 
     /**
      * 入队一个新任务（供内部业务模块调用，如 DVC/发布/Webhook 消费）。
+     *
+     * <p><b>trace 必须非空</b>：{@code REQ-JOB-001} 要求任务传递 trace 上下文，
+     * 且 {@code AC-P0B-AUD-004} 依赖 {@code job_task/job_attempt.trace_id} 把
+     * 「单请求触发的 DB + 外部依赖 + 后台任务」串成一条链。取值优先级：
+     * 调用方显式传入 &gt; 当前请求的共享 PrincipalContext &gt; 新生成的 32 位 hex。
+     * 兜底生成保证该列永不为 NULL（历史缺陷正是各调用点硬编码 null，
+     * 使 attempt 级追踪与「按 trace 关联」整体失效）；兜底命中时记 debug 日志，
+     * 便于发现漏传 trace 的新调用点。
      */
     public Job enqueue(String type, String payload, String principalId, String traceId,
                        String assetId, int maxAttempts) {
         Job job = new Job(null, idGenerator.generate(IdPrefix.JOB), type, payload, JobStatus.PENDING,
-                maxAttempts, 0, clock.instant(), null, null, traceId, principalId, assetId, null,
-                clock.instant(), clock.instant(), 0);
+                maxAttempts, 0, clock.instant(), null, null, resolveTraceId(traceId, type),
+                principalId, assetId, null, clock.instant(), clock.instant(), 0);
         jobRepository.insert(job);
         return job;
+    }
+
+    /**
+     * 解析任务应携带的 traceId：显式传入优先，其次当前请求上下文，最后新生成。
+     *
+     * <p>不解析任何 Token；只读取共享 {@link PrincipalContextHolder}（平台规则允许的业务侧取值方式）。
+     */
+    private String resolveTraceId(String explicitTraceId, String jobType) {
+        if (explicitTraceId != null && !explicitTraceId.isBlank()) {
+            return explicitTraceId;
+        }
+        String fromContext = PrincipalContextHolder.current()
+                .map(PrincipalContext::traceId)
+                .filter(value -> !value.isBlank())
+                .orElse(null);
+        if (fromContext != null) {
+            return fromContext;
+        }
+        String generated = UUID.randomUUID().toString().replace("-", "");
+        LOG.debug("job enqueue without trace context; generated fallback type={} traceId={}", jobType, generated);
+        return generated;
     }
 
     private void requireJobExists(String jobId) {

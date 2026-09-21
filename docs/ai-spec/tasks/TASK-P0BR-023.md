@@ -259,10 +259,12 @@ flywayBaseline: V27
 前端任务管理页面改动明确不在范围）。该项为「本卡不涉及」而非「未完成」，
 保留未勾选以免以勾选冒充交付。
 
-**不得声明完成**：`AC-P0B-JOB-003` 的「Trace/attempt 完整」子判据未满足
-（详见 §2 第 10 条与 `EVD-P0BR-023-001.yaml` 的 `notProven`），
-根因在 `com.aihub.asset` 且不在本卡 `allowedPaths` 内，已交接 `TASK-P0BR-063`。
-本卡状态为 `IMPLEMENTED_UNVERIFIED`，待 063 完成后回栈复验。
+**「Trace/attempt 完整」子判据已闭环（TASK-P0BR-063）**：063 修复入队点 trace 填充
+（`JobApplicationService.enqueue` 统一从共享 PrincipalContext 取值并兜底生成）后，
+本卡 E4 脚本已回栈复跑：「trace_id 均已填充（非空洞一致）」断言由 FAIL 转 PASS
+（populatedRows=2），全脚本 28/28 ALL PASS（`0e6b9ed` 基线 + 063 实施后镜像）。
+本卡状态由 `IMPLEMENTED_UNVERIFIED` 转为已闭环；判据证据见 `EVD-P0BR-023-001.yaml`
+的 trace 复验条目与 `EVD-P0BR-063-001.yaml`。
 
 ### §7.1 已实施内容与对应证据
 
@@ -275,11 +277,10 @@ flywayBaseline: V27
 | attempt 摘要落库前经共享 `SensitiveDataMasker` 脱敏 | `JobWorkerTest` 脱敏断言 | E2 |
 | 崩溃恢复全链路（强杀 → 租约到期 → 重领 → 幂等 → SUCCEEDED） | E4 A1–A5 | E4 |
 
-### §7.2 未闭环项与交接
+### §7.2 未闭环项与交接（已撤销）
 
-- `AC-P0B-JOB-003`「Trace/attempt 完整」：`trace_id` 恒为 NULL，根因在
-  `com.aihub.asset.application.AssetApplicationService.createProvisionJob`（不在本卡范围），
-  交接 `TASK-P0BR-063`。本卡 E4 已新增断言使其显式 FAIL 而非空洞通过。
+- ~~`AC-P0B-JOB-003`「Trace/attempt 完整」~~：已由 `TASK-P0BR-063` 修复并在本卡 E4
+  回栈复验通过（28/28 ALL PASS，trace 断言 populatedRows=2）。无未决项。
 
 实施路径：
 
@@ -344,8 +345,10 @@ Completed:
   被强杀的任务经租约到期后被重新领取并最终 SUCCEEDED（attempt 记账完整、Handler 幂等）；
   可重试依赖错误按指数退避+抖动进入 RETRY_WAIT，依赖恢复后无人工干预自行 SUCCEEDED；
   tick 异常不再使调度停摆。
-  但 AC-P0B-JOB-003 的「Trace/attempt 完整」子判据未满足（trace_id 恒为 NULL），
-  根因不在本卡 allowedPaths 内，已交接 TASK-P0BR-063。本卡交接为 IMPLEMENTED_UNVERIFIED。
+  但 AC-P0B-JOB-003 的「Trace/attempt 完整」子判据最初未满足（trace_id 恒为 NULL），
+  根因不在本卡 allowedPaths 内，经用户批准另立 TASK-P0BR-063 修复。
+  063 落地后本卡 E4 已回栈复跑 28/28 ALL PASS（trace 断言 FAIL→PASS），
+  notProven 已撤销，本卡闭环（不再交接 IMPLEMENTED_UNVERIFIED）。
 
 Changed files:
   实施提交 941ab67（TASK-P0BR-023 实施）：
@@ -363,9 +366,9 @@ Changed files:
 Requirements and scenarios satisfied:
   - AC-P0B-JOB-002（E4）：强杀 → 租约到期 → 重新领取 → 幂等短路 → SUCCEEDED；
     被终止的尝试补记为 JOB_LEASE_EXPIRED；attempt_no 无重复；不产生第二个仓库。
-  - AC-P0B-JOB-003（E4，部分满足）：退避重试区间正确、依赖恢复后自行成功、
-    并发不重叠、调度自愈。**「Trace/attempt 完整」未满足**（trace_id 恒为 NULL），
-    见 notProven 与 §7.2。
+  - AC-P0B-JOB-003（E4，已完整闭环）：退避重试区间正确、依赖恢复后自行成功、
+    并发不重叠、调度自愈；「Trace/attempt 完整」经 TASK-P0BR-063 修复后回栈复验 PASS
+    （见 §7 与 EVD 的 revalidation 条目）。
 
 Contract/database changes:
   - 新增 Flyway 前向迁移 V27__job_attempt_trace.sql：job_attempt 增加 trace_id 列，
@@ -376,8 +379,8 @@ Validation run and results:
   - ./docs/ai-spec/tools/validate-spec.ps1 -> PASS
   - validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-023.md -> PASS
   - validate-task-card.ps1 ... -CheckChangedPaths -> PASS
-  - E4 .trae/evidence/job-e4-023.ps1（真实 Compose 栈）-> 28 项断言，27 PASS、1 FAIL
-    （FAIL 为 trace 未填充，见 notProven；非本卡逻辑缺陷）
+  - E4 .trae/evidence/job-e4-023.ps1（真实 Compose 栈）-> 28 项断言：首跑 27 PASS、1 FAIL
+    （trace 未填充，交接 063）；063 落地后回栈复跑 28/28 ALL PASS
   - cd backend; ./mvnw.cmd -o verify -> 520 项，2 失败、6 跳过；2 项失败均为既存
     PreviewJobHandlerTest CSV 解析（不记为 PASS）
   - docker compose -f deploy/compose/compose.yaml config --quiet -> 退出码 0
@@ -394,8 +397,7 @@ Validation not run and reasons:
   - pnpm lint / typecheck / test / build：本卡未触碰 frontend/。
 
 Remaining risks or follow-ups:
-  - **AC-P0B-JOB-003 未完全闭环**：trace_id 未填充，交接 TASK-P0BR-063；063 完成后
-    本卡须回栈复验并撤销 notProven。
+  - ~~AC-P0B-JOB-003 未完全闭环~~：已由 TASK-P0BR-063 修复并回栈复验（28/28），撤销 notProven。
   - DEAD 终态的审计落点、人工 retry/cancel 的状态前置条件与审计属 TASK-P0BR-024。
   - 告警规则与 Grafana 指标名对齐属 TASK-P0BR-030。
   - Gitea 组织的自动创建（REQ-AST-008）与仓库删除（deleteGiteaRepository TODO）仍为未决项。

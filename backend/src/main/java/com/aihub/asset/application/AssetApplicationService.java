@@ -21,9 +21,7 @@ import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.AccessScope;
 import com.aihub.authorization.domain.Permissions;
-import com.aihub.job.domain.Job;
-import com.aihub.job.domain.JobRepository;
-import com.aihub.job.domain.JobStatus;
+import com.aihub.job.application.JobApplicationService;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -71,6 +69,9 @@ public class AssetApplicationService {
     private static final String DICT_FORMAT = "dataset_format";
     private static final String DICT_MODALITY = "dataset_modality";
 
+    /** 建仓任务的最大尝试次数（保持既有值 5，语义见 RepositoryProvisionJobHandler）。 */
+    private static final int PROVISION_MAX_ATTEMPTS = 5;
+
     private final AssetRepository assetRepository;
     private final AssetAccessPolicy accessPolicy;
     private final IdGenerator idGenerator;
@@ -78,7 +79,7 @@ public class AssetApplicationService {
     private final DictionaryValidationPort dictionaryValidationPort;
     private final TagValidationService tagValidationService;
     private final AuditService auditService;
-    private final JobRepository jobRepository;
+    private final JobApplicationService jobApplicationService;
     private final ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
 
     public AssetApplicationService(AssetRepository assetRepository,
@@ -88,7 +89,7 @@ public class AssetApplicationService {
                                    DictionaryValidationPort dictionaryValidationPort,
                                    TagValidationService tagValidationService,
                                    AuditService auditService,
-                                   JobRepository jobRepository,
+                                   JobApplicationService jobApplicationService,
                                    ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider) {
         this.assetRepository = assetRepository;
         this.accessPolicy = accessPolicy;
@@ -97,7 +98,7 @@ public class AssetApplicationService {
         this.dictionaryValidationPort = dictionaryValidationPort;
         this.tagValidationService = tagValidationService;
         this.auditService = auditService;
-        this.jobRepository = jobRepository;
+        this.jobApplicationService = jobApplicationService;
         this.cardProjectionPortProvider = cardProjectionPortProvider;
     }
 
@@ -472,13 +473,13 @@ public class AssetApplicationService {
     }
 
     private void createProvisionJob(Asset asset, String principalId) {
-        String jobId = idGenerator.generate(IdPrefix.JOB);
-        Instant now = Instant.now();
         String payload = "{\"assetId\":\"" + asset.assetId() + "\"}";
-        Job job = new Job(null, jobId, "REPOSITORY_PROVISION", payload,
-                JobStatus.PENDING, 5, 0, now, null, null, null, principalId,
-                asset.assetId(), null, now, now, 0);
-        jobRepository.insert(job);
+        // 经统一入队入口创建任务：traceId 传 null 时由 JobApplicationService 从共享
+        // PrincipalContext 取当前请求的 traceId（缺失则确定性生成），
+        // 保证 job_task/job_attempt.trace_id 非空（REQ-JOB-001「任务传递 trace 上下文」）。
+        // 不得改回 jobRepository.insert(new Job(..., null, ...))——那正是 trace 恒为 NULL 的根因。
+        jobApplicationService.enqueue("REPOSITORY_PROVISION", payload, principalId, null,
+                asset.assetId(), PROVISION_MAX_ATTEMPTS);
     }
 
     private static String modelFramework(CreateAssetCommand command) {

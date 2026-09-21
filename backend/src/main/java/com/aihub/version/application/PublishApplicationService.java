@@ -13,7 +13,6 @@ import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
-import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -159,8 +158,10 @@ public class PublishApplicationService {
 
         // 如果是 REJECT，直接拒绝请求
         if ("REJECT".equals(decision)) {
-            jdbcTemplate.update("UPDATE publish_request SET status = 'REJECTED', decided_at = ? WHERE request_id = ?",
-                    Instant.now(), requestId);
+            // decided_at 由 SQL now() 求值：JdbcTemplate 无法为 Instant 实参推断 JDBC 类型
+            // （真实栈实测 PSQLException → 审批接口必然 500），与库内其余时间列写法一致。
+            jdbcTemplate.update("UPDATE publish_request SET status = 'REJECTED', decided_at = now() WHERE request_id = ?",
+                    requestId);
 
             // 版本回到 DRAFT
             String versionId = String.valueOf(request.get("version_id"));
@@ -176,14 +177,16 @@ public class PublishApplicationService {
         // 如果是 APPROVE，检查是否所有必需审批人都已审批
         // P3 简化：单一审批即可
         if ("APPROVE".equals(decision)) {
-            jdbcTemplate.update("UPDATE publish_request SET status = 'APPROVED', decided_at = ? WHERE request_id = ?",
-                    Instant.now(), requestId);
+            jdbcTemplate.update("UPDATE publish_request SET status = 'APPROVED', decided_at = now() WHERE request_id = ?",
+                    requestId);
 
             // 创建发布 Job
             String versionId = String.valueOf(request.get("version_id"));
             try {
                 String payload = objectMapper.writeValueAsString(
                         Map.of("requestId", requestId, "versionId", versionId));
+                // traceId 传 null：由 JobApplicationService.enqueue 统一从共享
+                // PrincipalContext 取当前请求 traceId（缺失则兜底生成），保证永不为 NULL。
                 jobApplicationService.enqueue("VERSION_PUBLISH", payload, reviewerId, null, versionId, 3);
             } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
                 throw new IllegalStateException("failed to serialize publish payload", e);

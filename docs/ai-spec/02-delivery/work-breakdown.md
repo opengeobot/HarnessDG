@@ -73,6 +73,7 @@ GOV（决策与基线）
 | `TASK-P0BR-055` | 修复资产模型扩展实体的列名转义，恢复资产详情读取 | AC-P0B-UI-004 | GOV-002、P0BR-051 |
 | `TASK-P0BR-056` | 将幂等键唯一约束对齐到含 principalId 的作用域 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-052 |
 | `TASK-P0BR-062` | 修复 Gitea 仓库开通的 URL 编码与建仓非幂等，并使可部署 Profile 显式接通 Gitea | AC-P0B-JOB-003、AC-P0B-ENG-006 | GOV-002、P0BR-023 |
+| `TASK-P0BR-063` | 修复任务入队时 trace 上下文未被填充致 job_task/job_attempt.trace_id 恒为 NULL | AC-P0B-JOB-003 | GOV-002、P0BR-023 |
 
 ### 4.2 身份与授权纵向旅程
 
