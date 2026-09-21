@@ -20,6 +20,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.job.application.BackoffCalculator;
+import com.aihub.job.application.JobAuditPort;
 import com.aihub.job.application.JobNotificationPort;
 import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobAttempt;
@@ -43,6 +44,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 可靠任务 Worker 单元测试。
@@ -58,8 +61,11 @@ class JobWorkerTest {
     @SuppressWarnings("unchecked")
     private final ObjectProvider<JobNotificationPort> notificationPortProvider = mock(ObjectProvider.class);
     @SuppressWarnings("unchecked")
+    private final ObjectProvider<JobAuditPort> auditPortProvider = mock(ObjectProvider.class);
+    @SuppressWarnings("unchecked")
     private final ObjectProvider<MeterRegistry> meterRegistryProvider = mock(ObjectProvider.class);
     private JobNotificationPort notificationPort;
+    private JobAuditPort auditPort;
     private Clock clock;
 
     @BeforeEach
@@ -69,16 +75,21 @@ class JobWorkerTest {
         handlerRegistry = mock(JobHandlerRegistry.class);
         backoff = mock(BackoffCalculator.class);
         notificationPort = mock(JobNotificationPort.class);
+        auditPort = mock(JobAuditPort.class);
         when(notificationPortProvider.getIfAvailable()).thenReturn(notificationPort);
+        when(auditPortProvider.getIfAvailable()).thenReturn(auditPort);
         when(meterRegistryProvider.getIfAvailable()).thenReturn(null);
         when(jobAttemptRepository.exists(anyString(), anyInt())).thenReturn(false);
         clock = Clock.fixed(Instant.parse("2026-07-01T10:00:00Z"), ZoneOffset.UTC);
     }
 
     private JobWorker newWorker() {
+        // 事务模板以 mock 事务管理器构造：execute 同步运行回调，使单测能观察
+        // 「迁移 + attempt + 审计」是否确实处于同一执行单元内。
+        TransactionTemplate txTemplate = new TransactionTemplate(mock(PlatformTransactionManager.class));
         return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
-                notificationPortProvider, clock, meterRegistryProvider, new SensitiveDataMasker(),
-                LEASE_SECONDS);
+                notificationPortProvider, auditPortProvider, txTemplate, clock, meterRegistryProvider,
+                new SensitiveDataMasker(), LEASE_SECONDS);
     }
 
     @Test
@@ -140,6 +151,9 @@ class JobWorkerTest {
         verify(jobRepository).markDead(eq("job_3"), eq("INTERNAL_ERROR"), any());
         verify(notificationPort).notifyJobDead(eq("job_3"), eq("failing.type"), eq(3),
                 eq("INTERNAL_ERROR"), any());
+        // JOB_DEAD 审计与状态迁移同一执行单元提交；摘要不含 payload 原文。
+        verify(auditPort).record(eq("JOB_DEAD"), any(), eq("job_3"), any(),
+                eq(Map.of("jobType", "failing.type", "attempts", 3, "errorCode", "INTERNAL_ERROR")));
     }
 
     @Test
@@ -186,6 +200,25 @@ class JobWorkerTest {
         verify(jobRepository).markDead(eq("job_4"), eq("JOB_HANDLER_NOT_FOUND"), any());
         verify(notificationPort).notifyJobDead(eq("job_4"), eq("unknown.type"), eq(1),
                 eq("JOB_HANDLER_NOT_FOUND"), any());
+        verify(auditPort).record(eq("JOB_DEAD"), any(), eq("job_4"), any(),
+                eq(Map.of("jobType", "unknown.type", "attempts", 1, "errorCode", "JOB_HANDLER_NOT_FOUND")));
+    }
+
+    @Test
+    void shouldNotAuditJobDeadWhenRetrying() throws Exception {
+        // 可重试失败进入 RETRY_WAIT：不得产生 JOB_DEAD 审计（事件只属于终态迁移）。
+        Job job = claimedJob("job_8", "failing.type", 1, 5);
+        when(jobRepository.claimNext(anyString(), any(), anyLong())).thenReturn(Optional.of(claimed(job)));
+        JobHandler handler = mock(JobHandler.class);
+        when(handlerRegistry.resolve("failing.type")).thenReturn(Optional.of(handler));
+        doThrow(new DependencyException(ErrorCode.ASSET_REPOSITORY_PROVISION_FAILED, "gitea down",
+                Map.of(), null))
+                .when(handler).handle(any(JobContext.class));
+        when(backoff.nextRunAt(anyInt(), any())).thenReturn(Instant.parse("2026-07-01T10:00:10Z"));
+
+        newWorker().tick();
+
+        verify(auditPort, never()).record(anyString(), any(), anyString(), any(), any());
     }
 
     @Test

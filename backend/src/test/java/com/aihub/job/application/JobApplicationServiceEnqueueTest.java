@@ -47,7 +47,7 @@ class JobApplicationServiceEnqueueTest {
         IdGenerator idGenerator = mock(IdGenerator.class);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("job_test");
         Clock clock = Clock.fixed(Instant.parse("2026-09-20T08:00:00Z"), ZoneOffset.UTC);
-        service = new JobApplicationService(jobRepository, idGenerator, clock);
+        service = new JobApplicationService(jobRepository, idGenerator, clock, mock(JobAuditPort.class));
     }
 
     @AfterEach
@@ -115,7 +115,7 @@ class JobApplicationServiceEnqueueTest {
         IdGenerator idGenerator = mock(IdGenerator.class);
         when(idGenerator.generate(any(IdPrefix.class))).thenReturn("job_test2");
         service = new JobApplicationService(jobRepository, idGenerator,
-                Clock.fixed(Instant.now(), ZoneOffset.UTC));
+                Clock.fixed(Instant.now(), ZoneOffset.UTC), mock(JobAuditPort.class));
         service.enqueue("REPOSITORY_PROVISION", "{}", "usr_01", null, "ast_b", 5);
         String second = capturedJob().traceId();
 

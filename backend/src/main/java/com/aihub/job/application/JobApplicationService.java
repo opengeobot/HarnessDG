@@ -25,6 +25,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 任务应用服务。
@@ -40,11 +41,14 @@ public class JobApplicationService {
     private final JobRepository jobRepository;
     private final IdGenerator idGenerator;
     private final Clock clock;
+    private final JobAuditPort auditPort;
 
-    public JobApplicationService(JobRepository jobRepository, IdGenerator idGenerator, Clock clock) {
+    public JobApplicationService(JobRepository jobRepository, IdGenerator idGenerator, Clock clock,
+                                 JobAuditPort auditPort) {
         this.jobRepository = jobRepository;
         this.idGenerator = idGenerator;
         this.clock = clock;
+        this.auditPort = auditPort;
     }
 
     /**
@@ -69,8 +73,16 @@ public class JobApplicationService {
     }
 
     /**
-     * 人工重试：将 DEAD/RETRY_WAIT 任务重置为 PENDING。
+     * 人工重试：将 DEAD/RETRY_WAIT 任务重置为 PENDING，并与审计原子提交。
+     *
+     * <p><b>重试预算语义（TASK-P0BR-024 固定）：人工重试不重置 {@code attempts}</b>。
+     * 理由：attempts 是「该任务已被自动执行过多少次」的事实记录（INV-JOB-005 单调递增），
+     * 重置会使 DEAD 判定（attempts >= max_attempts）失去历史依据，并让
+     * 「无限人工重试」绕过重试预算这一治理约束；运维的正确动作是修复依赖后重试，
+     * 若仍反复 DEAD 应经告警升级处置，而不是由重试操作本身发放新预算。
+     * 因此 DEAD 任务被人工重试后，Handler 再失败一次即回到 DEAD——这是设计后果，非缺陷。
      */
+    @Transactional
     public void retryJob(String jobId) {
         requireJobExists(jobId);
         boolean reset = jobRepository.resetToPending(jobId, clock.instant());
@@ -79,11 +91,14 @@ public class JobApplicationService {
                     "job is not in a retryable state (DEAD/RETRY_WAIT)",
                     java.util.Map.of("jobId", jobId));
         }
+        auditPort.record("JOB_MANUALLY_RETRIED", "job:retry", jobId, currentPrincipalId(),
+                java.util.Map.of("targetStatus", "PENDING", "budgetReset", false));
     }
 
     /**
-     * 人工取消：仅 PENDING/RETRY_WAIT 可取消。
+     * 人工取消：仅 PENDING/RETRY_WAIT 可取消，并与审计原子提交。
      */
+    @Transactional
     public void cancelJob(String jobId) {
         requireJobExists(jobId);
         boolean cancelled = jobRepository.cancel(jobId, clock.instant());
@@ -92,6 +107,8 @@ public class JobApplicationService {
                     "job is not in a cancellable state (PENDING/RETRY_WAIT)",
                     java.util.Map.of("jobId", jobId));
         }
+        auditPort.record("JOB_MANUALLY_CANCELLED", "job:cancel", jobId, currentPrincipalId(),
+                java.util.Map.of("targetStatus", "CANCELLED"));
     }
 
     /**
@@ -139,6 +156,11 @@ public class JobApplicationService {
         if (jobRepository.findByJobId(jobId).isEmpty()) {
             throw new NotFoundException(ErrorCode.JOB_NOT_FOUND, "job not found", java.util.Map.of("jobId", jobId));
         }
+    }
+
+    /** 人工操作的 actor：只读共享主体上下文，不在业务模块解析 Token。 */
+    private static String currentPrincipalId() {
+        return PrincipalContextHolder.current().map(PrincipalContext::principalId).orElse(null);
     }
 
     /** 游标（不透明，base64 编码 occurredAt|id）。 */

@@ -6,6 +6,7 @@
 package com.aihub.job.infrastructure;
 
 import com.aihub.job.application.BackoffCalculator;
+import com.aihub.job.application.JobAuditPort;
 import com.aihub.job.application.JobNotificationPort;
 import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobAttempt;
@@ -21,10 +22,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 可靠任务 Worker。
@@ -60,6 +63,8 @@ public class JobWorker {
     private final JobHandlerRegistry handlerRegistry;
     private final BackoffCalculator backoff;
     private final ObjectProvider<JobNotificationPort> notificationPortProvider;
+    private final ObjectProvider<JobAuditPort> auditPortProvider;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final SensitiveDataMasker masker;
     private final long leaseSeconds;
@@ -74,6 +79,8 @@ public class JobWorker {
                      JobHandlerRegistry handlerRegistry,
                      BackoffCalculator backoff,
                      ObjectProvider<JobNotificationPort> notificationPortProvider,
+                     ObjectProvider<JobAuditPort> auditPortProvider,
+                     TransactionTemplate transactionTemplate,
                      Clock clock,
                      ObjectProvider<MeterRegistry> meterRegistryProvider,
                      SensitiveDataMasker masker,
@@ -83,6 +90,8 @@ public class JobWorker {
         this.handlerRegistry = handlerRegistry;
         this.backoff = backoff;
         this.notificationPortProvider = notificationPortProvider;
+        this.auditPortProvider = auditPortProvider;
+        this.transactionTemplate = transactionTemplate;
         this.clock = clock;
         this.masker = masker;
         this.leaseSeconds = leaseSeconds;
@@ -177,10 +186,15 @@ public class JobWorker {
 
     private void handleNoHandler(Job job, int attemptNo, Instant startedAt) {
         Instant endedAt = clock.instant();
-        jobRepository.markDead(job.jobId(), HANDLER_NOT_FOUND_ERROR_CODE, endedAt);
-        recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
-                "DEAD", "no handler registered for type " + job.type(), HANDLER_NOT_FOUND_ERROR_CODE,
-                Duration.between(startedAt, endedAt).toMillis(), job.traceId()));
+        // 状态迁移、attempt 与 JOB_DEAD 审计同事务原子提交（一致性门禁：
+        // 迁移成功而无审计、或审计而无迁移均为缺陷）；通知为旁路，置于事务之外。
+        transactionTemplate.executeWithoutResult(status -> {
+            jobRepository.markDead(job.jobId(), HANDLER_NOT_FOUND_ERROR_CODE, endedAt);
+            recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
+                    "DEAD", "no handler registered for type " + job.type(), HANDLER_NOT_FOUND_ERROR_CODE,
+                    Duration.between(startedAt, endedAt).toMillis(), job.traceId()));
+            auditJobDead(job, attemptNo, HANDLER_NOT_FOUND_ERROR_CODE);
+        });
         jobsDead.increment();
         notifyJobDead(job, attemptNo, HANDLER_NOT_FOUND_ERROR_CODE);
         LOG.warn("job dead (no handler) jobId={} type={}", job.jobId(), job.type());
@@ -193,9 +207,13 @@ public class JobWorker {
         String message = maskMessage(ex.getMessage());
 
         if (isTerminalFailure(ex, attemptNo, job.maxAttempts())) {
-            jobRepository.markDead(job.jobId(), errorCode, endedAt);
-            recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
-                    "DEAD", message, errorCode, durationMs, job.traceId()));
+            // 与 handleNoHandler 同理：迁移、attempt、审计同事务；通知旁路在事务外。
+            transactionTemplate.executeWithoutResult(status -> {
+                jobRepository.markDead(job.jobId(), errorCode, endedAt);
+                recordAttempt(new JobAttempt(null, job.jobId(), attemptNo, startedAt, endedAt,
+                        "DEAD", message, errorCode, durationMs, job.traceId()));
+                auditJobDead(job, attemptNo, errorCode);
+            });
             jobsDead.increment();
             notifyJobDead(job, attemptNo, errorCode);
             LOG.warn("job dead jobId={} type={} attempts={} error={}",
@@ -249,6 +267,23 @@ public class JobWorker {
         if (port != null) {
             port.notifyJobDead(job.jobId(), job.type(), attemptNo, errorCode, job.principalId());
         }
+    }
+
+    /**
+     * 写 JOB_DEAD 审计（REQ-JOB-001 声明的事件；契约口径 Worker 侧事件，无 REST 操作）。
+     *
+     * <p>摘要只含 jobId/type/attempts/errorCode——payload 原文与凭据不得进入审计。
+     * actor 传任务归属主体（principalId），无归属时由适配器落 system。
+     */
+    private void auditJobDead(Job job, int attemptNo, String errorCode) {
+        JobAuditPort port = auditPortProvider.getIfAvailable();
+        if (port == null) {
+            return;
+        }
+        port.record("JOB_DEAD", null, job.jobId(), job.principalId(), Map.of(
+                "jobType", job.type(),
+                "attempts", attemptNo,
+                "errorCode", errorCode == null ? "UNKNOWN" : errorCode));
     }
 
     /**

@@ -4,7 +4,7 @@ taskId: TASK-P0BR-024
 status: READY
 implementationAuthorized: true
 phase: P0-B
-baseCommit: 8ed02ef7e2664b09d878c69f09506027696a764b
+baseCommit: 7b88863fd41b02063217a91dec10f2ed6644f88d
 stageGatePassed: true
 stageGateEvidence: 用户批准方向。依据 READY 需求 REQ-JOB-001（PostgreSQL 可靠任务）与 REQ-AUD-001（不可变业务审计），以及 ACCEPTED 决策 DEC-003（P0-B 必须逐项重验）、DEC-013（Compose 为功能验收环境），补齐 DEAD 终态与人工重试/取消的审计与告警缺口；属 ADR-0002 允许的「公共底座接入与安全整改」，不新增业务能力。
 stageGateEvidenceRefs:
@@ -124,6 +124,24 @@ flywayBaseline: V26
    `:cancel` 在 OpenAPI 中把 `Idempotency-Key` 声明为 `required: true`，
    实现为可选；实现还会返回 404，而契约只声明 403/409。
 
+### 实施中复核的新事实（E4 取证期间确认）
+
+9. **claim 的 attempts 封顶语义**：`JdbcJobRepository.claimNext` 以
+   `CASE WHEN attempts < max_attempts THEN attempts + 1 ELSE attempts` 递增，
+   即 attempts 永不超过 `max_attempts`。因此「人工重试不发放新预算」的**可观察形态**是
+   「重试后真实执行一次 → 立即再 DEAD 且 attempts 保持 `max_attempts` 不变」
+   （而非 attempts 归零、也无法看到 attempts 续增到 max+1）。E4-S2a 据此断言，
+   并用「置备的 DEAD 任务上出现 JOB_DEAD 审计与 DEAD attempt 行」证明该次执行真实发生。
+10. **审计适配器与桥接先例的一处刻意差异**：`TaxonomyAuditAdapter` 吞掉审计写失败，
+    与本卡横切门禁「状态迁移与审计同一事务原子提交——迁移成功而无审计即缺陷」冲突
+    （吞异常恰好制造该半状态）。`JobAuditAdapter` 因此**不吞异常**：
+    Worker 侧 DEAD 落点用 `TransactionTemplate` 把 迁移+attempt+审计 收进同一事务，
+    通知仍按旁路置于事务外。人工操作侧用 `@Transactional` 达成同一效果。
+11. **告警为全库聚合指标**：`system_alert` 的 JOB_DEAD 检查按
+    `count(job_task where status='DEAD') >= 阈值` 判定。E4 必须先清理历史残留
+    （DEAD 任务、FIRING 行）并做**行级对照**（断言本次 FIRING 的那条 `alert_id`
+    转 RESOLVED），否则聚合口径会被上次运行污染（前者空洞通过、后者永不满足）。
+
 ## 3. 范围
 
 ### 允许修改
@@ -216,16 +234,18 @@ flywayBaseline: V26
 
 ## 7. 实施步骤
 
-- [ ] 契约及契约测试（本卡无契约结构变更，仅补实现落点）
-- [ ] Migration 及空库/升级迁移测试（本卡无 Migration）
-- [ ] Application/Domain 用例
-- [ ] REST/MCP/Worker Adapter
-- [ ] 前端页面与状态（本卡不接线前端）
-- [ ] 正常/边界/失败/越权/恢复测试
-- [ ] Compose Fixture/Verify
-- [ ] Runbook/追踪矩阵
+- [x] 契约及契约测试（本卡无契约结构变更，仅补实现落点）
+- [x] Migration 及空库/升级迁移测试（本卡无 Migration）
+- [x] Application/Domain 用例（JobAuditPort + retryJob/cancelJob 同事务审计 + 预算语义固定）
+- [x] REST/MCP/Worker Adapter（JobAuditAdapter；JobWorker 两 DEAD 分支经 TransactionTemplate 原子提交；AlertService 新增 JOB_DEAD 检查与受控阈值）
+- [ ] 前端页面与状态（本卡不接线前端；`JobView` 未变，该项为「本卡不涉及」而非「未完成」）
+- [x] 正常/边界/失败/越权/恢复测试（E2：ManualOpsTest 5 项、JobWorkerTest +3 项审计断言；E4：S1/S2a/S2b/S3）
+- [x] Compose Fixture/Verify（交付基线 compose.yaml 未改；取证覆盖在 .trae/evidence/ 下；verify.ps1 全 PASS）
+- [x] Runbook/追踪矩阵（EVD-P0BR-024-001.yaml；AC-P0B-JOB-004/005 闭环）
 
 勾选必须附 Evidence Manifest 条目；提交代码本身不能作为勾选依据。
+以上每个勾选项均对应 `EVD-P0BR-024-001.yaml` 的 `coverage.proven` 条目与
+`.trae/evidence/job-e4-024.txt`（E4）中的具体断言；§2 事实 9–11 为取证期间新增复核事实。
 
 实施路径：
 
@@ -290,13 +310,67 @@ AI 遇到以下情况必须停止受影响部分并报告：
 
 ```text
 Completed:
+  DEAD 终态与人工重试/取消的审计、通知、告警三条渠道在真实 Compose 栈全部可观察：
+  - 新增 JobAuditPort/JobAuditAdapter（桥接共享 AuditService，审计写失败上抛——
+    与一致性门禁对齐，见 §2 事实 10）；JobWorker 两 DEAD 分支把
+    状态迁移 + attempt + JOB_DEAD 审计收进同一 TransactionTemplate 事务，
+    通知保持旁路在事务外；retryJob/cancelJob 加 @Transactional 并写
+    JOB_MANUALLY_RETRIED/JOB_MANUALLY_CANCELLED；
+  - AlertService 新增 JOB_DEAD 检查（FIRING→RESOLVED 行级对照可观察），
+    三个阈值全部改为受控配置项（aihub.alert.*，默认值保持原行为）；
+  - 重试预算语义固定为「人工重试不发放新预算」（§6.6 决策），理由与可观察形态
+    写入 retryJob javadoc 与 §2 事实 9，E4-S2a 以「attempts 封顶不变 + 执行确实发生」证明。
+  E4 判别力自证：临时移除三处审计落点重建镜像复跑同一脚本 → 5 FAILED；
+  恢复修复形态 → 20/20 ALL PASS。
+
 Changed files:
+  - backend/src/main/java/com/aihub/job/application/JobAuditPort.java（新增）
+  - backend/src/main/java/com/aihub/job/infrastructure/JobAuditAdapter.java（新增）
+  - backend/src/main/java/com/aihub/job/application/JobApplicationService.java
+  - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java
+  - backend/src/main/java/com/aihub/job/infrastructure/JobConfiguration.java
+  - backend/src/main/java/com/aihub/platform/observability/application/AlertService.java
+  - backend/src/test/java/com/aihub/job/application/JobApplicationServiceManualOpsTest.java（新增，5 项）
+  - backend/src/test/java/com/aihub/job/application/JobApplicationServiceEnqueueTest.java（构造器跟进）
+  - backend/src/test/java/com/aihub/job/infrastructure/JobWorkerTest.java（+3 项审计断言）
+  - docs/ai-spec/tasks/TASK-P0BR-024.md（baseCommit 重绑 7b88863、§2 事实 9–11、§7、§10）
+  - docs/ai-spec/tasks/evidence/EVD-P0BR-024-001.yaml（新增，E4）
+
 Requirements and scenarios satisfied:
+  - AC-P0B-JOB-004（E4）：DEAD + attempt(DEAD) + error_code + 三渠道 + attempts 冻结
+    + 告警 FIRING/RESOLVED + 人工重试可恢复至 SUCCEEDED；
+  - AC-P0B-JOB-005（E4）：越权 403 零副作用、有权限 retry/cancel 成功且审计落点唯一、
+    同幂等键重复不二次迁移、非法状态 409、不存在 404（E2 补充）。
+
 Contract/database changes:
+  - 无契约结构变更（x-audit-event 声明因本卡而在实现中成立）；无迁移。
+  - 配置新增（向后兼容、默认值=原行为）：aihub.alert.dead-delivery-threshold /
+    outbox-backlog-threshold / job-dead-threshold。
+
 Validation run and results:
+  - validate-spec.ps1 -> PASS；本卡 validate-task-card -> PASS；-CheckChangedPaths -> PASS
+  - .trae/evidence/job-e4-024.ps1（024 覆盖）-> 20/20 ALL PASS（exit 0）；
+    缺陷基线复跑 -> 5 FAILED（.trae/evidence/job-e4-024-defectbaseline.txt）
+  - cd backend; ./mvnw.cmd -o verify -> 531 项，2 失败、6 跳过；2 项失败均为既存
+    PreviewJobHandlerTest CSV 对（023/049 的 EVD 已记录同一对，本卡未触碰 preview 代码）
+  - docker compose config --quiet -> 退出码 0
+  - ./deploy/compose/scripts/verify.ps1（交付基线 + 024 镜像）-> 19 步全部 PASS
+
 Evidence artifacts:
+  - docs/ai-spec/tasks/evidence/EVD-P0BR-024-001.yaml（E4）
+  - .trae/evidence/job-e4-024.txt / job-e4-024-defectbaseline.txt / job-e4-024-override.yaml
+
 Validation not run and reasons:
+  - 契约破坏检查：本卡无契约变更；@redocly/cli diff 为已登记工具链缺陷。
+  - pnpm lint/typecheck/test/build：未触碰 frontend/。
+
 Remaining risks or follow-ups:
+  - §2 事实 8（asset:write 未注册 → 发布提交入口对任何主体 403）与本卡审计无关，
+    已由 TASK-P0BR-063 登记，另立任务处置；
+  - 同型 Instant 绑定缺陷仍在 PublishJobHandler（4 处）与 PhysicalRecycleJobHandler（1 处）
+    （063 登记，另立任务）；
+  - 告警规则文件与 Grafana 指标名对齐属 TASK-P0BR-030；
+  - E4 取证脚本对「S2b 给予新预算」使用 SQL 特权（夹具行为，已在 EVD assumptions 声明）。
 ```
 
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。

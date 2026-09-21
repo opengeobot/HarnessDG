@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,7 +29,10 @@ import org.springframework.stereotype.Service;
  * 系统告警应用服务。
  *
  * <p>定时检查平台指标并生成告警记录（FIRING / RESOLVED）。
- * 检查项：DEAD 投递数、Outbox 积压数、认证失败率。
+ * 检查项：DEAD 投递数、Outbox 积压数、可靠任务 DEAD 数。
+ *
+ * <p>阈值均为受控配置项（TASK-P0BR-024：不得硬编码不可覆盖），
+ * 默认值与原常量一致，部署时可经 {@code aihub.alert.*} 覆盖。
  */
 @Service
 public class AlertService {
@@ -36,10 +40,12 @@ public class AlertService {
     private static final Logger LOG = LoggerFactory.getLogger(AlertService.class);
     private static final int DEFAULT_LIMIT = 100;
 
-    /** DEAD 投递告警阈值 */
-    private static final long DEAD_DELIVERY_THRESHOLD = 5;
-    /** Outbox 积压告警阈值 */
-    private static final long OUTBOX_BACKLOG_THRESHOLD = 100;
+    /** DEAD 投递告警阈值（受控配置） */
+    private final long deadDeliveryThreshold;
+    /** Outbox 积压告警阈值（受控配置） */
+    private final long outboxBacklogThreshold;
+    /** 可靠任务 DEAD 告警阈值（受控配置；默认 1——出现即告警） */
+    private final long jobDeadThreshold;
 
     private final JdbcTemplate jdbcTemplate;
     private final OutboxRepository outboxRepository;
@@ -50,12 +56,18 @@ public class AlertService {
     public AlertService(JdbcTemplate jdbcTemplate,
                          OutboxRepository outboxRepository,
                          WebhookDeliveryRepository deliveryRepository,
-                         IdGenerator idGenerator, Clock clock) {
+                         IdGenerator idGenerator, Clock clock,
+                         @Value("${aihub.alert.dead-delivery-threshold:5}") long deadDeliveryThreshold,
+                         @Value("${aihub.alert.outbox-backlog-threshold:100}") long outboxBacklogThreshold,
+                         @Value("${aihub.alert.job-dead-threshold:1}") long jobDeadThreshold) {
         this.jdbcTemplate = jdbcTemplate;
         this.outboxRepository = outboxRepository;
         this.deliveryRepository = deliveryRepository;
         this.idGenerator = idGenerator;
         this.clock = clock;
+        this.deadDeliveryThreshold = deadDeliveryThreshold;
+        this.outboxBacklogThreshold = outboxBacklogThreshold;
+        this.jobDeadThreshold = jobDeadThreshold;
     }
 
     /** 查询告警列表（按触发时间降序）。 */
@@ -79,6 +91,7 @@ public class AlertService {
         try {
             checkDeadDeliveries();
             checkOutboxBacklog();
+            checkJobDead();
         } catch (Exception e) {
             LOG.warn("alert check failed", e);
         }
@@ -88,12 +101,12 @@ public class AlertService {
         long deadCount = deliveryRepository.countByStatus(WebhookDeliveryStatus.DEAD);
         boolean hasFiringAlert = hasFiringAlert("DEAD_DELIVERY");
 
-        if (deadCount >= DEAD_DELIVERY_THRESHOLD && !hasFiringAlert) {
+        if (deadCount >= deadDeliveryThreshold && !hasFiringAlert) {
             fireAlert("DEAD_DELIVERY", "WARNING",
                     "Dead webhook deliveries exceed threshold",
-                    String.format("DEAD delivery count: %d (threshold: %d)", deadCount, DEAD_DELIVERY_THRESHOLD),
-                    "aihub_webhook_deliveries_total", (double) DEAD_DELIVERY_THRESHOLD, (double) deadCount);
-        } else if (deadCount < DEAD_DELIVERY_THRESHOLD && hasFiringAlert) {
+                    String.format("DEAD delivery count: %d (threshold: %d)", deadCount, deadDeliveryThreshold),
+                    "aihub_webhook_deliveries_total", (double) deadDeliveryThreshold, (double) deadCount);
+        } else if (deadCount < deadDeliveryThreshold && hasFiringAlert) {
             resolveAlert("DEAD_DELIVERY", deadCount);
         }
     }
@@ -102,13 +115,35 @@ public class AlertService {
         long pendingCount = outboxRepository.countPending();
         boolean hasFiringAlert = hasFiringAlert("OUTBOX_BACKLOG");
 
-        if (pendingCount >= OUTBOX_BACKLOG_THRESHOLD && !hasFiringAlert) {
+        if (pendingCount >= outboxBacklogThreshold && !hasFiringAlert) {
             fireAlert("OUTBOX_BACKLOG", "WARNING",
                     "Outbox backlog exceeds threshold",
-                    String.format("Pending outbox events: %d (threshold: %d)", pendingCount, OUTBOX_BACKLOG_THRESHOLD),
-                    "outbox_pending_count", (double) OUTBOX_BACKLOG_THRESHOLD, (double) pendingCount);
-        } else if (pendingCount < OUTBOX_BACKLOG_THRESHOLD && hasFiringAlert) {
+                    String.format("Pending outbox events: %d (threshold: %d)", pendingCount, outboxBacklogThreshold),
+                    "outbox_pending_count", (double) outboxBacklogThreshold, (double) pendingCount);
+        } else if (pendingCount < outboxBacklogThreshold && hasFiringAlert) {
             resolveAlert("OUTBOX_BACKLOG", pendingCount);
+        }
+    }
+
+    /**
+     * 可靠任务 DEAD 告警（AC-P0B-JOB-004）：DEAD 状态任务数达到阈值即 FIRING，
+     * 运维处置（重试成功后不再计入 DEAD 数）使数量回落后恢复 RESOLVED。
+     *
+     * <p>指标 label 不加入 jobId/principalId（基数约束）；计数按状态聚合。
+     */
+    private void checkJobDead() {
+        Long deadCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM job_task WHERE status = 'DEAD'", Long.class);
+        long count = deadCount == null ? 0L : deadCount;
+        boolean hasFiringAlert = hasFiringAlert("JOB_DEAD");
+
+        if (count >= jobDeadThreshold && !hasFiringAlert) {
+            fireAlert("JOB_DEAD", "WARNING",
+                    "Reliable jobs reached DEAD state",
+                    String.format("DEAD job count: %d (threshold: %d)", count, jobDeadThreshold),
+                    "job_queue_size_dead", (double) jobDeadThreshold, (double) count);
+        } else if (count < jobDeadThreshold && hasFiringAlert) {
+            resolveAlert("JOB_DEAD", count);
         }
     }
 

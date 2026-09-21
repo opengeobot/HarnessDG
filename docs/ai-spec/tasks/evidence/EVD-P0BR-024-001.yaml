@@ -1,0 +1,205 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-024-001
+# 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈取证：
+# job-e4-024.ps1 20/20 断言 ALL PASS（修复形态），同一脚本对缺陷基线（移除三处审计落点）
+# 复跑为 5 FAILED——证明断言具备判别力，PASS 不是空洞通过。
+# AC-P0B-JOB-004（DEAD 三渠道 + attempts 冻结）与 AC-P0B-JOB-005（越权/前置条件/幂等/审计）
+# 的全部行为切片均已闭环；重试预算语义按 §6.6 固定为「不重置」并有可观察证据。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-024
+  requirements: [REQ-JOB-001, REQ-AUD-001]
+  scenarios:
+    - AC-P0B-JOB-004
+    - AC-P0B-JOB-005
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-024.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-024.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-024.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 7b88863fd41b02063217a91dec10f2ed6644f88d
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/job/application/JobAuditPort.java
+    - backend/src/main/java/com/aihub/job/application/JobApplicationService.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobAuditAdapter.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobConfiguration.java
+    - backend/src/main/java/com/aihub/platform/observability/application/AlertService.java
+    - backend/src/test/java/com/aihub/job/application/JobApplicationServiceManualOpsTest.java
+    - backend/src/test/java/com/aihub/job/application/JobApplicationServiceEnqueueTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JobWorkerTest.java
+    - docs/ai-spec/tasks/TASK-P0BR-024.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-024-001.yaml
+
+environment:
+  observedAt: 2026-09-21T12:30:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 2025-10-21 LTS
+  docker: "29.1.2 (Docker Desktop, Linux engine)"
+  composeProfiles: [compose, api, worker]
+  composeServices: [postgres, minio, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    postgres: docker.m.daocloud.io/library/postgres:17.2-alpine
+    gitea: 1.24.0（真实依赖，用于注入「持续失败 → DEAD」与「恢复 → 重试成功」）
+
+execution:
+  workingDirectory: d:/workspace/opengeobot/HarnessDG
+  command: >-
+    docker compose build backend worker；
+    docker compose -f deploy/compose/compose.yaml -f .trae/evidence/job-e4-024-override.yaml
+    up -d --force-recreate backend worker（告警 5s / 阈值 1 / 退避 1s-2s / 仅 worker 领取）；
+    powershell -NoProfile -ExecutionPolicy Bypass -File .trae/evidence/job-e4-024.ps1（E4，20 项断言）；
+    缺陷基线对照：临时移除三处审计落点后重建镜像复跑同一脚本（5 FAILED）；
+    cd backend; ./mvnw.cmd -o verify（E2 全量）
+  startedAt: 2026-09-21T11:50:00+08:00
+  finishedAt: 2026-09-21T12:30:00+08:00
+  # E4 修复形态 exit 0（20/20）；缺陷基线 exit 1（5 FAILED，见 coverage 的判别力条目）。
+  # 后端全量 verify 的 2 项既存 IT 失败与本卡无关（见 limitations），不冒充 PASS。
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies:
+    - 真实 PostgreSQL 17（job_task/job_attempt/audit_log/notification/system_alert 直连真实库）
+    - 真实 Gitea 容器（持续失败注入与依赖恢复）
+    - 真实容器停机/恢复（docker stop/start，非 mock 异常）
+  e4EntryPoint: Nginx/REST（http://localhost:8080）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-JOB-004
+      assertion: >-
+        E4-S1（真实 Compose 栈，job-e4-024.ps1）：停用 Gitea 后创建资产，任务经
+        5 次真实尝试（指数退避 1s/2s 受控配置）进入 DEAD 且 error_code 落库；
+        job_attempt 存在 DEAD 行；JOB_DEAD 审计（audit_log）、JOB_DEAD 站内通知
+        （notification，参数含 jobId）、JOB_DEAD 告警（system_alert FIRING）三条渠道
+        各自可查；此后 15s 内 attempts 与 attempt 行数均不再增长（终态冻结、无无限重试）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-JOB-004
+      assertion: >-
+        E4-S2a（重试预算语义，固定为「不重置」）：SQL 置备一个 attempts=5/max=5 的
+        DEAD 任务（未知 Handler 类型——确定性即时失败、无外部依赖竞态）。
+        REST retry 返回 200 且产生 JOB_MANUALLY_RETRIED 审计；worker 真实执行一次
+        （该任务上的 JOB_DEAD 审计与 attempt(DEAD/JOB_HANDLER_NOT_FOUND) 行只能由执行写入，
+        置备阶段 worker 从未领取过它）；随后立即再 DEAD 且 attempts 仍为 5——
+        claim 封顶（CASE WHEN attempts < max THEN attempts+1 ELSE attempts）+ 不重置，
+        「人工重试不发放新预算」成为可观察事实（理由与替代方案见卡 §7 retryJob javadoc）。
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-JOB-004
+      assertion: >-
+        E4-S2b（恢复与告警回落）：恢复 Gitea 与 worker 后对 S1 的 DEAD 任务
+        （夹具显式给予新预算，与预算语义解耦）REST retry → 任务重新执行至 SUCCEEDED；
+        S1 触发的那条 FIRING 告警行本身转为 RESOLVED（行级对照，不受历史行干扰）。
+      scenarioCategory: recovery
+    - scenarioId: AC-P0B-JOB-005
+      assertion: >-
+        E4-S3（越权与前置条件）：READER 角色主体（无 job:manage）对 PENDING 任务
+        调用 :retry 与 :cancel 均 403，任务状态不变且零成功类审计（拒绝不改变状态码、
+        不因新增审计而放宽）；有 job:manage 的 admin 取消成功 → CANCELLED +
+        JOB_MANUALLY_CANCELLED 审计恰一条；同 Idempotency-Key 重复取消返回缓存 200、
+        不产生第二次迁移或重复审计；CANCELLED 上 retry 与 SUCCEEDED 上 cancel 均 409；
+        不存在的任务 :retry/:cancel 均 404 且不泄漏、不写成功审计。
+      scenarioCategory: unauthorized
+    - scenarioId: AC-P0B-JOB-005
+      assertion: >-
+        判别力反向对照（缺陷基线）：临时移除三处审计落点（JobWorker.auditJobDead、
+        retryJob/cancelJob 的 auditPort.record）后重建镜像复跑同一 E4 脚本 -> 5 FAILED
+        （S1 JOB_DEAD 审计缺失、S2a 两项、S2b RESOLVED 前值异常、S3 取消审计缺失）；
+        恢复修复形态后 20/20 ALL PASS。E2 同法验证：ManualOpsTest 3/5 FAIL、
+        JobWorkerTest 2/16 FAIL（仅审计相关项）。审计断言非空洞通过。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-JOB-004
+      assertion: >-
+        E2（JobWorkerTest 16 项、JobApplicationServiceManualOpsTest 5 项）：
+        DEAD 两分支（无 Handler / 重试预算耗尽）审计与迁移、attempt 同事务执行单元；
+        可重试失败（RETRY_WAIT）不产生 JOB_DEAD 审计；拒绝路径（404/409）零审计；
+        审计摘要含 budgetReset=false 显式事实；actor 取自共享 PrincipalContext。
+      scenarioCategory: happy
+  notProven: []
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: null
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: null
+
+artifacts:
+  reports:
+    - backend/src/main/java/com/aihub/job/application/JobAuditPort.java（新增）
+    - backend/src/main/java/com/aihub/job/infrastructure/JobAuditAdapter.java（新增）
+    - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java（DEAD 审计 + 事务边界）
+    - backend/src/main/java/com/aihub/platform/observability/application/AlertService.java（JOB_DEAD 检查 + 阈值受控）
+  logs:
+    - .trae/evidence/job-e4-024.txt（修复形态 E4 全文：20 PASS / 0 FAIL）
+    - .trae/evidence/job-e4-024-defectbaseline.txt（缺陷基线 E4 全文：5 FAILED）
+    - .trae/evidence/job-e4-024-override.yaml（E4 覆盖：告警 5s / 阈值 1 / 退避 1s-2s / 仅 worker）
+  screenshots: []
+  traces: []
+  metrics:
+    - E4 脚本：20 项断言，修复形态 20 PASS、缺陷基线 5 FAIL（判别力自证）
+    - JobWorkerTest：16 项 PASS（含 3 项新审计断言）
+    - JobApplicationServiceManualOpsTest：5 项 PASS（新增）
+    - 后端全量 ./mvnw -o verify（024 镜像）：531 项，2 失败、6 跳过；
+      2 项失败均为既存 PreviewJobHandlerTest CSV 对（本卡未触碰 preview 代码）
+  databaseQueries:
+    - "SELECT status, attempts, error_code FROM job_task -> DEAD 判定与 attempts 冻结"
+    - "SELECT count(*) FROM audit_log WHERE event_type='JOB_DEAD' AND resource_id=? -> 审计落点"
+    - "SELECT count(*) FROM notification WHERE event_type='JOB_DEAD' AND parameters->>'jobId'=? -> 通知渠道"
+    - "SELECT status FROM system_alert WHERE alert_type='JOB_DEAD' -> FIRING/RESOLVED 行级对照"
+    - "SELECT count(*) FROM audit_log WHERE event_type LIKE 'JOB_MANUALLY%' -> 拒绝路径零审计/幂等不重复"
+  auditEvents:
+    - JOB_DEAD（Worker 两 DEAD 分支，与状态迁移同事务）
+    - JOB_MANUALLY_RETRIED / JOB_MANUALLY_CANCELLED（应用服务成功路径，同事务）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 证据不含任何口令、Token、Secret 或预签名 URL；审计摘要仅含 jobId/type/attempts/errorCode。
+    - E4 输出只记录状态、计数与业务 ID。
+
+limitations:
+  skippedTests:
+    - >-
+      后端全量 verify 的 2 项 PreviewJobHandlerTest CSV 失败为既存缺陷
+      （EVD-P0BR-049-001 记录同一对），本卡未触碰 preview/CSV 代码，不记为 PASS。
+    - >-
+      6 项 SKIP 为 Testcontainers 依赖类 IT 在 -Dapi.version 协商下的既存跳过集合
+      （与 023/062 轮次一致）；SKIP 不计为 PASS。
+  assumptions:
+    - >-
+      JOB_DEAD 告警按全库 DEAD 数聚合（阈值默认 1）。E4 在运行前清理历史残留
+      DEAD 任务与 FIRING 告警行，避免聚合指标被上次运行污染——该清理仅存在于
+      取证脚本（一次性测试库），不是产品行为。
+    - >-
+      S2b 对 S1 的 DEAD 任务以 SQL 显式给予新预算（attempts=0），用于把
+      「重试成功路径」与「预算不重置语义」两个命题解耦验证；预算语义本身由 S2a 证明。
+  environmentDifferences:
+    - >-
+      E4 覆盖把告警检查间隔压到 5s（交付基线 5min）、DEAD 阈值设 1、退避压到秒级、
+      仅 worker 启用 JobWorker；均为取证用环境变量覆盖，不改交付 compose.yaml。
+    - >-
+      首次修复形态复跑出现 1 项假失败（S2a RETRIED 审计 0）：根因是对同一文件的
+      两处并行恢复编辑只有一处最终生效（retryJob 仍是 TEMP-DEFECT-BASELINE 分支），
+      镜像按含缺陷的源码构建。以 Grep 全库确认哨兵标记清零、重建后复跑 20/20 全绿。
+      固化教训：鉴别力自证恢复后必须先 Grep 哨兵标记、再串行编辑同文件、后 build。
+
+review:
+  recordedBy: Trae AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

@@ -6,6 +6,7 @@
 package com.aihub.job.infrastructure;
 
 import com.aihub.job.application.BackoffCalculator;
+import com.aihub.job.application.JobAuditPort;
 import com.aihub.job.application.JobNotificationPort;
 import com.aihub.job.domain.JobAttemptRepository;
 import com.aihub.job.domain.JobRepository;
@@ -23,6 +24,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * job 模块装配。
@@ -78,12 +80,15 @@ public class JobConfiguration {
                                JobHandlerRegistry handlerRegistry,
                                BackoffCalculator backoff,
                                ObjectProvider<JobNotificationPort> notificationPortProvider,
+                               ObjectProvider<JobAuditPort> auditPortProvider,
+                               TransactionTemplate transactionTemplate,
                                Clock clock,
                                ObjectProvider<MeterRegistry> meterRegistryProvider,
                                SensitiveDataMasker sensitiveDataMasker,
                                @Value("${aihub.job.worker.lease-seconds:60}") long leaseSeconds) {
         return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
-                notificationPortProvider, clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds);
+                notificationPortProvider, auditPortProvider, transactionTemplate,
+                clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds);
     }
 
     /**
