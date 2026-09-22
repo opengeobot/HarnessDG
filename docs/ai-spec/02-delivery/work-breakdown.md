@@ -65,6 +65,20 @@ GOV（决策与基线）
 | `TASK-P0BR-002` | `principalId=prn_`、userId/agentId 语义在 JWT/API/DB/审计统一 | TERM-001、INV-COM-001 | GOV-005 |
 | `TASK-P0BR-003` | Permission Catalog、Java 常量、V4+ Seed、OpenAPI 和 UI 无漂移 | TERM-003、AUD-016 | GOV-002 |
 | `TASK-P0BR-004` | 内置角色按确认 Persona 最小权限重建：拆分 READER 为 READER+OBSERVER（DEC-018） | AUD-017、personas matrix、DEC-018 | P0BR-003 |
+| `TASK-P0BR-047` | 修复可部署 Profile 的 Mapper 扫描覆盖，恢复 Compose 栈启动与 E3/E4 可达性 | AC-P0B-ENG-004/006 | GOV-002 |
+| `TASK-P0BR-048` | 资产表单受控字典选择恢复可用（dictCode 对齐 MVP Catalog） | AC-P0B-UI-004、AC-P0B-TAX-006 | GOV-002 |
+| `TASK-P0BR-049` | 资产 Facet 过滤条件下推，聚合计数与检索一致 | AC-P0B-AUTH-003、AC-DST-TAX-002 | GOV-002、P0BR-017 |
+| `TASK-P0BR-050` | 管理端页面可发现性与版本入口死链修复 | AC-P0B-UI-003/006、PAGE-ADM-004/008/009 | P0BR-041 |
+| `TASK-P0BR-051` | 修复可靠任务的 job_task 插入列/占位符不一致，恢复资产创建主链路 | AC-P0B-JOB-001、AC-P0B-UI-004 | GOV-002、P0BR-047 |
+| `TASK-P0BR-052` | 修复幂等存储的 Instant 绑定，恢复带 Idempotency-Key 的写接口 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-047 |
+| `TASK-P0BR-053` | 修复 verify 脚本默认拒绝断言无法区分权限拒绝与改密门（假阳性） | AC-P0B-AUTH-003、AC-P0B-AUTH-004 | GOV-002、P0BR-051/052 |
+| `TASK-P0BR-054` | 移除抢先回放的全局幂等拦截器，使摘要比对在 HTTP 层可达 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-052 |
+| `TASK-P0BR-055` | 修复资产模型扩展实体的列名转义，恢复资产详情读取 | AC-P0B-UI-004 | GOV-002、P0BR-051 |
+| `TASK-P0BR-056` | 将幂等键唯一约束对齐到含 principalId 的作用域 | AC-P0B-IDM-001、AC-P0B-IDM-002 | GOV-002、P0BR-052 |
+| `TASK-P0BR-062` | 修复 Gitea 仓库开通的 URL 编码与建仓非幂等，并使可部署 Profile 显式接通 Gitea | AC-P0B-JOB-003、AC-P0B-ENG-006 | GOV-002、P0BR-023 |
+| `TASK-P0BR-063` | 修复任务入队时 trace 上下文未被填充致 job_task/job_attempt.trace_id 恒为 NULL | AC-P0B-JOB-003 | GOV-002、P0BR-023 |
+| `TASK-P0BR-064` | 修复发布链路的未注册权限码 asset:write 与 Handler 内 Instant 绑定（审计/告警静默丢行） | AC-P0B-AUTH-004、AC-P0B-AUD-001 | GOV-002、P0BR-063 |
+| `TASK-P0BR-065` | 审查页数据流真实化（删除捏造队列）、前端幽灵权限码 asset:write 纠偏、/review 导航入口、幽灵端点清理、占位文案 i18n（差距层 0） | AC-P0B-UI-002/003/005/006 | GOV-002、P0BR-050、P0BR-064 |
 
 ### 4.2 身份与授权纵向旅程
 
