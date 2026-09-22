@@ -1,0 +1,96 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P2011-001
+status: DRAFT
+
+task:
+  taskId: TASK-P2-011
+  requirements: [REQ-PRE-001, REQ-DST-TAX-001]
+  scenarios: [AC-DST-PRE-001, AC-DST-PRE-002, AC-DST-PRE-003, AC-DST-PRE-004, AC-DST-TAX-001, AC-DST-TAX-002]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-011.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-011.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-011.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T04:15:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  node: local
+  pnpm: local
+  docker: available
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: backend
+  command: ./mvnw -o verify
+  startedAt: 2026-07-12T04:08:00Z
+  finishedAt: 2026-07-12T04:09:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-PRE-001
+      assertion: PreviewJobHandler content 为空时按 versionId 解析首个可预览 artifact，从 dvc-cache 自动取数解析 CSV（PreviewJobHandlerTest.shouldAutoFetchFromStorageWhenContentAbsent）
+    - scenarioId: AC-DST-PRE-002
+      assertion: image artifact 返回安全引用不内联二进制；text 分支 truncate+sanitize（PreviewJobHandlerTest.imageArtifactShouldReturnReferenceWithoutBytes + PreviewContentSecurityTest）
+    - scenarioId: AC-DST-PRE-003
+      assertion: 预览绑定精确 versionId，Parquet schema/列类型经 ParquetPreviewReader 解析；size 上限生效
+    - scenarioId: AC-DST-TAX-001
+      assertion: GET /datasets 支持 taskCodes/modalityCodes/formatCodes 多值过滤（AssetCatalogController + AssetApplicationServiceTest.searchAssetsPropagatesDatasetMultiValueFilters）
+    - scenarioId: AC-DST-TAX-002
+      assertion: Facet 计算经 AssetSearchDao 权限/敏感度/状态过滤下推（既有测试 + 677 PASS 回归）
+  notProven:
+    - scenarioId: AC-DST-PRE-004
+      reason: 越权防枚举 E4 需 Compose 全栈旅程（Wave W 闭合）
+    - scenarioId: AC-DST-TAX-002
+      reason: Facet 权限下推 E4 需 Testcontainers IT（96 IT SKIPPED due to disabledWithoutDocker from JVM）
+
+artifacts:
+  reports:
+    - ./mvnw -o verify → BUILD SUCCESS, 677 unit PASS, 96 IT SKIPPED
+    - redocly lint → valid (2 pre-existing warnings)
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - AssetCatalogIT (Testcontainers disabledWithoutDocker from JVM)
+    - VersionPublishIT, UploadTransferIT, AgentRestIT, McpEndToEndIT (同上)
+  assumptions:
+    - redocly diff 未运行：redocly CLI 2.38.0 已移除 diff 子命令（CI 命令需更新）；OpenAPI 变更为纯增量（新增可选 query 参数 + 错误码 + 描述），按语义非 breaking
+    - languageCodes 多值未在应用层 AssetSearchQuery 增加（会破坏 allowedPaths 外的 AssetController/AssetRequestMapper/McpToolCatalog/AgentController）；/datasets 与 /assets 对齐至 taskCodes/modalityCodes/formatCodes 多值，language 保持单值（与 /assets 一致）；languageCodes 多值列为后续 follow-up
+  environmentDifferences:
+    - Testcontainers IT 从 JVM 不可达 Docker（disabledWithoutDocker 跳过），E4 旅程留 Wave W
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

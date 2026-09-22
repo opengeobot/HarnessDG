@@ -55,6 +55,19 @@ class PlatformMetricsTest {
     }
 
     @Test
+    void shouldIncrementPreviewFailureCounter() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        PlatformMetrics metrics = new PlatformMetrics(registryProvider(registry));
+
+        metrics.recordPreviewFailure("limit_exceeded");
+        metrics.recordPreviewFailure("limit_exceeded");
+        metrics.recordPreviewFailure("unsupported_format");
+
+        assertThat(metrics.previewFailureCount("limit_exceeded")).isEqualTo(2);
+        assertThat(metrics.previewFailureCount("unsupported_format")).isEqualTo(1);
+    }
+
+    @Test
     void shouldNoopWhenNoMeterRegistry() {
         PlatformMetrics metrics = new PlatformMetrics(registryProvider(null));
 

@@ -6,6 +6,10 @@ openapi: 3.1.0
 info:
   title: AIHub Agent API
   version: 0.1.0
+  x-verification-status: implemented-unverified
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
   description: |
     Agent-friendly subset of the AIHub REST API.
     Two profiles: read-only (asset search/inspect) and contribution (draft/create/upload).
@@ -29,6 +33,9 @@ paths:
   /agent/assets/search:
     get:
       operationId: agentSearchAssets
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_search
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       tags: [read-only]
       summary: Search assets (read-only profile)
       description: |
@@ -64,7 +71,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/AssetSummary' }
-                  nextCursor: { type: string, nullable: true }
+                  nextCursor: { type: [string, 'null'] }
                   hasMore: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -72,6 +79,9 @@ paths:
   /agent/assets/{assetId}:
     get:
       operationId: agentGetAsset
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_get
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND]
       tags: [read-only]
       summary: Get asset details (read-only profile)
       parameters:
@@ -92,6 +102,9 @@ paths:
   /agent/assets/{assetId}/versions:
     get:
       operationId: agentListVersions
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_list_versions
+      x-error-codes: [AUTH_UNAUTHENTICATED, ASSET_NOT_FOUND]
       tags: [read-only]
       summary: List versions for an asset (read-only profile)
       parameters:
@@ -116,13 +129,39 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/VersionSummary' }
-                  nextCursor: { type: string, nullable: true }
+                  nextCursor: { type: [string, 'null'] }
                   hasMore: { type: boolean }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /agent/versions/{versionId}:
+    get:
+      operationId: agentGetVersion
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_get_version
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
+      tags: [read-only]
+      summary: Get version details (read-only profile)
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Version details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /agent/versions/{versionId}/download:
     post:
       operationId: agentRequestDownload
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_request_download
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND]
       tags: [read-only]
       summary: Request download ticket (returns handle, not URL)
       parameters:
@@ -136,7 +175,7 @@ paths:
             schema:
               type: object
               properties:
-                artifactId: { type: string, nullable: true }
+                artifactId: { type: [string, 'null'] }
       responses:
         '200':
           description: Download ticket
@@ -149,14 +188,21 @@ paths:
   /agent/assets/{assetId}/versions/draft:
     post:
       operationId: agentCreateDraftVersion
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_create_draft
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT, RATE_LIMIT_EXCEEDED]
       tags: [contribution]
       summary: Create a draft version (contribution profile)
       description: |
         Requires mcp.writeTools.enabled=true and asset:manage permission.
-        Protected by confirmation token mechanism.
+        Requires Idempotency-Key header.
       parameters:
         - name: assetId
           in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
           required: true
           schema: { type: string }
       requestBody:
@@ -168,7 +214,6 @@ paths:
               required: [version]
               properties:
                 version: { type: string }
-                confirmationToken: { type: string, nullable: true }
       responses:
         '201':
           description: Draft version created
@@ -178,6 +223,127 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /agent/assets/{assetId}/upload-sessions:
+    post:
+      operationId: agentCreateUploadSession
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_create_upload_session
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, VERSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
+      tags: [contribution]
+      summary: Create an upload session (contribution profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [versionId, totalBytes, fileCount]
+              properties:
+                versionId: { type: string }
+                totalBytes: { type: integer, format: int64 }
+                fileCount: { type: integer }
+      responses:
+        '201':
+          description: Upload session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /agent/assets/{assetId}/upload-sessions/{sessionId}/complete:
+    post:
+      operationId: agentCompleteUploadSession
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_complete_upload
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, UPLOAD_SESSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
+      tags: [contribution]
+      summary: Complete an upload session (contribution profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                parts:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      partNumber: { type: integer }
+                      etag: { type: string }
+                files:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      sha256: { type: string }
+                      size: { type: integer, format: int64 }
+                      mediaType: { type: string }
+                      sampleContent: { type: string }
+      responses:
+        '200':
+          description: Upload session completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /agent/assets/{assetId}/upload-sessions/{sessionId}:
+    get:
+      operationId: agentGetUploadSession
+      x-implementation-status: implemented-unverified
+      x-mcp-equivalent: asset_get_upload_status
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED, UPLOAD_SESSION_NOT_FOUND, RATE_LIMIT_EXCEEDED]
+      tags: [contribution]
+      summary: Get upload session status (contribution profile)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Upload session status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
 components:
   securitySchemes:
@@ -192,6 +358,7 @@ components:
       type: object
       properties:
         assetId: { type: string }
+        coordinate: { type: string, description: Stable aih:// URI }
         type: { type: string, enum: [MODEL, DATASET] }
         namespace: { type: string }
         name: { type: string }
@@ -200,20 +367,13 @@ components:
         visibility: { type: string }
         status: { type: string }
         license: { type: string }
-        tagIds:
+        matchedFields:
           type: array
-          items:
-            type: string
-            pattern: "^tag_"
-          description: "Controlled tag references (write-only in creates/updates, read-only in responses)"
-        organizationId:
-          type: string
-          pattern: "^org_"
-          description: "Organization identifier"
-        projectId:
-          type: string
-          pattern: "^proj_"
-          description: "Project identifier"
+          items: { type: string }
+          description: Keyword search hit fields (empty when no keyword)
+        latestPublished:
+          type: [string, 'null']
+          description: Server-computed latest PUBLISHED version label
 
     AssetDetail:
       allOf:
@@ -240,18 +400,37 @@ components:
         assetId: { type: string }
         version: { type: string }
         status: { type: string, enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED] }
-        gitTag: { type: string, nullable: true }
-        manifestDigest: { type: string, nullable: true }
-        publishedAt: { type: string, format: date-time, nullable: true }
+        gitTag: { type: [string, 'null'] }
+        manifestDigest: { type: [string, 'null'] }
+        publishedAt: { type: [string, 'null'], format: date-time }
 
     DownloadTicket:
       type: object
+      description: Download handle; MCP returns this shape without presignedUrl.
       properties:
+        versionId: { type: string }
+        artifactId: { type: [string, 'null'] }
         method: { type: string, enum: [PRESIGNED_URL, GIT_DVC] }
-        presignedUrl: { type: string, nullable: true }
-        expiresAt: { type: string, format: date-time, nullable: true }
-        fileName: { type: string, nullable: true }
-        fileSize: { type: integer, format: int64, nullable: true }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        fileName: { type: [string, 'null'] }
+        fileSize: { type: [integer, 'null'], format: int64 }
+        gitCloneUrl: { type: [string, 'null'] }
+        revision: { type: [string, 'null'] }
+        dvcCredentialsUrl: { type: [string, 'null'] }
+        assetId: { type: string }
+
+    UploadSessionSummary:
+      type: object
+      properties:
+        sessionId: { type: string }
+        assetId: { type: string }
+        versionId: { type: string }
+        status: { type: string }
+        totalBytes: { type: integer, format: int64 }
+        fileCount: { type: integer }
+        materializeJobId: { type: [string, 'null'] }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
 
     ErrorResponse:
       type: object
@@ -281,6 +460,11 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     Conflict:
       description: Resource state conflict
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateLimited:
+      description: Agent/MCP rate limit exceeded
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }

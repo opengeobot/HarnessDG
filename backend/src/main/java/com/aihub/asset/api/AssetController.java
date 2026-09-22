@@ -7,6 +7,9 @@ package com.aihub.asset.api;
 
 import com.aihub.asset.application.AssetApplicationService;
 import com.aihub.asset.application.AssetFacetView;
+import com.aihub.asset.application.AssetLineageQueryService;
+import com.aihub.asset.application.AssetRelationApplicationService;
+import com.aihub.asset.application.AssetLineageView;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.application.CreateAssetCommand;
@@ -21,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,13 +48,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssetController {
 
     private final AssetApplicationService assetService;
+    private final AssetLineageQueryService lineageQueryService;
+    private final AssetRelationApplicationService relationApplicationService;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
 
     public AssetController(AssetApplicationService assetService,
+                           AssetLineageQueryService lineageQueryService,
+                           AssetRelationApplicationService relationApplicationService,
                            IdempotencyService idempotencyService,
                            ObjectMapper objectMapper) {
         this.assetService = assetService;
+        this.lineageQueryService = lineageQueryService;
+        this.relationApplicationService = relationApplicationService;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
     }
@@ -83,6 +93,10 @@ public class AssetController {
             @RequestParam(required = false) AssetType type,
             @RequestParam(required = false) String namespace,
             @RequestParam(required = false) String organizationId,
+            @RequestParam(required = false) String projectId,
+            @RequestParam(required = false) String visibility,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String teamId,
             @RequestParam(required = false) String framework,
             @RequestParam(required = false) String task,
             @RequestParam(required = false) String format,
@@ -91,12 +105,18 @@ public class AssetController {
             @RequestParam(required = false) String owner,
             @RequestParam(required = false) String language,
             @RequestParam(required = false) String sensitivity,
+            @RequestParam(required = false) List<String> taskCodes,
+            @RequestParam(required = false) List<String> modalityCodes,
+            @RequestParam(required = false) List<String> formatCodes,
+            @RequestParam(required = false) List<String> languageCodes,
             @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "0") int limit) {
         return AssetApiContext.respond(assetService.searchAssets(AssetRequestMapper.toSearchQuery(
-                keyword, type, namespace, organizationId, framework, task, format, modality, tagId, owner,
-                language, sensitivity, includeArchived, cursor, limit, AssetApiContext.principalId())));
+                keyword, type, namespace, organizationId, projectId, visibility, status, teamId,
+                framework, task, format, modality, tagId, owner,
+                language, sensitivity, taskCodes, modalityCodes, formatCodes, languageCodes,
+                includeArchived, cursor, limit, AssetApiContext.principalId())));
     }
 
     /**
@@ -107,21 +127,9 @@ public class AssetController {
     @GetMapping("/facets")
     public ApiResponse<AssetFacetView> getAssetFacets(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) AssetType type,
-            @RequestParam(required = false) String namespace,
-            @RequestParam(required = false) String organizationId,
-            @RequestParam(required = false) String framework,
-            @RequestParam(required = false) String task,
-            @RequestParam(required = false) String format,
-            @RequestParam(required = false) String modality,
-            @RequestParam(required = false) String tagId,
-            @RequestParam(required = false) String owner,
-            @RequestParam(required = false) String language,
-            @RequestParam(required = false) String sensitivity,
-            @RequestParam(required = false, defaultValue = "false") boolean includeArchived) {
-        return AssetApiContext.respond(assetService.getAssetFacets(AssetRequestMapper.toSearchQuery(
-                keyword, type, namespace, organizationId, framework, task, format, modality, tagId, owner,
-                language, sensitivity, includeArchived, null, 0, AssetApiContext.principalId())));
+            @RequestParam(required = false) AssetType type) {
+        return AssetApiContext.respond(
+                assetService.getAssetFacets(keyword, type, AssetApiContext.principalId()));
     }
 
     /**
@@ -167,12 +175,56 @@ public class AssetController {
     }
 
     /**
-     * 弃用资产：仍可访问但检索降权。
+     * 查询资产血缘关系（BFS 上下游遍历）。
+     */
+    @GetMapping("/{assetId}/lineage")
+    public ApiResponse<AssetLineageView> getAssetLineage(
+            @PathVariable String assetId,
+            @RequestParam(required = false) Integer depth,
+            @RequestParam(required = false, defaultValue = "down") String direction) {
+        return AssetApiContext.respond(
+                lineageQueryService.queryLineage(assetId, depth, direction, AssetApiContext.principalId()));
+    }
+
+    /**
+     * 创建资产血缘关系边（当前资产为 parent）。
+     */
+    @PostMapping("/{assetId}/relations")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<AssetLineageView.RelationEdge> createAssetRelation(
+            @PathVariable String assetId,
+            @RequestBody CreateAssetRelationRequest request) {
+        return AssetApiContext.respond(relationApplicationService.createRelation(
+                assetId,
+                request.childAssetId(),
+                request.relationType(),
+                AssetApiContext.principalId()));
+    }
+
+    /**
+     * 删除资产血缘关系边（硬删除；历史由 audit_log 保留）。需 asset:manage 权限。
+     */
+    @DeleteMapping("/{assetId}/relations/{relationId}")
+    public ApiResponse<Void> deleteAssetRelation(
+            @PathVariable String assetId,
+            @PathVariable String relationId) {
+        relationApplicationService.deleteRelation(assetId, relationId, AssetApiContext.principalId());
+        return AssetApiContext.respond(null);
+    }
+
+    /**
+     * 弃用资产：仍可访问但检索降权。支持弃用原因与替代资产。
      */
     @PostMapping("/{assetId}/deprecate")
-    public ApiResponse<AssetView> deprecateAsset(@PathVariable String assetId) {
+    public ApiResponse<AssetView> deprecateAsset(
+            @PathVariable String assetId,
+            @RequestBody(required = false) DeprecateAssetRequest request) {
+        String reason = request != null ? request.deprecationReason() : null;
+        String note = request != null ? request.deprecationNote() : null;
+        String replacementId = request != null ? request.replacementAssetId() : null;
         return AssetApiContext.respond(
-                assetService.deprecateAsset(assetId, AssetApiContext.principalId()));
+                assetService.deprecateAsset(assetId, AssetApiContext.principalId(),
+                        reason, note, replacementId));
     }
 
     /**

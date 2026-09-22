@@ -1,0 +1,79 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1008-001
+status: PARTIAL
+
+task:
+  taskId: TASK-P1-008
+  requirements: [REQ-AST-009]
+  scenarios:
+    - AC-P1-AST-013
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-008.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-008.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-008.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: "22"
+  pnpm: "9"
+  docker: "available"
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
+  startedAt: 2026-07-11T19:25:10+08:00
+  finishedAt: 2026-07-11T19:50:10+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-013
+      assertion: PAGE-AST-001..006 full async states, permission gates and zh/en i18n with component and E2E tests
+  notProven:
+    - AC-P1-AST-013
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

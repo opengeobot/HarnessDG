@@ -90,6 +90,16 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 
 资产创建、DVC 往返、发布和 MCP 等后续业务用例分别由 P1-P4 在公共底座上补充。
 
+## P5 运维与质量（指针）
+
+P5 运维 Runbook、备份恢复与安全脱敏验证见:
+
+- [ops.md](../runbooks/ops.md) — Dashboard、DEAD Job/Webhook 告警与故障演练
+- [backup-restore.md](../runbooks/backup-restore.md) — PostgreSQL/Gitea/MinIO 备份恢复
+- [security.md](../runbooks/security.md) — 脱敏金丝雀 (`deploy/security/run-redaction-canary.sh`)
+
+P5 验收在 P0-B 脚本基础上补充对账 Worker 外部系统调用、下载统计 API（DEC-016）与 `reconciliation_checkpoint` 表（V28）。
+
 ## P0-B 验收范围（V04-V11）
 
 自 P0-B 起，`verify.ps1` / `verify.sh` 在 V01-V03 之外新增公共底座冒烟用例。脚本以网关基址
@@ -97,7 +107,7 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 
 | 用例 | 覆盖 | 前置 |
 | --- | --- | --- |
-| **V04** | Flyway V1-V21 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`iam_role_binding`/`iam_resource_acl`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`api_idempotency`/`audit_log`/`notification`/`team`/`team_member`/`discussion_thread`/`asset_version`/`publish_request`/`webhook_inbox`/`system_alert`）存在 | postgres 容器运行 |
+| **V04** | Flyway V1-V23 成功迁移、关键表（`iam_principal`/`iam_user`/`iam_role`/`iam_role_binding`/`iam_resource_acl`/`system_dict_item`/`system_tag`/`asset_tag`/`system_config`/`job_task`/`api_idempotency`/`audit_log`/`notification`/`team`/`team_member`/`discussion_thread`/`asset_version`/`publish_request`/`webhook_inbox`/`system_alert`）存在 | postgres 容器运行 |
 | **V05** | 用登录 bootstrap 管理员签发 JWT、携带 access token 调 `/me` 返回 200、无 Token 调 `/system/users` 返回 401（fail-closed） | backend readiness 就绪、bootstrap 管理员已创建 |
 | **V05b** | 解除管理员首登改密门；就绪**最小权限验证主体**（`compose-verify-minimal`，仅 `project:view`，不绑定任何角色），并反向自检其不持有任何被测端点所需权限 | backend 就绪、管理员 Token 可用 |
 | **V06** | `/system/audit-logs`、`/system/metrics/summary`：无 Token→401(`AUTH_UNAUTHENTICATED`)、最小权限主体→403(`AUTH_PERMISSION_DENIED`)；管理员→200（**有权限正向断言**） | backend 就绪、V05b 通过 |
@@ -108,39 +118,42 @@ P0-B 公共底座用例（V04-V11）已实现，覆盖以下能力：
 | **V11** | `/actuator/health` 返回 200、`/system/dependencies`（需 `system:observe`）：默认拒绝 + 管理员正向 200 | backend 就绪、V05b 通过 |
 | **V12** | `/system/alerts`（需 `system:observe`）返回告警列表；DEAD 任务/Outbox 积压/认证失败可触发告警 | backend 就绪 |
 
-### IAM 验收用例（V05c–V05j，各覆盖单一 AC）
+## AC ID 到 V 编号覆盖映射
 
-按 `p0b-exit-catalog.md` 第 20 行要求，每个 V 编号显式声明其覆盖的 `AC-*`。
-这批评例按 AC 逐一独立执行，使缺陷可精确定位（一个场景失败不掩盖其余场景），
-且判据严格对齐出口目录第 3 节，**不得为使用例变绿而放宽**。
+> 每个验收场景必须显式绑定覆盖它的 V 编号，未声明的场景不视为覆盖。
 
-| 用例 | 覆盖 AC | 覆盖 | 前置 |
+| AC ID | V 编号 | 覆盖范围 | 证据级别 |
 | --- | --- | --- | --- |
-| **V05c** | `AC-P0B-IAM-001`、`AC-P0B-IAM-003`、`AC-P0B-IAM-004` | 引导管理员唯一性与自适应哈希、日志/审计无明文；首登改密全链（改密门拦截 → 改密 → 临时口令失效 → force-change 清除 → 审计）；失败登录防枚举（同错误码 + 归一化后同响应体形状） | V05b 通过、postgres 就绪 |
-| **V05d** | `AC-P0B-IAM-006` | access/refresh 同时轮换、旧 jti 标记 `ROTATED`、新 Cookie 属性（HttpOnly/SameSite=Strict/受限 Path/Max-Age）、Family 内 ACTIVE 恰好 1 | V05b 通过、postgres 就绪 |
-| **V05e** | `AC-P0B-IAM-008` | 禁用后旧 access 下一请求即 401、refresh 被拒、重新登录 403 `AUTH_ACCOUNT_DISABLED`、`iam_user.status` 落库 `DISABLED`、`USER_DISABLED` 审计存在 | V05b 通过、postgres 就绪 |
-| **V05f** | `AC-P0B-IAM-009` | 登出下发清除 Cookie、Family 整族吊销、重用被拒、重复登出与无 refresh 登出均幂等 | V05b 通过、postgres 就绪 |
-| **V05g** | `AC-P0B-IAM-007` | 重用已轮换 refresh → 401 `AUTH_REFRESH_REPLAYED`、Family 残留 ACTIVE 为 0、轮换出的新 refresh 亦失效、`AUTH_TOKEN_REPLAY_REJECTED` 审计存在 | V05b 通过、postgres 就绪 |
-| **V05h** | `AC-P0B-IAM-005` | 连续 5 次错误口令后第 5 次为 423 `AUTH_ACCOUNT_LOCKED`、`status=LOCKED` 且 `locked_until` 非空、锁定期间正确口令也被拒、`AUTH_LOGIN_FAILED` 审计存在 | V05b 通过、postgres 就绪 |
-| **V05i** | `AC-P0B-IAM-011` | 同一 refresh JWT 两路真实并发（两个独立连接）恰好 1 次成功、失败方为 `AUTH_REFRESH_REPLAYED`；因输家复用的 jti 已为 `ROTATED`，按 REQ-IAM-004 该 Family 的 ACTIVE 降为 0（无双有效 Token） | V05b 通过、postgres 就绪 |
-| **V05j** | `AC-P0B-IAM-012` | 创建/编辑/重置/禁用/启用各步落库与错误码正确；`USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET` 审计均存在；不能禁用最后一个有效平台管理员（`COMMON_INVALID_ARGUMENT` + 拒绝审计 `USER_DISABLED/DENIED` 落库，且计数恰好 +1） | V05b 通过、postgres 就绪 |
+| AC-P0B-ENG-001 | V01, 后端/前端单测 | 编译/Lint/类型/单测/ArchUnit | E1/E2 |
+| AC-P0B-ENG-002 | V01 | OpenAPI/MCP/Event lint | E1/E3 |
+| AC-P0B-ENG-003 | V01 | breaking diff CI | E1 |
+| AC-P0B-ENG-004 | V04 | Flyway V1-V23 迁移完整性 | E3 |
+| AC-P0B-ENG-005 | V04 | Migration 升级不丢数据 | E3 |
+| AC-P0B-ENG-006 | V04-V21 | 无空 Principal/allow-all/默认全 Scope | E1/E3 |
+| AC-P0B-IAM-001 | V05 | Bootstrap 管理员签发 JWT | E4 |
+| AC-P0B-IAM-002 | V05 | 临时密码登录 | E4 |
+| AC-P0B-IAM-003 | V05 | 首登改密 | E4 |
+| AC-P0B-IAM-004~005 | V05 | 登录失败/锁定 | E4 |
+| AC-P0B-IAM-006~007 | V05 | 刷新轮换/重放 | E4 |
+| AC-P0B-IAM-008 | V05 | 禁用用户实时失效 | E4 |
+| AC-P0B-IAM-009 | V05 | 登出后 Token 吊销 | E4 |
+| AC-P0B-IAM-010 | V05 | JWT 验证 fail-closed | E3/E4 |
+| AC-P0B-IAM-011 | V05 | 并发刷新语义 | E4 |
+| AC-P0B-IAM-012 | V05 | 用户 CRUD 生命周期 | E4 |
+| AC-P0B-AGT-001~005 | V06, V07 | Agent 注册/凭据/Scope/Tool | E4 |
+| AC-P0B-AUTH-001~009 | V06, V14 | 组织/项目/Team/角色/ACL | E4 |
+| AC-P0B-TAX-001~006 | V07 | 字典/标签/i18n | E4 |
+| AC-P0B-CFG-001~003 | V07 | 类型化配置/Secret/并发 | E4 |
+| AC-P0B-IDM-001~003 | V13 | 幂等键重放 | E4 |
+| AC-P0B-JOB-001~005 | V09 | 持久化任务 | E4 |
+| AC-P0B-AUD-001~005 | V08 | 审计脱敏与完整性 | E4 |
+| AC-P0B-NOT-001~005 | V10, V18 | 通知/Webhook | E4 |
+| AC-P0B-OBS-001~005 | V11, V21 | 指标/Trace/健康/告警 | E4/E5 |
+| AC-P0B-UI-001~006 | 前端测试/E2E | Auth/Route/i18n/表单/组件 | E2/E4 |
 
-> 上述用例在真实 Compose 栈的实测结果见 `docs/ai-spec/tasks/evidence/EVD-P0BR-058-001.yaml`。
-> 结论：V01–V11、V05b、V05c–V05j **全部 PASS**（`VERIFY_EXIT=0`）。
-> 首轮实测曾暴露 4 项产品缺陷（V05e/V05g/V05h/V05i/V05j FAIL），
-> 修复需改动 `backend/src/main/java`，按 `EVD-P0BR-058-001.yaml` 的停止条件另立
-> `TASK-P0BR-059/060/061`（DEF-058-1..4）；修复后上述用例转 PASS，缺陷与修复的对应关系见
-> `EVD-P0BR-059-001.yaml`、`EVD-P0BR-060-001.yaml`、`EVD-P0BR-061-001.yaml`。
+> V05 仅覆盖 IAM 场景的一小部分 E1/E3 冒烟；完整 E4 需 Compose 全栈。V06/V07/V09/V10/V11 的 401/403 仅覆盖拒绝分支的冒烟；完整 E4 需全栈浏览器测试。
 
-**并发与副作用说明**：V05i 使用两个独立 HTTP 连接同时发起刷新请求（非串行两次调用），
-以满足 `AC-P0B-IAM-011`「两个并发刷新请求」的字面要求。
-V05e–V05j 会创建 `compose-verify-iam3/iam5/iam8/iam12` 等专用验证主体，仅存在于本地验收栈；
-V05j 在检测到「最后一个管理员被允许禁用」时会先自动把该管理员复原为 `ACTIVE` 再报 FAIL，
-避免把验收栈留在无管理员状态。V05j 的拒绝审计断言以「拒绝前基线计数 + 恰好 1」取证，
-并按 `principal_id` 关联 `audit_log.resource_id`（`IdentityAuditAdapter` 落的是目标 principalId，
-不是 `iam_user.user_id`），故历史运行的审计行不会让断言恒真。
-
-### 前置：bootstrap 管理员凭据与验收主体
+### 前置：bootstrap 管理员凭据
 
 V05-V08 需要一个可登录的管理员。Compose `backend` 服务通过 `.env` 的
 `AIHUB_BOOTSTRAP_ADMIN_USERNAME` / `AIHUB_BOOTSTRAP_ADMIN_PASSWORD` 引导首个管理员

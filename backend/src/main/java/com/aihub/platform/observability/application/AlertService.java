@@ -17,9 +17,12 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.aihub.shared.error.NotFoundException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -29,10 +32,7 @@ import org.springframework.stereotype.Service;
  * 系统告警应用服务。
  *
  * <p>定时检查平台指标并生成告警记录（FIRING / RESOLVED）。
- * 检查项：DEAD 投递数、Outbox 积压数、可靠任务 DEAD 数。
- *
- * <p>阈值均为受控配置项（TASK-P0BR-024：不得硬编码不可覆盖），
- * 默认值与原常量一致，部署时可经 {@code aihub.alert.*} 覆盖。
+ * 检查项：DEAD Job 数、DEAD 投递数、Outbox 积压数。
  */
 @Service
 public class AlertService {
@@ -40,18 +40,32 @@ public class AlertService {
     private static final Logger LOG = LoggerFactory.getLogger(AlertService.class);
     private static final int DEFAULT_LIMIT = 100;
 
-    /** DEAD 投递告警阈值（受控配置） */
-    private final long deadDeliveryThreshold;
-    /** Outbox 积压告警阈值（受控配置） */
-    private final long outboxBacklogThreshold;
-    /** 可靠任务 DEAD 告警阈值（受控配置；默认 1——出现即告警） */
-    private final long jobDeadThreshold;
+    /** DEAD Job 告警阈值（与 Prometheus JobDead 规则对齐：&gt; 0 即告警） */
+    private static final long DEAD_JOB_THRESHOLD = 1;
+    /** DEAD 投递告警阈值 */
+    private static final long DEAD_DELIVERY_THRESHOLD = 5;
+    /** Outbox 积压告警阈值 */
+    private static final long OUTBOX_BACKLOG_THRESHOLD = 100;
+
+    private static final String ALERT_STORAGE_QUOTA = "STORAGE_QUOTA_WARNING";
+    private static final String ALERT_DEPENDENCY_UNHEALTHY = "SYSTEM_DEPENDENCY_UNHEALTHY";
 
     private final JdbcTemplate jdbcTemplate;
     private final OutboxRepository outboxRepository;
     private final WebhookDeliveryRepository deliveryRepository;
     private final IdGenerator idGenerator;
     private final Clock clock;
+    private final long deadDeliveryThreshold;
+    private final long outboxBacklogThreshold;
+    private final long jobDeadThreshold;
+
+    public AlertService(JdbcTemplate jdbcTemplate,
+                         OutboxRepository outboxRepository,
+                         WebhookDeliveryRepository deliveryRepository,
+                         IdGenerator idGenerator, Clock clock) {
+        this(jdbcTemplate, outboxRepository, deliveryRepository, idGenerator, clock,
+                DEAD_DELIVERY_THRESHOLD, OUTBOX_BACKLOG_THRESHOLD, DEAD_JOB_THRESHOLD);
+    }
 
     public AlertService(JdbcTemplate jdbcTemplate,
                          OutboxRepository outboxRepository,
@@ -85,15 +99,92 @@ public class AlertService {
                 ALERT_MAPPER);
     }
 
+    /**
+     * 人工确认告警：按 alertId 标记为 RESOLVED。
+     *
+     * @return 更新后的告警
+     */
+    public SystemAlert acknowledge(String alertId) {
+        Instant now = clock.instant();
+        int rows = jdbcTemplate.update(
+                "UPDATE system_alert SET status = 'RESOLVED', resolved_at = ? "
+                        + "WHERE alert_id = ? AND status = 'FIRING'",
+                Timestamp.from(now), alertId);
+        if (rows == 0) {
+            throw new NotFoundException("alert not found or already resolved: " + alertId);
+        }
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT * FROM system_alert WHERE alert_id = ?",
+                    ALERT_MAPPER, alertId);
+        } catch (EmptyResultDataAccessException ex) {
+            throw new NotFoundException("alert not found: " + alertId);
+        }
+    }
+
+    /**
+     * 存储配额超阈值时触发告警（幂等：同类 FIRING 不重复插入）。
+     */
+    public void emitStorageQuotaWarning(long usedBytes, long quotaBytes, double usageRatio) {
+        if (hasFiringAlert(ALERT_STORAGE_QUOTA)) {
+            return;
+        }
+        fireAlert(ALERT_STORAGE_QUOTA, "WARNING",
+                "Storage quota warning",
+                String.format("Used %d bytes of %d bytes (%.1f%%)", usedBytes, quotaBytes, usageRatio * 100),
+                "storage_usage_ratio", (double) quotaWarningThresholdRatio(), usageRatio);
+    }
+
+    /**
+     * 依赖不可用时触发告警（幂等：按依赖名去重）。
+     */
+    public void emitDependencyUnhealthy(String dependency, String status, Long latencyMs) {
+        String alertType = ALERT_DEPENDENCY_UNHEALTHY + ":" + dependency;
+        if (hasFiringAlert(alertType)) {
+            return;
+        }
+        fireAlert(alertType, "CRITICAL",
+                "System dependency unhealthy: " + dependency,
+                String.format("dependency=%s status=%s latencyMs=%s", dependency, status, latencyMs),
+                "dependency_health", null, null);
+    }
+
+    /** 依赖恢复时解除对应告警。 */
+    public void resolveDependencyUnhealthy(String dependency) {
+        resolveAlert(ALERT_DEPENDENCY_UNHEALTHY + ":" + dependency, 0);
+    }
+
+    private double quotaWarningThresholdRatio() {
+        return 0.8;
+    }
+
     /** 定时告警检查（每 5 分钟）。 */
     @Scheduled(fixedDelayString = "${aihub.alert.check-interval:300000}")
     public void checkAlerts() {
         try {
+            checkDeadJobs();
             checkDeadDeliveries();
             checkOutboxBacklog();
             checkJobDead();
         } catch (Exception e) {
             LOG.warn("alert check failed", e);
+        }
+    }
+
+    /** 检查 job_task 中 DEAD 状态任务并 upsert {@code DEAD_JOB} 应用内告警。 */
+    void checkDeadJobs() {
+        Long deadCountObj = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM job_task WHERE status = 'DEAD'", Long.class);
+        long deadCount = deadCountObj != null ? deadCountObj : 0L;
+        boolean hasFiringAlert = hasFiringAlert("DEAD_JOB");
+
+        if (deadCount >= DEAD_JOB_THRESHOLD && !hasFiringAlert) {
+            fireAlert("DEAD_JOB", "CRITICAL",
+                    "Dead jobs detected",
+                    String.format("DEAD job count: %d (threshold: %d)", deadCount, DEAD_JOB_THRESHOLD),
+                    "aihub_job_dead_count", (double) DEAD_JOB_THRESHOLD, (double) deadCount);
+        } else if (deadCount < DEAD_JOB_THRESHOLD && hasFiringAlert) {
+            resolveAlert("DEAD_JOB", deadCount);
         }
     }
 

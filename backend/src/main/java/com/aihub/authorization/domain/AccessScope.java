@@ -42,6 +42,17 @@ public record AccessScope(String principalId,
     }
 
     /**
+     * 无 Team 维度的便捷构造（远端业务波次语义：PRIVATE 可见性不依赖 teamIds）。
+     */
+    public AccessScope(String principalId,
+                       boolean platformAdmin,
+                       Set<String> organizationIds,
+                       Set<String> projectIds,
+                       Set<String> accessibleResourceIds) {
+        this(principalId, platformAdmin, organizationIds, projectIds, Set.of(), accessibleResourceIds);
+    }
+
+    /**
      * @return 组织 ID 列表（便于 SQL IN 绑定）
      */
     public List<String> organizationIdList() {

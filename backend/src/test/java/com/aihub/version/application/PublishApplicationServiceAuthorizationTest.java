@@ -62,13 +62,16 @@ class PublishApplicationServiceAuthorizationTest {
     @Mock private AuthorizationService authorizationService;
     @Mock private AuditService auditService;
     @Mock private JobApplicationService jobApplicationService;
+    @Mock private com.aihub.notification.application.NotificationService notificationService;
+    @Mock private com.aihub.notification.application.NotificationRecipientResolver recipientResolver;
 
     private PublishApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new PublishApplicationService(versionRepository, jdbcTemplate, idGenerator,
-                authorizationService, auditService, jobApplicationService, new ObjectMapper());
+                authorizationService, auditService, jobApplicationService, new ObjectMapper(),
+                notificationService, recipientResolver);
         when(idGenerator.generate(any(com.aihub.shared.id.IdPrefix.class))).thenReturn("gen_01");
         PrincipalContextHolder.set(new PrincipalContext("usr_owner", null, null, null,
                 List.of(), Set.of(), Set.of(), 0, "zh-CN", "req_01", "trace_064"));
@@ -91,6 +94,7 @@ class PublishApplicationServiceAuthorizationTest {
         Version v = Version.createDraft("ver_01", "ast_01", "0.1.0", "usr_owner");
         v.transitionTo(VersionStatus.VALIDATING);
         v.bindManifestDigest("sha256-abc");
+        v.bindSourceCommit("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         v.transitionTo(VersionStatus.PENDING_REVIEW);
         return v;
     }
@@ -106,6 +110,9 @@ class PublishApplicationServiceAuthorizationTest {
     void submitPublishRequestRequiresAssetManage() {
         when(versionRepository.findByVersionId("ver_01")).thenReturn(Optional.of(pendingReviewVersion()));
         when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any())).thenReturn(0L);
+        // 远端新增的 PASSED 校验报告门：正例必须提供最新 PASSED 报告
+        when(jdbcTemplate.queryForList(anyString(), eq("ver_01")))
+                .thenReturn(List.of(Map.of("status", "PASSED", "policy_version", "v1")));
 
         service.submitPublishRequest("ver_01");
 
@@ -177,7 +184,10 @@ class PublishApplicationServiceAuthorizationTest {
     void submitDecisionRequiresRegisteredAssetPublish() {
         when(jdbcTemplate.queryForMap(anyString(), any())).thenReturn(Map.of(
                 "request_id", "pub_01", "version_id", "ver_01",
-                "submitted_by", "usr_submitter", "status", "SUBMITTED"));
+                "submitted_by", "usr_submitter", "status", "SUBMITTED",
+                "frozen_digest", "sha256-abc",
+                "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+        when(versionRepository.findByVersionId("ver_01")).thenReturn(Optional.of(pendingReviewVersion()));
 
         service.submitDecision("pub_01", "APPROVE", "ok");
 

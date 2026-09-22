@@ -40,10 +40,14 @@ public final class Asset {
     private List<String> tagIds;
     private String license;
     private String ownerTeamId;
+    private List<String> aliases;
     private ModelProfile modelProfile;
     private DatasetProfile datasetProfile;
     private AssetRepositoryRef repository;
     private ProvisioningStatus provisioningStatus;
+    private String deprecationReason;
+    private String deprecationNote;
+    private String replacementAssetId;
     private String sourceCommit;
     private String cardReadme;
     private String cardAssetYaml;
@@ -70,11 +74,15 @@ public final class Asset {
         this.tagIds = normalizeList(builder.tagIds);
         this.license = builder.license;
         this.ownerTeamId = builder.ownerTeamId;
+        this.aliases = normalizeList(builder.aliases);
         this.modelProfile = builder.modelProfile;
         this.datasetProfile = builder.datasetProfile;
         this.repository = builder.repository;
         this.provisioningStatus = builder.provisioningStatus != null
                 ? builder.provisioningStatus : ProvisioningStatus.NONE;
+        this.deprecationReason = builder.deprecationReason;
+        this.deprecationNote = builder.deprecationNote;
+        this.replacementAssetId = builder.replacementAssetId;
         this.sourceCommit = builder.sourceCommit;
         this.cardReadme = builder.cardReadme;
         this.cardAssetYaml = builder.cardAssetYaml;
@@ -101,7 +109,7 @@ public final class Asset {
      * @param tags           标签列表
      * @param tagIds         受控标签 ID 列表
      * @param license        许可证
-     * @param ownerTeamId    主 Owner Team ID（DEC-011 必填）
+     * @param ownerTeamId    主 Owner 团队 ID
      * @param modelProfile   模型画像（模型类必填语义，可空字段）
      * @param datasetProfile 数据集画像（数据集类必填语义，可空字段）
      * @param createdBy      创建者主体 ID
@@ -189,10 +197,7 @@ public final class Asset {
         }
         this.license = license;
         if (ownerTeamId != null) {
-            if (ownerTeamId.isBlank()) {
-                throw new IllegalArgumentException("ownerTeamId cannot be blank (DEC-011: at least one Team required)");
-            }
-            this.ownerTeamId = ownerTeamId.trim();
+            this.ownerTeamId = ownerTeamId;
         }
         if (type == AssetType.MODEL && modelProfile != null) {
             this.modelProfile = modelProfile;
@@ -205,11 +210,42 @@ public final class Asset {
 
     /** 标记弃用：仍可访问但检索降权。仅 ACTIVE 可弃用。 */
     public void deprecate(String updatedBy) {
+        deprecate(updatedBy, null, null, null);
+    }
+
+    /** 标记弃用（含原因与替代资产）。仅 ACTIVE 可弃用。 */
+    public void deprecate(String updatedBy, String deprecationReason,
+                          String deprecationNote, String replacementAssetId) {
         if (this.status != AssetStatus.ACTIVE) {
             throw new IllegalStateException(
                     "only ACTIVE assets can be deprecated, current: " + this.status);
         }
         this.status = AssetStatus.DEPRECATED;
+        this.deprecationReason = deprecationReason;
+        this.deprecationNote = deprecationNote;
+        this.replacementAssetId = replacementAssetId;
+        touch(updatedBy);
+    }
+
+    /** 重命名资产：保留旧坐标到 aliases，newName 用于 displayName（不做 slug 校验）。 */
+    public void rename(String newNamespace, String newDisplayName, String updatedBy) {
+        requireSlug(newNamespace, "namespace");
+        // displayName 是自由文本，不做 slug 校验
+        if (newDisplayName == null || newDisplayName.isBlank()) {
+            throw new IllegalArgumentException("displayName must not be blank");
+        }
+        if (newNamespace.equals(this.namespace) && newDisplayName.equals(this.displayName)) {
+            return;
+        }
+        String oldAlias = this.namespace + "/" + this.type.name().toLowerCase() + "/" + this.name;
+        if (this.aliases == null || !this.aliases.contains(oldAlias)) {
+            List<String> updated = new java.util.ArrayList<>(this.aliases != null ? this.aliases : List.of());
+            updated.add(oldAlias);
+            this.aliases = List.copyOf(updated);
+        }
+        // 注意：namespace/name 坐标不变（V2 唯一约束），重命名仅修改 displayName + aliases
+        // 真正的坐标重命名需要 asset_alias 表 + 异步重定向，P1 阶段仅记录别名
+        this.displayName = newDisplayName;
         touch(updatedBy);
     }
 
@@ -289,15 +325,6 @@ public final class Asset {
         }
     }
 
-    /**
-     * 资产坐标：{@code aih://{namespace}/{type}/{name}}。
-     *
-     * @return 唯一资产坐标字符串
-     */
-    public String coordinate() {
-        return "aih://" + namespace + "/" + type + "/" + name;
-    }
-
     public String assetId() {
         return assetId;
     }
@@ -320,6 +347,20 @@ public final class Asset {
 
     public String name() {
         return name;
+    }
+
+    /**
+     * 人类可读稳定坐标：{@code aih://{namespace}/{type}/{name}}，type 为小写 model/dataset。
+     */
+    public String coordinate() {
+        return formatCoordinate(namespace, type, name);
+    }
+
+    /**
+     * 由命名空间、类型与名称构造稳定坐标 URI。
+     */
+    public static String formatCoordinate(String namespace, AssetType type, String name) {
+        return "aih://" + namespace + "/" + type.name().toLowerCase() + "/" + name;
     }
 
     public String displayName() {
@@ -358,6 +399,10 @@ public final class Asset {
         return ownerTeamId;
     }
 
+    public List<String> aliases() {
+        return aliases;
+    }
+
     public ModelProfile modelProfile() {
         return modelProfile;
     }
@@ -372,6 +417,18 @@ public final class Asset {
 
     public ProvisioningStatus provisioningStatus() {
         return provisioningStatus;
+    }
+
+    public String deprecationReason() {
+        return deprecationReason;
+    }
+
+    public String deprecationNote() {
+        return deprecationNote;
+    }
+
+    public String replacementAssetId() {
+        return replacementAssetId;
     }
 
     public String sourceCommit() {
@@ -430,10 +487,14 @@ public final class Asset {
         private List<String> tagIds;
         private String license;
         private String ownerTeamId;
+        private List<String> aliases;
         private ModelProfile modelProfile;
         private DatasetProfile datasetProfile;
         private AssetRepositoryRef repository;
         private ProvisioningStatus provisioningStatus;
+        private String deprecationReason;
+        private String deprecationNote;
+        private String replacementAssetId;
         private String sourceCommit;
         private String cardReadme;
         private String cardAssetYaml;
@@ -518,6 +579,11 @@ public final class Asset {
             return this;
         }
 
+        public Builder aliases(List<String> aliases) {
+            this.aliases = aliases;
+            return this;
+        }
+
         public Builder modelProfile(ModelProfile modelProfile) {
             this.modelProfile = modelProfile;
             return this;
@@ -535,6 +601,21 @@ public final class Asset {
 
         public Builder provisioningStatus(ProvisioningStatus provisioningStatus) {
             this.provisioningStatus = provisioningStatus;
+            return this;
+        }
+
+        public Builder deprecationReason(String deprecationReason) {
+            this.deprecationReason = deprecationReason;
+            return this;
+        }
+
+        public Builder deprecationNote(String deprecationNote) {
+            this.deprecationNote = deprecationNote;
+            return this;
+        }
+
+        public Builder replacementAssetId(String replacementAssetId) {
+            this.replacementAssetId = replacementAssetId;
             return this;
         }
 

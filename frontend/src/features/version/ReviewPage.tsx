@@ -1,71 +1,217 @@
 /**
- * 功能: 发布审批页面——真实版本查询、提交发布请求、审批决策。
- *       后端契约（ReviewController）只有提交与决策两个 POST 端点，没有发布请求
- *       列表/读取端点，因此审批队列仅包含本会话内以真实 requestId 提交的请求，
- *       不渲染任何派生或虚构的行（TASK-P0BR-065 / AC-P0B-UI-003）。
- * 时间: 2026-09-22
+ * 功能: 发布审批页面——版本列表、校验报告、工件差异、提交发布与审批决策。
+ * 时间: 2026-07-10，2026-07-12 Wave Z Ant Design 迁移
  * 作者: AxeXie
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  Flex,
+  Input,
+  Row,
+  Select,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
-import { listVersions } from './api';
-import type { VersionView } from './types';
+import {
+  getValidationReport,
+  listArtifacts,
+  listDecisions,
+  listPublishRequests,
+  listVersions,
+} from './api';
+import type { ArtifactView } from './types';
 
-/** 本会话内提交成功的发布请求（requestId 全部来自后端真实响应）。 */
-interface SessionRequest {
+/** 发布请求（字段全部来自后端真实响应）。 */
+interface PublishRequest {
   requestId: string;
   versionId: string;
-  versionLabel: string;
-  /** SUBMITTED=待决策；其余值为已提交的本会话决策（如 DECIDED:APPROVE）。 */
+  frozenDigest: string;
+  frozenSourceCommit: string;
   status: string;
+  submittedBy: string;
+  submittedAt: string;
+}
+
+type ReviewDecision = 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES';
+
+interface ValidationFinding {
+  code?: string;
+  severity?: string;
+  message?: string;
+  path?: string;
+}
+
+interface ArtifactDiffEntry {
+  path: string;
+  change: 'added' | 'removed' | 'changed';
+  currentSha?: string;
+  previousSha?: string;
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  SUBMITTED: 'processing',
+  APPROVED: 'success',
+  REJECTED: 'error',
+  CHANGES_REQUESTED: 'warning',
+  PUBLISHING: 'processing',
+  PUBLISHED: 'success',
+  FAILED: 'error',
+};
+
+function computeArtifactDiff(
+  current: ArtifactView[],
+  previous: ArtifactView[],
+): ArtifactDiffEntry[] {
+  const prevByPath = new Map(previous.map((a) => [a.path, a]));
+  const currByPath = new Map(current.map((a) => [a.path, a]));
+  const paths = new Set([...prevByPath.keys(), ...currByPath.keys()]);
+  const diff: ArtifactDiffEntry[] = [];
+
+  for (const path of [...paths].sort()) {
+    const prev = prevByPath.get(path);
+    const curr = currByPath.get(path);
+    if (prev && !curr) {
+      diff.push({ path, change: 'removed', previousSha: prev.sha256 });
+    } else if (!prev && curr) {
+      diff.push({ path, change: 'added', currentSha: curr.sha256 });
+    } else if (prev && curr && prev.sha256 !== curr.sha256) {
+      diff.push({
+        path,
+        change: 'changed',
+        currentSha: curr.sha256,
+        previousSha: prev.sha256,
+      });
+    }
+  }
+  return diff;
 }
 
 export function ReviewPage() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   useDocumentTitle(t('review.title'));
-  const [assetId, setAssetId] = useState('');
-  const [versions, setVersions] = useState<VersionView[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [queried, setQueried] = useState(false);
-  const [requests, setRequests] = useState<SessionRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<SessionRequest | null>(null);
-  const [decision, setDecision] = useState<'APPROVE' | 'REJECT'>('APPROVE');
+  const [searchParams] = useSearchParams();
+  const assetId = searchParams.get('assetId') ?? '';
+  const [requests, setRequests] = useState<PublishRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<PublishRequest | null>(null);
+  const [decision, setDecision] = useState<ReviewDecision>('APPROVE');
   const [comments, setComments] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [validationReport, setValidationReport] = useState<Record<string, unknown> | null>(null);
+  const [findings, setFindings] = useState<ValidationFinding[]>([]);
+  const [artifactDiff, setArtifactDiff] = useState<ArtifactDiffEntry[]>([]);
+  const [decisionHistory, setDecisionHistory] = useState<Record<string, unknown>[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  const loadVersions = useCallback(async () => {
+  const loadRequests = useCallback(async () => {
     if (!assetId) return;
-    setLoading(true);
     setError(null);
     try {
-      const page = await listVersions(assetId);
-      setVersions(page.items ?? []);
-      setQueried(true);
+      const rows = await listPublishRequests(assetId);
+      const mapped: PublishRequest[] = rows.map((r) => ({
+        requestId: String(r.request_id),
+        versionId: String(r.version_id),
+        frozenDigest: String(r.frozen_digest ?? ''),
+        frozenSourceCommit: String(r.frozen_source_commit ?? ''),
+        status: String(r.status),
+        submittedBy: String(r.submitted_by),
+        submittedAt: String(r.created_at),
+      }));
+      setRequests(mapped);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.loadFailedMsg'));
-    } finally {
-      setLoading(false);
     }
   }, [assetId, t]);
 
-  const submitPublishRequest = async (v: VersionView) => {
-    setError(null);
-    setMessage(null);
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
+
+  useEffect(() => {
+    if (!selectedRequest || !assetId) {
+      setValidationReport(null);
+      setFindings([]);
+      setArtifactDiff([]);
+      setDecisionHistory([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadDetails = async () => {
+      setDetailLoading(true);
+      try {
+        const [report, artifacts, versions, decisions] = await Promise.all([
+          getValidationReport(assetId, selectedRequest.versionId),
+          listArtifacts(assetId, selectedRequest.versionId),
+          listVersions(assetId, undefined, 50),
+          listDecisions(assetId, selectedRequest.requestId),
+        ]);
+        if (cancelled) return;
+
+        setValidationReport(report.status === 'NOT_FOUND' ? null : report);
+        const rawFindings = Array.isArray(report.findings) ? report.findings : [];
+        setFindings(
+          rawFindings.map((f) => {
+            const row = f as Record<string, unknown>;
+            return {
+              code: String(row.code ?? ''),
+              severity: String(row.severity ?? ''),
+              message: String(row.message ?? row.summary ?? ''),
+              path: String(row.path ?? ''),
+            };
+          }),
+        );
+        setDecisionHistory(decisions);
+
+        const published = versions.items.filter(
+          (v) => v.status === 'PUBLISHED' && v.versionId !== selectedRequest.versionId,
+        );
+        const previous = published[0];
+        if (previous) {
+          const prevArtifacts = await listArtifacts(assetId, previous.versionId);
+          if (!cancelled) setArtifactDiff(computeArtifactDiff(artifacts, prevArtifacts));
+        } else {
+          setArtifactDiff(
+            artifacts.map((a) => ({ path: a.path, change: 'added' as const, currentSha: a.sha256 })),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setValidationReport(null);
+          setFindings([]);
+          setArtifactDiff([]);
+        }
+      } finally {
+        if (!cancelled) setDetailLoading(false);
+      }
+    };
+
+    void loadDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRequest, assetId]);
+
+  const submitPublishRequest = async (versionId: string) => {
     try {
       const result = await apiClient.post<{ requestId: string }>(
-        `/versions/${v.versionId}/publish-requests`,
+        `/versions/${versionId}/publish-requests`,
       );
-      const created: SessionRequest = {
-        requestId: result.requestId,
-        versionId: v.versionId,
-        versionLabel: v.version,
-        status: 'SUBMITTED',
-      };
-      setRequests((prev) => [created, ...prev.filter((r) => r.requestId !== created.requestId)]);
-      setMessage(t('review.requestSubmitted', { id: result.requestId }));
+      message.success(t('review.requestSubmitted', { id: result.requestId }));
+      void loadRequests();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.submitFailedMsg'));
     }
@@ -74,187 +220,223 @@ export function ReviewPage() {
   const submitDecision = async (requestId: string) => {
     setError(null);
     try {
-      await apiClient.post(`/publish-requests/${requestId}/decisions`, {
-        decision,
-        comments,
-      });
-      setRequests((prev) =>
-        prev.map((r) => (r.requestId === requestId ? { ...r, status: `DECIDED:${decision}` } : r)),
-      );
-      setMessage(t('review.decisionSubmitted', { decision: t(decision === 'APPROVE' ? 'review.approve' : 'review.reject') }));
+      await apiClient.post(`/publish-requests/${requestId}/decisions`, { decision, comments });
+      message.success(t('review.decisionSubmitted', { decision }));
       setComments('');
       setSelectedRequest(null);
+      void loadRequests();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.decisionFailed'));
     }
   };
 
-  const pendingVersions = versions.filter((v) => v.status === 'PENDING_REVIEW');
-  const selectedIsOpen = selectedRequest?.status === 'SUBMITTED';
+  if (!assetId) {
+    return (
+      <Card title={t('review.title')}>
+        <Empty description={t('version.deepLinkHint')}>
+          <Link to="/assets">
+            <Button type="primary">{t('nav.assetCatalog')}</Button>
+          </Link>
+        </Empty>
+      </Card>
+    );
+  }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">{t('review.title')}</h1>
+    <Flex vertical gap={16}>
+      <Card
+        title={t('review.title')}
+        extra={
+          <Link to={`/assets/${assetId}`}>
+            <Button type="link">{t('assets.detailTitle')}</Button>
+          </Link>
+        }
+      >
+        <Descriptions size="small" column={1}>
+          <Descriptions.Item label={t('version.assetIdLabel')}>
+            <Typography.Text code>{assetId}</Typography.Text>
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
 
-      <div className="mb-4 flex gap-2">
-        <input
-          className="border rounded px-3 py-2 flex-1"
-          placeholder={t('version.assetIdPlaceholder')}
-          value={assetId}
-          onChange={(e) => setAssetId(e.target.value)}
-        />
-        <button
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          onClick={loadVersions}
-        >
-          {t('common.query')}
-        </button>
-      </div>
+      {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
 
-      {error && (
-        <div className="mb-4 flex items-center gap-3">
-          <p className="text-red-600" role="alert">{error}</p>
-          <button
-            className="text-sm px-3 py-1 border rounded hover:bg-gray-100"
-            onClick={loadVersions}
-          >
-            {t('common.retry')}
-          </button>
-        </div>
-      )}
-      {message && <p className="text-green-600 mb-4">{message}</p>}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
-          <h2 className="text-lg font-semibold mb-2">{t('review.pendingVersions')}</h2>
-          {loading && <p className="text-gray-500">{t('common.loading')}</p>}
-          {!loading && !queried && <p className="text-gray-400 text-sm">{t('review.queryHint')}</p>}
-          {!loading && queried && pendingVersions.length === 0 && (
-            <p className="text-gray-400 text-sm">{t('review.emptyPending')}</p>
-          )}
-          {!loading && (
-            <div className="space-y-2">
-              {pendingVersions.map((v) => (
-                <div key={v.versionId} className="p-3 border rounded">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-semibold">{v.version}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                      {v.status}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-500 mt-1">
-                    {t('version.versionId')}: <span className="font-mono">{v.versionId}</span>
-                  </div>
-                  <button
-                    className="mt-2 text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                    onClick={() => submitPublishRequest(v)}
+      <Row gutter={16}>
+        <Col xs={24} lg={12}>
+          <Card title={t('review.publishRequests')} size="small">
+            {requests.length === 0 ? (
+              <Empty description={t('review.noRequests')} />
+            ) : (
+              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                {requests.map((r) => (
+                  <Card
+                    key={r.requestId}
+                    size="small"
+                    hoverable
+                    onClick={() => setSelectedRequest(r)}
+                    style={{
+                      borderColor: selectedRequest?.requestId === r.requestId ? '#1677ff' : undefined,
+                      background: selectedRequest?.requestId === r.requestId ? '#e6f4ff' : undefined,
+                    }}
                   >
-                    {t('review.submitPublish')}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <h2 className="text-lg font-semibold mt-6 mb-2">{t('review.sessionRequests')}</h2>
-          <div className="space-y-2">
-            {requests.map((r) => (
-              <div
-                key={r.requestId}
-                className={`p-3 border rounded cursor-pointer transition ${
-                  selectedRequest?.requestId === r.requestId
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'hover:bg-gray-50'
-                }`}
-                onClick={() => setSelectedRequest(r)}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm">{r.requestId}</span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded ${
-                      r.status === 'SUBMITTED'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-green-100 text-green-800'
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-500 mt-1">
-                  {t('version.version')}: {r.versionLabel}
-                </div>
-              </div>
-            ))}
-            {requests.length === 0 && (
-              <p className="text-gray-400 text-sm">{t('review.noSessionRequests')}</p>
+                    <Flex justify="space-between" align="center">
+                      <Typography.Text code>{r.versionId}</Typography.Text>
+                      <Tag color={STATUS_COLOR[r.status]}>{r.status}</Tag>
+                    </Flex>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('review.submitter')}: {r.submittedBy} | {new Date(r.submittedAt).toLocaleString()}
+                    </Typography.Text>
+                    {r.status === 'SUBMITTED' && (
+                      <Button
+                        size="small"
+                        style={{ marginTop: 8 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void submitPublishRequest(r.versionId);
+                        }}
+                      >
+                        {t('review.resubmit')}
+                      </Button>
+                    )}
+                  </Card>
+                ))}
+              </Space>
             )}
-          </div>
-        </div>
+          </Card>
+        </Col>
 
-        <div>
-          <h2 className="text-lg font-semibold mb-2">{t('review.decisionPanel')}</h2>
-          {selectedRequest ? (
-            <div className="space-y-4">
-              <div className="border rounded p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('review.requestId')}</span>
-                  <span className="font-mono text-sm">{selectedRequest.requestId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('version.versionId')}</span>
-                  <span className="font-mono text-sm">{selectedRequest.versionId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">{t('common.status')}</span>
-                  <span>{selectedRequest.status}</span>
-                </div>
-              </div>
+        <Col xs={24} lg={12}>
+          <Card title={t('review.decisionPanel')} size="small">
+            {selectedRequest ? (
+              <Flex vertical gap={16}>
+                <Descriptions column={1} size="small" bordered>
+                  <Descriptions.Item label={t('review.requestId')}>
+                    <Typography.Text code>{selectedRequest.requestId}</Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('version.versionId')}>
+                    <Typography.Text code>{selectedRequest.versionId}</Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('review.frozenDigest')}>
+                    <Typography.Text code style={{ fontSize: 11 }}>{selectedRequest.frozenDigest}</Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('review.frozenCommit')}>
+                    <Typography.Text code style={{ fontSize: 11 }}>
+                      {selectedRequest.frozenSourceCommit || '-'}
+                    </Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('common.status')}>
+                    <Tag color={STATUS_COLOR[selectedRequest.status]}>{selectedRequest.status}</Tag>
+                  </Descriptions.Item>
+                </Descriptions>
 
-              {selectedIsOpen && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">{t('review.decision')}</label>
-                    <select
-                      className="border rounded px-3 py-2 w-full"
-                      value={decision}
-                      onChange={(e) => setDecision(e.target.value as 'APPROVE' | 'REJECT')}
+                {selectedRequest.frozenDigest && (
+                  <Alert type="warning" showIcon message={t('review.driftWarning')} />
+                )}
+
+                {detailLoading && <Spin />}
+
+                {!detailLoading && validationReport && (
+                  <Card title={t('review.validationReport')} size="small" type="inner">
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {t('version.policyVersion')}: {String(validationReport.policy_version ?? '-')}
+                      {' | '}
+                      {t('common.status')}: {String(validationReport.status ?? '-')}
+                    </Typography.Text>
+                    {findings.length > 0 ? (
+                      <ul style={{ fontSize: 12, maxHeight: 160, overflow: 'auto', marginTop: 8 }}>
+                        {findings.map((f, idx) => (
+                          <li key={`${f.code}-${idx}`}>
+                            <Typography.Text
+                              type={f.severity === 'FAILED' || f.severity === 'ERROR' ? 'danger' : undefined}
+                              code
+                            >
+                              [{f.severity || 'INFO'}] {f.code}
+                            </Typography.Text>
+                            {f.path ? ` @ ${f.path}` : ''}
+                            {f.message ? ` — ${f.message}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <Empty description={t('review.noFindings')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                    )}
+                  </Card>
+                )}
+
+                {!detailLoading && artifactDiff.length > 0 && (
+                  <Card title={t('review.artifactDiff')} size="small" type="inner">
+                    <ul style={{ fontSize: 12, maxHeight: 128, overflow: 'auto' }}>
+                      {artifactDiff.map((d) => (
+                        <li key={d.path}>
+                          <Tag
+                            color={
+                              d.change === 'added' ? 'success' : d.change === 'removed' ? 'error' : 'warning'
+                            }
+                          >
+                            {t(`review.diff.${d.change}`)}
+                          </Tag>{' '}
+                          <Typography.Text code>{d.path}</Typography.Text>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+
+                {decisionHistory.length > 0 && (
+                  <Card title={t('review.decisionHistory')} size="small" type="inner">
+                    <ul style={{ fontSize: 12 }}>
+                      {decisionHistory.map((d) => (
+                        <li key={String(d.review_id)}>
+                          {String(d.reviewer_id)}: {String(d.decision)}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+
+                {selectedRequest.status === 'SUBMITTED' ? (
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    <div>
+                      <Typography.Text>{t('review.decision')}</Typography.Text>
+                      <Select
+                        style={{ width: '100%', marginTop: 4 }}
+                        value={decision}
+                        onChange={(v) => setDecision(v)}
+                        options={[
+                          { value: 'APPROVE', label: t('review.approve') },
+                          { value: 'REJECT', label: t('review.reject') },
+                          { value: 'REQUEST_CHANGES', label: t('review.requestChanges') },
+                        ]}
+                      />
+                    </div>
+                    <div>
+                      <Typography.Text>{t('review.comments')}</Typography.Text>
+                      <Input.TextArea
+                        rows={3}
+                        value={comments}
+                        onChange={(e) => setComments(e.target.value)}
+                        placeholder={t('review.commentsPlaceholder')}
+                        style={{ marginTop: 4 }}
+                      />
+                    </div>
+                    <Button
+                      type="primary"
+                      danger={decision === 'REJECT'}
+                      onClick={() => void submitDecision(selectedRequest.requestId)}
                     >
-                      <option value="APPROVE">{t('review.approve')}</option>
-                      <option value="REJECT">{t('review.reject')}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">{t('review.comments')}</label>
-                    <textarea
-                      className="border rounded px-3 py-2 w-full"
-                      rows={3}
-                      value={comments}
-                      onChange={(e) => setComments(e.target.value)}
-                      placeholder={t('review.commentsPlaceholder')}
-                    />
-                  </div>
-                  <button
-                    className={`px-4 py-2 text-white rounded ${
-                      decision === 'APPROVE'
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-red-600 hover:bg-red-700'
-                    }`}
-                    onClick={() => submitDecision(selectedRequest.requestId)}
-                  >
-                    {t('review.submitDecision')}
-                  </button>
-                </div>
-              )}
-
-              {!selectedIsOpen && (
-                <p className="text-gray-500 text-sm">{t('review.alreadyProcessed')}</p>
-              )}
-            </div>
-          ) : (
-            <p className="text-gray-400">{t('review.selectRequest')}</p>
-          )}
-        </div>
-      </div>
-    </div>
+                      {t('review.submitDecision')}
+                    </Button>
+                  </Space>
+                ) : (
+                  <Typography.Text type="secondary">{t('review.alreadyProcessed')}</Typography.Text>
+                )}
+              </Flex>
+            ) : (
+              <Empty description={t('review.selectRequest')} />
+            )}
+          </Card>
+        </Col>
+      </Row>
+    </Flex>
   );
 }

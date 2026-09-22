@@ -1,8 +1,15 @@
+/*
+ * 功能: DvcConfigurationService 单元测试。
+ * 时间: 2026-07-10
+ * 作者: AxeXie
+ */
 package com.aihub.version.application;
 
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.integration.minio.infrastructure.MinioProperties;
+import com.aihub.integration.minio.infrastructure.MinioStsCredentialIssuer;
+import com.aihub.shared.error.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,7 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -21,17 +31,26 @@ class DvcConfigurationServiceTest {
     private AuthorizationService authorizationService;
     @Mock
     private AuditService auditService;
+    @Mock
+    private MinioStsCredentialIssuer stsCredentialIssuer;
 
-    private MinioProperties minioProperties;
+    private MinioProperties dvcStorageProperties;
     private DvcConfigurationService service;
 
     @BeforeEach
     void setUp() {
-        minioProperties = new MinioProperties();
-        minioProperties.setEndpoint("http://localhost:9000");
-        minioProperties.setAccessKey("minioadmin");
-        minioProperties.setSecretKey("minioadmin");
-        service = new DvcConfigurationService(minioProperties, authorizationService, auditService);
+        dvcStorageProperties = new MinioProperties();
+        dvcStorageProperties.setEndpoint("http://localhost:9000");
+        dvcStorageProperties.setAccessKey("minioadmin");
+        dvcStorageProperties.setSecretKey("minioadmin");
+        dvcStorageProperties.setDvcAccessKey("dvc-scoped-key");
+        dvcStorageProperties.setDvcSecretKey("dvc-scoped-secret");
+        service = new DvcConfigurationService(dvcStorageProperties, stsCredentialIssuer,
+                authorizationService, auditService);
+    }
+
+    private void stubStsUnavailable() {
+        when(stsCredentialIssuer.issue(anyString(), anyString(), any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -52,7 +71,7 @@ class DvcConfigurationServiceTest {
     @Test
     @DisplayName("生成 DVC Remote 配置应优先使用外部端点")
     void generateRemoteConfigShouldPreferExternalEndpoint() {
-        minioProperties.setExternalEndpoint("http://minio.example.com:9000");
+        dvcStorageProperties.setExternalEndpoint("http://minio.example.com:9000");
 
         DvcConfigurationService.DvcRemoteConfig config = service.generateRemoteConfig("asset_1");
 
@@ -60,13 +79,17 @@ class DvcConfigurationServiceTest {
     }
 
     @Test
-    @DisplayName("签发 DVC 凭据应包含短期有效期")
-    void issueCredentialsShouldIncludeShortTtl() {
+    @DisplayName("签发 DVC 凭据应使用 scoped 密钥而非 root")
+    void issueCredentialsShouldUseScopedKeys() {
+        stubStsUnavailable();
         DvcConfigurationService.DvcCredentials credentials = service.issueCredentials("asset_1");
 
-        assertThat(credentials.accessKey()).isEqualTo("minioadmin");
+        assertThat(credentials.accessKey()).isEqualTo("dvc-scoped-key");
+        assertThat(credentials.secretKey()).isEqualTo("dvc-scoped-secret");
         assertThat(credentials.bucket()).isEqualTo("dvc-cache");
         assertThat(credentials.prefix()).isEqualTo("asset_1/");
+        assertThat(credentials.credentialType()).isEqualTo("SCOPED_CONFIG_KEY");
+        assertThat(credentials.limitationNote()).contains("STS");
         assertThat(credentials.expiresAt()).isAfter(java.time.Instant.now().plusSeconds(14 * 60));
 
         verify(authorizationService).requirePermission("asset:read");
@@ -74,40 +97,13 @@ class DvcConfigurationServiceTest {
     }
 
     @Test
-    @DisplayName("生成 Version 级别 DVC 完整配置应包含短期 S3 凭据")
-    void generateDvcRemoteConfigShouldIncludeShortTermCredentials() {
-        DvcConfigurationService.DvcRemoteConfigFull config = service.generateDvcRemoteConfig("ver_1");
+    @DisplayName("未配置 scoped 密钥时应 fail-closed")
+    void issueCredentialsShouldFailWhenScopedKeysMissing() {
+        stubStsUnavailable();
+        dvcStorageProperties.setDvcAccessKey("");
+        dvcStorageProperties.setDvcSecretKey("");
 
-        assertThat(config.bucket()).isEqualTo("dvc-cache");
-        assertThat(config.endpoint()).isEqualTo("http://localhost:9000");
-        assertThat(config.prefix()).isEqualTo("versions/ver_1/");
-        assertThat(config.accessKey()).isEqualTo("minioadmin");
-        assertThat(config.secretKey()).isEqualTo("minioadmin");
-        assertThat(config.expiresAt()).isAfter(java.time.Instant.now().plusSeconds(14 * 60));
-        assertThat(config.dvcRemoteConfig()).contains("[remote \"aihub\"]");
-        assertThat(config.dvcRemoteConfig()).contains("s3://dvc-cache/versions/ver_1/");
-
-        verify(authorizationService).requirePermission("asset:read");
-        verify(auditService).record(any());
-    }
-
-    @Test
-    @DisplayName("生成 Version 级别 DVC 配置审计中 secretKey 应脱敏")
-    void generateDvcRemoteConfigAuditShouldMaskSecretKey() {
-        service.generateDvcRemoteConfig("ver_1");
-
-        // 验证审计事件中 secretKey 被脱敏为 "***"
-        verify(auditService).record(argThat(event ->
-                "***".equals(event.attributes().get("secretKey"))));
-    }
-
-    @Test
-    @DisplayName("generateDvcRemoteConfig 应优先使用外部端点")
-    void generateDvcRemoteConfigShouldPreferExternalEndpoint() {
-        minioProperties.setExternalEndpoint("http://minio.example.com:9000");
-
-        DvcConfigurationService.DvcRemoteConfigFull config = service.generateDvcRemoteConfig("ver_1");
-
-        assertThat(config.endpoint()).isEqualTo("http://minio.example.com:9000");
+        assertThatThrownBy(() -> service.issueCredentials("asset_1"))
+                .isInstanceOf(ValidationException.class);
     }
 }

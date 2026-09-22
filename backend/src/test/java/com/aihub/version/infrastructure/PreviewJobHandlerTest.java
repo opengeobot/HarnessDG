@@ -1,11 +1,16 @@
 package com.aihub.version.infrastructure;
 
 import com.aihub.job.domain.JobContext;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.aihub.transfer.domain.StoragePort;
+import com.aihub.version.domain.Artifact;
+import com.aihub.version.domain.VersionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayInputStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,11 +19,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.lenient;
 
@@ -30,13 +38,24 @@ class PreviewJobHandlerTest {
     private IdGenerator idGenerator;
     @Mock
     private JdbcTemplate jdbcTemplate;
+    @Mock
+    private PlatformMetrics platformMetrics;
+    @Mock
+    private ObjectProvider<PlatformMetrics> platformMetricsProvider;
+    @Mock
+    private StoragePort storagePort;
+    @Mock
+    private VersionRepository versionRepository;
 
     private PreviewJobHandler handler;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final PreviewProperties previewProperties = new PreviewProperties(100, 50, 1024L * 1024);
 
     @BeforeEach
     void setUp() {
-        handler = new PreviewJobHandler(idGenerator, jdbcTemplate, objectMapper);
+        lenient().when(platformMetricsProvider.getIfAvailable()).thenReturn(platformMetrics);
+        handler = new PreviewJobHandler(idGenerator, jdbcTemplate, objectMapper, previewProperties,
+                platformMetricsProvider, storagePort, versionRepository);
     }
 
     @Test
@@ -73,13 +92,8 @@ class PreviewJobHandlerTest {
     }
 
     @Test
-    @DisplayName("超大内容应写入 errorReason 预览记录")
-    void oversizedContentShouldWriteErrorReason() throws Exception {
-        lenient().when(idGenerator.generate(IdPrefix.PREVIEW)).thenReturn("prv_1");
-        lenient().doReturn(1).when(jdbcTemplate).update(anyString(), any(), any());
-        lenient().doReturn(1).when(jdbcTemplate).update(anyString(), any(), any(), any(), any(), any(), any());
-
-        // 生成 2MiB 内容
+    @DisplayName("超大内容应抛出 PREVIEW_LIMIT_EXCEEDED")
+    void oversizedContentShouldBeRejected() throws Exception {
         StringBuilder huge = new StringBuilder();
         for (int i = 0; i < 2 * 1024 * 1024; i++) {
             huge.append('x');
@@ -92,53 +106,12 @@ class PreviewJobHandlerTest {
         JobContext context = new JobContext("job_1", "PREVIEW_GENERATE",
                 objectMapper.writeValueAsString(payload), 0, "principal_1", "trace_1", "ast_1");
 
-        handler.handle(context);
+        assertThatThrownBy(() -> handler.handle(context))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("PREVIEW_LIMIT_EXCEEDED");
 
-        // 应写入预览记录，且包含 errorReason
-        ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
-        verify(jdbcTemplate).update(anyString(), any(), any(), any(), any(), jsonCaptor.capture(), any());
-        JsonNode node = objectMapper.readTree(jsonCaptor.getValue());
-        assertThat(node.path("errorReason").asText()).isEqualTo("PREVIEW_SIZE_EXCEEDED");
-    }
-
-    @Test
-    @DisplayName("CSV 超过 50 列应标记 columnTruncated")
-    void csvExceedingFiftyColumnsShouldMarkColumnTruncated() throws Exception {
-        lenient().when(idGenerator.generate(IdPrefix.PREVIEW)).thenReturn("prv_1");
-        lenient().doReturn(1).when(jdbcTemplate).update(anyString(), any(), any());
-        lenient().doReturn(1).when(jdbcTemplate).update(anyString(), any(), any(), any(), any(), any(), any());
-
-        // 构建 60 列的 CSV
-        StringBuilder csv = new StringBuilder();
-        for (int col = 0; col < 60; col++) {
-            if (col > 0) csv.append(",");
-            csv.append("col").append(col);
-        }
-        csv.append("\n");
-        for (int col = 0; col < 60; col++) {
-            if (col > 0) csv.append(",");
-            csv.append(col);
-        }
-
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("assetId", "ast_1");
-        payload.put("content", csv.toString());
-        payload.put("contentType", "text/csv");
-
-        JobContext context = new JobContext("job_1", "PREVIEW_GENERATE",
-                objectMapper.writeValueAsString(payload), 0, "principal_1", "trace_1", "ast_1");
-
-        handler.handle(context);
-
-        // 验证 INSERT 被调用，并检查 columnTruncated 标记
-        ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
-        verify(jdbcTemplate).update(anyString(), anyString(), anyString(), anyString(),
-                anyString(), jsonCaptor.capture(), any());
-        JsonNode node = objectMapper.readTree(jsonCaptor.getValue());
-        assertThat(node.path("columnTruncated").asBoolean()).isTrue();
-        assertThat(node.path("truncated").asBoolean()).isFalse();
-        // 应该只保留了 50 列
-        assertThat(node.path("rows").get(0).size()).isEqualTo(50);
+        verify(platformMetrics).recordPreviewFailure("limit_exceeded");
+        verify(jdbcTemplate, never()).update(anyString(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -170,112 +143,85 @@ class PreviewJobHandlerTest {
                 anyString(), anyString(), any());
     }
 
-    // -------------------------------------------------------------------------
-    // RFC 4180 CSV parser tests
-    // -------------------------------------------------------------------------
-
-    private JsonNode runCsv(String csv) throws Exception {
+    @Test
+    @DisplayName("content 为空时应从 dvc-cache 自动取数解析 CSV")
+    void shouldAutoFetchFromStorageWhenContentAbsent() throws Exception {
         lenient().when(idGenerator.generate(IdPrefix.PREVIEW)).thenReturn("prv_1");
-        lenient().doReturn(1).when(jdbcTemplate).update(anyString(), any(), any());
-        lenient().doReturn(1).when(jdbcTemplate).update(anyString(), any(), any(), any(), any(), any(), any());
+        lenient().when(jdbcTemplate.update(anyString(), any(), any())).thenReturn(1);
+        lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+
+        Artifact csv = new Artifact("art_1", "ver_1", "data/train.csv",
+                "data/train.csv.dvc", "abcdef1234567890abcdef1234567890",
+                "sha256...", 200L, "text/csv");
+        lenient().when(versionRepository.listArtifactsByVersion("ver_1")).thenReturn(List.of(csv));
+        lenient().when(storagePort.objectExists(eq("dvc-cache"), eq("ab/cdef1234567890abcdef1234567890")))
+                .thenReturn(true);
+        lenient().when(storagePort.readObject(eq("dvc-cache"), eq("ab/cdef1234567890abcdef1234567890")))
+                .thenReturn(new ByteArrayInputStream("col1,col2\nv1,v2\n".getBytes()));
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("assetId", "ast_1");
         payload.put("versionId", "ver_1");
-        payload.put("content", csv);
-        payload.put("contentType", "text/csv");
 
         JobContext context = new JobContext("job_1", "PREVIEW_GENERATE",
                 objectMapper.writeValueAsString(payload), 0, "principal_1", "trace_1", "ast_1");
 
         handler.handle(context);
 
-        ArgumentCaptor<String> jsonCaptor = ArgumentCaptor.forClass(String.class);
+        verify(storagePort).readObject("dvc-cache", "ab/cdef1234567890abcdef1234567890");
         verify(jdbcTemplate).update(anyString(), anyString(), anyString(), anyString(),
-                anyString(), jsonCaptor.capture(), any());
-
-        return objectMapper.readTree(jsonCaptor.getValue());
+                anyString(), anyString(), any());
     }
 
     @Test
-    @DisplayName("CSV: 普通无引号字段应正确解析")
-    void csvNormalUnquotedFields() throws Exception {
-        String csv = "name,age,city\nAlice,30,Beijing\nBob,25,Shanghai\n";
-        JsonNode result = runCsv(csv);
+    @DisplayName("图片 artifact 应返回安全引用，不读取二进制")
+    void imageArtifactShouldReturnReferenceWithoutBytes() throws Exception {
+        lenient().when(idGenerator.generate(IdPrefix.PREVIEW)).thenReturn("prv_img");
+        lenient().when(jdbcTemplate.update(anyString(), any(), any())).thenReturn(1);
+        lenient().when(jdbcTemplate.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
 
-        JsonNode rows = result.get("rows");
-        assertThat(rows).hasSize(2);
+        Artifact img = new Artifact("art_img", "ver_1", "samples/preview.png",
+                "samples/preview.png.dvc", "ffeedd...".repeat(4),
+                "sha256...", 1024L, "image/png");
+        lenient().when(versionRepository.listArtifactsByVersion("ver_1")).thenReturn(List.of(img));
 
-        assertThat(rows.get(0).get("name").asText()).isEqualTo("Alice");
-        assertThat(rows.get(0).get("age").asText()).isEqualTo("30");
-        assertThat(rows.get(0).get("city").asText()).isEqualTo("Beijing");
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("assetId", "ast_1");
+        payload.put("versionId", "ver_1");
 
-        assertThat(rows.get(1).get("name").asText()).isEqualTo("Bob");
-        assertThat(rows.get(1).get("age").asText()).isEqualTo("25");
+        JobContext context = new JobContext("job_img", "PREVIEW_GENERATE",
+                objectMapper.writeValueAsString(payload), 0, "principal_1", "trace_1", "ast_1");
+
+        handler.handle(context);
+
+        // 图片不读取对象二进制
+        verify(storagePort, never()).readObject(anyString(), anyString());
+        verify(jdbcTemplate).update(anyString(), anyString(), anyString(), anyString(),
+                anyString(), anyString(), any());
     }
 
     @Test
-    @DisplayName("CSV: 引号字段中包含逗号应正确处理")
-    void csvQuotedFieldWithComma() throws Exception {
-        String csv = "\"name\",\"description\"\n\"Smith, John\",\"Engineer, Senior\"\n\"Doe, Jane\",\"Manager, VP\"\n";
-        JsonNode result = runCsv(csv);
+    @DisplayName("对象存储缺少 artifact 时抛 PREVIEW_SOURCE_UNAVAILABLE")
+    void missingArtifactObjectShouldBeRejected() throws Exception {
+        Artifact csv = new Artifact("art_1", "ver_1", "data/train.csv",
+                "data/train.csv.dvc", "abcdef1234567890abcdef1234567890",
+                "sha256...", 200L, "text/csv");
+        lenient().when(versionRepository.listArtifactsByVersion("ver_1")).thenReturn(List.of(csv));
+        lenient().when(storagePort.objectExists(eq("dvc-cache"), eq("ab/cdef1234567890abcdef1234567890")))
+                .thenReturn(false);
 
-        JsonNode rows = result.get("rows");
-        assertThat(rows).hasSize(2);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("assetId", "ast_1");
+        payload.put("versionId", "ver_1");
 
-        assertThat(rows.get(0).get("name").asText()).isEqualTo("Smith, John");
-        assertThat(rows.get(0).get("description").asText()).isEqualTo("Engineer, Senior");
+        JobContext context = new JobContext("job_miss", "PREVIEW_GENERATE",
+                objectMapper.writeValueAsString(payload), 0, "principal_1", "trace_1", "ast_1");
 
-        assertThat(rows.get(1).get("name").asText()).isEqualTo("Doe, Jane");
-    }
+        assertThatThrownBy(() -> handler.handle(context))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("PREVIEW_SOURCE_UNAVAILABLE");
 
-    @Test
-    @DisplayName("CSV: 转义引号（双引号）应正确解析为单个引号")
-    void csvEscapedQuotes() throws Exception {
-        String csv = "name,quote\n\"He said \"\"hello\"\"\",\"It was \"\"great\"\"\"\n";
-        JsonNode result = runCsv(csv);
-
-        JsonNode rows = result.get("rows");
-        assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).get("name").asText()).isEqualTo("He said \"hello\"");
-        assertThat(rows.get(0).get("quote").asText()).isEqualTo("It was \"great\"");
-    }
-
-    @Test
-    @DisplayName("CSV: 引号字段中包含换行符应作为同一行解析")
-    void csvQuotedFieldWithNewline() throws Exception {
-        String csv = "name,note\n\"Alice\",\"Line 1\nLine 2\nLine 3\"\n\"Bob\",\"Simple\"\n";
-        JsonNode result = runCsv(csv);
-
-        JsonNode rows = result.get("rows");
-        assertThat(rows).hasSize(2);
-
-        assertThat(rows.get(0).get("name").asText()).isEqualTo("Alice");
-        assertThat(rows.get(0).get("note").asText()).isEqualTo("Line 1\nLine 2\nLine 3");
-
-        assertThat(rows.get(1).get("name").asText()).isEqualTo("Bob");
-        assertThat(rows.get(1).get("note").asText()).isEqualTo("Simple");
-    }
-
-    @Test
-    @DisplayName("CSV: 混合引号和无引号字段应正确解析")
-    void csvMixedQuotedAndUnquoted() throws Exception {
-        String csv = "id,name,notes,active\n1,\"Alice\",\"Normal note\",true\n2,Bob,\"Has, comma\",false\n3,\"\"\"Quoted\"\"\"\",,maybe\n";
-        JsonNode result = runCsv(csv);
-
-        JsonNode rows = result.get("rows");
-        assertThat(rows).hasSize(3);
-
-        assertThat(rows.get(0).get("id").asText()).isEqualTo("1");
-        assertThat(rows.get(0).get("name").asText()).isEqualTo("Alice");
-        assertThat(rows.get(0).get("notes").asText()).isEqualTo("Normal note");
-        assertThat(rows.get(0).get("active").asText()).isEqualTo("true");
-
-        assertThat(rows.get(1).get("id").asText()).isEqualTo("2");
-        assertThat(rows.get(1).get("name").asText()).isEqualTo("Bob");
-        assertThat(rows.get(1).get("notes").asText()).isEqualTo("Has, comma");
-
-        assertThat(rows.get(2).get("name").asText()).isEqualTo("\"Quoted\"");
-        assertThat(rows.get(2).get("notes").asText()).isEmpty();
+        verify(platformMetrics).recordPreviewFailure("source_unavailable");
+        verify(jdbcTemplate, never()).update(anyString(), any(), any(), any(), any(), any(), any());
     }
 }

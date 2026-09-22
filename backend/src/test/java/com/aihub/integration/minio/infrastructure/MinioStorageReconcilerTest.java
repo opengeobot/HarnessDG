@@ -5,31 +5,56 @@
 package com.aihub.integration.minio.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.job.domain.JobContext;
+import com.aihub.notification.application.NotificationRecipientResolver;
+import com.aihub.notification.application.NotificationService;
+import com.aihub.platform.observability.application.AlertService;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class MinioStorageReconcilerTest {
 
     private JdbcTemplate jdbcTemplate;
+    private PlatformMetrics platformMetrics;
+    private ObjectProvider<MinioObjectExistencePort> minioExistenceProvider;
+    private MinioObjectExistencePort minioExistencePort;
+    private MinioProperties minioProperties;
+    private AlertService alertService;
+    private NotificationService notificationService;
+    private NotificationRecipientResolver recipientResolver;
     private MinioStorageReconciler reconciler;
 
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
-        reconciler = new MinioStorageReconciler(jdbcTemplate);
+        platformMetrics = mock(PlatformMetrics.class);
+        minioExistencePort = mock(MinioObjectExistencePort.class);
+        minioExistenceProvider = mock(ObjectProvider.class);
+        minioProperties = new MinioProperties();
+        alertService = mock(AlertService.class);
+        notificationService = mock(NotificationService.class);
+        recipientResolver = mock(NotificationRecipientResolver.class);
+        when(minioExistenceProvider.getIfAvailable()).thenReturn(minioExistencePort);
+        reconciler = new MinioStorageReconciler(jdbcTemplate, platformMetrics, minioExistenceProvider,
+                minioProperties, alertService, notificationService, recipientResolver);
     }
 
     @Test
@@ -71,6 +96,8 @@ class MinioStorageReconcilerTest {
         row.put("sha256", null);
         row.put("size", 100L);
         row.put("media_type", "application/octet-stream");
+        row.put("asset_id", "ast_001");
+        row.put("version", "v1.0.0");
         batch.add(row);
 
         when(jdbcTemplate.queryForList(anyString(), anyInt())).thenReturn(batch);
@@ -84,8 +111,35 @@ class MinioStorageReconcilerTest {
     }
 
     @Test
+    void handleDetectsMissingMinioObject() {
+        when(jdbcTemplate.update(anyString())).thenReturn(0, 0);
+        when(minioExistencePort.objectExists(anyString(), anyString())).thenReturn(false);
+
+        List<Map<String, Object>> batch = new ArrayList<>();
+        Map<String, Object> row = new HashMap<>();
+        row.put("artifact_id", "art_003");
+        row.put("version_id", "ver_001");
+        row.put("path", "data/train.csv");
+        row.put("sha256", "a".repeat(64));
+        row.put("size", 1024L);
+        row.put("media_type", "text/csv");
+        row.put("asset_id", "ast_001");
+        row.put("version", "v1.0.0");
+        batch.add(row);
+
+        when(jdbcTemplate.queryForList(anyString(), anyInt())).thenReturn(batch);
+        when(jdbcTemplate.queryForList(anyString(), anyString(), anyInt())).thenReturn(List.of());
+
+        JobContext ctx = new JobContext("job-1", "MINIO_STORAGE_RECONCILE", null, 0, "usr_1", "trace-1", null);
+        reconciler.handle(ctx);
+
+        verify(jdbcTemplate, times(1)).update(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
     void handleAcceptsValidArtifacts() {
         when(jdbcTemplate.update(anyString())).thenReturn(0, 0);
+        when(minioExistencePort.objectExists(anyString(), anyString())).thenReturn(true);
 
         List<Map<String, Object>> batch = new ArrayList<>();
         Map<String, Object> row = new HashMap<>();
@@ -95,6 +149,8 @@ class MinioStorageReconcilerTest {
         row.put("sha256", "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890");
         row.put("size", 1024L);
         row.put("media_type", "text/csv");
+        row.put("asset_id", "ast_001");
+        row.put("version", "v1.0.0");
         batch.add(row);
 
         when(jdbcTemplate.queryForList(anyString(), anyInt())).thenReturn(batch);
@@ -105,5 +161,26 @@ class MinioStorageReconcilerTest {
 
         // No discrepancy INSERT
         verify(jdbcTemplate, times(2)).update(anyString());
+    }
+
+    @Test
+    void checkStorageQuotaSkipsWhenQuotaDisabled() {
+        minioProperties.setQuotaBytes(0);
+        reconciler.checkStorageQuota();
+        verify(jdbcTemplate, never()).queryForObject(anyString(), eq(Long.class));
+    }
+
+    @Test
+    void checkStorageQuotaEmitsWarningWhenExceeded() {
+        minioProperties.setQuotaBytes(1000L);
+        minioProperties.setQuotaWarningPercent(80);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class))).thenReturn(900L);
+        when(recipientResolver.resolveSystemObservers()).thenReturn(Set.of("usr_obs"));
+
+        reconciler.checkStorageQuota();
+
+        verify(alertService).emitStorageQuotaWarning(900L, 1000L, 0.9);
+        verify(notificationService).publishOutboxEvent(eq("STORAGE"), eq("platform"),
+                eq("STORAGE_QUOTA_WARNING"), any(), any());
     }
 }

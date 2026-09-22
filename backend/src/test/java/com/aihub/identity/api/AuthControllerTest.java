@@ -160,4 +160,15 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.principalId").value("prn_1"))
                 .andExpect(jsonPath("$.data.principalType").value("USER"));
     }
+
+    @Test
+    void agentTokenAliasDelegatesToCredentialExchange() throws Exception {
+        given(authService.exchangeClientCredential(eq("agt_demo"), any())).willReturn(tokenPair());
+
+        mockMvc.perform(post("/api/v1/auth/agent/token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"subjectId\":\"agt_demo\",\"credential\":\"secret-demo\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").value("access.jwt.value"));
+    }
 }

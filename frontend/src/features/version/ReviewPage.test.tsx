@@ -1,120 +1,68 @@
 /**
- * 功能: ReviewPage 组件测试——锁定 TASK-P0BR-065 D2 整改：审批队列只包含本会话内
- *       以真实后端 requestId 提交的请求，不再渲染任何派生/虚构行；查询失败呈现
- *       Error + Retry；提交按钮仅对 PENDING_REVIEW 版本开放（AC-P0B-UI-003/006）。
- * 时间: 2026-09-22
- * 作者: AxeXie
+ * ReviewPage 组件测试——验证发布审批页面渲染与 REQUEST_CHANGES 选项。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { renderWithProviders } from '@/test/test-utils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ReviewPage } from './ReviewPage';
-import type { VersionView } from './types';
+import { renderWithProviders } from '@/test/test-utils';
 
-const listVersionsMock = vi.fn();
 vi.mock('./api', () => ({
-  listVersions: (...args: unknown[]) => listVersionsMock(...args),
+  listPublishRequests: vi.fn().mockResolvedValue([]),
+  getValidationReport: vi.fn().mockResolvedValue({ status: 'PASSED', findings: [] }),
+  listArtifacts: vi.fn().mockResolvedValue([]),
+  listVersions: vi.fn().mockResolvedValue({ items: [], nextCursor: null, hasMore: false }),
+  listDecisions: vi.fn().mockResolvedValue([]),
 }));
 
-const postMock = vi.fn();
 vi.mock('@/shared/api', () => ({
   apiClient: {
-    get: vi.fn(),
-    post: (...args: unknown[]) => postMock(...args),
+    post: vi.fn().mockResolvedValue({}),
   },
 }));
 
-function version(overrides: Partial<VersionView> = {}): VersionView {
-  return {
-    versionId: 'ver-1',
-    assetId: 'asset-1',
-    version: 'v1.0.0',
-    status: 'PENDING_REVIEW',
-    createdBy: 'u-1',
-    createdAt: '2026-09-22T00:00:00Z',
-    updatedAt: '2026-09-22T00:00:00Z',
-    ...overrides,
-  };
-}
-
-/** 输入资产 ID 并点击查询。 */
-async function query(assetId = 'asset-1') {
-  fireEvent.change(screen.getByPlaceholderText('输入资产 ID'), {
-    target: { value: assetId },
-  });
-  fireEvent.click(screen.getByRole('button', { name: '查询' }));
-}
-
-describe('ReviewPage 数据流真实化', () => {
+describe('ReviewPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('初始态诚实：仅提示查询，不渲染任何伪造请求行', async () => {
-    renderWithProviders(<ReviewPage />);
-    expect(await screen.findByText('输入资产 ID 后查询版本。')).toBeInTheDocument();
-    expect(screen.getByText('本会话暂未提交发布请求')).toBeInTheDocument();
-    // 旧实现以 pub_${versionId} 派生假 requestId、以 system/pending 伪造字段——必须不存在。
-    expect(screen.queryByText(/pub_/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/冻结摘要/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/提交人/)).not.toBeInTheDocument();
-    expect(listVersionsMock).not.toHaveBeenCalled();
+  it('shows deep-link hint when assetId missing', () => {
+    renderWithProviders(<ReviewPage />, { route: '/review' });
+    expect(screen.getByText(/assetId|查询参数/i)).toBeInTheDocument();
   });
 
-  it('提交发布按钮仅对 PENDING_REVIEW 版本开放', async () => {
-    listVersionsMock.mockResolvedValue({
-      items: [
-        version(),
-        version({ versionId: 'ver-draft', version: 'v0.9.0', status: 'DRAFT' }),
-        version({ versionId: 'ver-pub', version: 'v0.8.0', status: 'PUBLISHED' }),
-      ],
-    });
-    renderWithProviders(<ReviewPage />);
-    await query();
-    await screen.findByText('ver-1');
-    expect(screen.queryByText('ver-draft')).not.toBeInTheDocument();
-    expect(screen.queryByText('ver-pub')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /提交发布/ })).toHaveLength(1);
-    expect(listVersionsMock).toHaveBeenCalledWith('asset-1');
+  it('renders asset ID from query params', () => {
+    renderWithProviders(<ReviewPage />, { route: '/review?assetId=ast_1' });
+    expect(screen.getByText('ast_1')).toBeInTheDocument();
   });
 
-  it('提交后仅以真实后端 requestId 入队，并可对未决请求提交决策', async () => {
-    listVersionsMock.mockResolvedValue({ items: [version()] });
-    postMock.mockImplementation((url: string) =>
-      Promise.resolve(url.startsWith('/versions/') ? { requestId: 'req-real-1' } : {}),
-    );
-    renderWithProviders(<ReviewPage />);
-    await query();
-    fireEvent.click(await screen.findByRole('button', { name: /提交发布/ }));
-
-    expect(await screen.findByText('req-real-1')).toBeInTheDocument();
-    expect(postMock).toHaveBeenCalledWith('/versions/ver-1/publish-requests');
-
-    fireEvent.click(screen.getByText('req-real-1'));
-    fireEvent.click(await screen.findByRole('button', { name: '提交决策' }));
-    await waitFor(() =>
-      expect(postMock).toHaveBeenCalledWith('/publish-requests/req-real-1/decisions', {
-        decision: 'APPROVE',
-        comments: '',
-      }),
-    );
-    expect(await screen.findByText('DECIDED:APPROVE')).toBeInTheDocument();
-    // 已决策请求不再暴露决策表单
-    expect(screen.queryByRole('button', { name: '提交决策' })).not.toBeInTheDocument();
+  it('shows select-request prompt in decision panel', () => {
+    renderWithProviders(<ReviewPage />, { route: '/review?assetId=ast_1' });
+    const hints = screen.getAllByText(/select|选择/i);
+    expect(hints.length).toBeGreaterThan(0);
   });
 
-  it('查询失败呈现 alert 与重试，重试走真实查询', async () => {
-    listVersionsMock
-      .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce({ items: [] });
-    renderWithProviders(<ReviewPage />);
+  it('includes REQUEST_CHANGES in decision options when request selected', async () => {
+    const { listPublishRequests } = await import('./api');
+    vi.mocked(listPublishRequests).mockResolvedValue([
+      {
+        request_id: 'pub_1',
+        version_id: 'ver_1',
+        frozen_digest: 'abc',
+        frozen_source_commit: 'commit1',
+        status: 'SUBMITTED',
+        submitted_by: 'usr_1',
+        created_at: '2026-07-10T00:00:00Z',
+      },
+    ]);
 
-    await query();
-    expect(await screen.findByRole('alert')).toHaveTextContent('network down');
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    await waitFor(() => expect(listVersionsMock).toHaveBeenCalledTimes(2));
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    // 查询成功但无待审批版本 → 诚实空态
-    expect(await screen.findByText('该资产暂无待审批版本')).toBeInTheDocument();
+    const user = userEvent.setup();
+    renderWithProviders(<ReviewPage />, { route: '/review?assetId=ast_1' });
+
+    await user.click(await screen.findByText('ver_1'));
+
+    const select = await screen.findByRole('combobox');
+    await user.click(select);
+    expect(await screen.findByText(/要求修改|request changes/i)).toBeInTheDocument();
   });
 });

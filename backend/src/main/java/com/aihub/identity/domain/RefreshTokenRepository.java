@@ -22,6 +22,11 @@ public interface RefreshTokenRepository {
     Optional<RefreshTokenRecord> findByJti(String jti);
 
     /**
+     * 按 jti 摘要或明文 jti 查找（摘要优先，明文 jti 回退兼容历史记录）。
+     */
+    Optional<RefreshTokenRecord> findByJwtId(String jwtId);
+
+    /**
      * 以原子 compare-and-set 抢占轮换权：仅当该 jti 仍为 ACTIVE 时将其置为 ROTATED。
      *
      * <p>并发刷新时只有把 ACTIVE 成功翻转的请求成为唯一胜者；返回 {@code false} 表示

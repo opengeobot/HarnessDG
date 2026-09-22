@@ -2,10 +2,18 @@ package com.aihub.integration.minio.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.notification.application.NotificationRecipientResolver;
+import com.aihub.notification.application.NotificationService;
+import com.aihub.notification.domain.NotificationSeverity;
+import com.aihub.platform.observability.application.AlertService;
+import com.aihub.platform.observability.application.PlatformMetrics;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -22,10 +30,30 @@ public class MinioStorageReconciler implements JobHandler {
     private static final Logger LOG = LoggerFactory.getLogger(MinioStorageReconciler.class);
     private static final int BATCH_SIZE = 100;
 
-    private final JdbcTemplate jdbcTemplate;
+    private static final String DVC_BUCKET = "dvc-cache";
 
-    public MinioStorageReconciler(JdbcTemplate jdbcTemplate) {
+    private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
+    private final ObjectProvider<MinioObjectExistencePort> minioExistenceProvider;
+    private final MinioProperties minioProperties;
+    private final AlertService alertService;
+    private final NotificationService notificationService;
+    private final NotificationRecipientResolver recipientResolver;
+
+    public MinioStorageReconciler(JdbcTemplate jdbcTemplate,
+                                  PlatformMetrics platformMetrics,
+                                  ObjectProvider<MinioObjectExistencePort> minioExistenceProvider,
+                                  MinioProperties minioProperties,
+                                  AlertService alertService,
+                                  NotificationService notificationService,
+                                  NotificationRecipientResolver recipientResolver) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
+        this.minioExistenceProvider = minioExistenceProvider;
+        this.minioProperties = minioProperties;
+        this.alertService = alertService;
+        this.notificationService = notificationService;
+        this.recipientResolver = recipientResolver;
     }
 
     @Override
@@ -51,11 +79,17 @@ public class MinioStorageReconciler implements JobHandler {
         do {
             List<Map<String, Object>> batch = cursor == null
                     ? jdbcTemplate.queryForList(
-                    "SELECT artifact_id, version_id, path, sha256, size, media_type " +
-                            "FROM version_artifact ORDER BY artifact_id LIMIT ?", BATCH_SIZE)
+                    "SELECT va.artifact_id, va.version_id, va.path, va.sha256, va.size, va.media_type, "
+                            + "av.asset_id, av.version "
+                            + "FROM version_artifact va "
+                            + "JOIN asset_version av ON va.version_id = av.version_id "
+                            + "ORDER BY va.artifact_id LIMIT ?", BATCH_SIZE)
                     : jdbcTemplate.queryForList(
-                    "SELECT artifact_id, version_id, path, sha256, size, media_type " +
-                            "FROM version_artifact WHERE artifact_id > ? ORDER BY artifact_id LIMIT ?",
+                    "SELECT va.artifact_id, va.version_id, va.path, va.sha256, va.size, va.media_type, "
+                            + "av.asset_id, av.version "
+                            + "FROM version_artifact va "
+                            + "JOIN asset_version av ON va.version_id = av.version_id "
+                            + "WHERE va.artifact_id > ? ORDER BY va.artifact_id LIMIT ?",
                     cursor, BATCH_SIZE);
 
             if (batch.isEmpty()) break;
@@ -66,7 +100,9 @@ public class MinioStorageReconciler implements JobHandler {
                 String sha256 = (String) row.get("sha256");
                 Long size = row.get("size") != null ? ((Number) row.get("size")).longValue() : null;
 
-                ReconcileResult result = checkArtifact(artifactId, path, sha256, size);
+                String assetId = (String) row.get("asset_id");
+                String version = (String) row.get("version");
+                ReconcileResult result = checkArtifact(artifactId, path, sha256, size, assetId, version);
                 if (result != ReconcileResult.CONSISTENT) {
                     discrepancies++;
                     recordDiscrepancy(artifactId, result);
@@ -79,8 +115,49 @@ public class MinioStorageReconciler implements JobHandler {
 
         } while (true);
 
+        checkStorageQuota();
+
         LOG.info("MinIO storage reconciliation completed jobId={} totalChecked={} discrepancies={}",
                 context.jobId(), totalChecked, discrepancies);
+    }
+
+    void checkStorageQuota() {
+        long quotaBytes = minioProperties.getQuotaBytes();
+        if (quotaBytes <= 0) {
+            return;
+        }
+        Long usedObj = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(size), 0) FROM version_artifact WHERE size IS NOT NULL AND size >= 0",
+                Long.class);
+        long usedBytes = usedObj == null ? 0L : usedObj;
+        double usageRatio = quotaBytes == 0 ? 0.0 : (double) usedBytes / quotaBytes;
+        int warningPercent = Math.max(1, Math.min(minioProperties.getQuotaWarningPercent(), 100));
+        double threshold = warningPercent / 100.0;
+        if (usageRatio < threshold) {
+            return;
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("scopeType", "PLATFORM");
+        payload.put("scopeId", null);
+        payload.put("usedBytes", usedBytes);
+        payload.put("quotaBytes", quotaBytes);
+        payload.put("usageRatio", usageRatio);
+
+        alertService.emitStorageQuotaWarning(usedBytes, quotaBytes, usageRatio);
+        try {
+            notificationService.publishOutboxEvent("STORAGE", "platform",
+                    "STORAGE_QUOTA_WARNING", payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish STORAGE_QUOTA_WARNING outbox", ex);
+        }
+        Set<String> observers = recipientResolver.resolveSystemObservers();
+        notificationService.fanOutInAppNotifications(observers, null,
+                "STORAGE_QUOTA_WARNING",
+                "notification.storage.quota.warning",
+                NotificationSeverity.WARN, payload);
+        LOG.warn("storage quota warning usedBytes={} quotaBytes={} usageRatio={}",
+                usedBytes, quotaBytes, usageRatio);
     }
 
     private int expireStaleSessions(String jobId) {
@@ -89,6 +166,9 @@ public class MinioStorageReconciler implements JobHandler {
                         "WHERE status = 'OPEN' AND expires_at < NOW()");
         if (expired > 0) {
             LOG.info("expired {} stale upload sessions jobId={}", expired, jobId);
+            for (int i = 0; i < expired; i++) {
+                platformMetrics.recordUploadSessionExpired();
+            }
         }
         return expired;
     }
@@ -104,8 +184,8 @@ public class MinioStorageReconciler implements JobHandler {
         return stale;
     }
 
-    private ReconcileResult checkArtifact(String artifactId, String path, String sha256, Long size) {
-        // path 非空且不含路径穿越
+    ReconcileResult checkArtifact(String artifactId, String path, String sha256, Long size,
+                                  String assetId, String version) {
         if (path == null || path.isEmpty()) {
             return ReconcileResult.MANUAL_REVIEW;
         }
@@ -114,7 +194,6 @@ public class MinioStorageReconciler implements JobHandler {
             return ReconcileResult.SECURITY_INCIDENT;
         }
 
-        // SHA-256 格式校验
         if (sha256 != null && !sha256.isEmpty()) {
             if (!sha256.matches("^[a-f0-9]{64}$")) {
                 LOG.warn("artifact {} has invalid sha256 format", artifactId);
@@ -122,10 +201,18 @@ public class MinioStorageReconciler implements JobHandler {
             }
         }
 
-        // size 合理性检查
         if (size != null && size < 0) {
             LOG.warn("artifact {} has negative size: {}", artifactId, size);
             return ReconcileResult.MANUAL_REVIEW;
+        }
+
+        MinioObjectExistencePort minio = minioExistenceProvider.getIfAvailable();
+        if (minio != null && assetId != null && version != null) {
+            String objectKey = assetId + "/" + version + "/" + path;
+            if (!minio.objectExists(DVC_BUCKET, objectKey)) {
+                LOG.warn("artifact {} minio object missing key={}", artifactId, objectKey);
+                return ReconcileResult.MANUAL_REVIEW;
+            }
         }
 
         return ReconcileResult.CONSISTENT;
@@ -136,6 +223,7 @@ public class MinioStorageReconciler implements JobHandler {
         if (result == ReconcileResult.SECURITY_INCIDENT) {
             LOG.error("SECURITY INCIDENT: artifact {} has critical inconsistency", artifactId);
         }
+        platformMetrics.recordReconciliationDiscrepancy("MinioStorage", result.name());
         try {
             String deliveryId = "minio-reconcile-" + artifactId + "-" + System.currentTimeMillis();
             jdbcTemplate.update(

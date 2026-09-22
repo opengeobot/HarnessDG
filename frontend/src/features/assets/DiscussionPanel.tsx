@@ -21,13 +21,18 @@ import {
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { isApiError } from '@/shared/api';
+import { usePermission } from '@/app/permission';
 import {
   createComment,
   createThread,
   editComment,
+  hideComment,
   listComments,
   listThreads,
+  lockThread,
   retractComment,
+  unhideComment,
+  unlockThread,
 } from './api';
 import type { CommentView, ThreadView } from './types';
 
@@ -44,9 +49,10 @@ interface CommentItemProps {
   threadId: string;
   allComments: CommentView[];
   depth: number;
+  canModerate: boolean;
 }
 
-function CommentItem({ comment, threadId, allComments, depth }: CommentItemProps) {
+function CommentItem({ comment, threadId, allComments, depth, canModerate }: CommentItemProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -75,6 +81,24 @@ function CommentItem({ comment, threadId, allComments, depth }: CommentItemProps
     mutationFn: () => retractComment(threadId, comment.commentId),
     onSuccess: () => {
       message.success(t('discussion.retracted'));
+      void queryClient.invalidateQueries({ queryKey: ['comments', threadId] });
+    },
+    onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
+  });
+
+  const hideMut = useMutation({
+    mutationFn: () => hideComment(threadId, comment.commentId),
+    onSuccess: () => {
+      message.success(t('discussion.hidden'));
+      void queryClient.invalidateQueries({ queryKey: ['comments', threadId] });
+    },
+    onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
+  });
+
+  const unhideMut = useMutation({
+    mutationFn: () => unhideComment(threadId, comment.commentId),
+    onSuccess: () => {
+      message.success(t('discussion.unhidden'));
       void queryClient.invalidateQueries({ queryKey: ['comments', threadId] });
     },
     onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
@@ -127,6 +151,16 @@ function CommentItem({ comment, threadId, allComments, depth }: CommentItemProps
                     <Button size="small" type="text" danger>{t('discussion.retract')}</Button>
                   </Popconfirm>
                 </>
+              )}
+              {canModerate && comment.status === 'VISIBLE' && (
+                <Popconfirm title={t('discussion.confirmHide')} onConfirm={() => hideMut.mutate()}>
+                  <Button size="small" type="text" danger>{t('discussion.hide')}</Button>
+                </Popconfirm>
+              )}
+              {canModerate && comment.status === 'HIDDEN' && (
+                <Button size="small" type="text" onClick={() => unhideMut.mutate()} loading={unhideMut.isPending}>
+                  {t('discussion.unhide')}
+                </Button>
               )}
             </Space>
           </Flex>
@@ -211,6 +245,7 @@ function CommentItem({ comment, threadId, allComments, depth }: CommentItemProps
           threadId={threadId}
           allComments={allComments}
           depth={depth + 1}
+          canModerate={canModerate}
         />
       ))}
     </div>
@@ -225,6 +260,8 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { hasScope } = usePermission();
+  const canModerate = hasScope('asset:moderate');
   const [newTitle, setNewTitle] = useState('');
   const [selectedThread, setSelectedThread] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -256,6 +293,24 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
       message.success(t('discussion.commentPosted'));
       setNewComment('');
       void queryClient.invalidateQueries({ queryKey: ['comments', selectedThread] });
+      void queryClient.invalidateQueries({ queryKey: ['threads', assetId] });
+    },
+    onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
+  });
+
+  const lockThreadMut = useMutation({
+    mutationFn: (threadId: string) => lockThread(threadId),
+    onSuccess: () => {
+      message.success(t('discussion.threadLocked'));
+      void queryClient.invalidateQueries({ queryKey: ['threads', assetId] });
+    },
+    onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
+  });
+
+  const unlockThreadMut = useMutation({
+    mutationFn: (threadId: string) => unlockThread(threadId),
+    onSuccess: () => {
+      message.success(t('discussion.threadUnlocked'));
       void queryClient.invalidateQueries({ queryKey: ['threads', assetId] });
     },
     onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
@@ -303,6 +358,40 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
                 padding: '8px 12px',
               }}
               onClick={() => setSelectedThread(thread.threadId)}
+              actions={
+                canModerate
+                  ? [
+                      thread.status === 'LOCKED' ? (
+                        <Button
+                          key="unlock"
+                          type="link"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            unlockThreadMut.mutate(thread.threadId);
+                          }}
+                        >
+                          {t('discussion.unlockThread')}
+                        </Button>
+                      ) : (
+                        <Popconfirm
+                          key="lock"
+                          title={t('discussion.confirmLock')}
+                          onConfirm={() => lockThreadMut.mutate(thread.threadId)}
+                        >
+                          <Button
+                            type="link"
+                            size="small"
+                            danger
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {t('discussion.lockThread')}
+                          </Button>
+                        </Popconfirm>
+                      ),
+                    ]
+                  : undefined
+              }
             >
               <Flex justify="space-between" style={{ width: '100%' }}>
                 <Space>
@@ -344,6 +433,7 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
                       threadId={selectedThread}
                       allComments={commentsQuery.data ?? []}
                       depth={0}
+                      canModerate={canModerate}
                     />
                   )}
                 />

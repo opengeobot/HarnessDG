@@ -1,9 +1,8 @@
 # P0-B 身份、组织与授权需求
 
-> 状态：`READY`（用户已批准；`REQ-AUTH-003` 保持 `OPEN`，等待 `TASK-GOV-002`）
+> 状态：`READY`
 > 依据：ADR-0002、设计 5.4/5.5/11.1。
-> 已确认：`DEC-004`（单公司租户、多组织、多项目）、`DEC-011`（多组织多项目成员关系与 Team/Owner 语义）。
-> 阻塞：`Q-102..106` 已由 `DEC-011` 闭合，不再是阻塞项；仅 `REQ-AUTH-003` 的最终权限矩阵等待 `TASK-GOV-002`。
+> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有 Q-101~Q-106 已通过 DEC 闭合）。
 
 ## REQ-IAM-001 Bootstrap 首个管理员
 
@@ -276,7 +275,7 @@ minimumEvidenceLevel: E4
 status: READY
 priority: MUST
 phase: P0-B
-decisions: [DEC-011]
+
 minimumEvidenceLevel: E4
 ```
 
@@ -309,9 +308,9 @@ minimumEvidenceLevel: E4
 
 ```yaml
 status: READY
-priority: MUST
-phase: P0-B
-decisions: [DEC-011]
+priority: MUST if Team accepted
+phase: P0-B/P1 boundary
+
 minimumEvidenceLevel: E4
 ```
 
@@ -411,10 +410,10 @@ minimumEvidenceLevel: E4
 ## REQ-AUTH-003 Role、Binding 与 ACL 管理
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P0-B
-blockedBy: [TASK-GOV-002]
+
 minimumEvidenceLevel: E4
 ```
 

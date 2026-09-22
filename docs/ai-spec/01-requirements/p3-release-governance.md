@@ -1,12 +1,12 @@
 # P3 发布治理需求
 
-> 状态：`OPEN`
-> 阻塞：P2 VERIFIED；Q-203..206。
+> 状态：`READY`
+> 前置：P2 wiring committed；Q-203..206 已由 DEC-010/012 闭合。
 
 ## REQ-VAL-001 发布前完整性与治理校验
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P3
 permission: asset:submit
@@ -49,11 +49,10 @@ versionId、sourceCommit、asset.yaml/README digest、Manifest digest、Artifact
 ## REQ-REV-001 提交、审批、驳回与职责分离
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P3
 permissions: [asset:submit, asset:review]
-blockedBy: [Q-203, Q-204]
 minimumEvidenceLevel: E4
 ```
 
@@ -85,7 +84,7 @@ minimumEvidenceLevel: E4
 ## REQ-PUB-001 不可变发布 Saga
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P3
 permission: asset:publish
@@ -129,7 +128,7 @@ minimumEvidenceLevel: E4
 ## REQ-IMM-001 已发布版本不可变与完整标识
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P3
 minimumEvidenceLevel: E4
@@ -161,12 +160,11 @@ minimumEvidenceLevel: E4
 ## REQ-DEP-001 版本弃用与归档
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P3
 permission: asset:deprecate
 idempotency: REQUIRED
-blockedBy: [Q-206]
 minimumEvidenceLevel: E4
 ```
 
@@ -190,10 +188,9 @@ minimumEvidenceLevel: E4
 ## REQ-REV-002 版本与审批前端
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P3
-blockedBy: [Q-203, Q-204]
 minimumEvidenceLevel: E4
 ```
 

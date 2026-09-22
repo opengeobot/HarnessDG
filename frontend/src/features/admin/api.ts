@@ -54,6 +54,8 @@ import type {
   UpdateTeamRequest,
   UpdateUserRequest,
   WebhookDeliveryView,
+  IdempotencyRecordView,
+  SystemAlertView,
 } from './types';
 
 /** 生成当前 Principal 范围内唯一的写请求幂等键 */
@@ -323,6 +325,20 @@ export function retryWebhookDelivery(deliveryId: string) {
 /* ---------------- 指标 ---------------- */
 export function getMetricsSummary(): Promise<MetricsSummary> {
   return apiClient.get<MetricsSummary>('/system/metrics/summary');
+}
+
+/* ---------------- 幂等记录（只读） ---------------- */
+export function listIdempotencyRecords(limit = 50): Promise<IdempotencyRecordView[]> {
+  return apiClient.get<IdempotencyRecordView[]>('/system/idempotency', { params: { limit } });
+}
+
+/* ---------------- 系统告警 ---------------- */
+export function listAlerts(limit = 50): Promise<SystemAlertView[]> {
+  return apiClient.get<SystemAlertView[]>('/system/alerts', { params: { limit } });
+}
+
+export function acknowledgeAlert(alertId: string): Promise<SystemAlertView> {
+  return apiClient.post<SystemAlertView>(`/system/alerts/${alertId}:acknowledge`);
 }
 
 /* ---------------- Team ---------------- */

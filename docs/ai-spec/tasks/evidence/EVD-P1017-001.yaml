@@ -1,0 +1,67 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1017-001
+status: PASS
+
+task:
+  taskId: TASK-P1-017
+  requirements: [REQ-AST-001]
+  scenarios: [AC-P1-AST-001]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-017.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-017.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-017.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: b4d244a2f03efa18e4a8fe3ceb5796d46b0ca2c5
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T09:25:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+
+execution:
+  workingDirectory: .
+  command: npx @redocly/cli lint --config contracts/openapi/redocly.yaml contracts/openapi/aihub-v1.yaml
+  startedAt: 2026-07-12T09:20:00Z
+  finishedAt: 2026-07-12T09:25:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-001
+      assertion: aihub-v1.yaml/aihub-agent-v1.yaml 全部端点 x-implementation-status 校正为 implemented-unverified；info.x-verification-status 顶层声明；redocly lint PASS（2 warnings 预存 unused components）
+  notProven: []
+
+artifacts:
+  reports:
+    - redocly lint aihub-v1.yaml → validated, 2 warnings
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences: []
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: User (plan execution authorization 2026-07-12)
+  reviewedAt: 2026-07-12T10:05:00Z
+  accepted: true

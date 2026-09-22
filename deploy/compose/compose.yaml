@@ -60,6 +60,8 @@ services:
       AIHUB_MINIO_SECRET_KEY: ${AIHUB_MINIO_SECRET_KEY}
       DVC_ACCESS_KEY: ${DVC_ACCESS_KEY}
       DVC_SECRET_KEY: ${DVC_SECRET_KEY}
+      AIHUB_MINIO_DVC_ACCESS_KEY: ${AIHUB_MINIO_DVC_ACCESS_KEY}
+      AIHUB_MINIO_DVC_SECRET_KEY: ${AIHUB_MINIO_DVC_SECRET_KEY}
     volumes:
       - ./minio:/init:ro
     restart: "no"
@@ -92,8 +94,8 @@ services:
       GITEA__storage__SERVE_DIRECT: "true"
     volumes:
       - gitea-data:/data
-    ports:
-      - "127.0.0.1:2222:22"
+    # ports:
+    #   - "127.0.0.1:2222:22"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/healthz >/dev/null 2>&1 || exit 1"]
       interval: 10s
@@ -122,9 +124,6 @@ services:
       AIHUB_BOOTSTRAP_ADMIN_PASSWORD: ${AIHUB_BOOTSTRAP_ADMIN_PASSWORD}
       # 本地 http 场景关闭刷新 Cookie 的 Secure 标志，便于 verify 脚本走 http 验证 JWT 生命周期。
       AIHUB_REFRESH_COOKIE_SECURE: "false"
-      # 显式接通真实 Gitea：本 Profile 是可部署基线，不得以未声明的 Noop 开通器冒充建仓。
-      # 前置条件：.env 的 GITEA_SERVICE_TOKEN 必须是真实服务账号 Token（见 bootstrap.ps1 提示）；
-      # 未配置时建仓会按可重试依赖错误失败，这是预期行为，不得回退为 Noop。
       AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
@@ -132,6 +131,8 @@ services:
       AIHUB_MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_URL}
       AIHUB_MINIO_ACCESS_KEY: ${AIHUB_MINIO_ACCESS_KEY}
       AIHUB_MINIO_SECRET_KEY: ${AIHUB_MINIO_SECRET_KEY}
+      AIHUB_MINIO_DVC_ACCESS_KEY: ${AIHUB_MINIO_DVC_ACCESS_KEY}
+      AIHUB_MINIO_DVC_SECRET_KEY: ${AIHUB_MINIO_DVC_SECRET_KEY}
       AIHUB_DVC_BUCKET: dvc-cache
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health/readiness"]
@@ -152,7 +153,6 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      # 与 backend 一致：Worker 是可部署 Profile 的一部分，必须显式接通真实 Gitea。
       AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
@@ -183,6 +183,37 @@ services:
       - "8080:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
+
+  # ---- 可观测性（optional profile，非默认启动） ----
+
+  prometheus:
+    image: docker.m.daocloud.io/prom/prometheus:v2.53.0
+    profiles: ["observability"]
+    volumes:
+      - ./prometheus/prom.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./grafana/alerting-rules.yaml:/etc/prometheus/alerting-rules.yaml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: docker.m.daocloud.io/grafana/grafana:11.1.0
+    profiles: ["observability"]
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/aihub-dashboard.json:/var/lib/grafana/dashboards/aihub-dashboard.json:ro
+    ports:
+      - "127.0.0.1:3001:3000"
     restart: unless-stopped
 
 volumes:

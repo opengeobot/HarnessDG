@@ -14,7 +14,7 @@ import java.util.Set;
  * <p>由认证应用服务在登录/凭据交换/刷新时构造；签发方根据 {@link TokenType} 套用对应有效期，
  * 并补全 {@code iss}/{@code aud}/{@code jti}/{@code iat}/{@code exp}。
  *
- * @param principalId   主体 ID
+ * @param principalId   主体 ID（统一 {@code prn_} 前缀；JWT {@code sub} 使用此值）
  * @param principalType 主体类型
  * @param tokenVersion  主体 Token 版本
  * @param scopes        粗粒度 Scope 集合

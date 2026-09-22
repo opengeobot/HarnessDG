@@ -1,7 +1,9 @@
 package com.aihub.version.domain;
 
 import com.aihub.shared.api.CursorPage;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -18,6 +20,15 @@ public interface VersionRepository {
     CursorPage<Version> listByAsset(String assetId, String cursor, int limit);
 
     Optional<Version> findByCoordinate(String assetId, String version);
+
+    /** 统计资产下处于指定状态的版本数量（用于归档前活跃版本守卫）。 */
+    long countByAssetIdAndStatus(String assetId, VersionStatus status);
+
+    /** 查询资产最新已发布版本（按 published_at 降序取首条）。 */
+    Optional<Version> findLatestPublishedByAssetId(String assetId);
+
+    /** 批量查询各资产最新已发布版本（消除 N+1）。 */
+    Map<String, Version> findLatestPublishedByAssetIds(Collection<String> assetIds);
 
     // ---- 工件操作 ----
 

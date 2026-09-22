@@ -9,7 +9,27 @@ import { renderWithProviders } from '@/test/test-utils';
 // Mock API 模块
 vi.mock('./api', () => ({
   searchAssets: vi.fn().mockResolvedValue({ items: [], hasMore: false, nextCursor: null }),
+  getAssetFacets: vi.fn().mockResolvedValue({
+    types: { MODEL: 2 },
+    frameworks: { pytorch: 1 },
+    tasks: {},
+    formats: {},
+    modalities: {},
+    licenses: { 'Apache-2.0': 2 },
+    sensitivities: {},
+    sizeBuckets: {},
+    taskCodes: {},
+    modalityCodes: {},
+    formatCodes: {},
+    languageCodes: {},
+    totalCount: 2,
+  }),
   deleteAsset: vi.fn().mockResolvedValue(undefined),
+  createAsset: vi.fn().mockResolvedValue({ assetId: 'ast_new' }),
+  getAsset: vi.fn().mockResolvedValue(null),
+  updateAsset: vi.fn().mockResolvedValue(null),
+  listTags: vi.fn().mockResolvedValue([]),
+  listDictionaryItems: vi.fn().mockResolvedValue([]),
 }));
 
 // Mock ControlledSelect 避免测试中发起真实 API 请求
@@ -72,15 +92,21 @@ describe('AssetsPage', () => {
     renderWithProviders(<AssetsPage />);
     expect(screen.getByText('名称')).toBeInTheDocument();
     expect(screen.getByText('类型')).toBeInTheDocument();
-    expect(screen.getByText('可见性')).toBeInTheDocument();
-    expect(screen.getByText('状态')).toBeInTheDocument();
+    expect(screen.getAllByText('可见性').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('状态').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('渲染敏感等级筛选，且不展示无对应字典的失效语言筛选', () => {
+  it('渲染敏感等级筛选，且语言筛选经受控字典 dataset_language 呈现', () => {
     renderWithProviders(<AssetsPage />);
     expect(screen.getByText('敏感等级')).toBeInTheDocument();
-    // dataset_language 不属于 P0-B MVP Catalog，且 REST 当前无法写入 language_codes，
-    // 该筛选只会产生恒空结果，故已移除（TASK-P0BR-048）。
-    expect(screen.queryByText('语言')).not.toBeInTheDocument();
+    // 语言筛选是业务波次的真实功能：字典码为 V35 种子中的 dataset_language，
+    // 后端 AssetController 支持 language / languageCodes 检索入参。
+    expect(screen.getByText('语言')).toBeInTheDocument();
+  });
+
+  it('渲染 Facet 侧栏', async () => {
+    renderWithProviders(<AssetsPage />);
+    expect(await screen.findByText('分类统计')).toBeInTheDocument();
+    expect(await screen.findByText('pytorch')).toBeInTheDocument();
   });
 });

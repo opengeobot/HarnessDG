@@ -30,6 +30,26 @@ public class DiscussionController {
         this.discussionService = discussionService;
     }
 
+    /** 订阅或取消订阅资产讨论通知。 */
+    @PostMapping("/subscription")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void updateSubscription(@PathVariable String assetId,
+                                     @RequestBody DiscussionSubscriptionRequest request) {
+        String principalId = AssetApiContext.principalId();
+        if (request.subscribed()) {
+            discussionService.subscribe(assetId, principalId);
+        } else {
+            discussionService.unsubscribe(assetId, principalId);
+        }
+    }
+
+    /** 查询当前主体是否已订阅资产讨论。 */
+    @GetMapping("/subscription")
+    public ApiResponse<Boolean> getSubscription(@PathVariable String assetId) {
+        return AssetApiContext.respond(
+                discussionService.isSubscribed(assetId, AssetApiContext.principalId()));
+    }
+
     /** 创建讨论线程。 */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

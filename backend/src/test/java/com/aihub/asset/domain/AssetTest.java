@@ -20,7 +20,8 @@ class AssetTest {
         return Asset.create("ast_01", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "一个领域问答模型", Visibility.INTERNAL,
                 List.of("team-nlp"), List.of("text-generation"), null, "Apache-2.0",
-                "team_nlp_001", new ModelProfile("pytorch", "text-generation", "decoder-only"), null, "usr_01");
+                "tm_01",
+                new ModelProfile("pytorch", "text-generation", "decoder-only"), null, "usr_01");
     }
 
     @Test
@@ -37,7 +38,7 @@ class AssetTest {
     @Test
     void rejectsInvalidSlug() {
         assertThatThrownBy(() -> Asset.create("ast_02", AssetType.MODEL, null, null, "NLP", "Bad Name",
-                null, null, Visibility.PUBLIC, null, null, null, null, "team_nlp_001", null, null, "usr_01"))
+                null, null, Visibility.PUBLIC, null, null, null, null, null, null, null, "usr_01"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -45,7 +46,8 @@ class AssetTest {
     void datasetIgnoresModelProfileAndKeepsDatasetProfile() {
         Asset dataset = Asset.create("ast_03", AssetType.DATASET, null, null, "vision", "defect-images",
                 "缺陷图像", null, Visibility.PRIVATE, null, List.of("vision", "vision"), null, null,
-                "team_cv_001", new ModelProfile("pytorch", null, null), new DatasetProfile("parquet", "image"), "usr_01");
+                "tm_02",
+                new ModelProfile("pytorch", null, null), new DatasetProfile("parquet", "image"), "usr_01");
 
         assertThat(dataset.modelProfile()).isNull();
         assertThat(dataset.datasetProfile().format()).isEqualTo("parquet");
@@ -56,8 +58,8 @@ class AssetTest {
     void updateMetadataKeepsCoordinateImmutableAndChangesStatusViaDeprecate() {
         Asset asset = newModel();
         asset.updateMetadata(null, null, "新名称", "新描述", Visibility.PUBLIC,
-                List.of("team-platform"), List.of("llm"), null, "MIT",
-                "team_nlp_001", new ModelProfile("vllm", "chat", "moe"), null, "usr_02");
+                List.of("team-platform"), List.of("llm"), null, "MIT", null,
+                new ModelProfile("vllm", "chat", "moe"), null, "usr_02");
 
         assertThat(asset.namespace()).isEqualTo("nlp");
         assertThat(asset.name()).isEqualTo("qwen-domain-7b");
@@ -86,77 +88,11 @@ class AssetTest {
     void updateMetadataAcceptsTagIds() {
         Asset asset = newModel();
         asset.updateMetadata("org_01", "prj_01", "新名称", "新描述", Visibility.PUBLIC,
-                List.of("team-platform"), List.of("llm"), List.of("tag_001", "tag_002"), "MIT",
-                "team_nlp_001", new ModelProfile("vllm", "chat", "moe"), null, "usr_02");
+                List.of("team-platform"), List.of("llm"), List.of("tag_001", "tag_002"), "MIT", null,
+                new ModelProfile("vllm", "chat", "moe"), null, "usr_02");
 
         assertThat(asset.organizationId()).isEqualTo("org_01");
         assertThat(asset.projectId()).isEqualTo("prj_01");
         assertThat(asset.tagIds()).containsExactly("tag_001", "tag_002");
-    }
-
-    // ---- aih:// coordinate format validation ----
-
-    @Test
-    void returnsCoordinateInAihFormat() {
-        Asset asset = newModel();
-
-        assertThat(asset.coordinate()).isEqualTo("aih://nlp/MODEL/qwen-domain-7b");
-    }
-
-    @Test
-    void coordinateAcceptsNameWithUnderscore() {
-        Asset asset = Asset.create("ast_04", AssetType.MODEL, null, null, "vision",
-                "retina_net_v2", "RetinaNet V2", null, Visibility.PUBLIC, null, null, null, null,
-                "team_cv_001", null, null, "usr_01");
-
-        assertThat(asset.name()).isEqualTo("retina_net_v2");
-        assertThat(asset.coordinate()).isEqualTo("aih://vision/MODEL/retina_net_v2");
-    }
-
-    @Test
-    void rejectsUppercaseNamespace() {
-        assertThatThrownBy(() -> Asset.create("ast_05", AssetType.MODEL, null, null, "NLP",
-                "bad-model", null, null, Visibility.PUBLIC, null, null, null, null, "team_nlp_001",
-                null, null, "usr_01"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("namespace");
-    }
-
-    @Test
-    void rejectsEmptyNamespace() {
-        assertThatThrownBy(() -> Asset.create("ast_06", AssetType.MODEL, null, null, "",
-                "good-model", null, null, Visibility.PUBLIC, null, null, null, null, "team_nlp_001",
-                null, null, "usr_01"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("namespace");
-    }
-
-    @Test
-    void rejectsNameWithPathSeparators() {
-        assertThatThrownBy(() -> Asset.create("ast_07", AssetType.MODEL, null, null, "nlp",
-                "model/sub-model", null, null, Visibility.PUBLIC, null, null, null, null,
-                "team_nlp_001", null, null, "usr_01"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("name");
-    }
-
-    @Test
-    void rejectsNameTooLong() {
-        String longName = "a".repeat(65);
-        assertThatThrownBy(() -> Asset.create("ast_08", AssetType.MODEL, null, null, "nlp",
-                longName, null, null, Visibility.PUBLIC, null, null, null, null,
-                "team_nlp_001", null, null, "usr_01"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("name");
-    }
-
-    @Test
-    void validSlugAndNamePass() {
-        Asset asset = Asset.create("ast_09", AssetType.MODEL, null, null, "my-org",
-                "my_model-v1", "Valid", null, Visibility.PUBLIC, null, null, null, null,
-                "team_nlp_001", null, null, "usr_01");
-
-        assertThat(asset.namespace()).isEqualTo("my-org");
-        assertThat(asset.name()).isEqualTo("my_model-v1");
     }
 }

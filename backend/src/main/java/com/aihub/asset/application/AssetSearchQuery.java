@@ -6,6 +6,7 @@
 package com.aihub.asset.application;
 
 import com.aihub.asset.domain.AssetType;
+import java.util.List;
 
 /**
  * 资产检索查询输入。
@@ -14,6 +15,10 @@ import com.aihub.asset.domain.AssetType;
  * @param type            类型过滤（可空）
  * @param namespace       命名空间过滤（可空）
  * @param organizationId  组织 ID 过滤（可空，治理作用域下推）
+ * @param projectId       项目 ID 过滤（可空）
+ * @param visibility      可见性过滤（可空）
+ * @param status          状态过滤（可空）
+ * @param teamId          团队 ID 过滤（可空，匹配 ownerTeamId）
  * @param framework       模型框架过滤（可空）
  * @param task            模型任务过滤（可空）
  * @param format          数据格式过滤（可空）
@@ -22,6 +27,10 @@ import com.aihub.asset.domain.AssetType;
  * @param owner           Owner 过滤（可空）
  * @param language        语言过滤（可空）
  * @param sensitivity     敏感等级过滤（可空）
+ * @param taskCodes       多值模型任务过滤（可空，DATASET 多值分类）
+ * @param modalityCodes   多值数据模态过滤（可空，DATASET 多值分类）
+ * @param formatCodes     多值数据格式过滤（可空，DATASET 多值分类）
+ * @param languageCodes   多值语言过滤（可空，DATASET 多值分类；优先于单值 language）
  * @param includeArchived 是否包含归档资产（默认否，需管理员）
  * @param cursor          游标（首页为空）
  * @param limit           每页大小（&lt;=0 使用默认）
@@ -31,6 +40,10 @@ public record AssetSearchQuery(String keyword,
                                AssetType type,
                                String namespace,
                                String organizationId,
+                               String projectId,
+                               String visibility,
+                               String status,
+                               String teamId,
                                String framework,
                                String task,
                                String format,
@@ -39,8 +52,24 @@ public record AssetSearchQuery(String keyword,
                                String owner,
                                String language,
                                String sensitivity,
+                               List<String> taskCodes,
+                               List<String> modalityCodes,
+                               List<String> formatCodes,
+                               List<String> languageCodes,
                                boolean includeArchived,
                                String cursor,
                                int limit,
                                String principalId) {
+
+    /**
+     * P0-B 单值过滤便捷构造：多值分类维度留空，{@code language} 单值在服务层转 languageCodes。
+     */
+    public AssetSearchQuery(String keyword, AssetType type, String namespace, String organizationId,
+                            String framework, String task, String format, String modality,
+                            String tagId, String owner, String language, String sensitivity,
+                            boolean includeArchived, String cursor, int limit, String principalId) {
+        this(keyword, type, namespace, organizationId, null, null, null, null,
+                framework, task, format, modality, tagId, owner, language, sensitivity,
+                null, null, null, null, includeArchived, cursor, limit, principalId);
+    }
 }

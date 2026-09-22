@@ -1,8 +1,10 @@
 package com.aihub.transfer.domain;
 
+import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 对象存储端口。
@@ -41,28 +43,14 @@ public interface StoragePort {
     /** 删除对象。 */
     void deleteObject(String bucketName, String objectKey);
 
-    /**
-     * 获取对象元数据（DVC 等价 stat）。
-     *
-     * @return 包含 size 和 sha256 (MinIO ETag for non-multipart) 的对象元数据
-     */
-    ObjectMetadata statObject(String bucketName, String objectKey);
+    /** 读取对象内容流（调用方负责关闭）。 */
+    InputStream readObject(String bucketName, String objectKey);
 
-    /**
-     * 在 MinIO 内复制对象（DVC 等价 push）。
-     */
-    void copyObject(String srcBucket, String srcKey, String destBucket, String destKey);
+    /** 计算对象 SHA-256 十六进制摘要（对象不存在时返回 empty）。 */
+    Optional<String> sha256Hex(String bucketName, String objectKey);
 
-    /**
-     * 从流上传对象并计算 SHA-256（DVC 等价 add）。
-     *
-     * @param bucketName  目标 Bucket
-     * @param objectKey   对象 Key
-     * @param inputStream 数据流
-     * @param size        数据大小
-     * @return 上传内容的 SHA-256 摘要（小写 hex）
-     */
-    String uploadFromStream(String bucketName, String objectKey, java.io.InputStream inputStream, long size);
+    /** 检查对象是否存在。 */
+    boolean objectExists(String bucketName, String objectKey);
 
     /** Multipart Part 信息。 */
     record PartInfo(int partNumber, String etag) {}

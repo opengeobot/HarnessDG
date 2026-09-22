@@ -1,8 +1,14 @@
+/*
+ * 功能: 讨论应用服务。
+ * 时间: 2026-07-04
+ * 作者: AxeXie
+ */
 package com.aihub.asset.discussion.application;
 
 import com.aihub.asset.discussion.domain.Comment;
 import com.aihub.asset.discussion.domain.CommentStatus;
 import com.aihub.asset.discussion.domain.DiscussionRepository;
+import com.aihub.asset.discussion.domain.DiscussionSubscriptionRepository;
 import com.aihub.asset.discussion.domain.DiscussionThread;
 import com.aihub.asset.discussion.domain.ThreadStatus;
 import com.aihub.audit.application.AuditEvent;
@@ -10,6 +16,9 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.identity.application.PrincipalQueryApplicationService;
+import com.aihub.notification.application.NotificationService;
+import com.aihub.notification.domain.NotificationSeverity;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -17,9 +26,15 @@ import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.error.ValidationException;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
+import com.aihub.shared.identity.PrincipalContext;
+import com.aihub.shared.identity.PrincipalType;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,20 +50,31 @@ import org.springframework.transaction.annotation.Transactional;
 public class DiscussionApplicationService {
 
     private static final Logger LOG = LoggerFactory.getLogger(DiscussionApplicationService.class);
+    private static final Pattern MENTION_PATTERN =
+            Pattern.compile("@((?:prn|usr|agt)_[A-Za-z0-9_-]+)");
 
     private final DiscussionRepository discussionRepository;
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final IdGenerator idGenerator;
+    private final NotificationService notificationService;
+    private final PrincipalQueryApplicationService principalQuery;
+    private final DiscussionSubscriptionRepository subscriptionRepository;
 
     public DiscussionApplicationService(DiscussionRepository discussionRepository,
                                         AuthorizationService authorizationService,
                                         AuditService auditService,
-                                        IdGenerator idGenerator) {
+                                        IdGenerator idGenerator,
+                                        NotificationService notificationService,
+                                        PrincipalQueryApplicationService principalQuery,
+                                        DiscussionSubscriptionRepository subscriptionRepository) {
         this.discussionRepository = discussionRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
+        this.notificationService = notificationService;
+        this.principalQuery = principalQuery;
+        this.subscriptionRepository = subscriptionRepository;
     }
 
     /** 创建讨论线程。 */
@@ -69,6 +95,8 @@ public class DiscussionApplicationService {
         discussionRepository.insertThread(thread);
         auditDiscussion("DISCUSSION_CREATED", principalId, threadId, assetId,
                 Map.of("title", title));
+        publishOutbox("ASSET", assetId, "DISCUSSION_CREATED",
+                Map.of("threadId", threadId, "assetId", assetId, "title", title));
         return ThreadView.from(thread);
     }
 
@@ -98,21 +126,48 @@ public class DiscussionApplicationService {
         validateBody(body);
         String commentId = idGenerator.generate(IdPrefix.COMMENT);
         Instant now = Instant.now();
+        String trimmedBody = body.trim();
         Comment comment = new Comment(commentId, threadId, parentId, thread.assetId(),
-                body.trim(), principalId, CommentStatus.VISIBLE, 0, now, now);
+                trimmedBody, principalId, CommentStatus.VISIBLE, 0, now, now);
         discussionRepository.insertComment(comment);
         thread.incrementCommentCount();
         discussionRepository.updateThread(thread);
         auditDiscussion("COMMENT_CREATED", principalId, commentId, thread.assetId(),
                 Map.of("threadId", threadId));
+        publishOutbox("ASSET", thread.assetId(), "COMMENT_CREATED",
+                Map.of("commentId", commentId, "threadId", threadId,
+                        "assetId", thread.assetId(), "createdBy", principalId));
+        notifyMentionedPrincipals(trimmedBody, thread.assetId(), threadId, commentId, principalId);
+        notifySubscribers(thread, commentId, principalId);
         return CommentView.from(comment);
+    }
+
+    /** 订阅资产讨论通知。 */
+    @Transactional
+    public void subscribe(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        subscriptionRepository.subscribe(assetId, principalId);
+    }
+
+    /** 取消订阅资产讨论通知。 */
+    @Transactional
+    public void unsubscribe(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        subscriptionRepository.unsubscribe(assetId, principalId);
+    }
+
+    /** 查询当前主体是否已订阅。 */
+    @Transactional(readOnly = true)
+    public boolean isSubscribed(String assetId, String principalId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        return subscriptionRepository.isSubscribed(assetId, principalId);
     }
 
     /** 读取线程下的评论列表。 */
     @Transactional(readOnly = true)
     public List<CommentView> listComments(String threadId, String cursor, int limit) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        loadThread(threadId); // 验证线程存在
+        loadThread(threadId);
         int safeLimit = Math.max(1, Math.min(limit, 100));
         return discussionRepository.listCommentsByThread(threadId, cursor, safeLimit)
                 .stream().map(CommentView::from).toList();
@@ -221,6 +276,66 @@ public class DiscussionApplicationService {
 
     // ---- 私有辅助 ----
 
+    private void notifyMentionedPrincipals(String body, String assetId, String threadId,
+                                           String commentId, String authorId) {
+        Set<String> mentioned = parseMentions(body);
+        for (String mentionedId : mentioned) {
+            if (mentionedId.equals(authorId)) {
+                continue;
+            }
+            if (!principalQuery.existsByPrincipalId(mentionedId)) {
+                continue;
+            }
+            PrincipalContext context = new PrincipalContext(
+                    mentionedId, PrincipalType.USER, null, null, null, null, null, 0, null, null, null);
+            if (!authorizationService.isResourcePermitted(
+                    context, Permissions.ASSET_READ, "ASSET", assetId)) {
+                continue;
+            }
+            Map<String, Object> params = Map.of(
+                    "assetId", assetId, "threadId", threadId,
+                    "commentId", commentId, "authorId", authorId);
+            try {
+                notificationService.sendInAppNotification(
+                        mentionedId,
+                        "DISCUSSION_MENTIONED",
+                        "notification.discussion.mentioned",
+                        NotificationSeverity.INFO,
+                        params);
+                publishOutbox("ASSET", assetId, "DISCUSSION_MENTIONED", params);
+            } catch (Exception ex) {
+                LOG.warn("failed to notify mention target={} assetId={}", mentionedId, assetId, ex);
+            }
+        }
+    }
+
+    private void notifySubscribers(DiscussionThread thread, String commentId, String authorId) {
+        Set<String> subscribers = subscriptionRepository.findSubscribers(thread.assetId());
+        Map<String, Object> params = Map.of(
+                "assetId", thread.assetId(),
+                "threadId", thread.threadId(),
+                "commentId", commentId,
+                "authorId", authorId);
+        publishOutbox("ASSET", thread.assetId(), "DISCUSSION_REPLIED", params);
+        notificationService.fanOutInAppNotifications(subscribers, authorId,
+                "DISCUSSION_REPLIED",
+                "notification.discussion.replied",
+                NotificationSeverity.INFO,
+                params);
+    }
+
+    static Set<String> parseMentions(String body) {
+        if (body == null || body.isBlank()) {
+            return Set.of();
+        }
+        Set<String> result = new LinkedHashSet<>();
+        Matcher matcher = MENTION_PATTERN.matcher(body);
+        while (matcher.find()) {
+            result.add(matcher.group(1));
+        }
+        return Set.copyOf(result);
+    }
+
     private DiscussionThread loadThread(String threadId) {
         return discussionRepository.findThread(threadId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
@@ -254,6 +369,17 @@ public class DiscussionApplicationService {
         } catch (Exception ex) {
             LOG.error("failed to record audit event eventType={} resourceId={}",
                     eventType, resourceId, ex);
+        }
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
         }
     }
 }

@@ -15,6 +15,8 @@ import { describe, expect, it } from 'vitest';
  *   - 需求: docs/ai-spec/01-requirements/p0b-platform-services.md（REQ-TAX-001「行为」第 2 条）
  *   - 种子: backend/src/main/resources/db/migration/V6__taxonomy_dictionary.sql
  *     （`INSERT INTO system_dict_type` 的值列表）
+ *   - 扩展种子: backend/src/main/resources/db/migration/V35__dataset_dict_seed.sql
+ *     （业务波次新增 dataset_task / dataset_language 两个受控字典）
  *
  * 该清单在本测试中固化，作为前端一侧的契约快照：后端若新增或改名 dictCode，
  * 必须同步更新此清单并在同一变更中调整前端引用。
@@ -24,6 +26,8 @@ const MVP_DICT_CODES = [
   'model_framework',
   'dataset_modality',
   'dataset_format',
+  'dataset_task',
+  'dataset_language',
   'industry_tag',
   'license_catalog',
   'sensitivity_level',
@@ -86,7 +90,8 @@ describe('受控字典引用门禁', () => {
   });
 
   it('资产表单的五个治理字段全部经受控字典选择器提交', () => {
-    const modal = sourceOf('CreateAssetModal.tsx');
+    // 登记表单已重构：CreateAssetModal 仅做弹窗壳，字典字段全部在 CreateAssetForm。
+    const modal = sourceOf('CreateAssetForm.tsx');
 
     for (const dictCode of [
       'license_catalog',
@@ -110,10 +115,11 @@ describe('受控字典引用门禁', () => {
     }
   });
 
-  it('资产检索页不引用无对应字典类型的失效筛选', () => {
+  it('资产检索页的语言筛选必须经受控字典 dataset_language', () => {
     const page = sourceOf('AssetsPage.tsx');
-    // dataset_language 不属于 P0-B MVP Catalog，且 REST 当前无法写入 language_codes，
-    // 该筛选只会产生恒空结果，必须移除而非保留占位。
+    // 语言筛选是业务波次的真实功能（后端 V35 种子 + AssetController language 入参），
+    // 但必须引用受控字典 dataset_language，不得退化为裸码或自由文本。
     expect(page).not.toContain('/system/dictionaries/language/items');
+    expect(page).toContain('/system/dictionaries/dataset_language/items');
   });
 });

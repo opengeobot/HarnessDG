@@ -5,6 +5,7 @@
  */
 package com.aihub.asset.application;
 
+import com.aihub.asset.domain.Asset;
 import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetSummary;
 import com.aihub.asset.domain.AssetType;
@@ -16,6 +17,7 @@ import java.util.List;
  * 资产检索摘要视图。
  *
  * @param assetId        业务资产 ID
+ * @param coordinate     稳定坐标 {@code aih://{namespace}/{type}/{name}}
  * @param type           资产类型
  * @param namespace      命名空间
  * @param organizationId 组织 ID（治理作用域）
@@ -34,8 +36,10 @@ import java.util.List;
  * @param format         数据格式（仅数据集）
  * @param modality       数据模态（仅数据集）
  * @param updatedAt      更新时间
+ * @param matchedFields  关键词检索命中的字段名（无关键词时为空）
  */
 public record AssetSummaryView(String assetId,
+                               String coordinate,
                                AssetType type,
                                String namespace,
                                String organizationId,
@@ -53,7 +57,8 @@ public record AssetSummaryView(String assetId,
                                String task,
                                String format,
                                String modality,
-                               Instant updatedAt) {
+                               Instant updatedAt,
+                               List<String> matchedFields) {
 
     /**
      * 由领域摘要投影构造视图。
@@ -64,6 +69,7 @@ public record AssetSummaryView(String assetId,
     public static AssetSummaryView from(AssetSummary summary) {
         return new AssetSummaryView(
                 summary.assetId(),
+                Asset.formatCoordinate(summary.namespace(), summary.type(), summary.name()),
                 summary.type(),
                 summary.namespace(),
                 summary.organizationId(),
@@ -81,6 +87,7 @@ public record AssetSummaryView(String assetId,
                 summary.task(),
                 summary.format(),
                 summary.modality(),
-                summary.updatedAt());
+                summary.updatedAt(),
+                summary.matchedFields() != null ? summary.matchedFields() : List.of());
     }
 }

@@ -1,0 +1,93 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P3009-001
+status: DRAFT
+
+task:
+  taskId: TASK-P3-009
+  requirements: [REQ-REV-002, REQ-DL-001]
+  scenarios: [AC-P3-UI-001, AC-P2-DL-001]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-009.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-009.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-009.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T05:40:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  node: local
+  pnpm: local
+  docker: available
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: frontend
+  command: pnpm lint && pnpm typecheck && pnpm test && pnpm build && (cd backend && ./mvnw -o verify)
+  startedAt: 2026-07-12T05:30:00Z
+  finishedAt: 2026-07-12T05:42:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P3-UI-001
+      assertion: AssetDetailPage 版本切换器卡片内嵌「提交发布审核」按钮（submitPublishRequest，状态前置 PENDING_REVIEW/VALIDATING），无需手填 assetId；新增 version/api.submitPublishRequest
+    - scenarioId: AC-P2-DL-001
+      assertion: AssetDetailPage 内嵌「下载版本」按钮（issueDownloadTicket，Modal 展示 method/expiresAt/presignedUrl）与「DVC 凭据」按钮（getDvcCredentials，Modal 展示 bucket/prefix/accessKey，secretKey 脱敏）；后端 DownloadController/DownloadApplicationService 既有上下文签发，681 unit PASS
+  notProven:
+    - scenarioId: AC-P3-UI-001
+      reason: E4 需 Playwright e2e（publish-flow/version-management）在 Compose 环境执行（Wave W）
+    - scenarioId: AC-P2-DL-001
+      reason: 下载票据/DVC 凭据 E4 需 Compose 全栈 + 日志脱敏验证（Wave W）
+
+artifacts:
+  reports:
+    - pnpm lint → 0 errors, 2 pre-existing warnings
+    - pnpm typecheck → PASS
+    - pnpm test → 44 files, 189 tests PASS
+    - pnpm build → built in 9.51s
+    - ./mvnw -o verify → BUILD SUCCESS, 681 unit PASS, 96 IT SKIP
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings:
+    - DVC secretKey 在前端 Modal 脱敏为 ••••••••；accessKey 仅短暂展示，不写入日志/Local Storage
+
+limitations:
+  skippedTests:
+    - 96 Testcontainers IT（disabledWithoutDocker from JVM）
+  assumptions:
+    - 后端 DownloadController/DownloadApplicationService 无需改动（已按 versionId 上下文签发）；本 Wave 以前端集成为主
+    - ReviewPage/VersionPage 的手填 assetId 工具页保留（详情页内嵌入口已满足 AC-P3-UI-001；工具页后续可下线）
+  environmentDifferences:
+    - E2E（Playwright）未本地执行，E4 旅程留 Wave W
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

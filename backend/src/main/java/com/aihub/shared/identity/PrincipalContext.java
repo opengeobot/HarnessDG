@@ -14,7 +14,7 @@ import java.util.Set;
  * <p>由 Controller、MCP Tool、Worker 入口统一建立，业务代码只读取不解析底层凭据。
  * 集合字段在构造时被复制为不可变视图，保证线程内只读语义。
  *
- * @param principalId         主体 ID（如 {@code usr_}/{@code agt_} 前缀）
+ * @param principalId         主体 ID（统一 {@code prn_} 前缀；{@code usr_}/{@code agt_} 仅用于各自管理域的内部标识）
  * @param principalType       主体类型
  * @param subject             外部身份主体标识（如 OIDC subject）
  * @param organizationId      当前组织 ID

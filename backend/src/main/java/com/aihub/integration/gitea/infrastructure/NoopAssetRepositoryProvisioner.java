@@ -13,12 +13,12 @@ import org.springframework.stereotype.Component;
 /**
  * Noop 资产仓库开通器。
  *
- * <p>当 {@code aihub.gitea.enabled=false}（默认）时启用：不调用外部系统，按 {@code namespace/name}
- * 生成确定性仓库引用，使资产目录在无 Gitea 的开发/测试环境完整可用。接通 Gitea 后由
- * {@link GiteaAssetRepositoryProvisioner} 替代。
+ * <p>仅当显式配置 {@code aihub.gitea.enabled=false} 时启用；默认可部署环境须接通 Gitea
+ * （Compose 设置 {@code AIHUB_GITEA_ENABLED=true}）。按 {@code namespace/name} 生成确定性仓库引用，
+ * 供本地单元测试或显式禁用 Gitea 时使用。生产路径由 {@link GiteaAssetRepositoryProvisioner} 承载。
  */
 @Component
-@ConditionalOnProperty(name = "aihub.gitea.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "aihub.gitea.enabled", havingValue = "false", matchIfMissing = false)
 public class NoopAssetRepositoryProvisioner implements AssetRepositoryProvisioner {
 
     @Override

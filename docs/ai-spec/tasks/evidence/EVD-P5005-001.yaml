@@ -1,0 +1,92 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P5005-001
+status: PARTIAL
+
+task:
+  taskId: TASK-P5-005
+  requirements: [REQ-SEC-001]
+  scenarios: [AC-P5-SEC-001]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-005.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-005.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-005.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: "22"
+  pnpm: "9"
+  docker: "available"
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: bash ./deploy/security/p5-security-drill.sh
+  startedAt: 2026-07-11T20:48:45+08:00
+  finishedAt: 2026-07-11T20:49:30+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E5
+
+coverage:
+  proven:
+    - scenarioId: AC-P5-SEC-001
+      assertion: SensitiveDataMaskerTest + SecurityVerificationTest + AuditServiceTest mask canary PASS; run-redaction-canary.sh exit 0
+    - scenarioId: AC-P5-SEC-001-E4
+      assertion: verify.sh V08 audit redaction + AUTH_LOGIN_SUCCEEDED event PASS
+    - scenarioId: AC-P5-SEC-001-E5-injection-ssrf
+      assertion: "p5-security-drill.sh 5 PASS 2 SKIP: SafeMarkdown <script> escaped (7 tests); PreviewJobHandler PREVIEW_LIMIT_EXCEEDED; SsrfGuardTest; SsrfGuardDnsRebindingTest rejects 127.0.0.1.nip.io"
+  notProven:
+    - scenarioId: AC-P5-SEC-001-E5-SAST-dependency-image
+      reason: gitleaks/semgrep not installed locally; run-redaction-canary.sh used as substitute (PASS)
+    - scenarioId: AC-P5-SEC-001-E5-live-comment
+      reason: admin JWT login failed after restore drill (V05 credential drift); live prompt-injection POST skipped
+
+artifacts:
+  reports:
+    - deploy/security/p5-security-drill.sh
+    - deploy/security/run-redaction-canary.sh
+    - docs/runbooks/security.md
+  logs:
+    - /tmp/p5-security-drill.log
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - gitleaks/semgrep deep SAST (tools unavailable)
+    - live comment prompt-injection POST (no admin JWT)
+  assumptions:
+    - Zip-bomb coverage via PreviewJobHandlerTest unit path, not live upload
+  environmentDifferences: []
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

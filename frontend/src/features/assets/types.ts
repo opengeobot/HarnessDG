@@ -12,6 +12,13 @@ export interface ModelProfile {
   framework?: string | null;
   task?: string | null;
   architecture?: string | null;
+  parameterScale?: string | null;
+  precision?: string | null;
+  weightFormat?: string | null;
+  runtime?: string | null;
+  knownRisks?: string[] | null;
+  usageRestrictions?: string[] | null;
+  sensitivityCode?: string | null;
 }
 
 export interface DatasetProfile {
@@ -49,12 +56,35 @@ export interface AssetFacetView {
   formats: Record<string, number>;
   modalities: Record<string, number>;
   licenses: Record<string, number>;
+  sensitivities: Record<string, number>;
+  sizeBuckets: Record<string, number>;
+  taskCodes: Record<string, number>;
+  modalityCodes: Record<string, number>;
+  formatCodes: Record<string, number>;
+  languageCodes: Record<string, number>;
   totalCount: number;
+}
+
+/** 资源 ACL 视图 */
+export interface ResourceAclView {
+  aclId: string;
+  principalId: string;
+  resourceType: string;
+  resourceId: string;
+  permissionCodes: string[];
+  createdAt: string;
+}
+
+/** 创建资产 ACL 请求 */
+export interface CreateAssetAccessRequest {
+  principalId: string;
+  permissionCodes: string[];
 }
 
 /** 资产检索摘要 */
 export interface AssetSummary {
   assetId: string;
+  coordinate: string;
   type: AssetType;
   namespace: string;
   organizationId?: string | null;
@@ -73,6 +103,7 @@ export interface AssetSummary {
   format?: string | null;
   modality?: string | null;
   updatedAt: string;
+  matchedFields?: string[];
 }
 
 /** 资产详情 */
@@ -82,6 +113,12 @@ export interface AssetView extends AssetSummary {
   repository?: RepositoryRef | null;
   provisioningStatus?: ProvisioningStatus;
   card?: CardView | null;
+  ownerTeamId?: string | null;
+  aliases?: string[] | null;
+  rowVersion: number;
+  deprecationReason?: string | null;
+  deprecationNote?: string | null;
+  replacementAssetId?: string | null;
   createdAt: string;
 }
 
@@ -95,28 +132,50 @@ export interface CreateAssetRequest {
   displayName?: string;
   description?: string;
   visibility: Visibility;
-  ownerTeamId?: string;
   owners?: string[];
   tags?: string[];
   tagIds?: string[];
   license?: string;
+  ownerTeamId: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
 }
 
 /** 更新资产请求 */
 export interface UpdateAssetRequest {
+  expectedVersion: number;
   organizationId?: string;
   projectId?: string;
   displayName?: string;
   description?: string;
   visibility?: Visibility;
-  owners?: string[];
-  tags?: string[];
   tagIds?: string[];
   license?: string;
+  ownerTeamId?: string;
   model?: ModelProfile;
   dataset?: DatasetProfile;
+}
+
+/** 血缘遍历方向 */
+export type LineageDirection = 'up' | 'down';
+
+/** 血缘关系边 */
+export interface AssetLineageEdge {
+  relationId: string;
+  parentAssetId: string;
+  childAssetId: string;
+  relationType: string;
+  hopDepth: number;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+/** 资产血缘查询结果 */
+export interface AssetLineageView {
+  assetId: string;
+  direction: LineageDirection;
+  depth: number;
+  relations: AssetLineageEdge[];
 }
 
 /** 检索查询参数 */
@@ -125,6 +184,10 @@ export interface AssetSearchParams {
   type?: AssetType;
   namespace?: string;
   organizationId?: string;
+  projectId?: string;
+  visibility?: Visibility;
+  status?: AssetStatus;
+  teamId?: string;
   framework?: string;
   task?: string;
   format?: string;
@@ -133,6 +196,10 @@ export interface AssetSearchParams {
   sensitivity?: string;
   tagId?: string;
   owner?: string;
+  taskCodes?: string[];
+  modalityCodes?: string[];
+  formatCodes?: string[];
+  languageCodes?: string[];
   includeArchived?: boolean;
   cursor?: string;
   limit?: number;

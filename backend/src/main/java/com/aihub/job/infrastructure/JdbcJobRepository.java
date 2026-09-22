@@ -69,9 +69,7 @@ public class JdbcJobRepository implements JobRepository {
                 INSERT INTO job_task (job_id, type, payload, status, max_attempts, attempts, next_run_at,
                     leased_until, leased_by, trace_id, principal_id, asset_id, error_code,
                     created_at, updated_at, row_version)
-                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?)
+                VALUES (?,?,?::jsonb,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 job.jobId(), job.type(), job.payload(), job.status().name(),
                 job.maxAttempts(), job.attempts(), Timestamp.from(job.nextRunAt()),
@@ -120,12 +118,8 @@ public class JdbcJobRepository implements JobRepository {
                     WHERE (status IN ('PENDING','RETRY_WAIT') AND next_run_at <= ?)
                        OR (status = 'RUNNING' AND leased_until < ?)
                     ORDER BY next_run_at
-                    FOR UPDATE SKIP LOCKED
                     LIMIT 1
-                ), previous AS (
-                    SELECT id, status AS previous_status, attempts AS previous_attempts,
-                           updated_at AS previous_updated_at
-                    FROM candidate
+                    FOR UPDATE SKIP LOCKED
                 )
                 UPDATE job_task
                 SET status = 'RUNNING', leased_by = ?, leased_until = ?, updated_at = ?,

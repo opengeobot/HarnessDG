@@ -10,6 +10,7 @@ import com.aihub.job.application.JobAuditPort;
 import com.aihub.job.application.JobNotificationPort;
 import com.aihub.job.domain.JobAttemptRepository;
 import com.aihub.job.domain.JobRepository;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.logging.SensitiveDataMasker;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -85,10 +86,12 @@ public class JobConfiguration {
                                Clock clock,
                                ObjectProvider<MeterRegistry> meterRegistryProvider,
                                SensitiveDataMasker sensitiveDataMasker,
+                               ObjectProvider<PlatformMetrics> platformMetricsProvider,
                                @Value("${aihub.job.worker.lease-seconds:60}") long leaseSeconds) {
         return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
                 notificationPortProvider, auditPortProvider, transactionTemplate,
-                clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds);
+                clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds,
+                platformMetricsProvider);
     }
 
     /**

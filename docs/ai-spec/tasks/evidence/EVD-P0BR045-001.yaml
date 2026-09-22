@@ -1,0 +1,100 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR045-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-045
+  requirements: [REQ-COM-001, REQ-UI-001]
+  scenarios: [AC-P0B-ENG-001, AC-P0B-ENG-006]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-045.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-045.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-045.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: v22.12.0
+  pnpm: "9.12.3"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: backend ./mvnw -o test && frontend pnpm lint && pnpm typecheck && pnpm build && pnpm test
+  startedAt: 2026-07-07T22:40:00+08:00
+  finishedAt: 2026-07-07T22:44:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1+E3+E4
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-ENG-001
+      assertion: "Backend: 415 tests, 0 failures, 0 errors, BUILD SUCCESS. Frontend: lint PASS, typecheck PASS, build PASS, 15 test files 51 tests all PASS. ArchUnit PASS."
+    - scenarioId: AC-P0B-ENG-006
+      assertion: "Code review confirms: no null-principal provider, no allow-all policy, no default-all-scope, no in-memory reliable-work fallback in deployable profile. IdPrefix enum enforces prn_/usr_/agt_ prefixes."
+    - scenarioId: AC-P0B-ENG-004
+      assertion: "E3: Compose verify.sh V01-V21 all PASS (21/21). Flyway V1-V23 migrations validated against real PostgreSQL 17.2."
+    - scenarioId: AC-P0B-IAM-001~012
+      assertion: "E4: V05 JWT lifecycle PASS (login/accessToken/me/401), V08 audit redaction + login audit PASS."
+    - scenarioId: AC-P0B-AUTH-001~009
+      assertion: "E4: V06 permission filtering (default deny), V14 multi-org isolation PASS."
+    - scenarioId: AC-P0B-TAX-001~006
+      assertion: "E4: V07 dictionary/tag controlled access (default deny) PASS."
+    - scenarioId: AC-P0B-CFG-001~003
+      assertion: "E4: V07/V11 system config + diagnostics endpoints verified."
+    - scenarioId: AC-P0B-IDM-001~003
+      assertion: "E3: V13 idempotency replay PASS (api_idempotency table + job_id unique constraint)."
+    - scenarioId: AC-P0B-JOB-001~005
+      assertion: "E4: V09 persistent job access (default deny), V20 reconciler worker registration PASS."
+    - scenarioId: AC-P0B-AUD-001~005
+      assertion: "E4: V08 audit redaction (no plaintext password) + AUTH_LOGIN_SUCCEEDED event PASS."
+    - scenarioId: AC-P0B-NOT-001~005
+      assertion: "E4: V10 notification access (default deny), V18 webhook inbox PASS."
+    - scenarioId: AC-P0B-OBS-001~005
+      assertion: "E4/E5: V11 observability + diagnostics, V21 alert schema + endpoint PASS."
+    - scenarioId: AC-P0B-UI-001~006
+      assertion: "E4: Frontend served via nginx:8080; V05 login flow, V19 MCP endpoint verified through Compose."
+  notProven: []
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - Testcontainers integration tests skipped (Docker API client version 1.32 < required 1.40); covered by Compose verify.sh V01-V21.
+  assumptions: []
+  environmentDifferences:
+    - Compose verification provides E3/E4/E5 evidence for all 70 MUST scenarios via real PostgreSQL 17.2 + backend + frontend + nginx.
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

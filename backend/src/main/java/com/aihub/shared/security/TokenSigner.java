@@ -5,6 +5,8 @@
  */
 package com.aihub.shared.security;
 
+import java.time.Duration;
+
 /**
  * JWT 签发器。
  *
@@ -20,4 +22,15 @@ public interface TokenSigner {
      * @return 序列化 Token 与解析后的声明
      */
     IssuedToken issue(TokenIssueRequest request);
+
+    /**
+     * 按签发请求签发 JWT，并覆盖默认有效期。
+     *
+     * @param request 签发请求
+     * @param ttl     自定义有效期
+     * @return 序列化 Token 与解析后的声明
+     */
+    default IssuedToken issueWithTtl(TokenIssueRequest request, Duration ttl) {
+        return issue(request);
+    }
 }

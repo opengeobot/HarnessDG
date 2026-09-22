@@ -2,6 +2,7 @@ package com.aihub.integration.minio.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -23,9 +24,11 @@ public class SessionStagingReconciler implements JobHandler {
     private static final int BATCH_SIZE = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public SessionStagingReconciler(JdbcTemplate jdbcTemplate) {
+    public SessionStagingReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -98,11 +101,13 @@ public class SessionStagingReconciler implements JobHandler {
             return ReconcileResult.MANUAL_REVIEW;
         }
 
-        // CANCELLED/EXPIRED Session 不应有活跃 Part
+        // CANCELLED/EXPIRED Session 不应有未上传 Part
         if ("CANCELLED".equals(status) || "EXPIRED".equals(status)) {
-            Integer pendingParts = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM upload_part WHERE session_id = ? AND status = 'PENDING'",
-                    Integer.class, sessionId);
+            Integer pendingParts = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM upload_part up
+                    JOIN upload_file uf ON up.file_id = uf.file_id
+                    WHERE uf.session_id = ? AND up.uploaded_at IS NULL
+                    """, Integer.class, sessionId);
             if (pendingParts != null && pendingParts > 0) {
                 LOG.warn("{} session {} has {} pending parts (should be cleaned)",
                         status, sessionId, pendingParts);
@@ -118,6 +123,7 @@ public class SessionStagingReconciler implements JobHandler {
         if (result == ReconcileResult.SECURITY_INCIDENT) {
             LOG.error("SECURITY INCIDENT: session {} has critical inconsistency", sessionId);
         }
+        platformMetrics.recordReconciliationDiscrepancy("SessionStaging", result.name());
         try {
             String deliveryId = "session-reconcile-" + sessionId + "-" + System.currentTimeMillis();
             jdbcTemplate.update(

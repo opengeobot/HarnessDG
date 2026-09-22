@@ -33,6 +33,7 @@ import java.util.List;
  * @param format         数据格式（仅数据集）
  * @param modality       数据模态（仅数据集）
  * @param updatedAt      更新时间
+ * @param matchedFields  关键词检索命中的字段名（无关键词时为空）
  */
 public record AssetSummary(String assetId,
                            AssetType type,
@@ -52,5 +53,6 @@ public record AssetSummary(String assetId,
                            String task,
                            String format,
                            String modality,
-                           Instant updatedAt) {
+                           Instant updatedAt,
+                           List<String> matchedFields) {
 }

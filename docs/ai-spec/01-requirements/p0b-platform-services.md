@@ -1,9 +1,8 @@
 # P0-B 治理、可靠性与观测需求
 
-> 状态：`READY`（用户已批准；`REQ-OBS-001` 保持 `OPEN`，受 `AUD-005` 阻塞）
+> 状态：`READY`
 > 依据：ADR-0002、设计 5.6-5.14、11、13-15。
-> 已确认：`DEC-013`（zh-CN/en-US 运行时切换、企业后台 UI 基线与 Compose/Playwright 验收）。
-> 阻塞：`REQ-OBS-001` 受 `AUD-005`（OTel 范围冲突）阻塞，其余需求无未决阻塞。
+> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有相关 Q 已通过 DEC 闭合）。
 
 ## REQ-COM-001 统一 ID、上下文、响应与错误
 
@@ -160,7 +159,7 @@ minimumEvidenceLevel: E4
 ### 行为
 
 - key 与 principalId、method、canonical path、request digest 共同构成作用域；
-- 缺少 REQUIRED key 返回稳定错误（当前 Error Catalog 需补）；
+- 缺少 REQUIRED key 返回稳定错误（已通过 `IDEMPOTENCY_KEY_CONFLICT` 在 Error Catalog 中定义，DEC-019）；
 - 首次请求原子登记 IN_PROGRESS，业务完成后保存原始 status/response；
 - 同 key 同 digest 返回首次结果，不重复业务、审计、Outbox；
 - 同 key 不同 digest 返回 `IDEMPOTENCY_KEY_CONFLICT`；
@@ -344,10 +343,9 @@ minimumEvidenceLevel: E4
 ## REQ-OBS-001 指标、Trace、健康、诊断与告警
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P0-B
-blockedBy: [AUD-005]
 permission: system:observe
 minimumEvidenceLevel: E4/E5
 ```

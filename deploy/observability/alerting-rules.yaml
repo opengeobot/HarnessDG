@@ -1,0 +1,43 @@
+# AIHub Platform Alert Rules (P5 ops reference)
+# Sync with deploy/compose/grafana/alerting-rules.yaml for Compose deployments.
+groups:
+  - name: aihub-job-alerts
+    rules:
+      - alert: JobDead
+        expr: aihub_job_dead_count > 0
+        for: 1m
+        labels:
+          severity: critical
+          runbook: docs/runbooks/ops.md#dead-job-演练步骤
+        annotations:
+          summary: "Dead jobs detected"
+          description: "{{ $value }} jobs have exceeded max retry attempts. Check GET /api/v1/system/jobs?status=DEAD"
+
+      - alert: JobQueueBacklog
+        expr: aihub_job_queue_depth > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job queue backlog exceeds 50 ({{ $labels.type }})"
+
+  - name: aihub-webhook-alerts
+    rules:
+      - alert: WebhookInboxBacklog
+        expr: aihub_webhook_inbox_pending > 100
+        for: 5m
+        labels:
+          severity: warning
+          runbook: docs/runbooks/ops.md#webhook-故障演练
+        annotations:
+          summary: "Webhook inbox backlog exceeds 100"
+
+  - name: aihub-consistency-alerts
+    rules:
+      - alert: ReconciliationDiscrepancy
+        expr: aihub_reconciliation_discrepancies_total > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reconciliation discrepancies detected"

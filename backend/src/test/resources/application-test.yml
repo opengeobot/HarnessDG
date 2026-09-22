@@ -1,0 +1,35 @@
+#
+# Test Profile Configuration (AC-P0B-ENG-006)
+# 无空 Principal、无 allow-all、无默认全 Scope。
+# 数据源由 Testcontainers @DynamicPropertySource 动态注入，此处仅配置安全约束。
+#
+spring:
+  flyway:
+    enabled: true
+    clean-disabled: true
+
+aihub:
+  gitea:
+    enabled: false
+  security:
+    cookie:
+      secure: false
+      same-site: Lax
+  # 测试环境引导管理员：确保 IT 测试有可用的 admin 凭据
+  bootstrap:
+    admin:
+      username: admin
+      display-name: Test Admin
+      password: test-admin-password-01!
+  # 禁用邮件外发（测试无 SMTP）
+  notification:
+    email:
+      enabled: false
+  # 内存限流后端（测试无 Redis）
+  rate-limit:
+    backend: memory
+  # 预览配置：测试使用较小限制以加速
+  preview:
+    max-rows: 50
+    max-cols: 20
+    max-bytes: 524288

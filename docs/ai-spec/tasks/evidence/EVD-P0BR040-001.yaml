@@ -1,0 +1,77 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR040-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-040
+  requirements: [REQ-UI-001, REQ-IAM-003]
+  scenarios: [AC-P0B-UI-001, AC-P0B-UI-002]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-040.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-040.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-040.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  node: v22.12.0
+  pnpm: "9.12.3"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG/frontend
+  command: pnpm lint && pnpm typecheck && pnpm build && pnpm test
+  startedAt: 2026-07-07T23:35:00+08:00
+  finishedAt: 2026-07-07T23:40:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E2
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-001
+      assertion: "RouteGuard.tsx redirects anonymous users to /login with from state; tokenHolder.ts stores access token in memory only (never LocalStorage); refresh token via secure Cookie only."
+    - scenarioId: AC-P0B-UI-002
+      assertion: "RouteGuard checks requiredScopes via usePermission; 403 Result for insufficient scopes; backend still rejects unauthorized requests server-side."
+  notProven:
+    - E4 Compose full-stack browser integration test (no Docker in current environment).
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - E4 Compose full-stack test not executed due to no Docker environment.
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

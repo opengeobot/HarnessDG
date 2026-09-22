@@ -6,7 +6,9 @@ package com.aihub.transfer.domain;
 public enum UploadSessionStatus {
     OPEN,
     COMMITTING,
+    PROCESSING,
     COMPLETED,
+    FAILED,
     CANCELLED,
     EXPIRED
 }

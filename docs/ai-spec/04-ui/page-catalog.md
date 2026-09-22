@@ -1,6 +1,6 @@
 # 页面目录与完成边界
 
-> 状态：`PROPOSED`
+> 状态：`READY`
 > 规则：表中的“完成”只代表页面级最低行为；最终仍需所属 Journey 的 E4 验收。
 
 ## 1. 公共与身份页面
@@ -42,7 +42,7 @@
 | --- | --- | --- | --- | --- |
 | `PAGE-AST-001` | `/assets` | `asset:read` | 搜索、类型/组织/项目/治理/状态筛选、DATASET 分类 Facet、Cursor | 数据库权限过滤；Facet 不泄漏；URL 保存筛选；无权限结果不可枚举 |
 | `PAGE-AST-002` | `/assets/new` | `asset:create` | 选择作用域/类型/Owner/字典/tagId、仓库方式 | 所有治理值受控；幂等；建仓进度/失败恢复 |
-| `PAGE-AST-003` | `/assets/:id/overview` | `asset:read` | Card、治理、Owner、最新发布、使用限制、详情任务导航 | 精确来源 Commit；历史停用项回显；未实现阶段不显示 Placeholder |
+| `PAGE-AST-003` | `/assets/:id/overview` | `asset:read` | Card、治理、Owner、最新发布、使用限制、详情任务导航、“快速使用”代码片段面板（git clone/dvc pull/aih CLI/预签名 URL 示例，DEC-014） | 精确来源 Commit；历史停用项回显；未实现阶段不显示 Placeholder |
 | `PAGE-AST-004` | `/assets/:id/settings` | `asset:update/delete` | 元数据、Owner、治理、弃用/归档 | 乐观锁；高风险权限；影响提示；审计 |
 | `PAGE-AST-005` | `/assets/:id/access` | 授权读取/管理 | 角色、Team、ACL、最终权限解释 | 不只显示原始绑定；防自提权 |
 | `PAGE-AST-006` | `/assets/:id/lineage` | `asset:read` | 精确版本依赖图 | 权限过滤下不泄露不可见节点 |
@@ -58,7 +58,7 @@ MODEL/DATASET 的创建与详情字段应由共享 Schema + 类型扩展驱动�
 | `PAGE-VER-001` | `/assets/:id/versions` | `asset:read` | 版本、状态、Tag/Commit/Digest、比较 | Published 三元组完整；精确排序 |
 | `PAGE-VER-002` | `/assets/:id/versions/:version` | `asset:read` | Manifest、Artifact、校验报告、审批、下载 | 不返回二进制；下载票据按权；状态动作权限化 |
 | `PAGE-VER-003` | `/assets/:id/versions/:version/files` | `asset:read` | Artifact 树、路径、大小、媒体类型、摘要、单项/批量下载 | 精确 Version；路径安全；权限过滤；不显示 URL 查询串 |
-| `PAGE-DST-001` | `/assets/:id/versions/:version/preview` | `asset:read` + preview policy | Schema、Split、脱敏样例、统计、来源摘要 | 支持格式矩阵；实时授权；样例免责声明；PII/Secret 不泄漏 |
+| `PAGE-DST-001` | `/assets/:id/versions/:version/preview` | `asset:read` + preview policy | Schema、Subset 下拉+Split Tab 选择器（首版仅单 Subset，DEC-015）、脱敏样例、统计卡片（行数/大小/文件数/列数）、来源摘要 | 支持格式矩阵；实时授权；样例免责声明；PII/Secret 不泄漏 |
 | `PAGE-DST-002` | `/assets/:id/discussions` | `asset:read/discuss/moderate` | Thread、回复、修订、撤回、锁定、通知 | 继承资产权限；不可信 Markdown；Tombstone；游标与审计 |
 | `PAGE-REV-001` | `/reviews` | `asset:review` | 待审队列、风险、SLA/状态 | 数据权限过滤；提交人与审核人规则 |
 | `PAGE-REV-002` | `/reviews/:requestId` | `asset:review` | 冻结 Commit、Diff、License/敏感/质量、批准/驳回 | 审批对象不可漂移；意见规则；高风险确认 |

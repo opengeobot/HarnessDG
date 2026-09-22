@@ -1,6 +1,6 @@
 /*
- * 功能: MinIO 存储适配器，封装 MinIO SDK 调用。
- * 时间: 2026-07-30
+ * 功能: MinIO 存储适配器，实现真实 S3 Multipart Upload 与对象读写。
+ * 时间: 2026-07-10
  * 作者: AxeXie
  */
 package com.aihub.integration.minio.infrastructure;
@@ -11,30 +11,39 @@ import io.minio.CopyObjectArgs;
 import io.minio.GetObjectArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.StatObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.http.Method;
-import io.minio.errors.ErrorResponseException;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import io.minio.StatObjectArgs;
+import java.io.InputStream;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CompletedMultipartUpload;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest;
+import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.UploadPartRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedUploadPartRequest;
+import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest;
 
 /**
  * MinIO 存储适配器。
  *
- * <p>实现 {@link StoragePort}，封装 MinIO SDK 调用。
- * Multipart Upload 的 Part 签名通过预签名 URL 实现，客户端直传。
+ * <p>实现 {@link StoragePort}：Multipart 走 AWS SDK v2 S3Client；单对象预签名走 MinIO SDK。
  */
 @Component
 public class MinioStorageAdapter implements StoragePort {
@@ -42,11 +51,13 @@ public class MinioStorageAdapter implements StoragePort {
     private static final Logger LOG = LoggerFactory.getLogger(MinioStorageAdapter.class);
 
     private final MinioClient minioClient;
-    private final MinioProperties properties;
+    private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
-    public MinioStorageAdapter(MinioClient minioClient, MinioProperties properties) {
+    public MinioStorageAdapter(MinioClient minioClient, S3Client s3Client, S3Presigner s3Presigner) {
         this.minioClient = minioClient;
-        this.properties = properties;
+        this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
     }
 
     @Override
@@ -75,27 +86,41 @@ public class MinioStorageAdapter implements StoragePort {
 
     @Override
     public String createMultipartUpload(String bucketName, String objectKey, String contentType) {
-        // MinIO Java SDK 不直接暴露 createMultipartUpload API，
-        // 使用预签名 URL 方式：客户端通过预签名 URL 自行完成 Multipart。
-        // 此处返回 objectKey 作为 uploadId（简化实现，生产环境应使用更完善的方案）。
-        LOG.info("createMultipartUpload bucket={} key={} contentType={}", bucketName, objectKey, contentType);
-        return objectKey;
+        try {
+            CreateMultipartUploadRequest.Builder builder = CreateMultipartUploadRequest.builder()
+                    .bucket(bucketName)
+                    .key(objectKey);
+            if (contentType != null && !contentType.isBlank()) {
+                builder.contentType(contentType);
+            }
+            CreateMultipartUploadResponse response = s3Client.createMultipartUpload(builder.build());
+            String uploadId = response.uploadId();
+            LOG.info("createMultipartUpload bucket={} key={} uploadId={}", bucketName, objectKey, uploadId);
+            return uploadId;
+        } catch (Exception ex) {
+            LOG.error("createMultipartUpload failed bucket={} key={}", bucketName, objectKey, ex);
+            throw new StorageException("failed to create multipart upload", ex);
+        }
     }
 
     @Override
     public URL presignPartUpload(String bucketName, String objectKey, String uploadId,
                                  int partNumber, Duration expiry) {
         try {
-            String url = minioClient.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.PUT)
-                            .bucket(bucketName)
-                            .object(objectKey)
-                            .expiry((int) expiry.getSeconds(), TimeUnit.SECONDS)
-                            .build());
-            return new URL(url);
+            UploadPartRequest uploadPartRequest = UploadPartRequest.builder()
+                    .bucket(bucketName)
+                    .key(objectKey)
+                    .uploadId(uploadId)
+                    .partNumber(partNumber)
+                    .build();
+            UploadPartPresignRequest presignRequest = UploadPartPresignRequest.builder()
+                    .signatureDuration(expiry)
+                    .uploadPartRequest(uploadPartRequest)
+                    .build();
+            PresignedUploadPartRequest presigned = s3Presigner.presignUploadPart(presignRequest);
+            return presigned.url();
         } catch (Exception ex) {
-            LOG.error("presignPartUpload failed bucket={} key={}", bucketName, objectKey, ex);
+            LOG.error("presignPartUpload failed bucket={} key={} part={}", bucketName, objectKey, partNumber, ex);
             throw new StorageException("failed to presign part upload", ex);
         }
     }
@@ -103,14 +128,42 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public void completeMultipartUpload(String bucketName, String objectKey, String uploadId,
                                         List<PartInfo> parts) {
-        // 简化实现：客户端通过预签名 URL 完成上传后，服务端验证对象存在性。
-        LOG.info("completeMultipartUpload bucket={} key={} parts={}", bucketName, objectKey, parts.size());
+        try {
+            List<CompletedPart> completedParts = parts.stream()
+                    .sorted(Comparator.comparingInt(PartInfo::partNumber))
+                    .map(p -> CompletedPart.builder()
+                            .partNumber(p.partNumber())
+                            .eTag(stripQuotes(p.etag()))
+                            .build())
+                    .toList();
+            CompleteMultipartUploadRequest request = CompleteMultipartUploadRequest.builder()
+                    .bucket(bucketName)
+                    .key(objectKey)
+                    .uploadId(uploadId)
+                    .multipartUpload(CompletedMultipartUpload.builder()
+                            .parts(completedParts)
+                            .build())
+                    .build();
+            s3Client.completeMultipartUpload(request);
+            LOG.info("completeMultipartUpload bucket={} key={} parts={}", bucketName, objectKey, parts.size());
+        } catch (Exception ex) {
+            LOG.error("completeMultipartUpload failed bucket={} key={}", bucketName, objectKey, ex);
+            throw new StorageException("failed to complete multipart upload", ex);
+        }
     }
 
     @Override
     public void abortMultipartUpload(String bucketName, String objectKey, String uploadId) {
-        // 简化实现：删除可能存在的部分上传对象。
-        LOG.info("abortMultipartUpload bucket={} key={}", bucketName, objectKey);
+        try {
+            s3Client.abortMultipartUpload(AbortMultipartUploadRequest.builder()
+                    .bucket(bucketName)
+                    .key(objectKey)
+                    .uploadId(uploadId)
+                    .build());
+            LOG.info("abortMultipartUpload bucket={} key={}", bucketName, objectKey);
+        } catch (Exception ex) {
+            LOG.warn("abortMultipartUpload failed bucket={} key={}", bucketName, objectKey, ex);
+        }
     }
 
     @Override
@@ -162,119 +215,62 @@ public class MinioStorageAdapter implements StoragePort {
     }
 
     @Override
-    public ObjectMetadata statObject(String bucketName, String objectKey) {
+    public InputStream readObject(String bucketName, String objectKey) {
         try {
-            io.minio.StatObjectResponse stat = minioClient.statObject(
-                    StatObjectArgs.builder()
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectKey)
                             .build());
-            // MinIO ETag：非 multipart 对象为 SHA-256 hex（带引号），multipart 对象为 "sha256-parts"
-            String etag = stat.etag();
-            String sha256 = stripQuotes(etag);
-            return new ObjectMetadata(stat.size(), sha256, etag);
         } catch (Exception ex) {
-            LOG.error("statObject failed bucket={} key={}", bucketName, objectKey, ex);
-            throw new StorageException("failed to stat object: " + objectKey, ex);
+            LOG.error("readObject failed bucket={} key={}", bucketName, objectKey, ex);
+            throw new StorageException("failed to read object", ex);
         }
     }
 
     @Override
-    public void copyObject(String srcBucket, String srcKey, String destBucket, String destKey) {
-        try {
-            minioClient.copyObject(
-                    CopyObjectArgs.builder()
-                            .bucket(destBucket)
-                            .object(destKey)
-                            .source(io.minio.CopySource.builder().bucket(srcBucket).object(srcKey).build())
-                            .build());
-            LOG.info("copyObject {}->{}/{}", srcKey, destBucket, destKey);
-        } catch (Exception ex) {
-            LOG.error("copyObject failed src={}/{}, dest={}/{}", srcBucket, srcKey, destBucket, destKey, ex);
-            throw new StorageException("failed to copy object", ex);
+    public Optional<String> sha256Hex(String bucketName, String objectKey) {
+        if (!objectExists(bucketName, objectKey)) {
+            return Optional.empty();
         }
-    }
-
-    @Override
-    public String uploadFromStream(String bucketName, String objectKey, java.io.InputStream inputStream, long size) {
-        try {
+        try (InputStream in = readObject(bucketName, objectKey)) {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            DigestInputStream digestStream = new DigestInputStream(inputStream, digest);
-
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectKey)
-                            .stream(digestStream, size, -1)
-                            .contentType("application/octet-stream")
-                            .build());
-
-            String sha256 = bytesToHex(digest.digest());
-            LOG.info("uploadFromStream bucket={} key={} size={} sha256={}", bucketName, objectKey, size, sha256);
-            return sha256;
-        } catch (NoSuchAlgorithmException ex) {
-            // 不应发生：SHA-256 是 JRE 内置算法
-            throw new StorageException("SHA-256 algorithm not available", ex);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                digest.update(buffer, 0, read);
+            }
+            return Optional.of(bytesToHex(digest.digest()));
         } catch (Exception ex) {
-            LOG.error("uploadFromStream failed bucket={} key={}", bucketName, objectKey, ex);
-            throw new StorageException("failed to upload from stream: " + objectKey, ex);
+            LOG.warn("sha256Hex failed bucket={} key={}", bucketName, objectKey, ex);
+            return Optional.empty();
         }
     }
 
-    /**
-     * 去掉 ETag 引号。MinIO 对非 multipart 对象返回 "sha256hex"。
-     */
+    @Override
+    public boolean objectExists(String bucketName, String objectKey) {
+        try {
+            minioClient.statObject(
+                    StatObjectArgs.builder().bucket(bucketName).object(objectKey).build());
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
     private static String stripQuotes(String etag) {
         if (etag == null) {
-            return null;
+            return "";
         }
-        if (etag.startsWith("\"") && etag.endsWith("\"") && etag.length() >= 2) {
-            return etag.substring(1, etag.length() - 1);
-        }
-        return etag;
+        return etag.startsWith("\"") && etag.endsWith("\"") ? etag.substring(1, etag.length() - 1) : etag;
     }
 
-    /**
-     * 字节数组转小写 hex 字符串。
-     */
     private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        StringBuilder hex = new StringBuilder(bytes.length * 2);
         for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
+            hex.append(String.format("%02x", b));
         }
-        return sb.toString();
-    }
-
-    /**
-     * 计算输入流的 SHA-256 摘要（流式，不加载全量到内存）。
-     */
-    private static class DigestInputStream extends java.io.FilterInputStream {
-        private final MessageDigest digest;
-
-        DigestInputStream(java.io.InputStream in, MessageDigest digest) {
-            super(in);
-            this.digest = digest;
-        }
-
-        @Override
-        public int read() throws IOException {
-            int b = super.read();
-            if (b != -1) {
-                digest.update((byte) b);
-            }
-            return b;
-        }
-
-        @Override
-        public int read(byte[] buffer, int offset, int len) throws IOException {
-            int n = super.read(buffer, offset, len);
-            if (n > 0) {
-                digest.update(buffer, offset, n);
-            } else if (n == -1) {
-                // EOF
-            }
-            return n;
-        }
+        return hex.toString();
     }
 
     /** 存储操作异常。 */

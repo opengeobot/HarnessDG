@@ -1,6 +1,6 @@
 /*
  * 功能: 可靠任务 Worker 单元测试——验证领取、成功/失败/DEAD 状态机、可重试判定、调度自愈与通知触发。
- * 时间: 2026-07-01
+ * 时间: 2026-09-22
  * 作者: AxeXie
  */
 package com.aihub.job.infrastructure;
@@ -30,6 +30,7 @@ import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobStatus;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import com.aihub.shared.error.DependencyException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.ValidationException;
@@ -64,6 +65,8 @@ class JobWorkerTest {
     private final ObjectProvider<JobAuditPort> auditPortProvider = mock(ObjectProvider.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<MeterRegistry> meterRegistryProvider = mock(ObjectProvider.class);
+    @SuppressWarnings("unchecked")
+    private final ObjectProvider<PlatformMetrics> platformMetricsProvider = mock(ObjectProvider.class);
     private JobNotificationPort notificationPort;
     private JobAuditPort auditPort;
     private Clock clock;
@@ -79,6 +82,7 @@ class JobWorkerTest {
         when(notificationPortProvider.getIfAvailable()).thenReturn(notificationPort);
         when(auditPortProvider.getIfAvailable()).thenReturn(auditPort);
         when(meterRegistryProvider.getIfAvailable()).thenReturn(null);
+        when(platformMetricsProvider.getIfAvailable()).thenReturn(null);
         when(jobAttemptRepository.exists(anyString(), anyInt())).thenReturn(false);
         clock = Clock.fixed(Instant.parse("2026-07-01T10:00:00Z"), ZoneOffset.UTC);
     }
@@ -89,7 +93,7 @@ class JobWorkerTest {
         TransactionTemplate txTemplate = new TransactionTemplate(mock(PlatformTransactionManager.class));
         return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
                 notificationPortProvider, auditPortProvider, txTemplate, clock, meterRegistryProvider,
-                new SensitiveDataMasker(), LEASE_SECONDS);
+                new SensitiveDataMasker(), LEASE_SECONDS, platformMetricsProvider);
     }
 
     @Test

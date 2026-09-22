@@ -10,7 +10,7 @@ import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.idempotency.IdempotencyKey;
 import com.aihub.shared.idempotency.IdempotencyRecord;
 import com.aihub.shared.idempotency.IdempotencyStore;
-import java.util.Objects;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Service;
@@ -52,9 +52,11 @@ public class IdempotencyService {
         Optional<IdempotencyRecord> existing = idempotencyStore.find(key);
         if (existing.isPresent()) {
             IdempotencyRecord record = existing.get();
-            if (!Objects.equals(record.requestFingerprint(), requestFingerprint)) {
+            if (requestFingerprint != null && record.requestFingerprint() != null
+                    && !requestFingerprint.equals(record.requestFingerprint())) {
                 throw new ConflictException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
-                        "idempotency key reused with a different request payload: " + key.key());
+                        "same idempotency key with different request body",
+                        Map.of("key", key.key()));
             }
             return new IdempotencyResult(
                     new IdempotencyResponse(record.responseStatus(), record.responseBody()), true);

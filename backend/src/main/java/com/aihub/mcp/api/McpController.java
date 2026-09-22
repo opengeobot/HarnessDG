@@ -1,9 +1,26 @@
 package com.aihub.mcp.api;
 
+import com.aihub.audit.application.AuditEvent;
+import com.aihub.audit.application.AuditService;
+import com.aihub.audit.domain.AuditResult;
+import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.IdempotencyService;
 import com.aihub.mcp.application.McpResourceHandler;
 import com.aihub.mcp.application.McpToolCatalog;
-import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.mcp.application.McpToolCatalog.ToolDefinition;
+import com.aihub.platform.observability.application.PlatformMetrics;
+import com.aihub.platform.security.RateLimiter;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.RateLimitException;
+import com.aihub.shared.idempotency.IdempotencyKey;
+import com.aihub.shared.idempotency.IdempotencySupport;
+import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.shared.identity.PrincipalType;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,17 +51,36 @@ public class McpController {
     private final McpToolCatalog toolCatalog;
     private final McpResourceHandler resourceHandler;
     private final AuthorizationService authorizationService;
+    private final AuditService auditService;
+    private final PlatformMetrics platformMetrics;
+    private final IdempotencyService idempotencyService;
+    private final IdempotencySupport idempotencySupport;
+    private final RateLimiter rateLimiter;
+    private final ObjectMapper objectMapper;
 
     public McpController(McpToolCatalog toolCatalog,
                          McpResourceHandler resourceHandler,
-                         AuthorizationService authorizationService) {
+                         AuthorizationService authorizationService,
+                         AuditService auditService,
+                         PlatformMetrics platformMetrics,
+                         IdempotencyService idempotencyService,
+                         RateLimiter rateLimiter,
+                         ObjectMapper objectMapper) {
         this.toolCatalog = toolCatalog;
         this.resourceHandler = resourceHandler;
         this.authorizationService = authorizationService;
+        this.auditService = auditService;
+        this.platformMetrics = platformMetrics;
+        this.idempotencyService = idempotencyService;
+        this.rateLimiter = rateLimiter;
+        this.idempotencySupport = new IdempotencySupport(objectMapper);
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> handleJsonRpc(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> handleJsonRpc(
+            @RequestBody Map<String, Object> request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyHeader) {
         String method = (String) request.get("method");
         Object id = request.get("id");
 
@@ -59,7 +96,7 @@ public class McpController {
             case "tools/list" -> ResponseEntity.ok(successResponse(id, handleToolsList()));
             case "tools/call" -> {
                 Map<String, Object> params = getParams(request);
-                yield ResponseEntity.ok(successResponse(id, handleToolsCall(params)));
+                yield ResponseEntity.ok(successResponse(id, handleToolsCall(params, idempotencyHeader)));
             }
             case "resources/list" -> ResponseEntity.ok(successResponse(id, handleResourcesList()));
             case "resources/read" -> {
@@ -81,60 +118,146 @@ public class McpController {
     }
 
     private Map<String, Object> handleToolsList() {
-        // 按主体过滤：未认证主体不下发任何工具；已认证主体只看到被显式授权的 Tool（AC-DST-AIW-002）。
-        String principalId = PrincipalContextHolder.current()
-                .map(c -> c.principalId())
-                .orElse(null);
-        List<Map<String, Object>> tools = toolCatalog
-                .listTools(principalId, name -> authorizationService.isToolAllowed(principalId, name))
-                .stream()
-                .map(tool -> {
-                    Map<String, Object> toolDef = new LinkedHashMap<>();
-                    toolDef.put("name", tool.name());
-                    toolDef.put("description", tool.description());
-                    toolDef.put("inputSchema", tool.inputSchema());
-                    return toolDef;
-                })
+        PrincipalContext context = requireAuthenticatedPrincipal();
+        try {
+            authorizationService.requirePermission(context, Permissions.MCP_INVOKE);
+        } catch (AuthorizationException e) {
+            return toolError("Missing required scope: mcp:invoke");
+        }
+
+        List<Map<String, Object>> tools = toolCatalog.listVisibleTools().stream()
+                .map(this::toToolListEntry)
                 .toList();
         return Map.of("tools", tools);
     }
 
-    private Map<String, Object> handleToolsCall(Map<String, Object> params) {
+    private Map<String, Object> handleToolsCall(Map<String, Object> params, String idempotencyHeader) {
         String toolName = (String) params.get("name");
         if (toolName == null) {
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Missing tool name")));
+            return toolError("Missing tool name");
         }
 
-        // 授权检查：fail closed。缺少已认证主体时一律拒绝，绝不跳过 Tool Allowlist 校验。
-        // 判定同时要求 Tool 已注册（受控 Catalog）且主体被显式授权（AC-P0B-AGT-005）。
-        String principalId = PrincipalContextHolder.current()
-                .map(c -> c.principalId())
-                .orElse(null);
-        if (principalId == null) {
-            LOG.warn("MCP tools/call rejected: no authenticated principal tool={}", toolName);
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Authentication required")));
+        PrincipalContext context = PrincipalContextHolder.current().orElse(null);
+        if (context == null || context.principalId() == null) {
+            auditToolDenied(null, null, toolName, ErrorCode.AUTH_UNAUTHENTICATED.name());
+            return toolError("Unauthenticated");
         }
+
+        ToolDefinition toolDef = toolCatalog.findTool(toolName).orElse(null);
+        if (toolDef == null) {
+            auditToolDenied(context.principalId(), context.principalType(), toolName,
+                    ErrorCode.MCP_TOOL_NOT_ALLOWED.name());
+            return toolError("Unknown tool: " + toolName);
+        }
+
         try {
-            authorizationService.requireToolAllowed(principalId, toolName);
-        } catch (Exception e) {
-            LOG.warn("MCP tools/call denied tool={} principal={}", toolName, principalId);
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Tool not allowed: " + toolName)));
+            authorizationService.requirePermission(context, Permissions.MCP_INVOKE);
+            authorizationService.requirePermission(context, toolDef.requiredPermission());
+            if (context.principalType() == PrincipalType.AGENT) {
+                authorizationService.requireToolAllowed(context.principalId(), toolName);
+            }
+        } catch (AuthorizationException e) {
+            auditToolDenied(context.principalId(), context.principalType(), toolName, e.errorCode().name());
+            return toolError("Tool not allowed: " + toolName);
+        }
+
+        if (!rateLimiter.tryAcquire(context.principalId(), toolName)) {
+            auditRateLimitDenied(context, toolName);
+            throw new RateLimitException(ErrorCode.RATE_LIMIT_EXCEEDED, "rate limit exceeded",
+                    Map.of("tool", toolName));
         }
 
         @SuppressWarnings("unchecked")
         Map<String, Object> arguments = params.get("arguments") instanceof Map m ? m : Map.of();
 
         try {
+            if (toolDef.write()) {
+                String idempotencyKeyValue = resolveIdempotencyKey(params, idempotencyHeader);
+                if (idempotencyKeyValue == null || idempotencyKeyValue.isBlank()) {
+                    return toolError("Idempotency key required for write tools");
+                }
+                IdempotencyKey key = idempotencySupport.buildKey(
+                        idempotencyKeyValue, context.principalId(), "POST", "/mcp/tools/call/" + toolName);
+                String fingerprint = idempotencySupport.sha256Digest(arguments);
+                var idempotent = idempotencyService.execute(key, fingerprint, () -> {
+                    Object toolResult = toolCatalog.callTool(toolName, arguments);
+                    return new IdempotencyService.IdempotencyResponse(200, serializeResult(toolResult));
+                });
+                platformMetrics.recordToolCall(toolName, "success");
+                return Map.of("isError", false, "content",
+                        List.of(Map.of("type", "text", "text", idempotent.response().body())));
+            }
+
             Object result = toolCatalog.callTool(toolName, arguments);
+            platformMetrics.recordToolCall(toolName, "success");
             return Map.of("isError", false, "content",
-                    List.of(Map.of("type", "text", "text", String.valueOf(result))));
+                    List.of(Map.of("type", "text", "text", serializeResult(result))));
         } catch (Exception e) {
             LOG.warn("MCP tool call failed tool={} error={}", toolName, e.getMessage());
-            return Map.of("isError", true, "content",
-                    List.of(Map.of("type", "text", "text", "Error: " + e.getMessage())));
+            platformMetrics.recordToolCall(toolName, "error");
+            return toolError("Error: " + e.getMessage());
+        }
+    }
+
+    private static String resolveIdempotencyKey(Map<String, Object> params, String headerValue) {
+        Object fromParams = params.get("_idempotencyKey");
+        if (fromParams != null && !fromParams.toString().isBlank()) {
+            return fromParams.toString();
+        }
+        return headerValue;
+    }
+
+    private PrincipalContext requireAuthenticatedPrincipal() {
+        return PrincipalContextHolder.current()
+                .filter(ctx -> ctx.principalId() != null)
+                .orElseThrow(() -> new AuthorizationException(
+                        ErrorCode.AUTH_UNAUTHENTICATED, "no authenticated principal", Map.of()));
+    }
+
+    private void auditRateLimitDenied(PrincipalContext context, String toolName) {
+        auditService.record(new AuditEvent(
+                "AGENT_RATE_LIMIT_DENIED",
+                "mcp:tool:call",
+                context.principalId(),
+                context.principalType() == null ? null : context.principalType().name(),
+                "MCP_TOOL",
+                toolName,
+                null,
+                null,
+                AuditResult.DENIED,
+                ErrorCode.RATE_LIMIT_EXCEEDED.name(),
+                Map.of("tool", toolName)));
+    }
+
+    private void auditToolDenied(String principalId, PrincipalType principalType,
+                                 String toolName, String errorCode) {
+        auditService.record(new AuditEvent(
+                "AGENT_ACCESS_DENIED",
+                "mcp:tool:call",
+                principalId,
+                principalType == null ? null : principalType.name(),
+                "MCP_TOOL",
+                toolName,
+                null,
+                null,
+                AuditResult.DENIED,
+                errorCode,
+                Map.of("tool", toolName)));
+    }
+
+    private Map<String, Object> toToolListEntry(ToolDefinition tool) {
+        Map<String, Object> toolDef = new LinkedHashMap<>();
+        toolDef.put("name", tool.name());
+        toolDef.put("description", tool.description());
+        toolDef.put("inputSchema", tool.inputSchema());
+        return toolDef;
+    }
+
+    private String serializeResult(Object result) {
+        try {
+            return objectMapper.writeValueAsString(result);
+        } catch (JsonProcessingException e) {
+            return String.valueOf(result);
         }
     }
 
@@ -156,6 +279,11 @@ public class McpController {
                     "uri", uri, "mimeType", "application/json",
                     "text", "{\"error\": \"" + e.getMessage() + "\"}")));
         }
+    }
+
+    private static Map<String, Object> toolError(String message) {
+        return Map.of("isError", true, "content",
+                List.of(Map.of("type", "text", "text", message)));
     }
 
     @SuppressWarnings("unchecked")

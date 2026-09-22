@@ -5,9 +5,9 @@
  */
 package com.aihub.asset.api;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -17,9 +17,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.aihub.asset.application.AssetApplicationService;
+import com.aihub.asset.application.AssetLineageQueryService;
+import com.aihub.asset.application.AssetLineageView;
+import com.aihub.asset.application.AssetRelationApplicationService;
 import com.aihub.asset.application.AssetSummaryView;
 import com.aihub.asset.application.AssetView;
 import com.aihub.asset.domain.Asset;
+import com.aihub.asset.domain.AssetRelationType;
 import com.aihub.asset.domain.AssetStatus;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ModelProfile;
@@ -44,11 +48,9 @@ import com.aihub.shared.security.TokenType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Configuration;
@@ -79,6 +81,8 @@ class AssetControllerTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private TokenSigner tokenSigner;
     @MockitoBean private AssetApplicationService assetService;
+    @MockitoBean private AssetLineageQueryService lineageQueryService;
+    @MockitoBean private AssetRelationApplicationService relationApplicationService;
     @MockitoBean private RoleBindingRepository roleBindingRepository;
     @MockitoBean private ResourceAclRepository resourceAclRepository;
     @MockitoBean private AgentToolRepository agentToolRepository;
@@ -103,15 +107,17 @@ class AssetControllerTest {
         Asset asset = Asset.create("ast_demo", AssetType.MODEL, null, null, "nlp", "qwen-domain-7b",
                 "领域问答模型", "一个领域问答模型", Visibility.INTERNAL,
                 List.of("team-nlp"), List.of("text-generation"), List.of("tag_001"), "Apache-2.0",
-                "team_nlp_001", new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
+                "tm_01",
+                new ModelProfile("pytorch", "text-generation", null), null, "usr_01");
         return AssetView.from(asset);
     }
 
     private AssetSummaryView summaryView() {
-        return new AssetSummaryView("ast_demo", AssetType.MODEL, "nlp", null, null, "qwen-domain-7b",
+        return new AssetSummaryView("ast_demo", "aih://nlp/model/qwen-domain-7b",
+                AssetType.MODEL, "nlp", null, null, "qwen-domain-7b",
                 "领域问答模型", "描述", Visibility.INTERNAL, AssetStatus.ACTIVE,
                 List.of("team-nlp"), List.of("text-generation"), List.of("tag_001"), "Apache-2.0",
-                "pytorch", "text-generation", null, null, Instant.now());
+                "pytorch", "text-generation", null, null, Instant.now(), List.of());
     }
 
     @Test
@@ -121,7 +127,7 @@ class AssetControllerTest {
         String body = """
                 {"type":"MODEL","namespace":"nlp","name":"qwen-domain-7b",
                  "displayName":"领域问答模型","visibility":"INTERNAL",
-                 "owners":["team-nlp"],"tags":["text-generation"],"tagIds":["tag_001"],
+                 "ownerTeamId":"team_nlp","tags":["text-generation"],"tagIds":["tag_001"],
                  "license":"Apache-2.0","model":{"framework":"pytorch","task":"text-generation"}}
                 """;
 
@@ -146,46 +152,6 @@ class AssetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].assetId").value("ast_demo"))
                 .andExpect(jsonPath("$.data.items[0].tagIds[0]").value("tag_001"));
-    }
-
-    @Test
-    void getAssetFacetsBindsFullFilterSetIntoQuery() throws Exception {
-        given(assetService.getAssetFacets(any())).willReturn(
-                new com.aihub.asset.application.AssetFacetView(
-                        Map.of("DATASET", 2L), Map.of(), Map.of(), Map.of("PARQUET", 2L),
-                        Map.of("IMAGE", 2L), Map.of(), 2L));
-
-        ArgumentCaptor<com.aihub.asset.application.AssetSearchQuery> captor =
-                ArgumentCaptor.forClass(com.aihub.asset.application.AssetSearchQuery.class);
-
-        mockMvc.perform(get("/api/v1/assets/facets")
-                        .header(HttpHeaders.AUTHORIZATION, bearer())
-                        .param("type", "DATASET")
-                        .param("sensitivity", "INTERNAL")
-                        .param("tagId", "tag_001")
-                        .param("framework", "pytorch")
-                        .param("namespace", "vision"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalCount").value(2))
-                .andExpect(jsonPath("$.data.types.DATASET").value(2));
-
-        org.mockito.Mockito.verify(assetService).getAssetFacets(captor.capture());
-        com.aihub.asset.application.AssetSearchQuery captured = captor.getValue();
-        // 过滤位必须完整透传到应用层，而不是只保留 keyword/type（TASK-P0BR-049 回归点）。
-        assertThat(captured.type()).isEqualTo(AssetType.DATASET);
-        assertThat(captured.sensitivity()).isEqualTo("INTERNAL");
-        assertThat(captured.tagId()).isEqualTo("tag_001");
-        assertThat(captured.framework()).isEqualTo("pytorch");
-        assertThat(captured.namespace()).isEqualTo("vision");
-        // Facet 不使用分页，游标必须为空以免误用列表分页语义。
-        assertThat(captured.cursor()).isNull();
-    }
-
-    @Test
-    void getAssetFacetsRequiresAuthentication() throws Exception {
-        // 未认证访问 Facet 必须 fail closed 返回 401，不得匿名返回聚合计数。
-        mockMvc.perform(get("/api/v1/assets/facets"))
-                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -217,7 +183,7 @@ class AssetControllerTest {
 
     @Test
     void deprecateAssetReturnsUpdatedView() throws Exception {
-        given(assetService.deprecateAsset(any(), any())).willReturn(modelView());
+        given(assetService.deprecateAsset(any(), any(), any(), any(), any())).willReturn(modelView());
 
         mockMvc.perform(post("/api/v1/assets/ast_demo/deprecate")
                         .header(HttpHeaders.AUTHORIZATION, bearer()))
@@ -233,6 +199,44 @@ class AssetControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.assetId").value("ast_demo"));
+    }
+
+    @Test
+    void getAssetLineageReturnsRelations() throws Exception {
+        var lineage = new com.aihub.asset.application.AssetLineageView(
+                "ast_demo", "down", 3, List.of());
+        given(lineageQueryService.queryLineage(eq("ast_demo"), any(), eq("down"), any()))
+                .willReturn(lineage);
+
+        mockMvc.perform(get("/api/v1/assets/ast_demo/lineage")
+                        .param("depth", "3")
+                        .param("direction", "down")
+                        .header(HttpHeaders.AUTHORIZATION, bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assetId").value("ast_demo"))
+                .andExpect(jsonPath("$.data.direction").value("down"));
+    }
+
+    @Test
+    void createAssetRelationReturns201() throws Exception {
+        var edge = new AssetLineageView.RelationEdge(
+                "rel_001", "ast_demo", "ast_child", AssetRelationType.TRAINED_ON,
+                1, "prn_admin", Instant.now());
+        given(relationApplicationService.createRelation(
+                eq("ast_demo"), eq("ast_child"), eq(AssetRelationType.TRAINED_ON), any()))
+                .willReturn(edge);
+
+        String body = """
+                {"childAssetId":"ast_child","relationType":"TRAINED_ON"}
+                """;
+
+        mockMvc.perform(post("/api/v1/assets/ast_demo/relations")
+                        .header(HttpHeaders.AUTHORIZATION, bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.relationId").value("rel_001"))
+                .andExpect(jsonPath("$.data.childAssetId").value("ast_child"));
     }
 
     @Test

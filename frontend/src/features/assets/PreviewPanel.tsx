@@ -4,7 +4,7 @@
  * 作者: AxeXie
  */
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Empty, Spin, Table, Typography } from 'antd';
+import { Alert, Card, Empty, Flex, Spin, Table, Tag, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '@/shared/api';
 
@@ -24,7 +24,9 @@ interface ParsedPreview {
   rows: Record<string, unknown>[];
   truncated?: boolean;
   columnTruncated?: boolean;
-  errorReason?: string;
+  columns?: string[];
+  rowGroups?: number;
+  note?: string;
 }
 
 export function PreviewPanel({ assetId, versionId }: PreviewPanelProps) {
@@ -75,20 +77,47 @@ export function PreviewPanel({ assetId, versionId }: PreviewPanelProps) {
     parsed = null;
   }
 
-  // Size exceeded error
-  if (parsed && parsed.errorReason === 'PREVIEW_SIZE_EXCEEDED') {
+  if (!parsed) {
     return (
       <Card title={t('version.preview')}>
-        <Alert
-          type="warning"
-          message={t('version.previewSizeExceeded')}
-          showIcon
-        />
+        <Empty description={t('version.previewEmpty')} />
       </Card>
     );
   }
 
-  if (!parsed || !parsed.rows || parsed.rows.length === 0) {
+  // Parquet schema-only metadata（行数据不可读时后端返回 columns/rowGroups/note）
+  if ((!parsed.rows || parsed.rows.length === 0) && parsed.columns && parsed.columns.length > 0) {
+    return (
+      <Card
+        title={t('version.preview')}
+        extra={
+          data.generatedAt && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {new Date(data.generatedAt).toLocaleString()}
+            </Typography.Text>
+          )
+        }
+        size="small"
+      >
+        {parsed.note && (
+          <Alert type="info" message={parsed.note} showIcon style={{ marginBottom: 12 }} />
+        )}
+        <Typography.Text strong>{t('version.previewSchema')}</Typography.Text>
+        <Flex wrap gap={8} style={{ marginTop: 8 }}>
+          {parsed.columns.map((col) => (
+            <Tag key={col} color="blue">{col}</Tag>
+          ))}
+        </Flex>
+        {parsed.rowGroups != null && (
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+            {t('version.previewRowGroups', { count: parsed.rowGroups })}
+          </Typography.Text>
+        )}
+      </Card>
+    );
+  }
+
+  if (!parsed.rows || parsed.rows.length === 0) {
     return (
       <Card title={t('version.preview')}>
         <Empty description={t('version.previewEmpty')} />

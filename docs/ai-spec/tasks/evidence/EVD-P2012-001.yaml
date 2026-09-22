@@ -1,0 +1,94 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P2012-001
+status: DRAFT
+
+task:
+  taskId: TASK-P2-012
+  requirements: [REQ-UPL-001, REQ-UPL-003, REQ-MNF-001, REQ-AST-006]
+  scenarios: [AC-P2-UPL-001, AC-P2-UPL-003, AC-P2-MNF-001, AC-P1-AST-010]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-012.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-012.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-012.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T04:45:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  node: local
+  pnpm: local
+  docker: available
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: backend
+  command: ./mvnw -o verify
+  startedAt: 2026-07-12T04:40:00Z
+  finishedAt: 2026-07-12T04:41:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P2-UPL-001
+      assertion: completeSession 在 files 为空时拒绝并返回 COMMON_INVALID_ARGUMENT，不再生成 upload-N.bin 占位（UploadApplicationServiceTest.completeSessionRejectsEmptyFiles）
+    - scenarioId: AC-P2-UPL-003
+      assertion: Materialization Worker 校验真实 Manifest/DVC Digest；占位文件生成逻辑已移除（persistCompletedFiles/toFilePayload 不再合成占位）
+    - scenarioId: AC-P2-MNF-001
+      assertion: Manifest 摘要算法对真实文件清单生效（UploadMaterializeJobHandler 既有；占位路径已消除）
+    - scenarioId: AC-P1-AST-010
+      assertion: 血缘关系删除 API DELETE /assets/{id}/relations/{relationId} 按 asset:manage 授权、硬删除并审计 ASSET_RELATION_DELETED；关系不存在/不属于资产采用防枚举 ASSET_NOT_FOUND（AssetRelationApplicationServiceTest 3 例）
+  notProven:
+    - scenarioId: AC-P2-UPL-003
+      reason: Materialization E4 需 Compose 全栈旅程（Wave W）
+    - scenarioId: AC-P1-AST-010
+      reason: 血缘删除 E4 需 Testcontainers IT（96 IT SKIPPED）
+
+artifacts:
+  reports:
+    - ./mvnw -o verify → BUILD SUCCESS, 681 unit PASS, 96 IT SKIPPED
+    - redocly lint → valid (2 pre-existing warnings)
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - AssetCatalogIT, VersionPublishIT, UploadTransferIT, AgentRestIT, McpEndToEndIT (Testcontainers disabledWithoutDocker from JVM)
+  assumptions:
+    - 血缘删除采用硬删除；历史由不可变 audit_log 保留（满足「保留审计历史」），未新增 deleted_at 列/V37 Migration
+    - UPLOAD_NO_FILES 错误复用既有 COMMON_INVALID_ARGUMENT（ErrorCode.java 不在 allowedPaths），OpenAPI completeUploadSession 已声明该错误码
+    - redocly diff 未运行（CLI 2.38.0 移除 diff 子命令）；OpenAPI 变更为纯增量（新增 deleteAssetRelation 操作 + 错误码 + 描述），非 breaking
+  environmentDifferences:
+    - Testcontainers IT 从 JVM 不可达 Docker（disabledWithoutDocker 跳过），E4 旅程留 Wave W
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

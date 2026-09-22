@@ -2,6 +2,7 @@ package com.aihub.job.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -24,9 +25,11 @@ public class JobLeaseReconciler implements JobHandler {
     private static final int BATCH_SIZE = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public JobLeaseReconciler(JdbcTemplate jdbcTemplate) {
+    public JobLeaseReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -128,6 +131,7 @@ public class JobLeaseReconciler implements JobHandler {
 
     private void recordDiscrepancy(String jobId, ReconcileResult result) {
         LOG.warn("job-lease discrepancy jobId={} classification={}", jobId, result);
+        platformMetrics.recordReconciliationDiscrepancy("JobLease", result.name());
         try {
             String deliveryId = "job-lease-reconcile-" + jobId + "-" + System.currentTimeMillis();
             jdbcTemplate.update(

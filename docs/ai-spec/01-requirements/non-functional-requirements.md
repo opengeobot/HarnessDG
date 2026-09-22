@@ -1,8 +1,7 @@
 # 非功能需求与质量门禁
 
-> 状态：`PROPOSED`
-> 已确认：`DEC-013`（zh-CN/en-US 运行时切换、Ant Design 企业后台基线、Compose 验收环境、Playwright E2E）。
-> 未决：`AUD-005`（OTel 范围冲突）未解决前 `NFR-OBS-001..005` 不能进入 `READY`；`NFR-REL-008`、`NFR-UI-005/006` 及若干阈值仍为 `OPEN`。`Q-301` 至 `Q-305` 已由 `DEC-013` 闭合。
+> 状态：`READY`
+> 已确认：`DEC-013`（Q-301~Q-305 已闭合）。
 
 ## 1. 适用规则
 

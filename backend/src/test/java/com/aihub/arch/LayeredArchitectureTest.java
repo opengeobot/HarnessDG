@@ -5,6 +5,7 @@
  */
 package com.aihub.arch;
 
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
@@ -41,7 +42,8 @@ class LayeredArchitectureTest {
             "com.aihub.mcp..",
             "com.aihub.audit..",
             "com.aihub.notification..",
-            "com.aihub.bootstrap.."
+            "com.aihub.bootstrap..",
+            "com.aihub.agent.."
     };
 
     /** 规则一：shared-kernel 不得依赖任何业务模块或启动层。 */
@@ -66,6 +68,53 @@ class LayeredArchitectureTest {
                     .should(onlyBeAccessedFromSameModule())
                     .allowEmptyShould(true);
 
+    /** 规则四：domain 层不得依赖 Spring 或 MyBatis-Plus 或外部 SDK（Gitea/MinIO/DVC）。 */
+    @ArchTest
+    static final ArchRule domain_must_not_depend_on_spring_or_mybatis =
+            noClasses().that().resideInAPackage("com.aihub..domain..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "org.springframework..", "com.baomidou..",
+                            "io.minio..", "org.eclipse.jgit..",
+                            "io.gitea..", "com.iterative.dvc..")
+                    .allowEmptyShould(true);
+
+    /** 规则五：application 层不得依赖 infrastructure 层。 */
+    @ArchTest
+    static final ArchRule application_must_not_depend_on_infrastructure =
+            noClasses().that().resideInAPackage("com.aihub..application..")
+                    .should().dependOnClassesThat().resideInAPackage("com.aihub..infrastructure..")
+                    .allowEmptyShould(true);
+
+    /** 规则六：api 适配层不得直接依赖 domain 仓储端口。 */
+    @ArchTest
+    static final ArchRule controllers_must_not_call_repositories =
+            noClasses().that().resideInAPackage("com.aihub..api..")
+                    .should().dependOnClassesThat(
+                            resideInAPackage("com.aihub..domain..")
+                                    .and(JavaClass.Predicates.simpleNameEndingWith("Repository")))
+                    .allowEmptyShould(true);
+
+    /** 规则七：api 适配层方法不得返回持久化 Entity 类型。 */
+    @ArchTest
+    static final ArchRule controllers_must_not_return_entities =
+            noClasses().that().resideInAPackage("com.aihub..api..")
+                    .should(haveMethodReturningEntity())
+                    .allowEmptyShould(true);
+
+    /** 规则八：接口层（api）不得返回 MyBatis-Plus Entity 或 Mapper 类型。 */
+    @ArchTest
+    static final ArchRule interfaces_must_not_expose_persistence =
+            noClasses().that().resideInAPackage("com.aihub..api..")
+                    .should().dependOnClassesThat().resideInAPackage("com.baomidou.mybatisplus..")
+                    .allowEmptyShould(true);
+
+    /** 规则九：infrastructure 层不得反向依赖 application 层。 */
+    @ArchTest
+    static final ArchRule infrastructure_must_not_depend_on_application =
+            noClasses().that().resideInAPackage("com.aihub..infrastructure..")
+                    .should().dependOnClassesThat().resideInAPackage("com.aihub..application..")
+                    .allowEmptyShould(true);
+
     private static ArchCondition<JavaClass> onlyBeAccessedFromSameModule() {
         return new ArchCondition<>("only be accessed from classes within the same module") {
             @Override
@@ -76,6 +125,20 @@ class LayeredArchitectureTest {
                     boolean sameModule = mapperModule.equals(moduleOf(origin));
                     events.add(new SimpleConditionEvent(dependency, sameModule, dependency.getDescription()));
                 }
+            }
+        };
+    }
+
+    private static ArchCondition<JavaClass> haveMethodReturningEntity() {
+        return new ArchCondition<>("not have methods returning types ending with Entity") {
+            @Override
+            public void check(JavaClass javaClass, ConditionEvents events) {
+                javaClass.getMethods().forEach(method -> {
+                    String returnTypeName = method.getRawReturnType().getName();
+                    boolean violation = returnTypeName.endsWith("Entity");
+                    events.add(new SimpleConditionEvent(method, !violation,
+                            method.getFullName() + " returns " + returnTypeName));
+                });
             }
         };
     }

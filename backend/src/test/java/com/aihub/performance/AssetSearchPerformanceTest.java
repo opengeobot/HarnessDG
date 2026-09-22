@@ -244,7 +244,7 @@ class AssetSearchPerformanceTest {
         AccessScope adminScope = new AccessScope("usr_perf_admin", true,
                 Set.of(), Set.of(), Set.of(), Set.of());
         return new AssetSearchCriteria(
-                keyword, null, null, null, null, null, null, null, null, null,
+                keyword, null, null, null, null, null, null, null, null, null, null, null,
                 Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED),
                 Set.of(Visibility.PUBLIC, Visibility.INTERNAL, Visibility.PRIVATE),
                 adminScope, null, null, null, null, null, null, null, 20);
@@ -254,7 +254,7 @@ class AssetSearchPerformanceTest {
         AccessScope adminScope = new AccessScope("usr_perf_admin", true,
                 Set.of(), Set.of(), Set.of(), Set.of());
         return new AssetSearchCriteria(
-                keyword, type, null, null, null, null, null, null, null, null,
+                keyword, type, null, null, null, null, null, null, null, null, null, null,
                 Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED),
                 Set.of(Visibility.PUBLIC, Visibility.INTERNAL, Visibility.PRIVATE),
                 adminScope, null, null, null, null, null, null, null, 20);
@@ -264,7 +264,7 @@ class AssetSearchPerformanceTest {
         AccessScope adminScope = new AccessScope("usr_perf_admin", true,
                 Set.of(), Set.of(), Set.of(), Set.of());
         return new AssetSearchCriteria(
-                keyword, null, null, null, null, null, null, null, null, null,
+                keyword, null, null, null, null, null, null, null, null, null, null, null,
                 Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED),
                 Set.of(Visibility.PUBLIC, Visibility.INTERNAL, Visibility.PRIVATE),
                 adminScope, null, null, null, null, null, null, cursor, 20);

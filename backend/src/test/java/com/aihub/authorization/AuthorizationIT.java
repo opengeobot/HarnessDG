@@ -18,6 +18,7 @@ import com.aihub.identity.application.UserManagementApplicationService;
 import com.aihub.identity.application.UserView;
 import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalType;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -77,10 +78,38 @@ class AuthorizationIT {
 
     @Test
     void presetPermissionsAndRolesExist() {
-        assertThat(permissionService.listPermissions()).hasSizeGreaterThanOrEqualTo(31);
+        assertThat(permissionService.listPermissions()).hasSizeGreaterThanOrEqualTo(35);
         assertThat(roleService.listRoles())
                 .extracting(view -> view.roleCode())
-                .contains("ADMIN", "READER", "ASSET_AUTHOR");
+                .contains("ADMIN", "READER", "ASSET_AUTHOR", "OBSERVER");
+    }
+
+    /**
+     * TASK-P0BR-003：验证 Permissions.java 常量与数据库 iam_permission seed 无漂移。
+     */
+    @Test
+    void permissionsJavaConstantsMatchDatabaseSeed() throws Exception {
+        Set<String> dbCodes = permissionService.listPermissions().stream()
+                .map(v -> v.permissionCode())
+                .collect(java.util.stream.Collectors.toSet());
+
+        // 反射收集 Permissions.java 中所有 String 常量
+        Set<String> javaConstants = new java.util.LinkedHashSet<>();
+        for (Field field : Permissions.class.getDeclaredFields()) {
+            if (field.getType() == String.class
+                    && java.lang.reflect.Modifier.isStatic(field.getModifiers())
+                    && java.lang.reflect.Modifier.isFinal(field.getModifiers())
+                    && !field.getName().equals("HIGH_RISK_ACTIONS")) {
+                javaConstants.add((String) field.get(null));
+            }
+        }
+
+        // 每个 Java 常量必须在数据库 seed 中存在
+        for (String code : javaConstants) {
+            assertThat(dbCodes)
+                    .as("Permissions.java 常量 '%s' 必须在 iam_permission seed 中存在", code)
+                    .contains(code);
+        }
     }
 
     @Test

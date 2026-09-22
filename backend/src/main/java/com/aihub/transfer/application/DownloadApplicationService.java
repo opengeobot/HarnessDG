@@ -32,8 +32,8 @@ public class DownloadApplicationService {
 
     private static final Logger LOG = LoggerFactory.getLogger(DownloadApplicationService.class);
 
-    /** 预签名 URL 有效期：15 分钟。 */
-    private static final Duration PRESIGN_TTL = Duration.ofMinutes(15);
+    /** 预签名 URL / GIT_DVC 票据有效期：15 分钟。 */
+    private static final Duration TICKET_TTL = Duration.ofMinutes(15);
 
     private final VersionRepository versionRepository;
     private final AssetRepository assetRepository;
@@ -61,28 +61,24 @@ public class DownloadApplicationService {
      * @return 下载票据视图
      */
     public DownloadTicket issueTicket(String versionId, String artifactId) {
-        // 查询版本
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
                         "version not found", Map.of("versionId", versionId)));
 
-        // 检查版本状态：仅 PUBLISHED 版本可下载
         if (version.status() != VersionStatus.PUBLISHED) {
-            throw new IllegalStateException("only PUBLISHED versions can be downloaded, current: " + version.status());
+            throw new IllegalStateException(
+                    "only PUBLISHED versions can be downloaded, current: " + version.status());
         }
 
-        // 授权检查
         authorizationService.requirePermission("asset:read");
 
-        // 查询资产以获取存储桶信息
         Asset asset = assetRepository.findByAssetId(version.assetId())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
                         "asset not found", Map.of("assetId", version.assetId())));
 
-        String bucket = resolveBucket(asset);
+        Instant expiresAt = Instant.now().plus(TICKET_TTL);
 
         if (artifactId != null) {
-            // 签发单工件下载票据
             Artifact artifact = versionRepository.listArtifactsByVersion(versionId).stream()
                     .filter(a -> a.artifactId().equals(artifactId))
                     .findFirst()
@@ -90,7 +86,7 @@ public class DownloadApplicationService {
                             "artifact not found", Map.of("artifactId", artifactId)));
 
             String objectKey = resolveObjectKey(version, artifact);
-            var url = storagePort.presignDownload(bucket, objectKey, PRESIGN_TTL);
+            var url = storagePort.presignDownload(resolveBucket(asset), objectKey, TICKET_TTL);
 
             auditService.record(new AuditEvent(
                     "DOWNLOAD_TICKET_ISSUED",
@@ -106,30 +102,33 @@ public class DownloadApplicationService {
                     Map.of("artifactId", artifactId, "method", "PRESIGNED_URL")));
 
             LOG.info("issued PRESIGNED_URL download ticket versionId={} artifactId={}", versionId, artifactId);
-            return new DownloadTicket("PRESIGNED_URL", url.toString(), Instant.now().plus(PRESIGN_TTL),
-                    artifact.path(), artifact.size());
-        } else {
-            // 签发 GIT_DVC 方法（客户端通过 DVC 拉取）
-            auditService.record(new AuditEvent(
-                    "DOWNLOAD_TICKET_ISSUED",
-                    "download:dvc",
-                    PrincipalContextHolder.current().map(c -> c.principalId()).orElse(null),
-                    PrincipalContextHolder.current().map(c -> c.principalType() == null ? null : c.principalType().name()).orElse(null),
-                    "VERSION",
-                    versionId,
-                    null,
-                    null,
-                    AuditResult.SUCCEEDED,
-                    null,
-                    Map.of("method", "GIT_DVC")));
-
-            LOG.info("issued GIT_DVC download ticket versionId={}", versionId);
-            return new DownloadTicket("GIT_DVC", null, null, null, null);
+            return new DownloadTicket("PRESIGNED_URL", url.toString(), expiresAt,
+                    artifact.path(), artifact.size(), null, null, null, version.assetId());
         }
+
+        String gitCloneUrl = asset.repository() != null ? asset.repository().cloneUrl() : null;
+        String revision = version.sourceCommit() != null ? version.sourceCommit() : version.gitTag();
+        String dvcCredentialsUrl = "/api/v1/assets/" + version.assetId() + "/dvc/credentials";
+
+        auditService.record(new AuditEvent(
+                "DOWNLOAD_TICKET_ISSUED",
+                "download:dvc",
+                PrincipalContextHolder.current().map(c -> c.principalId()).orElse(null),
+                PrincipalContextHolder.current().map(c -> c.principalType() == null ? null : c.principalType().name()).orElse(null),
+                "VERSION",
+                versionId,
+                null,
+                null,
+                AuditResult.SUCCEEDED,
+                null,
+                Map.of("method", "GIT_DVC", "revision", revision != null ? revision : "")));
+
+        LOG.info("issued GIT_DVC download ticket versionId={} assetId={}", versionId, version.assetId());
+        return new DownloadTicket("GIT_DVC", null, expiresAt, null, null,
+                gitCloneUrl, revision, dvcCredentialsUrl, version.assetId());
     }
 
     private String resolveBucket(Asset asset) {
-        // P2 简化：所有资产共用 dvc-cache 存储桶
         return "dvc-cache";
     }
 
@@ -139,7 +138,11 @@ public class DownloadApplicationService {
 
     /**
      * 下载票据视图。
+     *
+     * <p>GIT_DVC 方法通过 {@code dvcCredentialsUrl} 引导客户端获取短期凭据，不在票据中嵌入 Secret。
      */
     public record DownloadTicket(String method, String presignedUrl,
-                                 Instant expiresAt, String fileName, Long fileSize) {}
+                                 Instant expiresAt, String fileName, Long fileSize,
+                                 String gitCloneUrl, String revision,
+                                 String dvcCredentialsUrl, String assetId) {}
 }

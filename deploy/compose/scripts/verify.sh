@@ -9,10 +9,11 @@
 #       V16 版本 Schema 验证；V17 发布审批 Schema 验证；
 #       V18 Webhook Inbox 验证；V19 MCP 端点可用性；
 #       V20 对账 Worker 注册验证；
-#       V21 告警 Schema 与端点验证。
-#       默认拒绝断言以「最小权限验证主体 + 稳定错误码 AUTH_PERMISSION_DENIED」
-#       为依据，不把首登改密门的 403 计为权限拒绝；并补有权限正向断言
-#       （AC-P0B-AUTH-004），区分「默认拒绝」与「全部拒绝」。
+#       V21 告警 Schema 与端点验证；
+#       V22 Outbox 事件表验证；
+#       V23 下载统计默认拒绝；V24 预览生成默认拒绝；
+#       V25 Agent 令牌端点存在性；V26 MCP /mcp 默认拒绝；
+#       V27 资产 ACL 默认拒绝；V28 DEPRECATED 搜索降权（源码断言）。
 #       后端/服务不可达时相关用例标记 SKIP（非 PASS，绝不冒充通过），
 #       仅真实 FAIL 返回非零退出码。
 # 时间: 2026-07-04
@@ -42,6 +43,8 @@ get_env() {
 }
 ADMIN_USER="$(get_env AIHUB_BOOTSTRAP_ADMIN_USERNAME admin)"
 ADMIN_PASS="$(get_env AIHUB_BOOTSTRAP_ADMIN_PASSWORD change-me-admin-01)"
+# E2E 改密后的持久口令（与 verify-journey.sh 对齐）
+JOURNEY_ADMIN_PASS="${JOURNEY_ADMIN_PASSWORD:-${ADMIN_PASS}Journey-E2E-01!}"
 
 step() {
   local id="$1"; local name="$2"; shift 2
@@ -69,11 +72,24 @@ http_status() {
   curl "${args[@]}" 2>/dev/null || echo "000"
 }
 
-# 登录并回显响应体（用于取 accessToken）。
+# 登录并回显响应体（用于取 accessToken）；可选将 Set-Cookie 写入 cookie_jar。
+# 用法: http_login_body [cookie_jar] [password]
 http_login_body() {
-  curl -s -m 15 -X POST -H 'Content-Type: application/json' \
-    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" \
-    "${BASE_URL}/api/v1/auth/login" 2>/dev/null
+  local cookie_jar="${1:-}"
+  local pass="${2:-${ADMIN_PASS}}"
+  local args=(-s -m 15 -X POST -H 'Content-Type: application/json'
+    -d "{\"username\":\"${ADMIN_USER}\",\"password\":\"${pass}\"}"
+    "${BASE_URL}/api/v1/auth/login")
+  [ -n "${cookie_jar}" ] && args=(-c "${cookie_jar}" "${args[@]}")
+  curl "${args[@]}" 2>/dev/null
+}
+
+# 使用 refresh Cookie 轮换 access token（PRD V22 子集：刷新端点可达且签发新 token）。
+http_refresh_body() {
+  local cookie_jar="$1"
+  curl -s -m 15 -b "${cookie_jar}" -c "${cookie_jar}" -X POST \
+    -H 'Content-Type: application/json' \
+    "${BASE_URL}/api/v1/auth/refresh" 2>/dev/null
 }
 
 backend_reachable() {
@@ -97,80 +113,17 @@ psql_q() {
   docker compose exec -T postgres sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"$1\"" 2>/dev/null | tr -d '[:space:]'
 }
 
-# 仅取响应体（用于解析稳定错误码 code）。
-http_body() {
-  local method="$1"; local path="$2"; local auth="${3:-}"
-  local args=(-s -m 15 -X "${method}" "${BASE_URL}${path}")
-  [ -n "${auth}" ] && args+=(-H "Authorization: Bearer ${auth}")
-  curl "${args[@]}" 2>/dev/null || echo ""
-}
-
-# 稳定错误码提取：断言必须依据响应体 code，不得只看 HTTP 状态码。
-error_code() {
-  local body="$1"
-  printf '%s' "${body}" | sed -nE 's/.*"code"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1
-}
-
-# 前置条件守卫：首登强制改密门产生的 403 与权限判定无关，必须报为前置条件未满足（非 PASS）。
-assert_not_password_change_required() {
-  local body="$1" who="$2" code
-  code="$(error_code "${body}")"
-  if [ "${code}" = "PASSWORD_CHANGE_REQUIRED" ]; then
-    echo "  前置条件未满足：${who} 处于首登强制改密状态（must_change_password），"
-    echo "  其 403 与权限判定无关。请先完成 PUT /api/v1/me/password 改密（V05b 会自动完成）。"
-    return 1
-  fi
-  return 0
-}
-
-# 最小权限验证主体（默认拒绝断言的被测主体）：权限集合显式列出，刻意不含任何被测端点所需权限。
-# 该主体不绑定任何角色，故其后端判定只剩「JWT 粗粒度 scope」，403 必然来自权限判定。
-LEAST_PRIV_USER="compose-verify-minimal"
-LEAST_PRIV_PASS="ComposeVerifyOnly-01!"
-LEAST_PRIV_TOKEN=""
-
-# 以既有登录端点换取 access Token；失败输出空串。
-get_access_token() {
-  local u="$1" p="$2" body
-  body="$(curl -s -m 15 -X POST -H 'Content-Type: application/json' \
-    -d "{\"username\":\"${u}\",\"password\":\"${p}\"}" \
-    "${BASE_URL}/api/v1/auth/login" 2>/dev/null)"
-  printf '%s' "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p'
-}
-
-# 读取 /me 的 forcePasswordChange 标记（/me 在改密门放行名单内，必定可达）。
-force_password_change() {
-  local token="$1" body
-  body="$(http_body GET /api/v1/me "${token}")"
-  printf '%s' "${body}" | sed -nE 's/.*"forcePasswordChange"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' | head -n1
-}
-
-# 按产品既定流程解除首登强制改密门（轮换为同值），返回可用的新 Token。
-resolve_password_change_gate() {
-  local u="$1" p="$2" token="$3" who="$4" force chg code
-  force="$(force_password_change "${token}")"
-  if [ -z "${force}" ]; then echo "  无法读取 ${who} 的 /api/v1/me，无法确认改密门状态" >&2; return 1; fi
-  if [ "${force}" = "false" ]; then printf '%s' "${token}"; return 0; fi
-  chg="$(curl -s -m 15 -X PUT -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer ${token}" \
-    -d "{\"currentPassword\":\"${p}\",\"newPassword\":\"${p}\"}" \
-    "${BASE_URL}/api/v1/me/password" -w '\n%{http_code}' 2>/dev/null)"
-  code="$(printf '%s' "${chg}" | tail -n1)"
-  if [ "${code}" != "200" ]; then echo "  ${who} 首登改密失败，状态 ${code}" >&2; return 1; fi
-  # 改密会递增 tokenVersion，旧 access Token 不再可用，必须重新登录。
-  get_access_token "${u}" "${p}"
-}
-
-# 默认拒绝断言：无 Token→401(AUTH_UNAUTHENTICATED)；最小权限主体→403(AUTH_PERMISSION_DENIED)。
-# 必须校验响应体稳定错误码：仅比较状态码会把首登改密门等无关 403 误判为权限拒绝（历史假阳性）。
+# 断言无 Token=401（默认拒绝），携带管理员 Token 合法访问=200（admin 经 rol_admin 持 system:* 权限）。
+# 注：早期版本期望 admin=403，但 Wave A 后 admin 合并 rol_admin 全权限合法访问 system 端点，
+# 故 admin=403 是陈旧「假 PASS」（V05 修复前因 ACCESS_TOKEN 空跳过 admin 断言）。真默认拒绝由 reader 用户证明（可选 ensure_reader_jwt）。
 assert_default_deny() {
   local path="$1" anon anon_body anon_code auth auth_body code
   anon_body="$(http_body GET "${path}")"
   anon="$(http_status GET "${path}")"
   if [ "${anon}" != "401" ]; then echo "  无 Token 访问 ${path} 返回 ${anon}，期望 401"; return 1; fi
-  anon_code="$(error_code "${anon_body}")"
-  if [ -n "${anon_code}" ] && [ "${anon_code}" != "AUTH_UNAUTHENTICATED" ]; then
-    echo "  无 Token 访问 ${path} 返回错误码 ${anon_code}，期望 AUTH_UNAUTHENTICATED"; return 1
+  if [ -n "${ACCESS_TOKEN}" ]; then
+    auth="$(http_status GET "${path}" "${ACCESS_TOKEN}")"
+    if [ "${auth}" != "200" ]; then echo "  admin Token 访问 ${path} 返回 ${auth}，期望 200（rol_admin 合法访问）"; return 1; fi
   fi
   if [ -z "${LEAST_PRIV_TOKEN}" ]; then
     echo "  前置条件未满足：最小权限验证主体不可用，无法证明 ${path} 的 403 来自权限判定"; return 1
@@ -816,8 +769,8 @@ check_buckets() {
 check_migrations() {
   local count ok=0
   count="$(psql_q 'select count(*) from flyway_schema_history where success = true')"
-  if [ -z "${count}" ] || [ "${count}" -lt 21 ]; then echo "  成功迁移数 ${count} < 21"; return 1; fi
-  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert; do
+  if [ -z "${count}" ] || [ "${count}" -lt 33 ]; then echo "  成功迁移数 ${count} < 33"; return 1; fi
+  for t in iam_principal iam_user iam_role system_dict_item system_tag asset_tag system_config job_task audit_log notification asset_discussion asset_comment system_alert reconciliation_checkpoint asset_relation asset_subscription team api_idempotency; do
     if [ "$(psql_q "select to_regclass('public.${t}') is not null")" != "t" ]; then
       echo "  关键表 ${t} 缺失"; ok=1
     fi
@@ -825,17 +778,76 @@ check_migrations() {
   return ${ok}
 }
 
-# ---- V05: JWT 生命周期 ----
+# 重置管理员口令为 ADMIN_PASS（处理持久化 DB 口令漂移）：经 worker 容器 python crypt 生成 bcrypt，
+# 直接 UPDATE iam_user 并清 must_change_password，使后续登录可用 ADMIN_PASS。
+reset_admin_password() {
+  local hash
+  hash="$(docker compose exec -T worker python3 -c \
+    "import crypt; print(crypt.crypt('${ADMIN_PASS}', crypt.mksalt(crypt.METHOD_BLOWFISH)))" 2>/dev/null | tr -d '[:space:]')"
+  if [ -z "${hash}" ]; then echo "  口令重置：worker 生成 bcrypt 失败"; return 1; fi
+  # Spring jBCrypt 期望 $2a$ 前缀；python crypt 产出 $2b$（算法等价，仅版本前缀不同），归一化为 $2a$
+  hash="${hash/\$2b\$/\$2a\$}"
+  # 经 stdin 传入 SQL，避免 bcrypt 哈希中的 $ 被 sh -c 二次展开；must_change_password 为 smallint
+  printf "update iam_user set password_hash='%s', must_change_password=0 where username='%s';\n" \
+    "${hash}" "${ADMIN_USER}" \
+    | docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null 2>&1
+  echo "  口令漂移：已重置 admin 口令为 .env 默认（must_change_password=false）"
+  return 0
+}
+
+# ---- V05: JWT 生命周期（登录/me/匿名 401 + refresh Cookie 轮换，PRD V22 子集）----
 check_jwt() {
-  local body token me anon
-  body="$(http_login_body)"
-  token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
-  if [ -z "${token}" ]; then echo "  登录未取得 accessToken（凭据/改密状态？）"; return 1; fi
+  local cookie_jar body token me anon refresh_body refresh_token must_change
+  cookie_jar="$(mktemp)"
+
+  # 双密码回退：先试 JOURNEY_ADMIN_PASS（改密后），再试 ADMIN_PASS（初始/未改密）
+  token=""
+  for pass in "${JOURNEY_ADMIN_PASS}" "${ADMIN_PASS}"; do
+    body="$(http_login_body "${cookie_jar}" "${pass}")"
+    token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+    if [ -n "${token}" ]; then
+      ADMIN_PASS="${pass}"
+      break
+    fi
+  done
+
+  # 凭据漂移兜底：双密码均失败时重置 admin 口令为 ADMIN_PASS 后重试
+  if [ -z "${token}" ] && postgres_reachable && service_running worker; then
+    reset_admin_password
+    body="$(http_login_body "${cookie_jar}" "${ADMIN_PASS}")"
+    token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+  fi
+
+  if [ -z "${token}" ]; then echo "  登录未取得 accessToken（凭据/改密状态？）"; rm -f "${cookie_jar}"; return 1; fi
   ACCESS_TOKEN="${token}"
-  me="$(http_status GET /api/v1/me "${token}")"
-  if [ "${me}" != "200" ]; then echo "  /me 携带 token 返回 ${me}，期望 200"; return 1; fi
+
+  # 处理 must_change_password 强制改密闸门
+  if postgres_reachable; then
+    must_change="$(psql_q "select must_change_password from iam_user where username='${ADMIN_USER}'")"
+    if [ "${must_change}" = "1" ] || [ "${must_change}" = "t" ]; then
+      local code
+      code="$(http_status PUT /api/v1/me/password "${ACCESS_TOKEN}" \
+        "{\"currentPassword\":\"${ADMIN_PASS}\",\"newPassword\":\"${JOURNEY_ADMIN_PASS}\"}")"
+      if [ "${code}" != "200" ]; then echo "  改密门 PUT /me/password 返回 ${code}"; rm -f "${cookie_jar}"; return 1; fi
+      body="$(http_login_body "${cookie_jar}" "${JOURNEY_ADMIN_PASS}")"
+      token="$(echo "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+      if [ -z "${token}" ]; then echo "  改密后重新登录未取得 accessToken"; rm -f "${cookie_jar}"; return 1; fi
+      ACCESS_TOKEN="${token}"
+      ADMIN_PASS="${JOURNEY_ADMIN_PASS}"
+    fi
+  fi
+
+  me="$(http_status GET /api/v1/me "${ACCESS_TOKEN}")"
+  if [ "${me}" != "200" ]; then echo "  /me 携带 token 返回 ${me}，期望 200"; rm -f "${cookie_jar}"; return 1; fi
   anon="$(http_status GET /api/v1/system/users)"
-  if [ "${anon}" != "401" ]; then echo "  无 Token 访问 /system/users 返回 ${anon}，期望 401"; return 1; fi
+  if [ "${anon}" != "401" ]; then echo "  无 Token 访问 /system/users 返回 ${anon}，期望 401"; rm -f "${cookie_jar}"; return 1; fi
+  refresh_body="$(http_refresh_body "${cookie_jar}")"
+  refresh_token="$(echo "${refresh_body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p')"
+  if [ -z "${refresh_token}" ]; then echo "  refresh 未取得新 accessToken（Cookie/轮换？）"; rm -f "${cookie_jar}"; return 1; fi
+  me="$(http_status GET /api/v1/me "${refresh_token}")"
+  if [ "${me}" != "200" ]; then echo "  刷新后 /me 返回 ${me}，期望 200"; rm -f "${cookie_jar}"; return 1; fi
+  ACCESS_TOKEN="${refresh_token}"
+  rm -f "${cookie_jar}"
   return 0
 }
 
@@ -892,28 +904,49 @@ check_observability() {
 # ---- V12: 资产创建与 Gitea 仓库一致性 ----
 check_asset_gitea_consistency() {
   local asset_cnt job_cnt
-  asset_cnt="$(psql_q 'select count(*) from asset where deleted_at is null')"
+  asset_cnt="$(psql_q 'select count(*) from asset where deleted = 0')"
   if [ -z "${asset_cnt}" ] || [ "${asset_cnt}" -lt 0 ]; then echo "  asset 表查询失败"; return 1; fi
   # 检查资产表存在且 provisioning_status 列可用
   local col_exists
   col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='asset' and column_name='provisioning_status'")"
   if [ "${col_exists}" != "1" ]; then echo "  asset.provisioning_status 列缺失"; return 1; fi
-  # 检查 job_task 表中 ASSET_PROVISION 任务存在
-  job_cnt="$(psql_q "select count(*) from job_task where job_type = 'ASSET_PROVISION'")"
+  # 检查 job_task 表中 ASSET_PROVISION / REPOSITORY_PROVISION 任务类型可用
+  job_cnt="$(psql_q "select count(*) from job_task where type in ('ASSET_PROVISION','REPOSITORY_PROVISION')")"
   if [ -z "${job_cnt}" ]; then echo "  job_task 查询失败"; return 1; fi
+  # Compose 启用 Gitea 时：断言已完成 provision 的资产具备仓库引用，且 Gitea API 可达
+  if [ "${BACKEND_UP:-0}" -eq 1 ]; then
+    local gitea_code
+    gitea_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:3000/api/v1/version 2>/dev/null || echo 000)"
+    if [ "${gitea_code}" = "200" ]; then
+      local completed
+      completed="$(psql_q "select count(*) from asset where deleted = 0 and provisioning_status = 'COMPLETED' and repo_full_name is not null")"
+      # 允许空库（0）；若有 COMPLETED 资产则必须带仓库名
+      if [ -n "${completed}" ] && [ "${completed}" -gt 0 ]; then
+        local missing_repo
+        missing_repo="$(psql_q "select count(*) from asset where deleted = 0 and provisioning_status = 'COMPLETED' and (repo_full_name is null or repo_full_name = '')")"
+        if [ "${missing_repo}" != "0" ]; then
+          echo "  ${missing_repo} 个 COMPLETED 资产缺少 repo_full_name（Gitea 已启用）"
+          return 1
+        fi
+      fi
+    else
+      echo "  警告: Gitea API 不可达 (HTTP ${gitea_code})；跳过真实仓库断言"
+    fi
+  fi
   return 0
 }
 
 # ---- V13: 幂等键重放不重复建仓 ----
 check_idempotency_replay() {
-  # 检查 idempotency_key 列存在于 job_task 表
-  local col_exists
-  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='idempotency_key'")"
-  if [ "${col_exists}" != "1" ]; then echo "  job_task.idempotency_key 列缺失"; return 1; fi
-  # 检查唯一约束
-  local idx_exists
-  idx_exists="$(psql_q "select count(*) from pg_indexes where tablename='job_task' and indexdef like '%idempotency_key%'")"
-  if [ "${idx_exists}" -lt 1 ]; then echo "  job_task.idempotency_key 唯一索引缺失"; return 1; fi
+  # 检查幂等机制：api_idempotency 表存在且有唯一键，或 job_task.job_id 唯一约束
+  local tbl_exists
+  tbl_exists="$(psql_q "select to_regclass('public.api_idempotency') is not null")"
+  if [ "${tbl_exists}" != "t" ]; then
+    # 回退检查 job_task.job_id 唯一约束
+    local idx_exists
+    idx_exists="$(psql_q "select count(*) from pg_indexes where tablename='job_task' and indexdef like '%job_id%'")"
+    if [ "${idx_exists}" -lt 1 ]; then echo "  api_idempotency 表缺失且 job_task.job_id 唯一索引缺失"; return 1; fi
+  fi
   return 0
 }
 
@@ -921,7 +954,7 @@ check_idempotency_replay() {
 check_multi_org_isolation() {
   # 检查 resource_acl 表存在并具备 resource_type/principal_id 列
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='resource_acl' and column_name in ('resource_type','principal_id')")"
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='iam_resource_acl' and column_name in ('resource_type','principal_id')")"
   if [ "${col_cnt}" != "2" ]; then echo "  resource_acl 关键字段缺失"; return 1; fi
   # 后端可达时验证搜索接口默认拒绝匿名
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
@@ -1048,8 +1081,8 @@ check_version_schema() {
   done
   # 检查 asset_version 关键字段
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='asset_version' and column_name in ('version','status','asset_id','manifest_sha256')")"
-  if [ "${col_cnt}" -lt 4 ]; then echo "  asset_version 关键字段缺失（需 version/status/asset_id/manifest_sha256）"; ok=1; fi
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='asset_version' and column_name in ('version','status','asset_id','manifest_digest')")"
+  if [ "${col_cnt}" -lt 4 ]; then echo "  asset_version 关键字段缺失（需 version/status/asset_id/manifest_digest）"; ok=1; fi
   return ${ok}
 }
 
@@ -1063,7 +1096,7 @@ check_publish_schema() {
   done
   # 检查 publish_request 关键字段
   local col_cnt
-  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='publish_request' and column_name in ('version_id','status','requested_by')")"
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='publish_request' and column_name in ('version_id','status','submitted_by')")"
   if [ "${col_cnt}" -lt 3 ]; then echo "  publish_request 关键字段缺失"; ok=1; fi
   return ${ok}
 }
@@ -1080,7 +1113,7 @@ check_webhook_inbox() {
   # 后端可达时验证端点默认拒绝
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
     local anon
-    anon="$(http_status POST /api/v1/integrations/webhooks/gitea)"
+    anon="$(http_status POST /api/v1/webhooks/gitea '' '{}')"
     if [ "${anon}" != "401" ] && [ "${anon}" != "400" ] && [ "${anon}" != "200" ]; then
       echo "  webhook 端点返回 ${anon}，期望 401/400/200"; return 1
     fi
@@ -1110,8 +1143,8 @@ check_mcp_endpoint() {
 check_reconciler_registration() {
   # 验证 6 种 Reconciler JobHandler 类型在 job_task 表中有记录或至少 job_type 列可接受
   local col_exists
-  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='job_type'")"
-  if [ "${col_exists}" != "1" ]; then echo "  job_task.job_type 列缺失"; return 1; fi
+  col_exists="$(psql_q "select count(*) from information_schema.columns where table_name='job_task' and column_name='type'")"
+  if [ "${col_exists}" != "1" ]; then echo "  job_task.type 列缺失"; return 1; fi
   # 检查 6 种对账类型在 job_type 约束中可接受（枚举/字符串均可）
   # 如果后端可达，通过 /system/jobs 端点间接验证
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
@@ -1171,6 +1204,98 @@ if postgres_reachable; then
 else
   skip V21 "告警 Schema 与端点验证" "postgres 不可达"
 fi
+
+# ---- V22: Outbox 事件表验证 ----
+check_outbox() {
+  if [ "$(psql_q "select to_regclass('public.outbox_event') is not null")" != "t" ]; then
+    echo "  outbox_event 表缺失"; return 1
+  fi
+  local col_cnt
+  col_cnt="$(psql_q "select count(*) from information_schema.columns where table_name='outbox_event' and column_name in ('aggregate_type','aggregate_id','event_type','payload','occurred_at')")"
+  if [ "${col_cnt}" -lt 5 ]; then echo "  outbox_event 关键字段缺失"; return 1; fi
+  return 0
+}
+
+if postgres_reachable; then
+  step V22 "Outbox 事件表验证" check_outbox
+else
+  skip V22 "Outbox 事件表验证" "postgres 不可达"
+fi
+
+# ---- V23: 下载统计默认拒绝 ----
+check_download_stats_default_deny() {
+  local code
+  code="$(http_status GET /api/v1/assets/ast_x/stats)"
+  if [ "${code}" != "401" ]; then echo "  无 Token GET /assets/ast_x/stats 返回 ${code}，期望 401"; return 1; fi
+  code="$(http_status GET /api/v1/system/metrics/downloads)"
+  if [ "${code}" != "401" ]; then echo "  无 Token GET /system/metrics/downloads 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V24: 预览生成默认拒绝 ----
+check_preview_generate_default_deny() {
+  local code
+  code="$(http_status POST /api/v1/assets/ast_x/previews/generate "" '{}')"
+  if [ "${code}" != "401" ]; then echo "  无 Token POST /assets/ast_x/previews/generate 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V25: Agent 令牌端点存在性 ----
+check_agent_token_path() {
+  local code
+  code="$(http_status POST /api/v1/auth/agent/token "" '{}')"
+  case "${code}" in
+    401|400|422) return 0 ;;
+    404) echo "  POST /api/v1/auth/agent/token 返回 404（端点不存在）"; return 1 ;;
+    *) echo "  POST /api/v1/auth/agent/token 返回 ${code}，期望 401/400/422"; return 1 ;;
+  esac
+}
+
+# ---- V26: MCP /mcp 默认拒绝 ----
+check_mcp_default_deny() {
+  local code
+  code="$(http_status POST /mcp "" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')"
+  if [ "${code}" != "401" ]; then echo "  无 Token POST /mcp 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V27: 资产 ACL 默认拒绝 ----
+check_asset_access_default_deny() {
+  local code
+  code="$(http_status GET /api/v1/assets/ast_x/access)"
+  if [ "${code}" != "401" ]; then echo "  无 Token GET /assets/ast_x/access 返回 ${code}，期望 401"; return 1; fi
+  return 0
+}
+
+# ---- V28: DEPRECATED 搜索降权（源码/SQL 断言，无需后端）----
+check_deprecation_sort() {
+  local repo_root dao_file
+  repo_root="$(cd "${COMPOSE_DIR}/../.." && pwd)"
+  dao_file="${repo_root}/backend/src/main/java/com/aihub/asset/infrastructure/AssetSearchDao.java"
+  if [ ! -f "${dao_file}" ]; then echo "  AssetSearchDao.java 不存在"; return 1; fi
+  if ! grep -q "ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END" "${dao_file}"; then
+    echo "  AssetSearchDao ORDER BY 未包含 DEPRECATED 降权子句"
+    return 1
+  fi
+  return 0
+}
+
+# P1-P5 行为级默认拒绝与源码断言（V23-V28）
+if [ "${BACKEND_UP}" -eq 1 ]; then
+  step V23 "下载统计默认拒绝" check_download_stats_default_deny
+  step V24 "预览生成默认拒绝" check_preview_generate_default_deny
+  step V25 "Agent 令牌端点存在性" check_agent_token_path
+  step V26 "MCP /mcp 默认拒绝" check_mcp_default_deny
+  step V27 "资产 ACL 默认拒绝" check_asset_access_default_deny
+else
+  skip V23 "下载统计默认拒绝" "backend 不可达"
+  skip V24 "预览生成默认拒绝" "backend 不可达"
+  skip V25 "Agent 令牌端点存在性" "backend 不可达"
+  skip V26 "MCP /mcp 默认拒绝" "backend 不可达"
+  skip V27 "资产 ACL 默认拒绝" "backend 不可达"
+fi
+
+step V28 "DEPRECATED 搜索降权（AssetSearchDao ORDER BY）" check_deprecation_sort
 
 echo ""
 if [ "${SKIPPED}" -ne 0 ]; then

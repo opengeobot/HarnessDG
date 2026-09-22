@@ -10,6 +10,7 @@ import com.aihub.identity.domain.AgentIdentityRepository;
 import com.aihub.identity.domain.LocalUser;
 import com.aihub.identity.domain.LocalUserRepository;
 import com.aihub.audit.domain.AuditResult;
+import com.aihub.authorization.application.EffectiveScopeResolver;
 import com.aihub.identity.domain.RefreshTokenRecord;
 import com.aihub.identity.domain.RefreshTokenRepository;
 import com.aihub.shared.error.AuthenticationException;
@@ -64,6 +65,7 @@ public class AuthenticationApplicationService {
     private final IdGenerator idGenerator;
     private final Clock clock;
     private final AuditPort auditPort;
+    private final EffectiveScopeResolver effectiveScopeResolver;
 
     /** 登录失败副作用（计数/锁定/失败审计）专用事务模板，独立于调用方事务提交。 */
     private final TransactionTemplate failureTransaction;
@@ -89,6 +91,7 @@ public class AuthenticationApplicationService {
                                             IdGenerator idGenerator,
                                             Clock clock,
                                             AuditPort auditPort,
+                                            EffectiveScopeResolver effectiveScopeResolver,
                                             PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.agentRepository = agentRepository;
@@ -100,6 +103,7 @@ public class AuthenticationApplicationService {
         this.idGenerator = idGenerator;
         this.clock = clock;
         this.auditPort = auditPort;
+        this.effectiveScopeResolver = effectiveScopeResolver;
         this.failureTransaction = new TransactionTemplate(transactionManager);
         this.failureTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.rotationTransaction = new TransactionTemplate(transactionManager);
@@ -199,7 +203,7 @@ public class AuthenticationApplicationService {
             throw new AuthenticationException(ErrorCode.AUTH_UNAUTHENTICATED, "not a refresh token", Map.of());
         }
 
-        RefreshTokenRecord record = refreshTokenRepository.findByJti(claims.jwtId())
+        RefreshTokenRecord record = refreshTokenRepository.findByJwtId(claims.jwtId())
                 .orElseThrow(() -> new AuthenticationException(
                         ErrorCode.AUTH_UNAUTHENTICATED, "unknown refresh token", Map.of()));
 
@@ -296,7 +300,7 @@ public class AuthenticationApplicationService {
         }
         try {
             JwtClaims claims = tokenVerifier.verify(refreshToken);
-            refreshTokenRepository.findByJti(claims.jwtId())
+            refreshTokenRepository.findByJwtId(claims.jwtId())
                     .ifPresent(record -> {
                         refreshTokenRepository.revokeFamily(record.tokenFamily());
                         audit("AUTH_LOGOUT", AuditResult.SUCCEEDED, record.principalId(), record.tokenFamily(),
@@ -356,7 +360,7 @@ public class AuthenticationApplicationService {
     }
 
     private TokenPairResult issueUserTokenPair(LocalUser user, String family) {
-        Set<String> scopes = user.scopes();
+        Set<String> scopes = effectiveScopeResolver.resolve(user.principalId(), user.scopes());
         IssuedToken access = tokenSigner.issue(new TokenIssueRequest(
                 user.principalId(), PrincipalType.USER, user.tokenVersion(), scopes, TokenType.ACCESS));
         IssuedToken refresh = tokenSigner.issue(new TokenIssueRequest(
@@ -379,9 +383,10 @@ public class AuthenticationApplicationService {
     }
 
     private CurrentPrincipalView toPrincipalView(LocalUser user) {
+        Set<String> effectiveScopes = effectiveScopeResolver.resolve(user.principalId(), user.scopes());
         return new CurrentPrincipalView(
                 user.principalId(), user.userId(), PrincipalType.USER, user.principalId(),
-                user.displayName(), null, List.of(), List.copyOf(user.scopes()),
+                user.displayName(), null, List.of(), List.copyOf(effectiveScopes),
                 user.locale(), user.mustChangePassword());
     }
 

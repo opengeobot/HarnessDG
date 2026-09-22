@@ -1,0 +1,77 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR044-001
+status: PASS
+
+task:
+  taskId: TASK-P0BR-044
+  requirements: [REQ-COM-001]
+  scenarios: [AC-P0B-ENG-004, AC-P0B-ENG-005]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-044.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-044.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-044.md -CheckCompletion
+    result: PASS
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: doc review - compose.md V04 updated V1-V21→V1-V23, AC ID to V mapping table added
+  startedAt: 2026-07-07T22:42:00+08:00
+  finishedAt: 2026-07-07T22:44:00+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E1+E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-ENG-004
+      assertion: "compose.md V04 updated to reference V1-V23 matching actual migration files; AC ID to V number mapping table added covering all 70 MUST scenarios."
+    - scenarioId: AC-P0B-ENG-005
+      assertion: "Migration chain V1-V23 verified forward-only; no applied migration was modified."
+    - scenarioId: AC-P0B-ENG-004-E3
+      assertion: "E3: Compose verify.sh V04 PASS — 23 successful Flyway migrations validated against real PostgreSQL 17.2 (schema version 23, no migration necessary)."
+  notProven: []
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - E3 Compose migration execution verified via Docker Compose + PostgreSQL 17.2.
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

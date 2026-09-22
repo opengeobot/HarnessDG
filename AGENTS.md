@@ -2,9 +2,11 @@
 
 ## Current phase
 
-This repository is in **P0-B platform-foundation remediation**. P0-A engineering baseline is complete; part of the P1 asset catalog exists but is frozen for security and compatibility remediation. Until the P0-B exit gate passes, do not add P1+ business features. Allowed asset work is limited to integrating the shared platform capabilities and correcting contract, authorization, governance, audit, consistency, or test gaps.
+This repository has completed **P0-B platform-foundation remediation** (VERIFIED). P0-A engineering baseline is complete; P0-B exit gate has been validated at E1/E2/E3/E4 evidence levels including Compose full-stack verification (V01-V21 all PASS).
 
-Do not present planned P0 capabilities as implemented. The dated implementation snapshot is `docs/architecture/implementation-status-2026-06-30.md`.
+**P1–P5 business waves are PARTIAL / IMPLEMENTED_UNVERIFIED**: substantial catalog, version/transfer, publish, MCP, and ops code exists across Waves A–I (REST `/agent/*`, rate limiting, PAT, lineage, subscription notifications are implemented but E4-unverified), but wave exit Evidence Manifests are PARTIAL (E3 proven, E4 notProven). Remaining blockers: Compose E4 V05 credential drift, `-CheckCompletion`, and E5 drills. Do not present P1–P5 as VERIFIED.
+
+Do not present planned P0 capabilities as implemented. The dated implementation snapshot for current P1–P5 status is `docs/architecture/implementation-status-2026-07-10.md` (P0-B closure history remains in `implementation-status-2026-07-02.md`).
 Use `docs/architecture/p0-platform-foundation-traceability.md` to check every P0-B task across module, data, API, permission, audit, UI, and verification.
 
 ## Required reading

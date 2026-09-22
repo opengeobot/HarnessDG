@@ -1,0 +1,86 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P4001-001
+status: PARTIAL
+
+task:
+  taskId: TASK-P4-001
+  requirements: [REQ-MCP-002]
+  scenarios: [AC-P4-SCH-001]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P4-001.md
+    result: null
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P4-001.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P4-001.md -CheckCompletion
+    result: null
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: "22"
+  pnpm: "9"
+  docker: "available"
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: bash ./deploy/compose/scripts/verify-journey.sh
+  startedAt: 2026-07-11T20:02:30+08:00
+  finishedAt: 2026-07-11T20:02:34+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+
+coverage:
+  proven:
+    - scenarioId: AC-P4-SCH-001
+      assertion: McpToolCatalog.listTools syncs with tools.yaml schema, write flags, and enabledByDefault invariants; McpToolCatalogTest (9 PASS); verify.sh V19/V26 PASS
+    - scenarioId: AC-P4-MCP-001
+      assertion: verify.sh V19 MCP endpoint availability + V26 /mcp default-deny PASS
+    - scenarioId: PRD-V12
+      assertion: verify-journey.sh journey_v12_mcp_list_call PASS — /mcp initialize + tools/list + asset_search on live Compose
+    - scenarioId: PRD-V13
+      assertion: verify-journey.sh journey_v13_mcp_publish_deny PASS — asset_publish_version write tool denied by default
+    - scenarioId: PRD-V27
+      assertion: verify-journey.sh journey_v27_ai_consume PASS — MCP DATASET asset_search
+  notProven: []
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - Live MCP initialize/list/call on /mcp not exercised in Compose this session
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

@@ -23,6 +23,11 @@ public interface ResourceAclRepository {
     List<ResourceAcl> findAll();
 
     /**
+     * 按资源类型与资源 ID 查询 ACL（按 aclId 分组聚合）。
+     */
+    List<ResourceAcl> findByResource(String resourceType, String resourceId);
+
+    /**
      * 按 aclId 查找分组（含其全部权限）。
      */
     Optional<ResourceAcl> findByAclId(String aclId);

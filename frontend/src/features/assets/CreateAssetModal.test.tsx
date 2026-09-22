@@ -5,6 +5,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { within } from '@testing-library/react';
 import { CreateAssetModal } from './CreateAssetModal';
 import { renderWithProviders } from '@/test/test-utils';
 
@@ -62,8 +63,28 @@ describe('CreateAssetModal', () => {
     // framework and task are now ControlledSelect components (zh i18n placeholders)
     expect(screen.getByTestId('controlled-select-请选择框架')).toBeInTheDocument();
     expect(screen.getByTestId('controlled-select-请选择任务')).toBeInTheDocument();
+    // sensitivity is ControlledSelect, not free Input
+    expect(screen.getByTestId('controlled-select-请选择敏感级别')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('L1')).not.toBeInTheDocument();
     // architecture remains as Input
     expect(screen.getByPlaceholderText('decoder-only')).toBeInTheDocument();
+  });
+
+  it('DATASET 类型时渲染多选字典字段与敏感级别选择器', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CreateAssetModal {...defaultProps} />);
+    const typeLabel = screen.getByText(/^类型$/);
+    const typeField = typeLabel.closest('.ant-form-item');
+    expect(typeField).toBeTruthy();
+    const typeCombobox = within(typeField as HTMLElement).getByRole('combobox');
+    await user.click(typeCombobox);
+    const datasetOption = await screen.findByText(/^数据集$/);
+    await user.click(datasetOption);
+    expect(screen.getByTestId('controlled-select-请选择任务分类')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择模态分类')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择格式分类')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择语言')).toBeInTheDocument();
+    expect(screen.getByTestId('controlled-select-请选择敏感级别')).toBeInTheDocument();
   });
 
   it('渲染组织/项目/Owner团队/标签/字典受控选择器', () => {

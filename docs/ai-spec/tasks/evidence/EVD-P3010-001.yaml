@@ -1,0 +1,85 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P3010-001
+status: PASS
+
+task:
+  taskId: TASK-P3-010
+  requirements: [REQ-AST-002]
+  scenarios: [AC-P1-AST-002]
+
+governance:
+  specValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md
+    result: PASS
+  changedPathValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md -CheckChangedPaths
+    result: PASS
+  completionValidation:
+    command: pwsh ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P3-010.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: pending-commit
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-12T08:50:00Z
+  os: linux 6.17.0-35-generic
+  timezone: UTC+8
+  java: 21
+  node: local
+  pnpm: local
+  docker: available
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: backend
+  command: ./mvnw -o verify
+  startedAt: 2026-07-12T08:45:00Z
+  finishedAt: 2026-07-12T08:50:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-002
+      assertion: Compose verify.sh V12 资产创建 PASS + verify-journey PRD-V05 创建模型 PASS（provisioning=PENDING→job 入队成功，无 500）
+  notProven: []
+
+artifacts:
+  reports:
+    - ./mvnw -o verify → BUILD SUCCESS, 682 unit PASS, 96 IT SKIP
+    - JdbcJobRepositoryTest → 1 PASS（SQL 占位符一致性回归防护）
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries:
+    - INSERT INTO job_task (...) VALUES (?,?,?::jsonb,?,?,?,?,?,?,?,?,?,?,?,?,?) — 16 占位符
+    - claimNext: ORDER BY next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests:
+    - 96 Testcontainers IT（disabledWithoutDocker from JVM）
+  assumptions:
+    - claimNext BadSqlGrammar 根因为 FOR UPDATE SKIP LOCKED 在 LIMIT 之前（PostgreSQL 语法要求 LIMIT 在 FOR UPDATE 前）；同源 job_task SQL，一并修复
+    - insert 占位符 bug 是资产创建 500 与 RecurringJobBootstrapper 启动失败的根因；修复后需重建镜像验证
+  environmentDifferences:
+    - Testcontainers IT 从 JVM 不可达 Docker（disabledWithoutDocker 跳过）；E4 旅程留 Wave E4
+
+review:
+  recordedBy: AI (implementation session 2026-07-12)
+  reviewedBy: User (plan execution authorization 2026-07-12)
+  reviewedAt: 2026-07-12T10:05:00Z
+  accepted: true

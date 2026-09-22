@@ -6,6 +6,10 @@
 spring:
   application:
     name: aihub-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
   # 默认数据源占位；各 Profile 覆盖具体连接信息。
   datasource:
     url: ${AIHUB_DB_URL:jdbc:postgresql://localhost:5432/aihub}
@@ -72,11 +76,14 @@ server:
 
 # 平台业务配置（部署期注入）。Gitea 仓库开通默认关闭，便于无 Gitea 的开发/测试环境使用 Noop 开通器。
 aihub:
+  public-base-url: ${AIHUB_PUBLIC_BASE_URL:http://localhost:8080}
   gitea:
     enabled: ${AIHUB_GITEA_ENABLED:false}
     base-url: ${AIHUB_GITEA_BASE_URL:}
     token: ${AIHUB_GITEA_TOKEN:}
     default-branch: ${AIHUB_GITEA_DEFAULT_BRANCH:main}
+    # Webhook HMAC 签名密钥（生产环境必填，fail-closed 策略下为空将拒绝所有 Gitea 事件）
+    webhook-secret: ${AIHUB_GITEA_WEBHOOK_SECRET:}
   # 认证签名密钥（部署期注入 Secret）。测试 Profile 无须配置，由实现按 dev-only 临时密钥兜底。
   security:
     jwt:
@@ -87,6 +94,7 @@ aihub:
       public-key-pem: ${AIHUB_JWT_PUBLIC_KEY_PEM:}
       access-token-ttl: ${AIHUB_JWT_ACCESS_TTL:PT15M}
       refresh-token-ttl: ${AIHUB_JWT_REFRESH_TTL:P7D}
+      pat-token-ttl: ${AIHUB_JWT_PAT_TTL:P90D}
     # 浏览器刷新 JWT Cookie 配置。生产默认 Secure；本地/测试 http 可置 false。
     cookie:
       name: ${AIHUB_REFRESH_COOKIE_NAME:aihub_refresh}
@@ -108,19 +116,38 @@ aihub:
     secret-key: ${AIHUB_MINIO_SECRET_KEY:minioadmin}
     secure: ${AIHUB_MINIO_SECURE:false}
     external-endpoint: ${AIHUB_MINIO_EXTERNAL_ENDPOINT:}
-  # 可靠任务 Worker 配置。默认值保持既有生产语义；缩短租约仅用于本地/验收的租约恢复取证。
-  job:
-    worker:
-      # Worker 调度开关（默认开启）。
-      enabled: ${AIHUB_JOB_WORKER_ENABLED:true}
-      # 每次 tick 的调度间隔（秒）。
-      interval-seconds: ${AIHUB_JOB_WORKER_INTERVAL_SECONDS:5}
-      # 任务租约时长（秒）。必须显著大于单次 Handler 的最大执行时间，否则任务会被重复领取。
-      lease-seconds: ${AIHUB_JOB_LEASE_SECONDS:60}
-    backoff:
-      # 指数退避基数与上限（毫秒）。
-      base-millis: ${AIHUB_JOB_BACKOFF_BASE_MILLIS:2000}
-      cap-millis: ${AIHUB_JOB_BACKOFF_CAP_MILLIS:300000}
+    dvc-access-key: ${AIHUB_MINIO_DVC_ACCESS_KEY:}
+    dvc-secret-key: ${AIHUB_MINIO_DVC_SECRET_KEY:}
+    quota-bytes: ${AIHUB_MINIO_QUOTA_BYTES:0}
+    quota-warning-percent: ${AIHUB_MINIO_QUOTA_WARNING_PERCENT:80}
+  # 预览 Worker 内容解析上限（进程级内存/CPU 由容器 cgroup 约束，见 docs/runbooks/ops.md）
+  preview:
+    max-rows: ${AIHUB_PREVIEW_MAX_ROWS:100}
+    max-cols: ${AIHUB_PREVIEW_MAX_COLS:50}
+    max-bytes: ${AIHUB_PREVIEW_MAX_BYTES:1048576}
+  # 应用内告警定时检查间隔（毫秒）
+  alert:
+    check-interval: ${AIHUB_ALERT_CHECK_INTERVAL:300000}
+  # Agent/MCP 主体级限流（令牌桶）
+  agent:
+    rate-limit:
+      requests-per-minute: ${AIHUB_AGENT_RATE_LIMIT_RPM:60}
+      burst: ${AIHUB_AGENT_RATE_LIMIT_BURST:10}
+  # 限流存储后端：memory（默认，单进程）| redis（多实例；Compose 未部署 Redis 时保持 memory）
+  rate-limit:
+    backend: ${AIHUB_RATE_LIMIT_BACKEND:memory}
+    redis-host: ${AIHUB_RATE_LIMIT_REDIS_HOST:localhost}
+    redis-port: ${AIHUB_RATE_LIMIT_REDIS_PORT:6379}
+  # 邮件外发渠道（默认关闭；启用需配置 SMTP 凭据，见 docs/runbooks/notification-channels.md）
+  notification:
+    email:
+      enabled: ${AIHUB_NOTIFICATION_EMAIL_ENABLED:false}
+      from: ${AIHUB_NOTIFICATION_EMAIL_FROM:noreply@aihub.local}
+      host: ${AIHUB_NOTIFICATION_EMAIL_HOST:localhost}
+      port: ${AIHUB_NOTIFICATION_EMAIL_PORT:587}
+      username: ${AIHUB_NOTIFICATION_EMAIL_USERNAME:}
+      password: ${AIHUB_NOTIFICATION_EMAIL_PASSWORD:}
+      start-tls: ${AIHUB_NOTIFICATION_EMAIL_STARTTLS:true}
 
 ---
 #
@@ -161,6 +188,7 @@ spring:
 ---
 #
 # test Profile：供 Testcontainers 集成测试使用，数据源由容器动态注入。
+# AC-P0B-ENG-006: 无空 Principal、无 allow-all、无默认全 Scope。
 #
 spring:
   config:
@@ -169,9 +197,24 @@ spring:
   flyway:
     enabled: true
     clean-disabled: true
-# 集成测试直接驱动仓储与应用服务，不让后台 Worker 并发领取任务，
-# 避免用例之间互相抢走对方刚写入的行。
+
 aihub:
-  job:
-    worker:
+  gitea:
+    enabled: false
+  security:
+    cookie:
+      secure: false
+      same-site: Lax
+  # 测试环境引导管理员：确保 IT 测试有可用的 admin 凭据
+  bootstrap:
+    admin:
+      username: admin
+      display-name: Test Admin
+      password: test-admin-password-01!
+  # 禁用邮件外发
+  notification:
+    email:
       enabled: false
+  # 内存限流后端（测试无 Redis）
+  rate-limit:
+    backend: memory

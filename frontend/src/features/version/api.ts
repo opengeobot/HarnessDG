@@ -41,6 +41,65 @@ export function createDraftVersion(
   });
 }
 
+/** 推进版本状态 */
+export function transitionVersion(
+  assetId: string,
+  versionId: string,
+  targetStatus: string,
+): Promise<VersionView> {
+  return apiClient.post<VersionView>(`/assets/${assetId}/versions/${versionId}/transition`, {
+    targetStatus,
+  });
+}
+
+/** 查询校验报告 */
+export function getValidationReport(
+  assetId: string,
+  versionId: string,
+): Promise<Record<string, unknown>> {
+  return apiClient.get<Record<string, unknown>>(
+    `/assets/${assetId}/versions/${versionId}/validation-report`,
+  );
+}
+
+/** 查询发布请求列表 */
+export function listPublishRequests(
+  assetId: string,
+): Promise<Record<string, unknown>[]> {
+  return apiClient.get<Record<string, unknown>[]>(`/assets/${assetId}/versions/publish-requests`);
+}
+
+/** 查询审批决策历史 */
+export function listDecisions(
+  assetId: string,
+  requestId: string,
+): Promise<Record<string, unknown>[]> {
+  return apiClient.get<Record<string, unknown>[]>(
+    `/assets/${assetId}/versions/publish-requests/${requestId}/decisions`,
+  );
+}
+
+/** 发布版本 */
+export function publishVersion(
+  versionId: string,
+  gitTag: string,
+): Promise<VersionView> {
+  return apiClient.post<VersionView>(`/versions/${versionId}/publish`, {
+    gitTag,
+  });
+}
+
+/** 提交发布请求（详情/版本上下文集成，无需手填 assetId） */
+export function submitPublishRequest(
+  versionId: string,
+  gitTag?: string,
+): Promise<Record<string, unknown>> {
+  return apiClient.post<Record<string, unknown>>(
+    `/versions/${versionId}/publish-requests`,
+    { gitTag },
+  );
+}
+
 /** 列出版本工件 */
 export function listArtifacts(assetId: string, versionId: string): Promise<ArtifactView[]> {
   return apiClient.get<ArtifactView[]>(`/assets/${assetId}/versions/${versionId}/artifacts`);

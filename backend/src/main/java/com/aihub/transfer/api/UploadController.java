@@ -48,6 +48,13 @@ public class UploadController {
         return uploadApplicationService.getSession(sessionId);
     }
 
+    /** 按资产查询上传会话详情（含分片状态，用于恢复）。 */
+    @GetMapping("/assets/{assetId}/upload-sessions/{sessionId}")
+    public UploadSessionView getSessionForAsset(@PathVariable String assetId,
+                                                 @PathVariable String sessionId) {
+        return uploadApplicationService.getSessionForAsset(assetId, sessionId);
+    }
+
     /** 签发 Part 上传预签名 URL。 */
     @GetMapping("/upload-sessions/{sessionId}/parts/{partNumber}/presign")
     public Map<String, String> presignPart(@PathVariable String sessionId,
@@ -63,7 +70,13 @@ public class UploadController {
         List<StoragePort.PartInfo> parts = body.parts().stream()
                 .map(p -> new StoragePort.PartInfo(p.partNumber(), p.etag()))
                 .toList();
-        return uploadApplicationService.completeSession(sessionId, parts, null);
+        List<UploadApplicationService.FileMetadata> files = body.files() == null
+                ? List.of()
+                : body.files().stream()
+                        .map(f -> new UploadApplicationService.FileMetadata(
+                                f.path(), f.sha256(), f.size(), f.mediaType(), f.sampleContent()))
+                        .toList();
+        return uploadApplicationService.completeSession(sessionId, parts, files, null);
     }
 
     /** 取消上传会话。 */
@@ -85,8 +98,12 @@ public class UploadController {
     public record CreateSessionRequest(long totalBytes, int fileCount, Integer ttlSeconds) {}
 
     /** 完成上传会话请求体。 */
-    public record CompleteSessionRequest(List<PartEntry> parts) {}
+    public record CompleteSessionRequest(List<PartEntry> parts, List<FileEntry> files) {}
 
     /** Part 条目。 */
     public record PartEntry(int partNumber, String etag) {}
+
+    /** 文件元数据条目。 */
+    public record FileEntry(String path, String sha256, long size,
+                            String mediaType, String sampleContent) {}
 }

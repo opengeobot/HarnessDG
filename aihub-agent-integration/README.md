@@ -8,6 +8,7 @@
 aihub-agent-integration/
 ├── README.md               # 本文件
 ├── SKILL.md                # Agent Skill 声明（OpenClaw/QwenPaw 兼容）
+├── compatibility.yaml      # OpenClaw/QwenPaw 客户端兼容与 Tool 清单
 └── examples/
     └── search-and-download.md  # 典型工作流示例
 ```

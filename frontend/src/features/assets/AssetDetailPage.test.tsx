@@ -8,6 +8,7 @@ import { renderWithProviders } from '@/test/test-utils';
 
 const mockAsset = {
   assetId: 'ast_001',
+  coordinate: 'aih://org/team/model/test-model',
   type: 'MODEL' as const,
   namespace: 'org/team',
   name: 'test-model',
@@ -118,7 +119,14 @@ describe('AssetDetailPage', () => {
   it('shows coordinate', async () => {
     renderWithProviders(<AssetDetailPage />, { route: '/assets/ast_001' });
     await waitFor(() => {
-      expect(screen.getByText('org/team/MODEL/test-model')).toBeInTheDocument();
+      expect(screen.getAllByText(/aih:\/\/org\/team\/model\/test-model/).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('shows quick use panel with aih CLI snippet', async () => {
+    renderWithProviders(<AssetDetailPage />, { route: '/assets/ast_001' });
+    await waitFor(() => {
+      expect(screen.getByText(/aih model pull aih:\/\/org\/team\/model\/test-model/)).toBeInTheDocument();
     });
   });
 

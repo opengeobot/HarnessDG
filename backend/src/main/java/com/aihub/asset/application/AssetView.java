@@ -22,6 +22,7 @@ import java.util.List;
  * <p>对外只暴露业务字段，绝不返回持久化实体。模型/数据集画像按类型择一返回，另一为 {@code null}。
  *
  * @param assetId        业务资产 ID
+ * @param coordinate     稳定坐标 {@code aih://{namespace}/{type}/{name}}
  * @param type           资产类型
  * @param namespace      命名空间
  * @param organizationId 组织 ID（治理作用域）
@@ -32,19 +33,25 @@ import java.util.List;
  * @param visibility     可见性
  * @param status         状态
  * @param owners         Owner 列表
+ * @param ownerTeamId    主 Owner 团队 ID
+ * @param aliases        资产别名列表
  * @param tags           标签列表（legacy 自由标签，只读回显）
  * @param tagIds         受控标签 ID 列表（来自 asset_tag 关联）
  * @param license        许可证
- * @param ownerTeamId    主 Owner Team ID（DEC-011）
  * @param model          模型画像（仅模型类非空）
  * @param dataset        数据集画像（仅数据集类非空）
  * @param repository          仓库引用
  * @param provisioningStatus  建仓异步状态
  * @param card                Card 投影（untrustedContent，前端需 DOMPurify 渲染）
+ * @param rowVersion          乐观锁版本号
+ * @param deprecationReason   弃用原因编码
+ * @param deprecationNote     弃用说明
+ * @param replacementAssetId  替代资产 ID
  * @param createdAt           创建时间
  * @param updatedAt           更新时间
  */
 public record AssetView(String assetId,
+                        String coordinate,
                         AssetType type,
                         String namespace,
                         String organizationId,
@@ -55,20 +62,29 @@ public record AssetView(String assetId,
                         Visibility visibility,
                         AssetStatus status,
                         List<String> owners,
+                        String ownerTeamId,
+                        List<String> aliases,
                         List<String> tags,
                         List<String> tagIds,
                         String license,
-                        String ownerTeamId,
                         ModelView model,
                         DatasetView dataset,
                         RepositoryView repository,
                         ProvisioningStatus provisioningStatus,
                         CardView card,
+                        long rowVersion,
+                        String deprecationReason,
+                        String deprecationNote,
+                        String replacementAssetId,
                         Instant createdAt,
                         Instant updatedAt) {
 
     /** 模型画像视图。 */
-    public record ModelView(String framework, String task, String architecture) {
+    public record ModelView(String framework, String task, String architecture,
+                            String parameterScale, String precision,
+                            String weightFormat, String runtime,
+                            List<String> knownRisks, List<String> usageRestrictions,
+                            String sensitivityCode) {
     }
 
     /** 数据集画像视图。 */
@@ -97,6 +113,7 @@ public record AssetView(String assetId,
     public static AssetView from(Asset asset) {
         return new AssetView(
                 asset.assetId(),
+                asset.coordinate(),
                 asset.type(),
                 asset.namespace(),
                 asset.organizationId(),
@@ -107,22 +124,31 @@ public record AssetView(String assetId,
                 asset.visibility(),
                 asset.status(),
                 asset.owners(),
+                asset.ownerTeamId(),
+                asset.aliases(),
                 asset.tags(),
                 asset.tagIds(),
                 asset.license(),
-                asset.ownerTeamId(),
                 modelView(asset.modelProfile()),
                 datasetView(asset.datasetProfile()),
                 repositoryView(asset.repository()),
                 asset.provisioningStatus(),
                 cardView(asset),
+                asset.rowVersion(),
+                asset.deprecationReason(),
+                asset.deprecationNote(),
+                asset.replacementAssetId(),
                 asset.createdAt(),
                 asset.updatedAt());
     }
 
     private static ModelView modelView(ModelProfile profile) {
         return profile == null ? null
-                : new ModelView(profile.framework(), profile.task(), profile.architecture());
+                : new ModelView(profile.framework(), profile.task(), profile.architecture(),
+                        profile.parameterScale(), profile.precision(),
+                        profile.weightFormat(), profile.runtime(),
+                        profile.knownRisks(), profile.usageRestrictions(),
+                        profile.sensitivityCode());
     }
 
     private static DatasetView datasetView(DatasetProfile profile) {

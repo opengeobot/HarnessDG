@@ -20,4 +20,6 @@ export {
   NotificationsPage,
   DependenciesPage,
   TeamsPage,
+  IdempotencyPage,
+  AlertsPage,
 } from './pages';

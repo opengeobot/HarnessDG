@@ -1,6 +1,6 @@
 # 前端信息架构与全局交互
 
-> 状态：`PROPOSED`
+> 状态：`READY`
 > 技术基线：React + TypeScript + Ant Design + TanStack Query。
 
 ## 1. 导航原则

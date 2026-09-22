@@ -14,6 +14,7 @@ import com.aihub.authorization.domain.AccessScope;
 import com.aihub.shared.api.CursorPage;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -50,6 +51,7 @@ public class AssetSearchDao {
                    a.display_name, a.description, a.visibility, a.status,
                    a.owners::text AS owners_json, a.tags::text AS tags_json, a.license,
                    am.framework, am.task, ad.format, ad.modality,
+                   ad.task_codes::text AS task_codes_json,
                    a.provisioning_status, a.created_at, a.updated_at
             FROM asset a
             LEFT JOIN asset_model am ON am.asset_id = a.asset_id
@@ -62,10 +64,20 @@ public class AssetSearchDao {
             SELECT asset_id, tag_id FROM asset_tag WHERE asset_id IN (:assetIds)
             """;
 
-    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private static final String FACET_FROM = """
+            FROM asset a
+            LEFT JOIN asset_model am ON am.asset_id = a.asset_id
+            LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
+            WHERE a.deleted = 0 AND a.provisioning_status = 'COMPLETED'
+            """;
 
-    public AssetSearchDao(NamedParameterJdbcTemplate jdbcTemplate) {
+    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final Cache<String, Map<String, Map<String, Long>>> facetCache;
+
+    public AssetSearchDao(NamedParameterJdbcTemplate jdbcTemplate,
+                          Cache<String, Map<String, Map<String, Long>>> facetCache) {
         this.jdbcTemplate = jdbcTemplate;
+        this.facetCache = facetCache;
     }
 
     /**
@@ -78,73 +90,90 @@ public class AssetSearchDao {
         StringBuilder sql = new StringBuilder(BASE_SELECT);
         MapSqlParameterSource params = new MapSqlParameterSource();
 
-        appendFieldFilters(sql, params, criteria);
+        appendCommonFilters(sql, params, criteria);
         appendCursor(sql, params, criteria.cursor());
 
         sql.append(" ORDER BY CASE a.status WHEN 'DEPRECATED' THEN 1 ELSE 0 END, a.created_at DESC, a.id DESC LIMIT :limit");
         params.addValue("limit", criteria.limit() + 1);
 
         List<SearchRow> rows = jdbcTemplate.query(sql.toString(), params, this::mapRow);
-        return toPage(rows, criteria.limit());
+        return toPage(rows, criteria.limit(), criteria.keyword());
     }
 
     /**
-     * 按维度统计资产数量（Facet），应用与 search 相同的访问作用域过滤。
-     *
-     * <p>过滤条件下推与 {@link #search(AssetSearchCriteria)} 共用 {@link #appendFieldFilters}，
-     * 避免两处各自拼装导致计数与检索结果漂移。
+     * 按维度统计资产数量（Facet），使用 SQL GROUP BY + UNION ALL 消除内存计数。
      *
      * @param criteria 检索条件（仅使用过滤和权限部分，忽略分页）
      * @return 各维度计数映射
      */
     public Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria) {
-        StringBuilder sql = new StringBuilder("""
-                SELECT a.type, a.license, am.framework, am.task, ad.format, ad.modality
-                FROM asset a
-                LEFT JOIN asset_model am ON am.asset_id = a.asset_id
-                LEFT JOIN asset_dataset ad ON ad.asset_id = a.asset_id
-                WHERE a.deleted = 0
-                AND a.provisioning_status = 'COMPLETED'
-                """);
-        MapSqlParameterSource params = new MapSqlParameterSource();
+        String cacheKey = buildFacetCacheKey(criteria);
+        Map<String, Map<String, Long>> cached = facetCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
 
-        appendFieldFilters(sql, params, criteria);
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        StringBuilder where = new StringBuilder();
+        appendCommonFilters(where, params, criteria);
+        String w = where.toString();
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT 'types' AS dim, a.type AS val, COUNT(*) AS cnt").append(FACET_FROM).append(w).append(" GROUP BY a.type");
+        sql.append(" UNION ALL SELECT 'licenses', a.license, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY a.license");
+        sql.append(" UNION ALL SELECT 'frameworks', am.framework, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY am.framework");
+        sql.append(" UNION ALL SELECT 'tasks', am.task, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY am.task");
+        sql.append(" UNION ALL SELECT 'formats', ad.format, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY ad.format");
+        sql.append(" UNION ALL SELECT 'modalities', ad.modality, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY ad.modality");
+        sql.append(" UNION ALL SELECT 'sensitivities', COALESCE(am.sensitivity_code, ad.sensitivity_code), COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY COALESCE(am.sensitivity_code, ad.sensitivity_code)");
+        sql.append(" UNION ALL SELECT 'sizeBuckets', ad.size_bucket_code, COUNT(*)").append(FACET_FROM).append(w).append(" GROUP BY ad.size_bucket_code");
+        sql.append(" UNION ALL SELECT 'taskCodes', t.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.task_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.task_codes) t(val) GROUP BY t.val");
+        sql.append(" UNION ALL SELECT 'modalityCodes', m.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.modality_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.modality_codes) m(val) GROUP BY m.val");
+        sql.append(" UNION ALL SELECT 'formatCodes', f.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.format_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.format_codes) f(val) GROUP BY f.val");
+        sql.append(" UNION ALL SELECT 'languageCodes', l.val, COUNT(*)").append(FACET_FROM).append(w)
+                .append(" AND ad.language_codes IS NOT NULL CROSS JOIN jsonb_array_elements_text(ad.language_codes) l(val) GROUP BY l.val");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params);
-        Map<String, Map<String, Long>> result = new LinkedHashMap<>();
-        Map<String, Long> types = new LinkedHashMap<>();
-        Map<String, Long> frameworks = new LinkedHashMap<>();
-        Map<String, Long> tasks = new LinkedHashMap<>();
-        Map<String, Long> formats = new LinkedHashMap<>();
-        Map<String, Long> modalities = new LinkedHashMap<>();
-        Map<String, Long> licenses = new LinkedHashMap<>();
 
+        Map<String, Map<String, Long>> result = new LinkedHashMap<>();
+        result.put("types", new LinkedHashMap<>());
+        result.put("licenses", new LinkedHashMap<>());
+        result.put("frameworks", new LinkedHashMap<>());
+        result.put("tasks", new LinkedHashMap<>());
+        result.put("formats", new LinkedHashMap<>());
+        result.put("modalities", new LinkedHashMap<>());
+        result.put("sensitivities", new LinkedHashMap<>());
+        result.put("sizeBuckets", new LinkedHashMap<>());
+        result.put("taskCodes", new LinkedHashMap<>());
+        result.put("modalityCodes", new LinkedHashMap<>());
+        result.put("formatCodes", new LinkedHashMap<>());
+        result.put("languageCodes", new LinkedHashMap<>());
+
+        long total = 0;
         for (Map<String, Object> row : rows) {
-            countIfNotNull(types, row.get("type"));
-            countIfNotNull(frameworks, row.get("framework"));
-            countIfNotNull(tasks, row.get("task"));
-            countIfNotNull(formats, row.get("format"));
-            countIfNotNull(modalities, row.get("modality"));
-            countIfNotNull(licenses, row.get("license"));
+            String dim = (String) row.get("dim");
+            Object val = row.get("val");
+            long cnt = ((Number) row.get("cnt")).longValue();
+            if (val != null && result.containsKey(dim)) {
+                result.get(dim).put(String.valueOf(val), cnt);
+            }
+            if ("types".equals(dim)) {
+                total += cnt;
+            }
         }
-        result.put("types", types);
-        result.put("frameworks", frameworks);
-        result.put("tasks", tasks);
-        result.put("formats", formats);
-        result.put("modalities", modalities);
-        result.put("licenses", licenses);
-        result.put("_total", Map.of("count", (long) rows.size()));
+        result.put("_total", Map.of("count", total));
+        facetCache.put(cacheKey, result);
         return result;
     }
 
     /**
-     * 拼装 search 与 facet 共用的过滤条件（状态、可见性、字段与分类维度、访问作用域）。
-     *
-     * <p>两处调用方必须共享本方法，使 Facet 计数与检索结果在同一过滤条件下保持一致；
-     * 权限可见性经 {@link #appendAccessScopeFilter} 在 SQL {@code WHERE} 阶段下推。
+     * 追加 search 和 facet 共用的 WHERE 过滤条件。
      */
-    private void appendFieldFilters(StringBuilder sql, MapSqlParameterSource params,
-                                    AssetSearchCriteria criteria) {
+    private void appendCommonFilters(StringBuilder sql, MapSqlParameterSource params,
+                                     AssetSearchCriteria criteria) {
         sql.append(" AND a.status IN (:statuses)");
         params.addValue("statuses", criteria.statusNames());
         sql.append(" AND a.visibility IN (:visibilities)");
@@ -153,6 +182,8 @@ public class AssetSearchDao {
         appendEquals(sql, params, "a.type", "type", typeName(criteria.type()));
         appendEquals(sql, params, "a.namespace", "namespace", criteria.namespace());
         appendEquals(sql, params, "a.organization_id", "organizationId", criteria.organizationId());
+        appendEquals(sql, params, "a.project_id", "projectId", criteria.projectId());
+        appendEquals(sql, params, "a.owner_team_id", "teamId", criteria.teamId());
         appendEquals(sql, params, "am.framework", "framework", criteria.framework());
         appendEquals(sql, params, "am.task", "task", criteria.task());
         appendEquals(sql, params, "ad.format", "format", criteria.format());
@@ -169,14 +200,6 @@ public class AssetSearchDao {
         appendAccessScopeFilter(sql, params, criteria.accessScope());
     }
 
-    private void countIfNotNull(Map<String, Long> map, Object value) {
-        if (value == null) {
-            return;
-        }
-        String key = String.valueOf(value);
-        map.merge(key, 1L, Long::sum);
-    }
-
     private void appendEquals(StringBuilder sql, MapSqlParameterSource params,
                               String column, String key, String value) {
         if (!StringUtils.hasText(value)) {
@@ -190,9 +213,19 @@ public class AssetSearchDao {
         if (!StringUtils.hasText(keyword)) {
             return;
         }
-        sql.append(" AND (a.name ILIKE :kw OR a.display_name ILIKE :kw OR a.description ILIKE :kw"
-                + " OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(a.tags) t WHERE t ILIKE :kw))");
-        params.addValue("kw", "%" + keyword.trim() + "%");
+        String trimmed = keyword.trim();
+        // name/display_name: ILIKE 利用 pg_trgm GIN 索引
+        // description: tsvector @@ plainto_tsquery 利用 GIN 全文索引
+        // tags: 通过 asset_tag 关联表 EXISTS 子查询替代 jsonb_array_elements_text
+        sql.append(" AND (a.name ILIKE :kw OR a.display_name ILIKE :kw"
+                + " OR to_tsvector('simple', COALESCE(a.description, '')) @@ plainto_tsquery('simple', :kwRaw)"
+                + " OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(ad.task_codes, '[]'::jsonb)) tc"
+                + " WHERE tc ILIKE :kw)"
+                + " OR EXISTS (SELECT 1 FROM asset_tag at2"
+                + " JOIN system_tag st ON st.tag_id = at2.tag_id WHERE at2.asset_id = a.asset_id"
+                + " AND (st.name ILIKE :kw OR st.tag_code ILIKE :kw)))");
+        params.addValue("kw", "%" + trimmed + "%");
+        params.addValue("kwRaw", trimmed);
     }
 
     private void appendTagIdFilter(StringBuilder sql, MapSqlParameterSource params, String tagId) {
@@ -279,12 +312,12 @@ public class AssetSearchDao {
         params.addValue("cursorId", decoded.id());
     }
 
-    private CursorPage<AssetSummary> toPage(List<SearchRow> rows, int limit) {
+    private CursorPage<AssetSummary> toPage(List<SearchRow> rows, int limit, String keyword) {
         boolean hasMore = rows.size() > limit;
         List<SearchRow> pageRows = hasMore ? rows.subList(0, limit) : rows;
         Map<String, List<String>> tagIdsByAsset = batchLoadTagIds(pageRows);
         List<AssetSummary> summaries = pageRows.stream()
-                .map(row -> row.toSummary(tagIdsByAsset.getOrDefault(row.assetId, List.of())))
+                .map(row -> row.toSummary(tagIdsByAsset.getOrDefault(row.assetId, List.of()), keyword))
                 .toList();
         if (!hasMore || pageRows.isEmpty()) {
             return CursorPage.last(summaries);
@@ -327,6 +360,7 @@ public class AssetSearchDao {
                 AssetStatus.valueOf(rs.getString("status")),
                 parseJsonList(rs.getString("owners_json")),
                 parseJsonList(rs.getString("tags_json")),
+                parseJsonList(rs.getString("task_codes_json")),
                 rs.getString("license"), framework, task, format, modality, updatedAt, createdAt, id);
     }
 
@@ -343,6 +377,31 @@ public class AssetSearchDao {
 
     private String typeName(AssetType type) {
         return type == null ? null : type.name();
+    }
+
+    private String buildFacetCacheKey(AssetSearchCriteria c) {
+        return new StringBuilder(256)
+                .append(typeName(c.type())).append('|')
+                .append(c.namespace()).append('|')
+                .append(c.organizationId()).append('|')
+                .append(c.projectId()).append('|')
+                .append(c.teamId()).append('|')
+                .append(c.keyword()).append('|')
+                .append(c.framework()).append('|')
+                .append(c.task()).append('|')
+                .append(c.format()).append('|')
+                .append(c.modality()).append('|')
+                .append(c.tagId()).append('|')
+                .append(c.tagIds()).append('|')
+                .append(c.owner()).append('|')
+                .append(c.taskCodes()).append('|')
+                .append(c.modalityCodes()).append('|')
+                .append(c.formatCodes()).append('|')
+                .append(c.languageCodes()).append('|')
+                .append(c.sensitivity()).append('|')
+                .append(c.statusNames()).append('|')
+                .append(c.visibilityNames())
+                .toString();
     }
 
     private String encodeCursor(Instant createdAt, long id) {
@@ -372,14 +431,53 @@ public class AssetSearchDao {
     private record SearchRow(String assetId, AssetType type, String organizationId, String projectId,
                             String namespace, String name, String displayName, String description,
                             Visibility visibility, AssetStatus status,
-                            List<String> owners, List<String> tags, String license,
+                            List<String> owners, List<String> tags, List<String> taskCodes, String license,
                             String framework, String task, String format, String modality,
                             Instant updatedAt, Instant createdAt, long id) {
 
-        AssetSummary toSummary(List<String> tagIds) {
+        AssetSummary toSummary(List<String> tagIds, String keyword) {
             return new AssetSummary(assetId, type, namespace, organizationId, projectId, name,
                     displayName, description, visibility, status, owners, tags, tagIds, license,
-                    framework, task, format, modality, updatedAt);
+                    framework, task, format, modality, updatedAt,
+                    computeMatchedFields(keyword));
+        }
+
+        private List<String> computeMatchedFields(String keyword) {
+            if (!StringUtils.hasText(keyword)) {
+                return List.of();
+            }
+            String kw = keyword.trim().toLowerCase();
+            List<String> matched = new ArrayList<>();
+            if (containsIgnoreCase(name, kw)) {
+                matched.add("name");
+            }
+            if (containsIgnoreCase(displayName, kw)) {
+                matched.add("displayName");
+            }
+            if (descriptionMatches(description, keyword.trim())) {
+                matched.add("description");
+            }
+            if (taskCodes != null && taskCodes.stream().anyMatch(code -> containsIgnoreCase(code, kw))) {
+                matched.add("taskCodes");
+            }
+            return List.copyOf(matched);
+        }
+
+        private static boolean containsIgnoreCase(String value, String keywordLower) {
+            return value != null && value.toLowerCase().contains(keywordLower);
+        }
+
+        private static boolean descriptionMatches(String description, String keyword) {
+            if (description == null || description.isBlank()) {
+                return false;
+            }
+            String lower = description.toLowerCase();
+            for (String token : keyword.toLowerCase().split("\\s+")) {
+                if (!token.isBlank() && lower.contains(token)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

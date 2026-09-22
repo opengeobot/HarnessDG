@@ -7,11 +7,14 @@ import { apiClient } from '@/shared/api';
 import type { CursorPage } from '@/shared/types';
 import type {
   AssetFacetView,
+  AssetLineageView,
   AssetSearchParams,
   AssetSummary,
   AssetView,
   CommentView,
   CreateAssetRequest,
+  CreateAssetAccessRequest,
+  ResourceAclView,
   ThreadView,
   UpdateAssetRequest,
 } from './types';
@@ -41,6 +44,22 @@ export function updateAsset(
   return apiClient.patch<AssetView>(`/assets/${assetId}`, payload);
 }
 
+/** 查询资产血缘 */
+export function getAssetLineage(
+  assetId: string,
+  params?: { depth?: number; direction?: 'up' | 'down' },
+): Promise<AssetLineageView> {
+  return apiClient.get(`/assets/${assetId}/lineage`, { params });
+}
+
+/** 创建资产血缘关系边 */
+export function createAssetRelation(
+  assetId: string,
+  payload: { childAssetId: string; relationType: string },
+): Promise<AssetLineageView['relations'][number]> {
+  return apiClient.post(`/assets/${assetId}/relations`, payload);
+}
+
 /** 逻辑删除资产 */
 export function deleteAsset(assetId: string): Promise<void> {
   return apiClient.delete<void>(`/assets/${assetId}`);
@@ -56,9 +75,34 @@ export function getAssetFacets(
   });
 }
 
-/** 弃用资产 */
-export function deprecateAsset(assetId: string): Promise<AssetView> {
-  return apiClient.post<AssetView>(`/assets/${assetId}/deprecate`);
+/** 列出资产 ACL */
+export function listAssetAccess(assetId: string): Promise<ResourceAclView[]> {
+  return apiClient.get<ResourceAclView[]>(`/assets/${assetId}/access`);
+}
+
+/** 创建资产 ACL */
+export function createAssetAccess(
+  assetId: string,
+  payload: CreateAssetAccessRequest,
+): Promise<ResourceAclView> {
+  return apiClient.post<ResourceAclView>(`/assets/${assetId}/access`, payload);
+}
+
+/** 删除资产 ACL */
+export function deleteAssetAccess(assetId: string, aclId: string): Promise<void> {
+  return apiClient.delete<void>(`/assets/${assetId}/access/${aclId}`);
+}
+
+/** 弃用资产：支持弃用原因与替代资产 */
+export function deprecateAsset(
+  assetId: string,
+  body?: {
+    deprecationReason?: string;
+    deprecationNote?: string;
+    replacementAssetId?: string;
+  },
+): Promise<AssetView> {
+  return apiClient.post<AssetView>(`/assets/${assetId}/deprecate`, body ?? {});
 }
 
 /** 归档资产 */

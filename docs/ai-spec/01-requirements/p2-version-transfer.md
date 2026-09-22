@@ -1,6 +1,6 @@
 # P2 版本与数据面需求
 
-> 状态：`OPEN`
+> 状态：`READY`
 > 阻塞：P1 VERIFIED；Q-205；Manifest 算法、上传限额和短期 DVC 凭据策略需确认。
 > 非目标：审批发布、受保护 Tag、MCP。
 > 数据集专项：`REQ-DST-CLI-001` 和 `REQ-PRE-001` 的最小安全预览属于 P2 MUST；
@@ -9,7 +9,7 @@
 ## REQ-VER-001 资产版本草稿
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P2
 permission: asset:update
@@ -39,7 +39,7 @@ minimumEvidenceLevel: E4
 ## REQ-MNF-001 Manifest Schema、规范化与摘要
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P2
 minimumEvidenceLevel: E3
@@ -88,7 +88,7 @@ artifacts:
 ## REQ-DVC-001 客户端原生 Git+DVC 往返
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P2
 actor: 研发用户/API Client
@@ -119,7 +119,7 @@ minimumEvidenceLevel: E4
 ## REQ-UPL-001 Web Upload Session
 
 ```yaml
-status: OPEN
+status: READY
 priority: MUST
 phase: P2
 permission: asset:upload
@@ -158,7 +158,7 @@ assetId、versionId/目标草稿、files(path/size/mediaType/optional sha256)、
 ## REQ-UPL-002 Multipart Part 签名、恢复与 complete
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P2
 permission: session owner + asset:upload
@@ -194,7 +194,7 @@ minimumEvidenceLevel: E4
 ## REQ-UPL-003 上传校验与 DVC/Git 物化 Worker
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P2
 workerHandler: UPLOAD_MATERIALIZE
@@ -225,7 +225,7 @@ minimumEvidenceLevel: E4
 ## REQ-DL-001 授权下载票据
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P2/P3
 permission: asset:download
@@ -262,7 +262,7 @@ minimumEvidenceLevel: E4
 ## REQ-UPL-004 上传与版本前端
 
 ```yaml
-status: PROPOSED
+status: READY
 priority: MUST
 phase: P2
 minimumEvidenceLevel: E4

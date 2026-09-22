@@ -6,6 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  Alert,
   Button,
   Card,
   Descriptions,
@@ -20,7 +21,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
-import { getVersion, listArtifacts } from './api';
+import { getVersion, listArtifacts, getValidationReport } from './api';
 import type { ArtifactView, VersionStatus } from './types';
 import { PreviewPanel } from '@/features/assets/PreviewPanel';
 
@@ -60,11 +61,25 @@ export function VersionDetailPage() {
     enabled: !!versionId,
   });
 
+  const validationQuery = useQuery({
+    queryKey: ['validation-report', versionId],
+    queryFn: () => getValidationReport(assetId!, versionId!),
+    enabled: !!versionId,
+  });
+
   if (versionQuery.isLoading) return <Spin style={{ display: 'block', margin: '80px auto' }} />;
   if (versionQuery.isError || !versionQuery.data) return <Empty description={t('version.noVersions')} />;
 
   const version = versionQuery.data;
   const artifacts = artifactsQuery.data ?? [];
+  const validationReport = validationQuery.data;
+  const findings = Array.isArray(validationReport?.findings)
+    ? (validationReport.findings as Array<Record<string, string>>)
+    : [];
+  const digestDrift =
+    validationReport &&
+    version.manifestDigest &&
+    validationReport.status === 'PASSED';
 
   const columns: ColumnsType<ArtifactView> = [
     {
@@ -149,6 +164,41 @@ export function VersionDetailPage() {
             {new Date(version.createdAt).toLocaleString()}
           </Descriptions.Item>
         </Descriptions>
+      </Card>
+
+      <Card title={t('version.validationReport')} size="small" loading={validationQuery.isLoading}>
+        {validationReport ? (
+          <Flex vertical gap={8}>
+            <Descriptions column={2} bordered size="small">
+              <Descriptions.Item label={t('common.status')}>
+                <Tag color={validationReport.status === 'PASSED' ? 'success' : 'error'}>
+                  {String(validationReport.status)}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label={t('version.policyVersion')}>
+                {String(validationReport.policyVersion ?? validationReport.policy_version ?? '-')}
+              </Descriptions.Item>
+            </Descriptions>
+            {digestDrift && (
+              <Alert type="info" showIcon message={t('version.frozenDigestHint')} />
+            )}
+            <Table
+              rowKey={(_, idx) => String(idx)}
+              size="small"
+              pagination={false}
+              dataSource={findings}
+              columns={[
+                { title: 'Rule', dataIndex: 'ruleId', key: 'ruleId' },
+                { title: t('common.status'), dataIndex: 'status', key: 'status' },
+                { title: 'Severity', dataIndex: 'severity', key: 'severity' },
+                { title: t('version.path'), dataIndex: 'resourcePath', key: 'resourcePath', render: (v) => v ?? '-' },
+                { title: 'Message', dataIndex: 'message', key: 'message' },
+              ]}
+            />
+          </Flex>
+        ) : (
+          <Empty description={t('version.noValidationReport')} />
+        )}
       </Card>
 
       <Card title={`${t('version.artifactList')} (${artifacts.length})`} size="small">

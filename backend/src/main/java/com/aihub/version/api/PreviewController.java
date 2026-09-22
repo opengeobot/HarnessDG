@@ -1,9 +1,19 @@
+/*
+ * 功能: 资产预览 REST 控制器，查询与触发预览生成。
+ * 时间: 2026-07-10
+ * 作者: AxeXie
+ */
 package com.aihub.version.api;
 
 import com.aihub.authorization.application.AuthorizationService;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.aihub.shared.identity.PrincipalContext;
+import com.aihub.shared.identity.PrincipalContextHolder;
+import com.aihub.version.application.PreviewApplicationService;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,13 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/assets/{assetId}/previews")
 public class PreviewController {
 
-    private final JdbcTemplate jdbcTemplate;
     private final AuthorizationService authorizationService;
+    private final PreviewApplicationService previewApplicationService;
 
-    public PreviewController(JdbcTemplate jdbcTemplate,
-                             AuthorizationService authorizationService) {
-        this.jdbcTemplate = jdbcTemplate;
+    public PreviewController(AuthorizationService authorizationService,
+                             PreviewApplicationService previewApplicationService) {
         this.authorizationService = authorizationService;
+        this.previewApplicationService = previewApplicationService;
     }
 
     /**
@@ -34,26 +44,29 @@ public class PreviewController {
      * @return 预览视图
      */
     @GetMapping
-    public PreviewView getPreview(@PathVariable String assetId,
-                                  @RequestParam(required = false) String versionId) {
-        authorizationService.requirePermission("asset:read");
-
-        var row = jdbcTemplate.queryForMap(
-                "SELECT preview_id, content_type, content, generated_at FROM asset_preview " +
-                "WHERE asset_id = ? AND (? IS NULL OR version_id = ?) " +
-                "ORDER BY generated_at DESC LIMIT 1",
-                assetId, versionId, versionId);
-
-        return new PreviewView(
-                String.valueOf(row.get("preview_id")),
-                String.valueOf(row.get("content_type")),
-                String.valueOf(row.get("content")),
-                row.get("generated_at") != null ? row.get("generated_at").toString() : null);
+    public PreviewApplicationService.PreviewView getPreview(@PathVariable String assetId,
+                                                            @RequestParam(required = false) String versionId) {
+        return previewApplicationService.getPreview(assetId, versionId);
     }
 
     /**
-     * 预览视图。
+     * 触发预览生成 Job。
      */
-    public record PreviewView(String previewId, String contentType,
-                              String content, String generatedAt) {}
+    @PostMapping("/generate")
+    public Map<String, String> triggerPreviewGeneration(@PathVariable String assetId,
+                                                        @RequestBody GeneratePreviewRequest body) {
+        authorizationService.requirePermission("asset:manage");
+        String principalId = PrincipalContextHolder.current()
+                .map(PrincipalContext::principalId).orElse(null);
+        String jobId = previewApplicationService.enqueuePreview(
+                assetId,
+                body.versionId(),
+                body.content(),
+                body.contentType(),
+                principalId);
+        return Map.of("jobId", jobId);
+    }
+
+    /** 触发预览生成请求。 */
+    public record GeneratePreviewRequest(String versionId, String content, String contentType) {}
 }

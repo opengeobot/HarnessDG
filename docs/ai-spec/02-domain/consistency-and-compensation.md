@@ -1,6 +1,6 @@
 # 跨系统一致性、补偿与对账
 
-> 状态：`PROPOSED`
+> 状态：`READY`
 > 固定边界：PostgreSQL 事务不能覆盖 Gitea、DVC 或 MinIO。
 
 ## 1. 总体模式

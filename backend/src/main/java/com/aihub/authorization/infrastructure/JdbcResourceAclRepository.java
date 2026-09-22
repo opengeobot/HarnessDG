@@ -46,6 +46,18 @@ public class JdbcResourceAclRepository implements ResourceAclRepository {
     }
 
     @Override
+    public List<ResourceAcl> findByResource(String resourceType, String resourceId) {
+        return groupByAclId(jdbcTemplate.query(
+                "SELECT acl_id, resource_type, resource_id, principal_id, permission, created_by, created_at "
+                        + "FROM iam_resource_acl WHERE resource_type = :resourceType AND resource_id = :resourceId "
+                        + "ORDER BY created_at DESC, id DESC",
+                new MapSqlParameterSource()
+                        .addValue("resourceType", resourceType)
+                        .addValue("resourceId", resourceId),
+                this::mapRow));
+    }
+
+    @Override
     public Optional<ResourceAcl> findByAclId(String aclId) {
         List<AclRow> rows = jdbcTemplate.query(
                 "SELECT acl_id, resource_type, resource_id, principal_id, permission, created_by, created_at "

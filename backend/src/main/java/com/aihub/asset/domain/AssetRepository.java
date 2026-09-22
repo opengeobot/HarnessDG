@@ -72,4 +72,22 @@ public interface AssetRepository {
      * @return 各维度计数映射
      */
     Map<String, Map<String, Long>> facet(AssetSearchCriteria criteria);
+
+    /**
+     * 插入资产重命名永久别名（保障旧坐标可解析）。
+     *
+     * @param assetId      资产 ID
+     * @param oldNamespace 旧命名空间
+     * @param oldName      旧名称
+     */
+    void insertAlias(String assetId, String oldNamespace, String oldName);
+
+    /**
+     * 按旧坐标查找资产 ID（用于重定向）。
+     *
+     * @param namespace 旧命名空间
+     * @param name      旧名称
+     * @return 资产 ID（可空）
+     */
+    Optional<String> findByAlias(String namespace, String name);
 }

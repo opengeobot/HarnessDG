@@ -22,6 +22,9 @@ import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.AccessScope;
 import com.aihub.authorization.domain.Permissions;
 import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationService;
+import com.aihub.organization.domain.Team;
+import com.aihub.organization.domain.TeamRepository;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -33,6 +36,8 @@ import com.aihub.taxonomy.dictionary.application.DictionaryValidationPort;
 import com.aihub.taxonomy.tag.application.TagDtos.TagScopeContext;
 import com.aihub.taxonomy.tag.application.TagValidationService;
 import com.aihub.taxonomy.tag.domain.TagScopeType;
+import com.aihub.version.domain.VersionRepository;
+import com.aihub.version.domain.VersionStatus;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,7 +57,8 @@ import org.springframework.util.StringUtils;
  *
  * <p>接入平台治理能力：
  * <ul>
- *   <li>授权：create/update/delete 需 {@code asset:manage}，read/search 需 {@code asset:read}。</li>
+ *   <li>授权：create 需 {@code asset:create}，update 需 {@code asset:update}，delete 需 {@code asset:delete}，
+ *       deprecate 需 {@code asset:deprecate}，archive/restore 需 {@code asset:manage}，read/search 需 {@code asset:read}。</li>
  *   <li>字典校验：license/framework/task/format/modality 按 asset type 语义校验 ACTIVE 字典项。</li>
  *   <li>标签校验：tagIds 经 {@link TagValidationService#resolveActiveTags} 校验全部存在且 ACTIVE。</li>
  *   <li>审计：写操作记录 ASSET_CREATED/ASSET_UPDATED/ASSET_DELETED；审计失败不阻塞主流程。</li>
@@ -68,9 +74,7 @@ public class AssetApplicationService {
     private static final String DICT_TASK = "model_task";
     private static final String DICT_FORMAT = "dataset_format";
     private static final String DICT_MODALITY = "dataset_modality";
-
-    /** 建仓任务的最大尝试次数（保持既有值 5，语义见 RepositoryProvisionJobHandler）。 */
-    private static final int PROVISION_MAX_ATTEMPTS = 5;
+    private static final String DICT_DEPRECATION_REASON = "deprecation_reason";
 
     private final AssetRepository assetRepository;
     private final AssetAccessPolicy accessPolicy;
@@ -79,8 +83,13 @@ public class AssetApplicationService {
     private final DictionaryValidationPort dictionaryValidationPort;
     private final TagValidationService tagValidationService;
     private final AuditService auditService;
+    /** 建仓任务最大尝试次数（语义见 RepositoryProvisionJobHandler）。 */
+    private static final int PROVISION_MAX_ATTEMPTS = 5;
     private final JobApplicationService jobApplicationService;
     private final ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider;
+    private final NotificationService notificationService;
+    private final VersionRepository versionRepository;
+    private final TeamRepository teamRepository;
 
     public AssetApplicationService(AssetRepository assetRepository,
                                    AssetAccessPolicy accessPolicy,
@@ -90,7 +99,10 @@ public class AssetApplicationService {
                                    TagValidationService tagValidationService,
                                    AuditService auditService,
                                    JobApplicationService jobApplicationService,
-                                   ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider) {
+                                   ObjectProvider<AssetCardProjectionPort> cardProjectionPortProvider,
+                                   NotificationService notificationService,
+                                   VersionRepository versionRepository,
+                                   TeamRepository teamRepository) {
         this.assetRepository = assetRepository;
         this.accessPolicy = accessPolicy;
         this.idGenerator = idGenerator;
@@ -100,6 +112,9 @@ public class AssetApplicationService {
         this.auditService = auditService;
         this.jobApplicationService = jobApplicationService;
         this.cardProjectionPortProvider = cardProjectionPortProvider;
+        this.notificationService = notificationService;
+        this.versionRepository = versionRepository;
+        this.teamRepository = teamRepository;
     }
 
     /**
@@ -116,11 +131,10 @@ public class AssetApplicationService {
         if (command.visibility() == null) {
             throw new ValidationException("asset visibility is required");
         }
-        if (!StringUtils.hasText(command.ownerTeamId())) {
-            throw new ValidationException("ownerTeamId is required (DEC-011: asset must have at least one Team)");
-        }
-        validateCoordinate(command.namespace(), command.name());
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
+        authorizationService.requirePermission(Permissions.ASSET_CREATE);
+        rejectFreeFormOwners(command.owners(), true);
+        rejectFreeFormTags(command.tags(), true);
+        validateOwnerTeamId(command.ownerTeamId());
         validateGovernanceFields(command.type(), command.license(),
                 modelFramework(command), modelTask(command),
                 datasetFormat(command), datasetModality(command));
@@ -134,6 +148,9 @@ public class AssetApplicationService {
         createProvisionJob(asset, command.principalId());
         auditAsset("ASSET_CREATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name(), "type", asset.type().name()));
+        publishOutbox("ASSET", asset.assetId(), "ASSET_CREATED",
+                Map.of("assetId", asset.assetId(), "namespace", asset.namespace(),
+                        "name", asset.name(), "type", asset.type().name()));
         return AssetView.from(asset);
     }
 
@@ -143,7 +160,7 @@ public class AssetApplicationService {
     @Transactional(readOnly = true)
     public AssetView getAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        Asset asset = loadAccessible(assetId);
+        Asset asset = loadAccessible(assetId, principalId);
         return AssetView.from(asset);
     }
 
@@ -152,24 +169,40 @@ public class AssetApplicationService {
      */
     @Transactional
     public AssetView updateAsset(String assetId, UpdateAssetCommand command) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId);
-        if (command.ownerTeamId() != null && !StringUtils.hasText(command.ownerTeamId())) {
-            throw new ValidationException("ownerTeamId cannot be set to null/blank (DEC-011: at least one Team required)");
+        authorizationService.requirePermission(Permissions.ASSET_UPDATE);
+        Asset asset = loadAccessible(assetId, command.principalId());
+        if (asset.rowVersion() != command.expectedVersion()) {
+            throw new ConflictException(ErrorCode.ASSET_CONCURRENT_MODIFICATION,
+                    "asset was modified concurrently: " + assetId,
+                    Map.of("assetId", assetId,
+                            "expectedVersion", command.expectedVersion(),
+                            "currentVersion", asset.rowVersion()));
         }
         validateGovernanceFields(asset.type(), command.license(),
                 modelFramework(command), modelTask(command),
                 datasetFormat(command), datasetModality(command));
         List<String> validatedTagIds = resolveValidatedTagIds(command.tagIds(),
                 command.organizationId() != null ? command.organizationId() : asset.organizationId());
+        if (command.ownerTeamId() != null) {
+            validateOwnerTeamId(command.ownerTeamId());
+        }
+        String oldDisplayName = asset.displayName();
+        boolean renameRequested = command.displayName() != null
+                && !command.displayName().equals(oldDisplayName);
+        if (renameRequested) {
+            asset.rename(asset.namespace(), command.displayName(), command.principalId());
+            assetRepository.insertAlias(asset.assetId(), asset.namespace(),
+                    oldDisplayName != null ? oldDisplayName : asset.name());
+            createCardSyncJob(asset, command.principalId());
+        }
         asset.updateMetadata(
                 command.organizationId(),
                 command.projectId(),
                 command.displayName(),
                 command.description(),
                 command.visibility(),
-                command.owners(),
-                command.tags(),
+                null,
+                null,
                 validatedTagIds,
                 command.license(),
                 command.ownerTeamId(),
@@ -179,6 +212,9 @@ public class AssetApplicationService {
         assetRepository.update(asset);
         auditAsset("ASSET_UPDATED", command.principalId(), asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
+        publishOutbox("ASSET", asset.assetId(), "ASSET_UPDATED",
+                Map.of("assetId", asset.assetId(), "namespace", asset.namespace(),
+                        "name", asset.name()));
         return AssetView.from(asset);
     }
 
@@ -187,41 +223,54 @@ public class AssetApplicationService {
      */
     @Transactional
     public void deleteAsset(String assetId, String principalId) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId);
+        authorizationService.requirePermission(Permissions.ASSET_DELETE);
+        Asset asset = loadAccessible(assetId, principalId);
         assetRepository.softDelete(asset.assetId(), principalId);
         auditAsset("ASSET_DELETED", principalId, asset.assetId(), Map.of(
                 "namespace", asset.namespace(), "name", asset.name()));
+        publishOutbox("ASSET", asset.assetId(), "ASSET_DELETED",
+                Map.of("assetId", asset.assetId(), "namespace", asset.namespace(),
+                        "name", asset.name()));
     }
 
     /**
-     * 弃用资产：仍可访问但检索降权。仅 ACTIVE 可弃用。
+     * 弃用资产：仍可访问但检索降权。支持弃用原因与替代资产。
      */
     @Transactional
-    public AssetView deprecateAsset(String assetId, String principalId) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId);
+    public AssetView deprecateAsset(String assetId, String principalId,
+                                    String deprecationReason, String deprecationNote,
+                                    String replacementAssetId) {
+        authorizationService.requirePermission(Permissions.ASSET_DEPRECATE);
+        Asset asset = loadAccessible(assetId, principalId);
+        validateDictItem(DICT_DEPRECATION_REASON, deprecationReason);
         try {
-            asset.deprecate(principalId);
+            asset.deprecate(principalId, deprecationReason, deprecationNote, replacementAssetId);
         } catch (IllegalStateException ex) {
             throw new ConflictException(ErrorCode.ASSET_STATE_NOT_ALLOWED, ex.getMessage(),
                     Map.of("assetId", assetId, "status", asset.status().name()));
         }
         assetRepository.update(asset);
         auditAsset("ASSET_DEPRECATED", principalId, asset.assetId(), Map.of(
-                "namespace", asset.namespace(), "name", asset.name()));
+                "namespace", asset.namespace(), "name", asset.name(),
+                "reason", deprecationReason != null ? deprecationReason : ""));
         return AssetView.from(asset);
     }
 
     /**
      * 归档资产：默认不返回，仅管理员可恢复。ACTIVE 或 DEPRECATED 可归档。
      *
-     * <p>归档前预留检查活跃发布版本（P2 Version 模块就绪后接入）。
+     * <p>存在 {@link VersionStatus#PUBLISHED} 版本时拒绝归档。
      */
     @Transactional
     public AssetView archiveAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId);
+        Asset asset = loadAccessible(assetId, principalId);
+        long publishedCount = versionRepository.countByAssetIdAndStatus(assetId, VersionStatus.PUBLISHED);
+        if (publishedCount > 0) {
+            throw new ConflictException(ErrorCode.ASSET_HAS_ACTIVE_VERSIONS,
+                    "asset has active published versions and cannot be archived: " + assetId,
+                    Map.of("assetId", assetId, "publishedVersionCount", publishedCount));
+        }
         try {
             asset.archive(principalId);
         } catch (IllegalStateException ex) {
@@ -240,7 +289,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView restoreAsset(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        Asset asset = loadAccessible(assetId);
+        Asset asset = loadAccessible(assetId, principalId);
         try {
             asset.restore(principalId);
         } catch (IllegalStateException ex) {
@@ -259,17 +308,40 @@ public class AssetApplicationService {
     @Transactional(readOnly = true)
     public CursorPage<AssetSummaryView> searchAssets(AssetSearchQuery query) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
+        Set<Visibility> allowed = accessPolicy.visibleVisibilities(query.principalId());
+        // 如果请求指定了可见性过滤，与权限交集
+        if (query.visibility() != null) {
+            try {
+                Visibility requested = Visibility.valueOf(query.visibility());
+                if (allowed.contains(requested)) {
+                    allowed = Set.of(requested);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // 无效可见性值，忽略
+            }
+        }
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
-        Set<Visibility> allowed = accessPolicy.visibleVisibilities(accessScope);
         Set<AssetStatus> statuses = query.includeArchived()
                 ? Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED, AssetStatus.ARCHIVED)
                 : Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
+        // 如果请求指定了状态过滤，与状态集交集
+        if (query.status() != null) {
+            try {
+                AssetStatus requested = AssetStatus.valueOf(query.status());
+                if (statuses.contains(requested)) {
+                    statuses = Set.of(requested);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // 无效状态值，忽略
+            }
+        }
         AssetSearchCriteria criteria = new AssetSearchCriteria(
                 query.keyword(), query.type(), query.namespace(), query.organizationId(),
+                query.projectId(), query.teamId(),
                 query.framework(), query.task(), query.format(), query.modality(),
                 query.tagId(), query.owner(), statuses, allowed, accessScope,
-                null, null, null,
-                query.language() != null ? java.util.List.of(query.language()) : null,
+                query.taskCodes(), query.modalityCodes(), query.formatCodes(),
+                resolveLanguageCodes(query),
                 null,
                 query.sensitivity(),
                 query.cursor(), query.limit());
@@ -281,26 +353,43 @@ public class AssetApplicationService {
     }
 
     /**
-     * 查询资产 Facet 统计（按维度分组计数，应用与 search 相同的过滤与权限下推）。
-     *
-     * <p>过滤条件、状态集合与访问作用域均来自同一 {@link AssetSearchQuery} 语义，
-     * 因此每个维度的计数与施加同一过滤条件后的 {@link #searchAssets(AssetSearchQuery)}
-     * 可达总数一致；分页字段（cursor/limit）在此不生效。
+     * 查询资产 Facet 统计（按维度分组计数，应用与 search 相同的权限过滤）。
+     */
+    @Transactional(readOnly = true)
+    public AssetFacetView getAssetFacets(String keyword, AssetType type, String principalId) {
+        return getAssetFacets(new AssetSearchQuery(keyword, type, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null,
+                false, null, 0, principalId));
+    }
+
+    /**
+     * 按完整检索条件查询 Facet 统计：各维度计数与同条件 search 严格一致（过滤在 SQL WHERE 阶段下推）。
      */
     @Transactional(readOnly = true)
     public AssetFacetView getAssetFacets(AssetSearchQuery query) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
+        Set<Visibility> allowed = accessPolicy.visibleVisibilities(query.principalId());
+        if (query.visibility() != null) {
+            try {
+                Visibility requested = Visibility.valueOf(query.visibility());
+                if (allowed.contains(requested)) {
+                    allowed = Set.of(requested);
+                }
+            } catch (IllegalArgumentException ignored) {
+                // 无效可见性值，忽略
+            }
+        }
         AccessScope accessScope = authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
-        Set<Visibility> allowed = accessPolicy.visibleVisibilities(accessScope);
         Set<AssetStatus> statuses = query.includeArchived()
                 ? Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED, AssetStatus.ARCHIVED)
                 : Set.of(AssetStatus.ACTIVE, AssetStatus.DEPRECATED);
         AssetSearchCriteria criteria = new AssetSearchCriteria(
                 query.keyword(), query.type(), query.namespace(), query.organizationId(),
+                query.projectId(), query.teamId(),
                 query.framework(), query.task(), query.format(), query.modality(),
                 query.tagId(), query.owner(), statuses, allowed, accessScope,
-                null, null, null,
-                query.language() != null ? java.util.List.of(query.language()) : null,
+                query.taskCodes(), query.modalityCodes(), query.formatCodes(),
+                resolveLanguageCodes(query),
                 null,
                 query.sensitivity(),
                 null, AssetSearchCriteria.MAX_LIMIT);
@@ -313,6 +402,12 @@ public class AssetApplicationService {
                 raw.getOrDefault("formats", Map.of()),
                 raw.getOrDefault("modalities", Map.of()),
                 raw.getOrDefault("licenses", Map.of()),
+                raw.getOrDefault("sensitivities", Map.of()),
+                raw.getOrDefault("sizeBuckets", Map.of()),
+                raw.getOrDefault("taskCodes", Map.of()),
+                raw.getOrDefault("modalityCodes", Map.of()),
+                raw.getOrDefault("formatCodes", Map.of()),
+                raw.getOrDefault("languageCodes", Map.of()),
                 total);
     }
 
@@ -324,7 +419,7 @@ public class AssetApplicationService {
     @Transactional
     public AssetView refreshCardProjection(String assetId, String principalId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
-        Asset asset = loadAccessible(assetId);
+        Asset asset = loadAccessible(assetId, principalId);
         AssetCardProjectionPort port = cardProjectionPortProvider.getIfAvailable();
         if (port == null || asset.repository() == null) {
             return AssetView.from(asset);
@@ -348,10 +443,14 @@ public class AssetApplicationService {
                     .tagIds(asset.tagIds())
                     .license(asset.license())
                     .ownerTeamId(asset.ownerTeamId())
+                    .aliases(asset.aliases())
                     .modelProfile(asset.modelProfile())
                     .datasetProfile(asset.datasetProfile())
                     .repository(asset.repository())
                     .provisioningStatus(asset.provisioningStatus())
+                    .deprecationReason(asset.deprecationReason())
+                    .deprecationNote(asset.deprecationNote())
+                    .replacementAssetId(asset.replacementAssetId())
                     .rowVersion(asset.rowVersion())
                     .createdBy(asset.createdBy())
                     .updatedBy(principalId)
@@ -393,32 +492,12 @@ public class AssetApplicationService {
         }
     }
 
-    private Asset loadAccessible(String assetId) {
+    private Asset loadAccessible(String assetId, String principalId) {
         Asset asset = assetRepository.findByAssetId(assetId)
-                .filter(found -> accessPolicy.canAccess(found, readAccessScope()))
+                .filter(found -> accessPolicy.canAccess(found, principalId))
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
                         "asset not found: " + assetId, Map.of()));
         return asset;
-    }
-
-    /**
-     * 计算当前主体对 ASSET 域的读访问作用域，使详情与列表使用同一可见性判定（REQ-AUTH-002）。
-     */
-    private AccessScope readAccessScope() {
-        return authorizationService.computeAccessScope("ASSET", Permissions.ASSET_READ);
-    }
-
-    private void validateCoordinate(String namespace, String name) {
-        if (!Asset.SLUG_PATTERN.matcher(namespace).matches()) {
-            throw new ValidationException(ErrorCode.ASSET_COORDINATE_INVALID,
-                    "invalid coordinate: namespace \"" + namespace + "\" does not match aih:// slug format",
-                    Map.of("namespace", namespace, "name", name));
-        }
-        if (!Asset.NAME_PATTERN.matcher(name).matches()) {
-            throw new ValidationException(ErrorCode.ASSET_COORDINATE_INVALID,
-                    "invalid coordinate: name \"" + name + "\" does not match aih:// name format",
-                    Map.of("namespace", namespace, "name", name));
-        }
     }
 
     private void validateGovernanceFields(AssetType type, String license,
@@ -482,6 +561,45 @@ public class AssetApplicationService {
                 asset.assetId(), PROVISION_MAX_ATTEMPTS);
     }
 
+    private void createCardSyncJob(Asset asset, String principalId) {
+        if (cardProjectionPortProvider.getIfAvailable() == null) {
+            return;
+        }
+        String payload = "{\"assetId\":\"" + asset.assetId() + "\"}";
+        jobApplicationService.enqueue("ASSET_CARD_SYNC", payload, principalId, null,
+                asset.assetId(), PROVISION_MAX_ATTEMPTS);
+    }
+
+    private void rejectFreeFormOwners(List<String> owners, boolean onCreate) {
+        if (owners == null || owners.isEmpty()) {
+            return;
+        }
+        throw new ValidationException(onCreate
+                ? "free-form owners are deprecated; use ownerTeamId instead"
+                : "free-form owners cannot be updated; use ownerTeamId instead");
+    }
+
+    private void rejectFreeFormTags(List<String> tags, boolean onCreate) {
+        if (tags == null || tags.isEmpty()) {
+            return;
+        }
+        throw new ValidationException(onCreate
+                ? "free-form tags are deprecated; use tagIds instead"
+                : "free-form tags cannot be updated; use tagIds instead");
+    }
+
+    private void validateOwnerTeamId(String ownerTeamId) {
+        if (!StringUtils.hasText(ownerTeamId)) {
+            throw new ValidationException("ownerTeamId is required");
+        }
+        Team team = teamRepository.findByTeamId(ownerTeamId.trim())
+                .orElseThrow(() -> new NotFoundException(ErrorCode.TEAM_NOT_FOUND,
+                        "team not found", Map.of("teamId", ownerTeamId)));
+        if (!"ACTIVE".equals(team.status())) {
+            throw new ValidationException("owner team must be ACTIVE: " + ownerTeamId);
+        }
+    }
+
     private static String modelFramework(CreateAssetCommand command) {
         return command.model() == null ? null : command.model().framework();
     }
@@ -512,5 +630,23 @@ public class AssetApplicationService {
 
     private static String datasetModality(UpdateAssetCommand command) {
         return command.dataset() == null ? null : command.dataset().modality();
+    }
+
+    private static List<String> resolveLanguageCodes(AssetSearchQuery query) {
+        if (query.languageCodes() != null && !query.languageCodes().isEmpty()) {
+            return query.languageCodes();
+        }
+        return query.language() != null ? java.util.List.of(query.language()) : null;
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.aihub.notification.infrastructure;
 
 import com.aihub.job.domain.JobContext;
 import com.aihub.job.domain.JobHandler;
+import com.aihub.platform.observability.application.PlatformMetrics;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -25,9 +26,11 @@ public class OutboxDeliveryReconciler implements JobHandler {
     private static final int BATCH_SIZE = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformMetrics platformMetrics;
 
-    public OutboxDeliveryReconciler(JdbcTemplate jdbcTemplate) {
+    public OutboxDeliveryReconciler(JdbcTemplate jdbcTemplate, PlatformMetrics platformMetrics) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformMetrics = platformMetrics;
     }
 
     @Override
@@ -126,6 +129,7 @@ public class OutboxDeliveryReconciler implements JobHandler {
 
     private void recordDiscrepancy(String eventId, ReconcileResult result) {
         LOG.warn("outbox-delivery discrepancy eventId={} classification={}", eventId, result);
+        platformMetrics.recordReconciliationDiscrepancy("OutboxDelivery", result.name());
         try {
             String deliveryId = "outbox-reconcile-" + eventId + "-" + System.currentTimeMillis();
             jdbcTemplate.update(

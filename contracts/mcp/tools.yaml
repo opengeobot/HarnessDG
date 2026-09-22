@@ -5,11 +5,18 @@
 #       Tool 实现必须复用与 REST 相同的 Application Service，不得绕过权限或直接访问 Mapper。
 # 作者：AxeXie
 schemaVersion: 1
-contractStatus: implemented-p4
+contractStatus: implemented-p4-synced
 
 transport:
   protocol: streamable-http
   description: MCP 通过 Streamable HTTP 暴露；不使用 stdio 部署形态。
+  rateLimit:
+    requestsPerMinute: 60
+    burst: 10
+    enforced: true
+    description: |
+      运行时由平台 RateLimiter 在 MCP tools/call 与 REST /agent/* 端点强制执行。
+      默认单进程 memory 后端；多实例部署可切换 aihub.rate-limit.backend=redis。
   authentication:
     scheme: bearer-jwt
     description: |
@@ -109,12 +116,89 @@ tools:
     parameters:
       type: object
       additionalProperties: false
+      required: [versionId]
+      properties:
+        versionId: { type: string }
+
+  - name: asset_request_download
+    enabled: true
+    write: false
+    summary: 请求已发布版本的下载 handle（不含预签名 URL；REST 票据端点另行签发 URL）。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: DownloadApplicationService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [versionId]
+      properties:
+        versionId: { type: string }
+        artifactId: { type: string, description: 可选工件 ID；省略表示整版本下载（GIT_DVC）。 }
+
+  # ---- P0-B 默认关闭的写工具（受 mcp.writeTools.enabled 与高风险 Scope 双控）----
+  - name: asset_create_draft
+    enabled: false
+    write: true
+    summary: 为资产创建草稿版本。P0-B 默认关闭；受 mcp.writeTools.enabled 控制。
+    requiredScopes: [asset:manage]
+    requiredPermissions: [asset:manage]
+    reusesApplicationService: VersionApplicationService
+    idempotency: required
+    parameters:
+      type: object
+      additionalProperties: false
       required: [assetId, version]
       properties:
         assetId: { type: string }
         version: { type: string }
 
-  # ---- P0-B 默认关闭的写工具（受 mcp.writeTools.enabled 与高风险 Scope 双控）----
+  - name: asset_create_upload_session
+    enabled: false
+    write: true
+    summary: 创建上传会话。写工具，默认关闭；受 mcp.writeTools.enabled 控制。
+    requiredScopes: [asset:manage]
+    requiredPermissions: [asset:manage]
+    reusesApplicationService: UploadApplicationService
+    idempotency: required
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [assetId, versionId, totalBytes, fileCount]
+      properties:
+        assetId: { type: string }
+        versionId: { type: string }
+        totalBytes: { type: integer }
+        fileCount: { type: integer }
+
+  - name: asset_complete_upload
+    enabled: false
+    write: true
+    summary: 完成上传会话。写工具，默认关闭。
+    requiredScopes: [asset:manage]
+    requiredPermissions: [asset:manage]
+    reusesApplicationService: UploadApplicationService
+    idempotency: required
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+
+  - name: asset_get_upload_status
+    enabled: false
+    write: true
+    summary: 查询上传会话状态。写工具，默认关闭。
+    requiredScopes: [asset:read]
+    requiredPermissions: [asset:read]
+    reusesApplicationService: UploadApplicationService
+    parameters:
+      type: object
+      additionalProperties: false
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+
   - name: asset_publish_version
     enabled: false
     write: true
@@ -123,6 +207,7 @@ tools:
     requiredScopes: [asset:publish]
     requiredPermissions: [asset:publish]
     auditEvent: VERSION_PUBLISHED
+    idempotency: required
 
   - name: asset_delete
     enabled: false
@@ -132,3 +217,4 @@ tools:
     requiredScopes: [asset:delete]
     requiredPermissions: [asset:delete]
     auditEvent: ASSET_DELETED
+    idempotency: required

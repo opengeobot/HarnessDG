@@ -110,7 +110,10 @@ public enum IdPrefix {
     REVIEW_DECISION("rvw"),
 
     /** 系统告警。 */
-    ALERT("alt");
+    ALERT("alt"),
+
+    /** 资产血缘关系。 */
+    RELATION("rel");
 
     private final String value;
 

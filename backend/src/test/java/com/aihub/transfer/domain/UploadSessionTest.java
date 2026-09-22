@@ -54,6 +54,32 @@ class UploadSessionTest {
     void completeTransitionsToCompleted() {
         UploadSession session = createOpenSession();
         session.commit();
+        session.markProcessing();
+        session.complete();
+        assertThat(session.status()).isEqualTo(UploadSessionStatus.COMPLETED);
+    }
+
+    @Test
+    void markProcessingFromCommitting() {
+        UploadSession session = createOpenSession();
+        session.commit();
+        session.markProcessing();
+        assertThat(session.status()).isEqualTo(UploadSessionStatus.PROCESSING);
+    }
+
+    @Test
+    void markFailedFromProcessing() {
+        UploadSession session = createOpenSession();
+        session.commit();
+        session.markProcessing();
+        session.markFailed();
+        assertThat(session.status()).isEqualTo(UploadSessionStatus.FAILED);
+    }
+
+    @Test
+    void completeFromCommittingStillSupported() {
+        UploadSession session = createOpenSession();
+        session.commit();
         session.complete();
         assertThat(session.status()).isEqualTo(UploadSessionStatus.COMPLETED);
     }
@@ -69,6 +95,7 @@ class UploadSessionTest {
     void cancelFromCompletedThrowsIllegalState() {
         UploadSession session = createOpenSession();
         session.commit();
+        session.markProcessing();
         session.complete();
 
         assertThatThrownBy(session::cancel)

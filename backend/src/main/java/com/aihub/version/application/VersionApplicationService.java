@@ -8,6 +8,10 @@ import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.authorization.domain.Permissions;
+import com.aihub.job.application.JobApplicationService;
+import com.aihub.notification.application.NotificationRecipientResolver;
+import com.aihub.notification.application.NotificationService;
+import com.aihub.notification.domain.NotificationSeverity;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
@@ -18,10 +22,15 @@ import com.aihub.version.domain.Artifact;
 import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,24 +49,39 @@ public class VersionApplicationService {
     private final AuthorizationService authorizationService;
     private final AuditService auditService;
     private final IdGenerator idGenerator;
+    private final JdbcTemplate jdbcTemplate;
+    private final NotificationService notificationService;
+    private final NotificationRecipientResolver recipientResolver;
+    private final JobApplicationService jobApplicationService;
+    private final ObjectMapper objectMapper;
 
     public VersionApplicationService(VersionRepository versionRepository,
                                      AssetRepository assetRepository,
                                      AuthorizationService authorizationService,
                                      AuditService auditService,
-                                     IdGenerator idGenerator) {
+                                     IdGenerator idGenerator,
+                                     JdbcTemplate jdbcTemplate,
+                                     NotificationService notificationService,
+                                     NotificationRecipientResolver recipientResolver,
+                                     JobApplicationService jobApplicationService,
+                                     ObjectMapper objectMapper) {
         this.versionRepository = versionRepository;
         this.assetRepository = assetRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
         this.idGenerator = idGenerator;
+        this.jdbcTemplate = jdbcTemplate;
+        this.notificationService = notificationService;
+        this.recipientResolver = recipientResolver;
+        this.jobApplicationService = jobApplicationService;
+        this.objectMapper = objectMapper;
     }
 
     /** 创建草稿版本。 */
     @Transactional
     public VersionView createDraftVersion(String assetId, String version, String principalId) {
-        authorizationService.requirePermission(Permissions.ASSET_MANAGE);
-        // 加载资产以获取类型（用于版本号语法校验）
+        authorizationService.requirePermission(Permissions.ASSET_UPDATE);
+        // 版本语法校验依赖资产类型（MODEL 仅 SemVer；DATASET 允许 SemVer 或 YYYY-MM-DD）
         Asset asset = assetRepository.findByAssetId(assetId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
                         "asset not found: " + assetId, Map.of()));
@@ -110,6 +134,21 @@ public class VersionApplicationService {
         versionRepository.update(v);
         auditVersion("VERSION_STATUS_CHANGED", principalId, versionId, v.assetId(),
                 Map.of("from", v.status().name(), "to", target.name()));
+        if (target == VersionStatus.VALIDATING) {
+            enqueueValidationJob(versionId, v.assetId(), principalId);
+        }
+        if (target == VersionStatus.DEPRECATED) {
+            Map<String, Object> payload = Map.of("versionId", versionId, "assetId", v.assetId(),
+                    "version", v.version());
+            publishOutbox("ASSET_VERSION", versionId, "VERSION_DEPRECATED", payload);
+            notificationService.fanOutInAppNotifications(
+                    recipientResolver.resolveAssetOwners(v.assetId()),
+                    null,
+                    "VERSION_DEPRECATED",
+                    "notification.version.deprecated",
+                    NotificationSeverity.WARN,
+                    payload);
+        }
         return VersionView.from(v);
     }
 
@@ -128,6 +167,18 @@ public class VersionApplicationService {
         versionRepository.update(v);
         auditVersion("VERSION_PUBLISHED", principalId, versionId, v.assetId(),
                 Map.of("version", v.version(), "gitTag", gitTag));
+        Map<String, Object> payload = Map.of("versionId", versionId, "assetId", v.assetId(),
+                "version", v.version(), "gitTag", gitTag, "publishedBy", principalId);
+        publishOutbox("ASSET_VERSION", versionId, "VERSION_PUBLISHED", payload);
+        Set<String> recipients = new LinkedHashSet<>();
+        recipients.add(principalId);
+        recipients.addAll(recipientResolver.resolveAssetOwners(v.assetId()));
+        recipients.addAll(recipientResolver.resolveSubscribers(v.assetId()));
+        notificationService.fanOutInAppNotifications(recipients, null,
+                "VERSION_PUBLISHED",
+                "notification.version.published",
+                NotificationSeverity.INFO,
+                payload);
         return VersionView.from(v);
     }
 
@@ -141,6 +192,21 @@ public class VersionApplicationService {
     }
 
     // ---- 私有辅助 ----
+
+    /** 查询校验报告（最新版本）。 */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getValidationReport(String versionId) {
+        authorizationService.requirePermission(Permissions.ASSET_READ);
+        loadVersion(versionId); // 验证版本存在
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT report_id, policy_version, status, findings, created_at " +
+                        "FROM validation_report WHERE version_id = ? ORDER BY created_at DESC LIMIT 1",
+                versionId);
+        if (rows.isEmpty()) {
+            return Map.of("status", "NOT_FOUND");
+        }
+        return rows.get(0);
+    }
 
     private Version loadVersion(String versionId) {
         return versionRepository.findByVersionId(versionId)
@@ -159,6 +225,26 @@ public class VersionApplicationService {
         } catch (Exception ex) {
             LOG.error("failed to record audit event eventType={} resourceId={}",
                     eventType, resourceId, ex);
+        }
+    }
+
+    private void publishOutbox(String aggregateType, String aggregateId, String eventType,
+                               Map<String, Object> payload) {
+        try {
+            notificationService.publishOutboxEvent(aggregateType, aggregateId, eventType,
+                    payload, Map.of());
+        } catch (Exception ex) {
+            LOG.warn("failed to publish outbox event eventType={} aggregateId={}",
+                    eventType, aggregateId, ex);
+        }
+    }
+
+    private void enqueueValidationJob(String versionId, String assetId, String principalId) {
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of("versionId", versionId));
+            jobApplicationService.enqueue("VERSION_VALIDATE", payload, principalId, null, assetId, 3);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize validation payload", e);
         }
     }
 }

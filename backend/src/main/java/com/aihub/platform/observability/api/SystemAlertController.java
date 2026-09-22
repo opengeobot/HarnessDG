@@ -14,6 +14,8 @@ import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -49,6 +51,13 @@ public class SystemAlertController {
     public ApiResponse<List<SystemAlert>> listFiringAlerts() {
         authorizationService.requirePermission(Permissions.SYSTEM_OBSERVE);
         return respond(alertService.listFiringAlerts());
+    }
+
+    /** 人工确认告警（FIRING → RESOLVED）。 */
+    @PostMapping("/{alertId}:acknowledge")
+    public ApiResponse<SystemAlert> acknowledgeAlert(@PathVariable String alertId) {
+        authorizationService.requirePermission(Permissions.SYSTEM_OBSERVE);
+        return respond(alertService.acknowledge(alertId));
     }
 
     private static <T> ApiResponse<T> respond(T data) {

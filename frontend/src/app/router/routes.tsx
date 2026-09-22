@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/app/layout/AppLayout';
 import { RouteGuard } from '@/app/permission';
-import { AssetsPage, AssetDetailPage, AssetSettingsPage } from '@/features/assets';
+import { AssetsPage, AssetDetailPage, AssetSettingsPage, AssetAccessPage, AssetLineagePage, CreateAssetPage } from '@/features/assets';
 import { VersionPage, VersionDetailPage, VersionListPage, ReviewPage } from '@/features/version';
 import { UploadPage } from '@/features/upload';
 import { AccessPage } from '@/features/access';
@@ -31,6 +31,8 @@ import {
   TagsPage,
   TeamsPage,
   UsersPage,
+  IdempotencyPage,
+  AlertsPage,
 } from '@/features/admin';
 import type { Scope } from '@/shared/types';
 import { NotFoundPage } from './NotFoundPage';
@@ -51,8 +53,11 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/assets" replace /> },
       { path: 'assets', element: guarded(<AssetsPage />, ['asset:read']) },
+      { path: 'assets/new', element: guarded(<CreateAssetPage />, ['asset:create']) },
       { path: 'assets/:assetId', element: guarded(<AssetDetailPage />, ['asset:read']) },
       { path: 'assets/:assetId/settings', element: guarded(<AssetSettingsPage />, ['asset:manage']) },
+      { path: 'assets/:assetId/lineage', element: guarded(<AssetLineagePage />, ['asset:read']) },
+      { path: 'assets/:assetId/access', element: guarded(<AssetAccessPage />, ['asset:manage']) },
       { path: 'version', element: guarded(<VersionPage />, ['asset:read']) },
       { path: 'assets/:assetId/versions', element: guarded(<VersionListPage />, ['asset:read']) },
       { path: 'assets/:assetId/versions/:versionId', element: guarded(<VersionDetailPage />, ['asset:read']) },
@@ -79,6 +84,10 @@ export const router = createBrowserRouter([
           { path: 'tags', element: guarded(<TagsPage />, ['tag:read']) },
           { path: 'configurations', element: guarded(<ConfigurationsPage />, ['system:configure']) },
           { path: 'jobs', element: guarded(<JobsPage />, ['job:read']) },
+          { path: 'idempotency', element: guarded(<IdempotencyPage />, ['job:read']) },
+          { path: 'role-bindings', element: guarded(<RoleBindingsPage />, ['authorization:read']) },
+          { path: 'resource-acls', element: guarded(<ResourceAclsPage />, ['authorization:read']) },
+          { path: 'alerts', element: guarded(<AlertsPage />, ['system:observe']) },
           { path: 'audit-logs', element: guarded(<AuditLogsPage />, ['audit:read']) },
           { path: 'notifications', element: guarded(<NotificationsPage />, ['notification:read']) },
           { path: 'dependencies', element: guarded(<DependenciesPage />, ['system:observe']) },

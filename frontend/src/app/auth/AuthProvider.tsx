@@ -35,6 +35,14 @@ function refreshOncePerPageLoad(): Promise<TokenPair | null> {
   return bootstrapRefresh;
 }
 
+/**
+ * 仅供测试：重置跨挂载去重缓存。同一模块实例内多个用例共享
+ * bootstrapRefresh，若不清理，后续用例的 refresh mock 不会生效。
+ */
+export function __resetBootstrapRefreshForTests(): void {
+  bootstrapRefresh = null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('initializing');
   const [principal, setPrincipal] = useState<CurrentPrincipal | null>(null);

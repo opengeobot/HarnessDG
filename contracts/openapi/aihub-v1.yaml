@@ -2,7 +2,8 @@
 # 依据：prd/DEEP_RESEARCH_内部AI资产管理平台设计.md 第 5、8、11、15、16 章
 # 说明：P0-B 平台基础 + P1 资产目录 + P2 版本传输 + P3 发布治理 +
 #       P4 Agent 集成 + P5 质量运营均已实施。
-#       x-implementation-status 用于区分 planned/partial/implemented。
+#       x-implementation-status 用于区分 planned/partial/implemented/implemented-unverified。
+#       项目整体状态为 IMPLEMENTED_UNVERIFIED；端点级 x-implementation-status 据实标注。
 # 作者：AxeXie
 openapi: 3.1.0
 x-contract-status: implemented-p5
@@ -10,6 +11,7 @@ x-document-version: 3.0
 info:
   title: AIHub Platform API
   version: v1
+  x-verification-status: implemented-unverified
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -48,7 +50,8 @@ paths:
       summary: 本地用户登录并签发 JWT
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_INVALID_CREDENTIALS, AUTH_ACCOUNT_LOCKED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
       x-audit-event: AUTH_LOGIN_SUCCEEDED_OR_FAILED
       requestBody:
         required: true
@@ -75,7 +78,8 @@ paths:
       summary: 轮换刷新 JWT 并签发新访问 JWT
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_TOKEN_EXPIRED, AUTH_REFRESH_REPLAYED]
       x-audit-event: AUTH_TOKEN_REFRESHED_OR_REPLAY_REJECTED
       requestBody:
         required: false
@@ -102,7 +106,8 @@ paths:
       summary: Agent/Service/API Client 凭据换取 JWT
       tags: [auth]
       security: []
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
       x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
       requestBody:
         required: true
@@ -123,12 +128,43 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
+  /auth/agent/token:
+    post:
+      operationId: exchangeAgentCredentialAlias
+      summary: Agent 凭据换取 JWT（/auth/token 别名）
+      tags: [auth]
+      security: []
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED, AUTH_ACCOUNT_DISABLED, COMMON_INVALID_ARGUMENT]
+      x-audit-event: CLIENT_TOKEN_ISSUED_OR_REJECTED
+      description: |
+        Agent 客户端凭据交换别名端点，行为与 POST /auth/token 完全相同。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientCredentialTokenRequest' }
+      responses:
+        '200':
+          description: 凭据有效，签发访问 JWT
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /auth/logout:
     post:
       operationId: logout
       summary: 吊销当前 Token Family
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED]
       x-audit-event: AUTH_LOGOUT
       responses:
         '200':
@@ -143,7 +179,8 @@ paths:
       operationId: getCurrentPrincipal
       summary: 获取当前主体、角色和粗粒度 Scope
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED]
       responses:
         '200':
           description: 当前主体
@@ -162,7 +199,8 @@ paths:
       operationId: changeCurrentUserPassword
       summary: 修改当前本地用户密码并吊销其他 Token Family
       tags: [auth]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_UNAUTHENTICATED, PASSWORD_POLICY_VIOLATION, COMMON_INVALID_ARGUMENT]
       x-audit-event: USER_PASSWORD_CHANGED
       requestBody:
         required: true
@@ -183,7 +221,8 @@ paths:
       operationId: listPrincipals
       summary: 查询统一访问主体
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:read]
       parameters:
         - { name: principalType, in: query, schema: { $ref: '#/components/schemas/PrincipalType' } }
@@ -206,7 +245,8 @@ paths:
       operationId: listUsers
       summary: 分页查询本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -229,7 +269,8 @@ paths:
       operationId: createUser
       summary: 创建本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [USER_ALREADY_EXISTS, COMMON_INVALID_ARGUMENT, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [user:manage]
       x-audit-event: USER_CREATED
       parameters:
@@ -261,7 +302,8 @@ paths:
       operationId: getUser
       summary: 获取本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:read]
       responses:
         '200':
@@ -280,7 +322,8 @@ paths:
       operationId: updateUser
       summary: 更新本地用户资料
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [USER_NOT_FOUND, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [user:manage]
       x-audit-event: USER_UPDATED
       requestBody:
@@ -308,7 +351,8 @@ paths:
       operationId: enableUser
       summary: 启用本地用户
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:manage]
       x-audit-event: USER_ENABLED
       parameters:
@@ -324,7 +368,8 @@ paths:
       operationId: disableUser
       summary: 禁用本地用户并吊销其 Token
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [user:manage]
       x-audit-event: USER_DISABLED
       parameters:
@@ -340,7 +385,8 @@ paths:
       operationId: resetUserPassword
       summary: 设置临时密码、强制下次修改并吊销现有 Token
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [USER_NOT_FOUND, AUTH_PERMISSION_DENIED, PASSWORD_POLICY_VIOLATION, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [user:manage]
       x-audit-event: USER_PASSWORD_RESET
       parameters:
@@ -361,7 +407,8 @@ paths:
       operationId: listAgents
       summary: 查询 Agent 主体
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -379,7 +426,8 @@ paths:
       operationId: createAgent
       summary: 注册 Agent 主体
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [agent:register]
       x-audit-event: AGENT_REGISTERED
       parameters:
@@ -408,7 +456,8 @@ paths:
       operationId: enableAgent
       summary: 启用 Agent
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AGENT_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_ENABLED
       parameters:
@@ -423,7 +472,8 @@ paths:
       operationId: disableAgent
       summary: 禁用 Agent 并吊销凭据/Token
       tags: [users]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AGENT_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_DISABLED
       parameters:
@@ -438,7 +488,8 @@ paths:
       operationId: updateAgentToolAllowlist
       summary: 替换 Agent MCP Tool 白名单
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AGENT_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [agent:authorize]
       x-audit-event: AGENT_TOOL_ALLOWLIST_UPDATED
       parameters:
@@ -458,7 +509,8 @@ paths:
       operationId: listOrganizations
       summary: 查询调用者可管理或可访问的组织
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -476,7 +528,8 @@ paths:
       operationId: createOrganization
       summary: 创建组织作用域
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ORGANIZATION_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_CREATED
       parameters:
@@ -507,7 +560,8 @@ paths:
       operationId: listOrganizationMembers
       summary: 查询组织成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [organization:manage]
       responses:
         '200':
@@ -525,7 +579,8 @@ paths:
       operationId: addOrganizationMember
       summary: 添加组织成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ORGANIZATION_NOT_FOUND, ORGANIZATION_MEMBER_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_MEMBER_ADDED
       parameters:
@@ -554,7 +609,8 @@ paths:
       operationId: removeOrganizationMember
       summary: 移除组织成员并使其组织作用域授权失效
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ORGANIZATION_NOT_FOUND, ORGANIZATION_MEMBER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [organization:manage]
       x-audit-event: ORGANIZATION_MEMBER_REMOVED
       parameters:
@@ -572,7 +628,8 @@ paths:
       operationId: listOrganizationProjects
       summary: 查询组织项目
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -590,7 +647,8 @@ paths:
       operationId: createProject
       summary: 创建组织项目
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [PROJECT_ALREADY_EXISTS, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [project:manage]
       x-audit-event: PROJECT_CREATED
       parameters:
@@ -621,7 +679,8 @@ paths:
       operationId: listTeams
       summary: 列出组织下的 Team
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -639,7 +698,8 @@ paths:
       operationId: createTeam
       summary: 创建 Team
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TEAM_ALREADY_EXISTS, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_CREATED
       requestBody:
@@ -669,7 +729,8 @@ paths:
       operationId: getTeam
       summary: 查询 Team 详情
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TEAM_NOT_FOUND, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -688,7 +749,8 @@ paths:
       operationId: updateTeam
       summary: 更新 Team
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TEAM_NOT_FOUND, TEAM_ALREADY_EXISTS, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_UPDATED
       requestBody:
@@ -719,7 +781,8 @@ paths:
       operationId: listTeamMembers
       summary: 列出 Team 成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TEAM_NOT_FOUND, ORGANIZATION_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [project:view]
       responses:
         '200':
@@ -738,7 +801,8 @@ paths:
       operationId: addTeamMember
       summary: 添加 Team 成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TEAM_NOT_FOUND, TEAM_MEMBER_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_MEMBER_ADDED
       requestBody:
@@ -766,7 +830,8 @@ paths:
       operationId: removeTeamMember
       summary: 移除 Team 成员
       tags: [organizations]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TEAM_NOT_FOUND, TEAM_MEMBER_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [team:manage]
       x-audit-event: TEAM_MEMBER_REMOVED
       parameters:
@@ -783,7 +848,8 @@ paths:
       operationId: listRoles
       summary: 查询角色
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -801,7 +867,8 @@ paths:
       operationId: createRole
       summary: 创建业务角色
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ROLE_ALREADY_EXISTS, PERMISSION_UNKNOWN, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_CREATED
       parameters:
@@ -830,7 +897,8 @@ paths:
       operationId: listPermissions
       summary: 查询系统权限定义
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -850,7 +918,8 @@ paths:
       operationId: updateRole
       summary: 更新自定义角色名称和权限集合
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ROLE_NOT_FOUND, ROLE_BUILTIN_IMMUTABLE, PERMISSION_UNKNOWN, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_UPDATED
       parameters:
@@ -878,7 +947,8 @@ paths:
       operationId: deleteRole
       summary: 删除无有效绑定的自定义角色
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ROLE_NOT_FOUND, ROLE_BUILTIN_IMMUTABLE, ROLE_IN_USE, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_DELETED
       parameters:
@@ -894,7 +964,8 @@ paths:
       operationId: listRoleBindings
       summary: 查询主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -912,7 +983,8 @@ paths:
       operationId: createRoleBinding
       summary: 创建主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ROLE_NOT_FOUND, ROLE_BINDING_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_BINDING_CREATED
       parameters:
@@ -941,7 +1013,8 @@ paths:
       operationId: deleteRoleBinding
       summary: 删除主体作用域角色绑定
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ROLE_BINDING_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: ROLE_BINDING_DELETED
       parameters:
@@ -956,7 +1029,8 @@ paths:
       operationId: listResourceAcls
       summary: 查询资源 ACL
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:read]
       responses:
         '200':
@@ -974,7 +1048,8 @@ paths:
       operationId: createResourceAcl
       summary: 创建资源 ACL
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [RESOURCE_ACL_ALREADY_EXISTS, PERMISSION_UNKNOWN, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: RESOURCE_ACL_CREATED
       parameters:
@@ -1003,7 +1078,8 @@ paths:
       operationId: deleteResourceAcl
       summary: 删除资源 ACL
       tags: [authorization]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [RESOURCE_ACL_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [authorization:manage]
       x-audit-event: RESOURCE_ACL_DELETED
       parameters:
@@ -1018,7 +1094,8 @@ paths:
       operationId: listDictionaries
       summary: 查询字典类型
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [dictionary:read]
       responses:
         '200':
@@ -1040,7 +1117,8 @@ paths:
       operationId: listDictionaryItems
       summary: 查询字典项
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [dictionary:read]
       responses:
         '200':
@@ -1058,7 +1136,8 @@ paths:
       operationId: createDictionaryItem
       summary: 新增字典项
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [DICTIONARY_ITEM_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [dictionary:manage]
       x-audit-event: DICTIONARY_ITEM_CREATED
       parameters:
@@ -1087,7 +1166,8 @@ paths:
       operationId: updateDictionaryItem
       summary: 更新、启用或停用字典项
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [DICTIONARY_ITEM_NOT_FOUND, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [dictionary:manage]
       x-audit-event: DICTIONARY_ITEM_UPDATED
       parameters:
@@ -1117,7 +1197,8 @@ paths:
       operationId: listTags
       summary: 查询平台/组织受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:read]
       parameters:
         - { name: scopeType, in: query, schema: { $ref: '#/components/schemas/TagScopeType' } }
@@ -1140,7 +1221,8 @@ paths:
       operationId: createTag
       summary: 创建平台/组织受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TAG_ALREADY_EXISTS, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_CREATED
       parameters:
@@ -1169,7 +1251,8 @@ paths:
       operationId: updateTag
       summary: 更新、启用或停用受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TAG_NOT_FOUND, CONCURRENT_MODIFICATION, AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_UPDATED
       parameters:
@@ -1198,7 +1281,8 @@ paths:
       operationId: enableTag
       summary: 启用受控标签
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TAG_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_ENABLED
       parameters:
@@ -1213,7 +1297,8 @@ paths:
       operationId: disableTag
       summary: 停用受控标签，保留历史关联回显
       tags: [taxonomy]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [TAG_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [tag:manage]
       x-audit-event: TAG_DISABLED
       parameters:
@@ -1228,7 +1313,8 @@ paths:
       operationId: listConfigurations
       summary: 查询非敏感运行配置
       tags: [configuration]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:configure]
       responses:
         '200':
@@ -1248,7 +1334,8 @@ paths:
       operationId: updateConfiguration
       summary: 更新非敏感运行配置
       tags: [configuration]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [CONFIG_NOT_FOUND, CONFIG_SECRET_FORBIDDEN, CONFIG_VALUE_INVALID, AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:configure]
       x-audit-event: SYSTEM_CONFIGURATION_UPDATED
       parameters:
@@ -1278,7 +1365,8 @@ paths:
       operationId: listJobs
       summary: 游标查询持久化任务
       tags: [jobs]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:read]
       parameters:
         - { name: status, in: query, schema: { $ref: '#/components/schemas/JobStatus' } }
@@ -1302,7 +1390,8 @@ paths:
       operationId: retryJob
       summary: 人工重试可重试任务
       tags: [jobs]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [JOB_NOT_FOUND, JOB_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:manage]
       x-audit-event: JOB_MANUALLY_RETRIED
       parameters:
@@ -1318,7 +1407,8 @@ paths:
       operationId: cancelJob
       summary: 取消尚未开始且允许取消的持久化任务
       tags: [jobs]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [JOB_NOT_FOUND, JOB_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [job:manage]
       x-audit-event: JOB_MANUALLY_CANCELLED
       parameters:
@@ -1334,7 +1424,8 @@ paths:
       operationId: listAuditLogs
       summary: 游标查询不可变审计记录
       tags: [audit]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [audit:read]
       parameters:
         - { name: principalId, in: query, schema: { type: string } }
@@ -1360,7 +1451,8 @@ paths:
       operationId: listCurrentNotifications
       summary: 查询当前主体站内通知
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [notification:read]
       parameters:
         - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
@@ -1384,7 +1476,8 @@ paths:
       operationId: markNotificationRead
       summary: 标记当前主体通知已读
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [NOTIFICATION_NOT_FOUND, AUTH_UNAUTHENTICATED]
       x-required-permissions: [notification:read]
       x-audit-event: NOTIFICATION_MARKED_READ
       parameters:
@@ -1399,7 +1492,8 @@ paths:
       operationId: getMetricsSummary
       summary: 获取受保护的平台指标摘要
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
         '200':
@@ -1414,6 +1508,34 @@ paths:
                       data: { $ref: '#/components/schemas/MetricsSummary' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
+  /system/metrics/downloads:
+    get:
+      operationId: getDownloadLeaderboard
+      summary: 平台下载热度排行（基于 audit_log 下载授权事件聚合）
+      tags: [system]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
+      x-required-permissions: [system:observe]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 下载排行
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/DownloadLeaderboardEntry' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /system/dependencies:
     get:
       operationId: getSystemDependencies
@@ -1424,7 +1546,8 @@ paths:
         P0-B 补齐认证保护、Gitea/MinIO 探测和脱敏后的诊断信息。
       tags:
         - system
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
         '200':
@@ -1443,13 +1566,88 @@ paths:
         '403':
           $ref: '#/components/responses/ErrorResponse'
 
+  # ── PAT（PatController） ──
+
+  /tokens:
+    post:
+      operationId: createPat
+      summary: 创建个人访问令牌（完整 Token 仅返回一次）
+      tags: [auth]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
+      x-required-permissions: [token:create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePatRequest' }
+      responses:
+        '201':
+          description: PAT 已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatedPatView' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    get:
+      operationId: listPats
+      summary: 列出当前用户的 PAT
+      tags: [auth]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [token:create]
+      responses:
+        '200':
+          description: PAT 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PatView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /tokens/{tokenId}:
+    parameters:
+      - { name: tokenId, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: revokePat
+      summary: 吊销 PAT
+      tags: [auth]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [token:create]
+      responses:
+        '204':
+          description: 已吊销
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  # ── 集成（IntegrationsController） ──
+
+  /integrations/agent-bundle:
+    get:
+      operationId: getAgentBundle
+      summary: 获取 Agent 接入配置包
+      tags: [integrations]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [authorization:read]
+      responses:
+        '200':
+          description: Agent 接入配置包
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentBundleView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets:
     post:
       operationId: createAsset
       summary: 登记新资产（模型/数据集）
       description: 校验坐标唯一、开通 Git 仓库并写入初始卡片，返回资产详情。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_ALREADY_EXISTS, DICTIONARY_VALUE_INVALID, TAG_VALUE_INVALID, AUTH_PERMISSION_DENIED, IDEMPOTENCY_KEY_CONFLICT]
       x-required-permissions: [asset:create]
       x-audit-event: ASSET_CREATED
       parameters:
@@ -1481,18 +1679,50 @@ paths:
       summary: 检索资产摘要（游标分页）
       description: 精确字段过滤 + 关键词全文 + 权限可见性过滤；默认排除归档资产。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED, DICTIONARY_VALUE_INVALID, TAG_VALUE_INVALID]
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: type, in: query, schema: { $ref: '#/components/schemas/AssetType' } }
         - { name: namespace, in: query, schema: { type: string } }
+        - { name: organizationId, in: query, schema: { type: string } }
+        - { name: projectId, in: query, schema: { type: string } }
+        - { name: visibility, in: query, schema: { $ref: '#/components/schemas/Visibility' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AssetStatus' } }
+        - { name: teamId, in: query, schema: { type: string } }
         - { name: framework, in: query, schema: { type: string } }
         - { name: task, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { type: string } }
         - { name: modality, in: query, schema: { type: string } }
+        - { name: language, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
+        - name: taskCodes
+          in: query
+          description: 多值模型任务过滤（DATASET 多值分类，同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: modalityCodes
+          in: query
+          description: 多值数据模态过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: formatCodes
+          in: query
+          description: 多值数据格式过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: languageCodes
+          in: query
+          description: 多值语言过滤（同维度 OR；优先于单值 language）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
         - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 100 } }
@@ -1523,7 +1753,8 @@ paths:
       operationId: getAsset
       summary: 查询资产详情
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -1543,7 +1774,8 @@ paths:
       operationId: updateAsset
       summary: 更新资产可变元数据
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, ASSET_CONCURRENT_MODIFICATION, DICTIONARY_VALUE_INVALID, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_UPDATED
       requestBody:
@@ -1572,7 +1804,8 @@ paths:
       operationId: deleteAsset
       summary: 逻辑删除资产
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, ASSET_HAS_ACTIVE_VERSIONS, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:delete]
       x-audit-event: ASSET_DELETED
       responses:
@@ -1595,7 +1828,8 @@ paths:
         计数在数据库阶段完成授权可见性、状态与敏感度过滤，因此每个维度计数与施加同一过滤条件后的
         检索结果可达总数一致；无权资产不进入任何维度计数，`totalCount` 亦不泄漏其数量。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -1624,6 +1858,234 @@ paths:
         '401':
           $ref: '#/components/responses/ErrorResponse'
 
+  /assets/{assetId}/access:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listAssetAccess
+      summary: 列出资产显式 ACL
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: ACL 列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceAclView'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      operationId: createAssetAccess
+      summary: 为资产创建显式 ACL
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, RESOURCE_ACL_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetAccessRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ResourceAclView'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/access/{aclId}:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: aclId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteAssetAccess
+      summary: 删除资产显式 ACL
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, RESOURCE_ACL_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /assets/{assetId}/stats:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAssetDownloadStats
+      summary: 查询资产下载统计（基于 DOWNLOAD_TICKET_ISSUED 审计聚合）
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 下载统计
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AssetDownloadStats' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/lineage:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: depth
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1, maximum: 10, default: 3 }
+      - name: direction
+        in: query
+        required: false
+        schema: { type: string, enum: [up, down], default: down }
+    get:
+      operationId: getAssetLineage
+      summary: 查询资产血缘关系（向上/向下）
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 血缘关系
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AssetLineageView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/relations:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: createAssetRelation
+      summary: 创建资产血缘关系边（当前资产为 parent）
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, ASSET_ALREADY_EXISTS, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      x-audit-event: ASSET_RELATION_CREATED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAssetRelationRequest'
+      responses:
+        '201':
+          description: 关系已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AssetRelationEntry' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/relations/{relationId}:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: relationId
+        in: path
+        required: true
+        schema: { type: string }
+    delete:
+      operationId: deleteAssetRelation
+      summary: 删除资产血缘关系边（硬删除；历史由 audit_log 保留）
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      x-audit-event: ASSET_RELATION_DELETED
+      responses:
+        '200':
+          description: 关系已删除
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/deprecate:
     parameters:
       - name: assetId
@@ -1634,9 +2096,27 @@ paths:
       operationId: deprecateAsset
       summary: 弃用资产（ACTIVE → DEPRECATED）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_DEPRECATED
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                deprecationReason:
+                  type: string
+                  description: 弃用原因编码（REPLACED/OUTDATED/SECURITY_ISSUE/UNSUPPORTED）
+                deprecationNote:
+                  type: string
+                  description: 弃用说明
+                replacementAssetId:
+                  type: string
+                  description: 替代资产 ID
       responses:
         '200':
           description: 弃用成功
@@ -1664,7 +2144,8 @@ paths:
       operationId: archiveAsset
       summary: 归档资产（ACTIVE/DEPRECATED → ARCHIVED）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_ARCHIVED
       responses:
@@ -1694,7 +2175,8 @@ paths:
       operationId: restoreAsset
       summary: 恢复资产（DEPRECATED/ARCHIVED → ACTIVE）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:update]
       x-audit-event: ASSET_RESTORED
       responses:
@@ -1724,7 +2206,8 @@ paths:
       operationId: createDiscussionThread
       summary: 创建资产讨论线程
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:discuss]
       x-audit-event: DISCUSSION_CREATED
       requestBody:
@@ -1753,7 +2236,8 @@ paths:
       operationId: listDiscussionThreads
       summary: 列出资产讨论线程（游标分页）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
@@ -1783,7 +2267,8 @@ paths:
       operationId: createComment
       summary: 在讨论线程下创建评论
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_CREATED
       requestBody:
@@ -1812,7 +2297,8 @@ paths:
       operationId: listComments
       summary: 列出讨论线程下的评论（游标分页）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: cursor, in: query, schema: { type: string } }
@@ -1837,7 +2323,8 @@ paths:
       operationId: searchModels
       summary: 检索模型列表（固定类型语义入口）
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
@@ -1846,6 +2333,8 @@ paths:
         - { name: task, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20 } }
       responses:
@@ -1869,16 +2358,45 @@ paths:
     get:
       operationId: searchDatasets
       summary: 检索数据集列表（固定类型语义入口）
+      description: 复用统一资产检索，支持 taskCodes/modalityCodes/formatCodes/languageCodes 多值分类过滤（同维度 OR、跨维度 AND）。
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: keyword, in: query, schema: { type: string } }
         - { name: namespace, in: query, schema: { type: string } }
         - { name: format, in: query, schema: { type: string } }
         - { name: modality, in: query, schema: { type: string } }
+        - { name: language, in: query, schema: { type: string } }
         - { name: tagId, in: query, schema: { type: string, pattern: '^tag_' } }
         - { name: owner, in: query, schema: { type: string } }
+        - { name: sensitivity, in: query, schema: { type: string } }
+        - name: taskCodes
+          in: query
+          description: 多值数据任务过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: modalityCodes
+          in: query
+          description: 多值数据模态过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: formatCodes
+          in: query
+          description: 多值数据格式过滤（同维度 OR）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: languageCodes
+          in: query
+          description: 多值语言过滤（同维度 OR；优先于单值 language）
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - { name: includeArchived, in: query, schema: { type: boolean, default: false } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20 } }
       responses:
@@ -1908,7 +2426,8 @@ paths:
       operationId: editComment
       summary: 编辑评论（作者）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_EDITED
       requestBody:
@@ -1938,7 +2457,8 @@ paths:
       operationId: retractComment
       summary: 撤回评论（作者）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:discuss]
       x-audit-event: COMMENT_RETRACTED
       responses:
@@ -1963,7 +2483,8 @@ paths:
       operationId: hideComment
       summary: 隐藏评论（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: COMMENT_HIDDEN
       responses:
@@ -1988,7 +2509,8 @@ paths:
       operationId: unhideComment
       summary: 恢复评论（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: COMMENT_UNHIDDEN
       responses:
@@ -2012,7 +2534,8 @@ paths:
       operationId: lockThread
       summary: 锁定线程（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: THREAD_LOCKED
       responses:
@@ -2036,7 +2559,8 @@ paths:
       operationId: unlockThread
       summary: 解锁线程（Moderator）
       tags: [discussions]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: THREAD_UNLOCKED
       responses:
@@ -2053,6 +2577,57 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/discussions/subscription:
+    parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getDiscussionSubscription
+      summary: 查询当前主体对资产讨论的订阅状态
+      tags: [discussions]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 订阅状态
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          subscribed: { type: boolean }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: subscribeDiscussion
+      summary: 订阅/取消订阅资产讨论通知
+      tags: [discussions]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subscribe: { type: boolean, default: true }
+      responses:
+        '200':
+          description: 订阅状态已更新
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   # ── 系统告警（SystemAlertController） ──
 
   /system/alerts:
@@ -2060,7 +2635,8 @@ paths:
       operationId: listAlerts
       summary: 查询告警列表（按触发时间降序）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
@@ -2079,12 +2655,65 @@ paths:
                         items: { $ref: '#/components/schemas/SystemAlert' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
+  /system/alerts/{alertId}:acknowledge:
+    parameters:
+      - name: alertId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: acknowledgeAlert
+      summary: 人工确认告警（FIRING → RESOLVED）
+      tags: [system]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [system:observe]
+      responses:
+        '200':
+          description: 告警已确认
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SystemAlert' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /system/idempotency:
+    get:
+      operationId: listIdempotencyRecords
+      summary: 查询幂等记录列表（管理员只读）
+      tags: [system]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [job:read]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+      responses:
+        '200':
+          description: 幂等记录列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/IdempotencyRecord' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /system/alerts/firing:
     get:
       operationId: listFiringAlerts
       summary: 查询当前活跃告警（FIRING）
       tags: [system]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
         '200':
@@ -2108,7 +2737,8 @@ paths:
       operationId: listOutboxEvents
       summary: 查询最近 Outbox 事件
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
@@ -2132,7 +2762,8 @@ paths:
       operationId: countPendingOutbox
       summary: 统计 Outbox 待处理事件数
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       responses:
         '200':
@@ -2155,7 +2786,8 @@ paths:
       operationId: listDeliveries
       summary: 查询最近 Webhook 投递记录
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
@@ -2179,7 +2811,8 @@ paths:
       operationId: retryDelivery
       summary: 手动重试失败投递
       tags: [notifications]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [system:observe]
       parameters:
         - { name: deliveryId, in: path, required: true, schema: { type: string } }
@@ -2201,6 +2834,221 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  # ── 版本管理（VersionController） ──
+
+  /assets/{assetId}/versions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listVersions
+      summary: 列出版本（游标分页）
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CursorPageVersionView'
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      operationId: createDraftVersion
+      summary: 创建草稿版本
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, ASSET_VERSION_CONFLICT, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
+      x-required-permissions: [asset:update]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVersionRequest' }
+      responses:
+        '200':
+          description: 草稿版本已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VersionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/publish-requests:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listPublishRequestsByAsset
+      summary: 查询资产发布请求列表
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 发布请求列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { type: object }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/publish-requests/{requestId}/decisions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listPublishDecisions
+      summary: 查询审批决策历史
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 决策历史
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { type: object }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getVersion
+      summary: 查询版本详情
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 版本详情
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VersionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}/artifacts:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listArtifacts
+      summary: 列出版本工件
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 工件列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ArtifactView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}/transition:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: transitionVersion
+      summary: 推进版本状态
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionVersionRequest' }
+      responses:
+        '200':
+          description: 版本状态已更新
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/VersionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/versions/{versionId}/validation-report:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getValidationReport
+      summary: 查询校验报告
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 校验报告
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { type: object }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   # ── 版本审批与生命周期（ReviewController） ──
 
   /versions/{versionId}/publish-requests:
@@ -2210,7 +3058,8 @@ paths:
       operationId: submitPublishRequest
       summary: 提交发布请求
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: PUBLISH_REQUESTED
       responses:
@@ -2232,7 +3081,8 @@ paths:
       operationId: submitDecision
       summary: 提交审批决策
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [publish:approve]
       x-audit-event: PUBLISH_DECISION_SUBMITTED
       requestBody:
@@ -2259,7 +3109,8 @@ paths:
       operationId: deprecateVersion
       summary: 弃用版本
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: VERSION_DEPRECATED
       responses:
@@ -2281,7 +3132,8 @@ paths:
       operationId: archiveVersion
       summary: 归档版本
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       x-audit-event: VERSION_ARCHIVED
       responses:
@@ -2305,7 +3157,8 @@ paths:
       operationId: getPreview
       summary: 获取资产预览
       tags: [assets]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, PREVIEW_NOT_FOUND, PREVIEW_TOO_LARGE]
       x-required-permissions: [asset:read]
       parameters:
         - { name: versionId, in: query, schema: { type: string } }
@@ -2318,6 +3171,40 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/previews/generate:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: triggerPreviewGeneration
+      summary: 触发预览生成 Job
+      description: 入队 PREVIEW_GENERATE；content 可空，Worker 在 content 为空时按 versionId 解析首个可预览 artifact 并从对象存储自动取数（csv/jsonl/parquet/text/image）。
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, PREVIEW_TOO_LARGE, PREVIEW_UNSUPPORTED_FORMAT, PREVIEW_SOURCE_UNAVAILABLE]
+      x-required-permissions: [asset:manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                versionId: { type: string }
+                content: { type: string }
+                contentType: { type: string }
+              required: [versionId]
+      responses:
+        '200':
+          description: 预览 Job 已入队
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/dvc/config:
     parameters:
       - { name: assetId, in: path, required: true, schema: { type: string } }
@@ -2325,7 +3212,8 @@ paths:
       operationId: getDvcRemoteConfig
       summary: 获取 DVC Remote 配置
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -2343,7 +3231,8 @@ paths:
       operationId: getDvcCredentials
       summary: 签发短期 DVC 凭据
       tags: [version]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -2356,6 +3245,27 @@ paths:
 
   # ── 上传会话（UploadController） ──
 
+  /assets/{assetId}/upload-sessions:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listUploadSessions
+      summary: 列出资产上传会话
+      tags: [transfer]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          description: 上传会话列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CursorPageUploadSessionView' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/versions/{versionId}/upload-sessions:
     parameters:
       - { name: assetId, in: path, required: true, schema: { type: string } }
@@ -2364,7 +3274,8 @@ paths:
       operationId: createUploadSession
       summary: 创建上传会话
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT]
       x-required-permissions: [asset:manage]
       requestBody:
         required: true
@@ -2391,9 +3302,29 @@ paths:
       - { name: sessionId, in: path, required: true, schema: { type: string } }
     get:
       operationId: getUploadSession
-      summary: 查询上传会话详情
+      summary: 查询上传会话详情（含分片状态）
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 会话详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSessionView' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /assets/{assetId}/upload-sessions/{sessionId}:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: sessionId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getUploadSessionForAsset
+      summary: 按资产查询上传会话详情（含分片状态，用于恢复）
+      tags: [transfer]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       responses:
         '200':
@@ -2411,7 +3342,8 @@ paths:
       operationId: presignPartUpload
       summary: 签发 Part 上传预签名 URL
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       responses:
         '200':
@@ -2432,8 +3364,10 @@ paths:
     post:
       operationId: completeUploadSession
       summary: 完成上传会话
+      description: files 必须非空且包含真实文件元数据（path/sha256/size/mediaType）；空 files 返回 COMMON_INVALID_ARGUMENT（PRD §6.5 Manifest 为机器事实，不接受占位文件）。
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED, COMMON_INVALID_ARGUMENT, UPLOAD_SESSION_EXPIRED]
       x-required-permissions: [asset:manage]
       requestBody:
         required: true
@@ -2450,6 +3384,16 @@ paths:
                       partNumber: { type: integer }
                       etag: { type: string }
                     required: [partNumber, etag]
+                files:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      sha256: { type: string }
+                      size: { type: integer, format: int64 }
+                      mediaType: { type: string }
+                      sampleContent: { type: string }
               required: [parts]
       responses:
         '200':
@@ -2466,7 +3410,8 @@ paths:
       operationId: cancelUploadSession
       summary: 取消上传会话
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:manage]
       responses:
         '200':
@@ -2485,7 +3430,8 @@ paths:
       operationId: issueDownloadTicket
       summary: 签发下载票据
       tags: [transfer]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: artifactId, in: query, schema: { type: string } }
@@ -2505,7 +3451,8 @@ paths:
       operationId: receiveGiteaWebhook
       summary: 接收 Gitea Webhook
       tags: [integration]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [COMMON_INVALID_ARGUMENT]
       security: []
       parameters:
         - { name: X-Gitea-Delivery, in: header, required: false, schema: { type: string } }
@@ -2528,7 +3475,8 @@ paths:
       operationId: mcpJsonRpc
       summary: MCP JSON-RPC 端点
       tags: [mcp]
-      x-implementation-status: implemented
+      x-implementation-status: implemented-unverified
+      x-error-codes: [MCP_TOOL_NOT_ALLOWED, AUTH_UNAUTHENTICATED, AUTH_PERMISSION_DENIED]
       description: |
         支持方法: initialize、tools/list、tools/call、resources/list、resources/read。
         JWT 认证复用 PrincipalContext。
@@ -3309,6 +4257,76 @@ components:
           type: object
           additionalProperties: true
 
+    DownloadLeaderboardEntry:
+      type: object
+      required: [id, downloads]
+      properties:
+        id: { type: string, description: 资产 ID 或版本 ID }
+        label: { type: [string, 'null'], description: 展示标签（如版本号） }
+        downloads: { type: integer, format: int64, description: 下载授权次数 }
+
+    AssetDownloadStats:
+      type: object
+      required: [assetId, totalDownloads, byVersion]
+      properties:
+        assetId: { type: string }
+        totalDownloads: { type: integer, format: int64 }
+        byVersion:
+          type: array
+          items: { $ref: '#/components/schemas/DownloadLeaderboardEntry' }
+
+    AssetLineageView:
+      type: object
+      description: 资产血缘关系视图
+      required: [assetId, direction, depth, relations]
+      properties:
+        assetId: { type: string }
+        direction: { type: string, enum: [up, down] }
+        depth: { type: integer }
+        relations:
+          type: array
+          items: { $ref: '#/components/schemas/AssetRelationEntry' }
+
+    AssetRelationEntry:
+      type: object
+      required: [relationId, parentAssetId, childAssetId, relationType]
+      properties:
+        relationId: { type: string }
+        parentAssetId: { type: string }
+        parentName: { type: [string, 'null'] }
+        childAssetId: { type: string }
+        childName: { type: [string, 'null'] }
+        relationType: { type: string, enum: [DERIVED_FROM, TRAINED_ON, BASED_ON, FINE_TUNED_FROM] }
+        hopDepth: { type: integer }
+        createdBy: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    CreateAssetRelationRequest:
+      type: object
+      required: [childAssetId, relationType]
+      additionalProperties: false
+      properties:
+        childAssetId:
+          type: string
+          description: 下游/子资产 ID
+        relationType:
+          type: string
+          enum: [DERIVED_FROM, TRAINED_ON, BASED_ON, FINE_TUNED_FROM]
+
+    IdempotencyRecord:
+      type: object
+      description: 幂等记录（管理员只读）
+      required: [idempotencyKey, method, path, digest]
+      properties:
+        idempotencyKey: { type: string }
+        principalId: { type: [string, 'null'] }
+        method: { type: string }
+        path: { type: string }
+        digest: { type: string }
+        responseStatus: { type: [integer, 'null'] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: [string, 'null'], format: date-time }
+
     SystemDependencySummary:
       type: object
       description: 系统依赖与健康摘要（精简）
@@ -3376,6 +4394,19 @@ components:
           description: model_task 字典的有效 itemCode。
           example: text-generation
         architecture: { type: string }
+        parameterScale: { type: [string, 'null'], description: 参数规模，如 7B }
+        precision: { type: [string, 'null'], description: 精度，如 fp16/bf16 }
+        weightFormat: { type: [string, 'null'], description: 权重格式，如 safetensors }
+        runtime: { type: [string, 'null'], description: 运行时，如 vllm }
+        knownRisks:
+          type: [array, 'null']
+          description: 已知风险列表
+          items: { type: string }
+        usageRestrictions:
+          type: [array, 'null']
+          description: 使用限制列表
+          items: { type: string }
+        sensitivityCode: { type: [string, 'null'], description: 敏感级别编码 }
 
     DatasetProfile:
       type: object
@@ -3389,6 +4420,26 @@ components:
           type: string
           description: dataset_modality 字典的有效 itemCode。
           example: text
+        taskCodes:
+          type: [array, 'null']
+          description: 任务分类编码列表
+          items: { type: string }
+        modalityCodes:
+          type: [array, 'null']
+          description: 模态分类编码列表
+          items: { type: string }
+        formatCodes:
+          type: [array, 'null']
+          description: 格式分类编码列表
+          items: { type: string }
+        languageCodes:
+          type: [array, 'null']
+          description: 语言编码列表
+          items: { type: string }
+        sensitivityCode: { type: [string, 'null'], description: 敏感级别编码 }
+        sampleCount: { type: [integer, 'null'], description: 样本数量 }
+        totalBytes: { type: [integer, 'null'], description: 数据总字节数 }
+        sizeBucketCode: { type: [string, 'null'], description: 大小区间编码 }
 
     TagReference:
       type: object
@@ -3404,7 +4455,7 @@ components:
     CreateAssetRequest:
       type: object
       additionalProperties: false
-      required: [type, namespace, name, visibility]
+      required: [type, namespace, name, visibility, ownerTeamId]
       properties:
         type: { $ref: '#/components/schemas/AssetType' }
         organizationId:
@@ -3427,7 +4478,8 @@ components:
         owners:
           type: array
           uniqueItems: true
-          description: 受权 Principal/Team 的稳定 ID。
+          deprecated: true
+          description: 已弃用。请使用 ownerTeamId；非空写入将被拒绝。
           items: { type: string, pattern: '^(prn|team)_' }
           example: [team_01J0000000000000000000000]
         tagIds:
@@ -3440,8 +4492,26 @@ components:
           type: string
           description: license_catalog 字典的有效 itemCode。
           example: Apache-2.0
+        ownerTeamId:
+          type: string
+          description: 资产所属 Team ID（必填，须为 ACTIVE Team）
         model: { $ref: '#/components/schemas/ModelProfile' }
         dataset: { $ref: '#/components/schemas/DatasetProfile' }
+
+    CreateAssetAccessRequest:
+      type: object
+      additionalProperties: false
+      required: [principalId, permissionCodes]
+      properties:
+        principalId:
+          type: string
+          description: 被授权主体 ID
+        permissionCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string }
+          description: 权限编码列表（如 asset:read）
 
     UpdateAssetRequest:
       type: object
@@ -3465,6 +4535,8 @@ components:
         owners:
           type: array
           uniqueItems: true
+          deprecated: true
+          description: 已弃用；非空写入将被拒绝
           items: { type: string, pattern: '^(prn|team)_' }
         tagIds:
           type: array
@@ -3473,6 +4545,9 @@ components:
         license:
           type: string
           description: license_catalog 字典的有效 itemCode。
+        ownerTeamId:
+          type: string
+          description: 资产所属 Team ID
         model: { $ref: '#/components/schemas/ModelProfile' }
         dataset: { $ref: '#/components/schemas/DatasetProfile' }
 
@@ -3482,6 +4557,10 @@ components:
       required: [assetId, type, namespace, name, visibility, status]
       properties:
         assetId: { type: string, example: ast_01J... }
+        coordinate:
+          type: string
+          description: 稳定坐标 aih://{namespace}/{type}/{name}，type 为小写 model/dataset
+          example: aih://nlp/model/qwen-domain-7b
         type: { $ref: '#/components/schemas/AssetType' }
         namespace: { type: string }
         organizationId: { type: [string, 'null'], description: 所属组织 ID }
@@ -3520,7 +4599,26 @@ components:
         provisioningStatus:
           type: string
           description: 建仓异步状态
-          enum: [PENDING, IN_PROGRESS, COMPLETED, FAILED]
+          enum: [NONE, PENDING, IN_PROGRESS, COMPLETED, FAILED]
+        ownerTeamId: { type: [string, 'null'], description: 资产所属 Team ID }
+        aliases:
+          type: [array, 'null']
+          description: 历史坐标别名（rename 后保留旧坐标）
+          items: { type: string }
+        rowVersion:
+          type: integer
+          description: 乐观锁版本号
+        deprecationReason: { type: [string, 'null'], description: 弃用原因编码 }
+        deprecationNote: { type: [string, 'null'], description: 弃用说明 }
+        replacementAssetId: { type: [string, 'null'], description: 替代资产 ID }
+        card:
+          type: [object, 'null']
+          description: Card 投影（来自仓库 README/asset.yaml）
+          properties:
+            readme: { type: [string, 'null'] }
+            assetYaml: { type: [string, 'null'] }
+            sourceCommit: { type: [string, 'null'] }
+            untrustedContent: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
 
@@ -3530,6 +4628,9 @@ components:
       required: [assetId, type, namespace, name, visibility, status]
       properties:
         assetId: { type: string }
+        coordinate:
+          type: string
+          description: 稳定坐标 aih://{namespace}/{type}/{name}
         type: { $ref: '#/components/schemas/AssetType' }
         namespace: { type: string }
         organizationId: { type: [string, 'null'], description: 所属组织 ID }
@@ -3556,6 +4657,12 @@ components:
         format: { type: string }
         modality: { type: string }
         updatedAt: { type: string, format: date-time }
+        matchedFields:
+          type: array
+          description: 关键词检索命中的字段名（无关键词时为空）
+          items:
+            type: string
+            enum: [name, displayName, description, taskCodes]
 
     CursorPageAssetSummary:
       type: object
@@ -3592,11 +4699,19 @@ components:
       type: object
       description: 资产 Facet 聚合视图
       properties:
-        type: { $ref: '#/components/schemas/FacetDimension' }
-        framework: { $ref: '#/components/schemas/FacetDimension' }
-        task: { $ref: '#/components/schemas/FacetDimension' }
-        modality: { $ref: '#/components/schemas/FacetDimension' }
-        format: { $ref: '#/components/schemas/FacetDimension' }
+        types: { type: object, additionalProperties: { type: integer } }
+        frameworks: { type: object, additionalProperties: { type: integer } }
+        tasks: { type: object, additionalProperties: { type: integer } }
+        formats: { type: object, additionalProperties: { type: integer } }
+        modalities: { type: object, additionalProperties: { type: integer } }
+        licenses: { type: object, additionalProperties: { type: integer } }
+        sensitivities: { type: object, additionalProperties: { type: integer } }
+        sizeBuckets: { type: object, additionalProperties: { type: integer } }
+        taskCodes: { type: object, additionalProperties: { type: integer } }
+        modalityCodes: { type: object, additionalProperties: { type: integer } }
+        formatCodes: { type: object, additionalProperties: { type: integer } }
+        languageCodes: { type: object, additionalProperties: { type: integer } }
+        totalCount: { type: integer, description: 匹配资产总数 }
 
     ThreadStatus:
       type: string
@@ -3798,24 +4913,179 @@ components:
         principalId: { type: string }
         status:
           type: string
-          enum: [OPEN, COMMITTING, COMPLETED, CANCELLED, EXPIRED]
+          enum: [OPEN, COMMITTING, PROCESSING, COMPLETED, FAILED, CANCELLED, EXPIRED]
         totalBytes: { type: integer, format: int64 }
         fileCount: { type: integer }
         expiresAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+        materializeJobId: { type: [string, 'null'] }
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/UploadPartView' }
+        files:
+          type: array
+          items: { $ref: '#/components/schemas/UploadFileView' }
+
+    UploadFileView:
+      type: object
+      description: 上传文件状态
+      properties:
+        fileId: { type: string }
+        path: { type: string }
+        size: { type: integer, format: int64 }
+        sha256: { type: [string, 'null'] }
+        mediaType: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [PENDING, UPLOADING, COMPLETED, FAILED]
+
+    UploadPartView:
+      type: object
+      description: 上传分片状态
+      properties:
+        partNumber: { type: integer }
+        size: { type: integer, format: int64 }
+        etag: { type: [string, 'null'] }
+        status:
+          type: string
+          enum: [PENDING, COMPLETED]
+        uploadedAt: { type: [string, 'null'], format: date-time }
+
+    PatView:
+      type: object
+      properties:
+        tokenId: { type: string }
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [ACTIVE, REVOKED, EXPIRED]
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        lastUsedAt: { type: [string, 'null'], format: date-time }
+
+    CreatedPatView:
+      type: object
+      properties:
+        tokenId: { type: string }
+        name: { type: string }
+        token: { type: string, format: password }
+        scopes:
+          type: array
+          items: { type: string }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+
+    CreatePatRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+        ttlDays: { type: integer, minimum: 1, maximum: 365 }
+
+    AgentBundleView:
+      type: object
+      properties:
+        mcpEndpointUrl: { type: string, format: uri }
+        openApiUrl: { type: string, format: uri }
+        skillTemplates:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              description: { type: string }
+              path: { type: string }
+        exampleCommands:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              command: { type: string }
+
+    CursorPageUploadSessionView:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UploadSessionView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
+
+    VersionView:
+      type: object
+      properties:
+        versionId: { type: string }
+        assetId: { type: string }
+        version: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED]
+        sourceCommit: { type: [string, 'null'] }
+        manifestDigest: { type: [string, 'null'] }
+        gitTag: { type: [string, 'null'] }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        publishedBy: { type: [string, 'null'] }
+        notes: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+
+    ArtifactView:
+      type: object
+      properties:
+        artifactId: { type: string }
+        versionId: { type: string }
+        path: { type: string }
+        dvcFile: { type: [string, 'null'] }
+        dvcHash: { type: [string, 'null'] }
+        sha256: { type: string }
+        size: { type: integer, format: int64 }
+        mediaType: { type: [string, 'null'] }
+
+    CreateVersionRequest:
+      type: object
+      required: [version]
+      properties:
+        version: { type: string }
+
+    TransitionVersionRequest:
+      type: object
+      required: [targetStatus]
+      properties:
+        targetStatus:
+          type: string
+          enum: [DRAFT, VALIDATING, PENDING_REVIEW, PUBLISHED, DEPRECATED, ARCHIVED]
+
+    CursorPageVersionView:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VersionView' }
+        nextCursor: { type: [string, 'null'] }
+        hasMore: { type: boolean }
 
     DownloadTicket:
       type: object
       description: 下载票据
-      required: [method, presignedUrl, expiresAt, fileName, fileSize]
+      required: [method]
       properties:
         method:
           type: string
           enum: [PRESIGNED_URL, GIT_DVC]
-        presignedUrl: { type: string, format: uri }
-        expiresAt: { type: string, format: date-time }
-        fileName: { type: string }
-        fileSize: { type: [integer, 'null'] }
+        presignedUrl: { type: [string, 'null'], format: uri }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        fileName: { type: [string, 'null'] }
+        fileSize: { type: [integer, 'null'], format: int64 }
+        gitCloneUrl: { type: [string, 'null'], format: uri }
+        revision: { type: [string, 'null'] }
+        dvcCredentialsUrl: { type: [string, 'null'] }
+        assetId: { type: [string, 'null'] }
 
     # ── MCP schema ──
 

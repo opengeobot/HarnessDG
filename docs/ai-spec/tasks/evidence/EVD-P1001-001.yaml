@@ -1,0 +1,84 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P1001-001
+status: PARTIAL
+
+task:
+  taskId: TASK-P1-001
+  requirements: [REQ-AST-001]
+  scenarios:
+    - AC-P1-AST-001
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-001.md
+    result: FAIL
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-001.md -CheckChangedPaths
+    result: null
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P1-001.md -CheckCompletion
+    result: FAIL
+
+source:
+  branch: ai
+  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  dirtyWorktree: false
+  dirtyPaths: []
+
+environment:
+  observedAt: 2026-07-11T21:00:00+08:00
+  os: Ubuntu 24.04 LTS
+  timezone: Asia/Shanghai
+  java: "21"
+  node: "22"
+  pnpm: "9"
+  docker: "available"
+  composeProfiles: []
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: /home/axe/workspace/HarnessDG
+  command: cd backend && ./mvnw -o test -Dtest='AssetCoordinateTest,AssetViewCoordinateTest' && bash ./deploy/compose/scripts/verify.sh
+  startedAt: 2026-07-11T19:25:10+08:00
+  finishedAt: 2026-07-11T19:50:10+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E3
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-001
+      assertion: Asset.coordinate() returns aih://{namespace}/{type}/{name}; AssetCoordinateTest + AssetViewCoordinateTest (4 tests PASS); OpenAPI AssetView/SummaryView coordinate field present
+  notProven:
+    - scenarioId: AC-P1-AST-001-E4
+      reason: Compose E4 coordinate UI journey not executed; verify.sh V05/V12 PASS (schema/default-deny only)
+
+artifacts:
+  reports: []
+  logs: []
+  screenshots: []
+  traces: []
+  metrics: []
+  databaseQueries: []
+
+secrets:
+  redactionChecked: true
+  findings: []
+
+limitations:
+  skippedTests: []
+  assumptions: []
+  environmentDifferences:
+    - Compose verify.sh 28/28 PASS after fresh-volume reset (V05 JWT+refresh, V20 reconciler)
+  checkCompletionBlockers:
+    - 421 changed paths outside TASK-P1-001 allowedPaths (wave L cumulative branch delta)
+    - Evidence status PARTIAL with notProven E4 AC; review.accepted false (AI cannot self-accept)
+
+review:
+  recordedBy: AI
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

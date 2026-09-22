@@ -9,6 +9,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.aihub.notification.application.NotificationRecipientResolver;
+import com.aihub.notification.application.NotificationService;
 import com.aihub.platform.observability.domain.DependencyHealth;
 import com.aihub.platform.observability.domain.DependencyHealthProbe;
 import com.aihub.platform.observability.domain.DependencyStatus;
@@ -35,6 +37,15 @@ class MetricsSummaryServiceTest {
         return provider;
     }
 
+    @SuppressWarnings("unchecked")
+    private SystemDependencyService dependencyService(List<DependencyHealthProbe> probes) {
+        return new SystemDependencyService(probes,
+                mock(AlertService.class),
+                mock(NotificationService.class),
+                mock(NotificationRecipientResolver.class),
+                Clock.systemUTC());
+    }
+
     @Test
     void shouldAggregateJobCountsAndDependencies() {
         JobMetricsPort jobMetrics = status -> {
@@ -43,7 +54,7 @@ class MetricsSummaryServiceTest {
             if ("DEAD".equals(status)) return 1L;
             return 0L;
         };
-        SystemDependencyService dependencyService = new SystemDependencyService(List.of());
+        SystemDependencyService dependencyService = dependencyService(List.of());
         Clock clock = Clock.fixed(Instant.parse("2026-07-01T10:00:00Z"), ZoneOffset.UTC);
 
         MetricsSummaryService service = new MetricsSummaryService(
@@ -61,7 +72,7 @@ class MetricsSummaryServiceTest {
 
     @Test
     void shouldFallbackToZeroWhenJobMetricsPortMissing() {
-        SystemDependencyService dependencyService = new SystemDependencyService(List.of());
+        SystemDependencyService dependencyService = dependencyService(List.of());
         Clock clock = Clock.fixed(Instant.parse("2026-07-01T10:00:00Z"), ZoneOffset.UTC);
 
         MetricsSummaryService service = new MetricsSummaryService(
@@ -76,7 +87,7 @@ class MetricsSummaryServiceTest {
 
     @Test
     void shouldIncludeDependencyHealthStatus() {
-        SystemDependencyService dependencyService = new SystemDependencyService(List.of(
+        SystemDependencyService dependencyService = dependencyService(List.of(
                 new DependencyHealthProbe() {
                     @Override
                     public String name() {
