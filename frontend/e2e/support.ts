@@ -51,9 +51,17 @@ export async function openAssetsViaNav(page: Page) {
  * <p>刻意不使用 {@code page.goto('/assets/...')} 做整页加载：前端容器 nginx 的
  * {@code location /assets/} 静态资源规则会遮蔽 SPA 深链（详见 EVD-P0BR-050-001 的
  * limitations）。本函数走用户在应用内真实可行的路径，不掩盖该既有基础设施缺陷。
+ *
+ * <p>目录页默认按创建时间倒序分页（limit=10）：验收栈累积的历史夹具资产会把目标资产
+ * 挤出首屏，直接找链接必然间歇失败。先使用页内真实搜索框按显示名过滤，再点击结果——
+ * 这是用户本来的操作路径，不是放宽断言。
  */
 export async function openAssetDetailViaCatalog(page: Page, displayName: string) {
   await openAssetsViaNav(page);
+  await page
+    .getByPlaceholder(/搜索名称、描述或标签|Search name, description or tags/i)
+    .fill(displayName);
+  await page.keyboard.press('Enter');
   await page.getByRole('link', { name: displayName }).click();
   await expect(page.getByText(/页面不存在|Page not found/)).toHaveCount(0);
 }

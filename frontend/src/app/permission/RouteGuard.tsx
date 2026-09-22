@@ -7,6 +7,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Button, Result, Spin } from 'antd';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/app/auth';
 import type { Scope } from '@/shared/types';
 import { usePermission } from './usePermission';
@@ -21,11 +22,12 @@ export function RouteGuard({ requiredScopes, children }: RouteGuardProps) {
   const { status } = useAuth();
   const { hasAllScopes } = usePermission();
   const location = useLocation();
+  const { t } = useTranslation();
 
   if (status === 'initializing') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 96 }}>
-        <Spin size="large" tip="正在恢复会话..." />
+        <Spin size="large" tip={t('guard.restoringSession')} />
       </div>
     );
   }
@@ -48,11 +50,11 @@ export function RouteGuard({ requiredScopes, children }: RouteGuardProps) {
   return (
     <Result
       status="403"
-      title="缺少访问权限"
-      subTitle={`所需权限: ${requiredScopes?.join('、')}。请联系管理员申请相应权限。`}
+      title={t('guard.forbiddenTitle')}
+      subTitle={t('guard.forbiddenSubTitle', { scopes: requiredScopes?.join('、') })}
       extra={
         <Button type="primary" disabled>
-          申请权限
+          {t('guard.applyPermission')}
         </Button>
       }
     />

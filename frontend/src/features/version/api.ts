@@ -41,26 +41,6 @@ export function createDraftVersion(
   });
 }
 
-/** 推进版本状态 */
-export function transitionVersion(
-  versionId: string,
-  targetStatus: string,
-): Promise<VersionView> {
-  return apiClient.post<VersionView>(`/versions/${versionId}/transition`, {
-    targetStatus,
-  });
-}
-
-/** 发布版本 */
-export function publishVersion(
-  versionId: string,
-  gitTag: string,
-): Promise<VersionView> {
-  return apiClient.post<VersionView>(`/versions/${versionId}/publish`, {
-    gitTag,
-  });
-}
-
 /** 列出版本工件 */
 export function listArtifacts(assetId: string, versionId: string): Promise<ArtifactView[]> {
   return apiClient.get<ArtifactView[]>(`/assets/${assetId}/versions/${versionId}/artifacts`);

@@ -21,7 +21,8 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { key: '/assets', labelKey: 'nav.assetCatalog', requiredScopes: ['asset:read'] },
   { key: '/version', labelKey: 'nav.versionCenter', requiredScopes: ['asset:read'] },
-  { key: '/upload', labelKey: 'nav.uploadCenter', requiredScopes: ['asset:write'] },
+  { key: '/upload', labelKey: 'nav.uploadCenter', requiredScopes: ['asset:manage'] },
+  { key: '/review', labelKey: 'nav.review', requiredScopes: ['asset:manage'] },
   { key: '/access', labelKey: 'nav.accessCredentials', requiredScopes: ['authorization:read'] },
   { key: '/integrations', labelKey: 'nav.agentIntegration', requiredScopes: ['authorization:read'] },
   {

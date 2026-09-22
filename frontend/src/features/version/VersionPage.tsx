@@ -10,7 +10,6 @@ import {
   issueDownloadTicket,
   listArtifacts,
   listVersions,
-  transitionVersion,
 } from './api';
 import type { ArtifactView, VersionView } from './types';
 
@@ -58,20 +57,6 @@ export function VersionPage() {
       setArtifacts(arts);
     } catch {
       setArtifacts([]);
-    }
-  };
-
-  const handleTransition = async (v: VersionView, target: string) => {
-    try {
-      const updated = await transitionVersion(v.versionId, target);
-      setVersions((prev) =>
-        prev.map((x) => (x.versionId === v.versionId ? updated : x)),
-      );
-      if (selectedVersion?.versionId === v.versionId) {
-        setSelectedVersion(updated);
-      }
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t('version.transitionFailed'));
     }
   };
 
@@ -144,19 +129,6 @@ export function VersionPage() {
                   {v.createdAt && new Date(v.createdAt).toLocaleString()}
                   {v.sourceCommit && ` | Commit: ${v.sourceCommit.slice(0, 8)}`}
                 </div>
-                {v.status === 'DRAFT' && (
-                  <div className="mt-2 flex gap-1">
-                    <button
-                      className="text-xs px-2 py-1 bg-yellow-100 rounded"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTransition(v, 'VALIDATING');
-                      }}
-                    >
-                      {t('version.submitValidation')}
-                    </button>
-                  </div>
-                )}
                 {v.status === 'PUBLISHED' && (
                   <div className="mt-2 flex gap-1">
                     <button

@@ -1,91 +1,96 @@
 /**
- * 功能: 发布审批页面——版本列表、提交发布、审批决策。
- * 时间: 2026-07-05
+ * 功能: 发布审批页面——真实版本查询、提交发布请求、审批决策。
+ *       后端契约（ReviewController）只有提交与决策两个 POST 端点，没有发布请求
+ *       列表/读取端点，因此审批队列仅包含本会话内以真实 requestId 提交的请求，
+ *       不渲染任何派生或虚构的行（TASK-P0BR-065 / AC-P0B-UI-003）。
+ * 时间: 2026-09-22
  * 作者: AxeXie
  */
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { apiClient } from '@/shared/api';
+import { listVersions } from './api';
+import type { VersionView } from './types';
 
-interface PublishRequest {
+/** 本会话内提交成功的发布请求（requestId 全部来自后端真实响应）。 */
+interface SessionRequest {
   requestId: string;
   versionId: string;
-  frozenDigest: string;
+  versionLabel: string;
+  /** SUBMITTED=待决策；其余值为已提交的本会话决策（如 DECIDED:APPROVE）。 */
   status: string;
-  submittedBy: string;
-  submittedAt: string;
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  SUBMITTED: 'bg-blue-100 text-blue-800',
-  APPROVED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  PUBLISHING: 'bg-yellow-100 text-yellow-800',
-  PUBLISHED: 'bg-green-200 text-green-900',
-  FAILED: 'bg-red-200 text-red-900',
-};
 
 export function ReviewPage() {
   const { t } = useTranslation();
   useDocumentTitle(t('review.title'));
   const [assetId, setAssetId] = useState('');
-  const [requests, setRequests] = useState<PublishRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<PublishRequest | null>(null);
+  const [versions, setVersions] = useState<VersionView[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [queried, setQueried] = useState(false);
+  const [requests, setRequests] = useState<SessionRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<SessionRequest | null>(null);
   const [decision, setDecision] = useState<'APPROVE' | 'REJECT'>('APPROVE');
   const [comments, setComments] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const loadRequests = useCallback(async () => {
+  const loadVersions = useCallback(async () => {
     if (!assetId) return;
+    setLoading(true);
     setError(null);
     try {
-      const versions = await apiClient.get<Array<{ versionId: string; version: string; status: string }>>(
-        `/assets/${assetId}/versions`,
-      );
-      const publishedRequests = versions
-        .filter((v) => ['PENDING_REVIEW', 'PUBLISHED'].includes(v.status))
-        .map((v) => ({
-          requestId: `pub_${v.versionId}`,
-          versionId: v.versionId,
-          frozenDigest: 'pending',
-          status: v.status === 'PUBLISHED' ? 'PUBLISHED' : 'SUBMITTED',
-          submittedBy: 'system',
-          submittedAt: new Date().toISOString(),
-        }));
-      setRequests(publishedRequests);
+      const page = await listVersions(assetId);
+      setVersions(page.items ?? []);
+      setQueried(true);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.loadFailedMsg'));
+    } finally {
+      setLoading(false);
     }
   }, [assetId, t]);
 
-  const submitPublishRequest = async (versionId: string) => {
+  const submitPublishRequest = async (v: VersionView) => {
+    setError(null);
+    setMessage(null);
     try {
       const result = await apiClient.post<{ requestId: string }>(
-        `/versions/${versionId}/publish-requests`,
+        `/versions/${v.versionId}/publish-requests`,
       );
+      const created: SessionRequest = {
+        requestId: result.requestId,
+        versionId: v.versionId,
+        versionLabel: v.version,
+        status: 'SUBMITTED',
+      };
+      setRequests((prev) => [created, ...prev.filter((r) => r.requestId !== created.requestId)]);
       setMessage(t('review.requestSubmitted', { id: result.requestId }));
-      loadRequests();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.submitFailedMsg'));
     }
   };
 
   const submitDecision = async (requestId: string) => {
+    setError(null);
     try {
       await apiClient.post(`/publish-requests/${requestId}/decisions`, {
         decision,
         comments,
       });
-      setMessage(t('review.decisionSubmitted', { decision }));
+      setRequests((prev) =>
+        prev.map((r) => (r.requestId === requestId ? { ...r, status: `DECIDED:${decision}` } : r)),
+      );
+      setMessage(t('review.decisionSubmitted', { decision: t(decision === 'APPROVE' ? 'review.approve' : 'review.reject') }));
       setComments('');
       setSelectedRequest(null);
-      loadRequests();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t('review.decisionFailed'));
     }
   };
+
+  const pendingVersions = versions.filter((v) => v.status === 'PENDING_REVIEW');
+  const selectedIsOpen = selectedRequest?.status === 'SUBMITTED';
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -100,18 +105,58 @@ export function ReviewPage() {
         />
         <button
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          onClick={loadRequests}
+          onClick={loadVersions}
         >
           {t('common.query')}
         </button>
       </div>
 
-      {error && <p className="text-red-600 mb-4">{error}</p>}
+      {error && (
+        <div className="mb-4 flex items-center gap-3">
+          <p className="text-red-600" role="alert">{error}</p>
+          <button
+            className="text-sm px-3 py-1 border rounded hover:bg-gray-100"
+            onClick={loadVersions}
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
       {message && <p className="text-green-600 mb-4">{message}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-          <h2 className="text-lg font-semibold mb-2">{t('review.publishRequests')}</h2>
+          <h2 className="text-lg font-semibold mb-2">{t('review.pendingVersions')}</h2>
+          {loading && <p className="text-gray-500">{t('common.loading')}</p>}
+          {!loading && !queried && <p className="text-gray-400 text-sm">{t('review.queryHint')}</p>}
+          {!loading && queried && pendingVersions.length === 0 && (
+            <p className="text-gray-400 text-sm">{t('review.emptyPending')}</p>
+          )}
+          {!loading && (
+            <div className="space-y-2">
+              {pendingVersions.map((v) => (
+                <div key={v.versionId} className="p-3 border rounded">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-semibold">{v.version}</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                      {v.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {t('version.versionId')}: <span className="font-mono">{v.versionId}</span>
+                  </div>
+                  <button
+                    className="mt-2 text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    onClick={() => submitPublishRequest(v)}
+                  >
+                    {t('review.submitPublish')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <h2 className="text-lg font-semibold mt-6 mb-2">{t('review.sessionRequests')}</h2>
           <div className="space-y-2">
             {requests.map((r) => (
               <div
@@ -124,31 +169,24 @@ export function ReviewPage() {
                 onClick={() => setSelectedRequest(r)}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-sm">{r.versionId}</span>
+                  <span className="font-mono text-sm">{r.requestId}</span>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded ${STATUS_COLORS[r.status] ?? 'bg-gray-100'}`}
+                    className={`text-xs px-2 py-0.5 rounded ${
+                      r.status === 'SUBMITTED'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}
                   >
                     {r.status}
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1">
-                  {t('review.submitter')}: {r.submittedBy} | {new Date(r.submittedAt).toLocaleString()}
+                  {t('version.version')}: {r.versionLabel}
                 </div>
-                {r.status === 'SUBMITTED' && (
-                  <button
-                    className="mt-2 text-xs px-2 py-1 bg-blue-100 rounded hover:bg-blue-200"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      submitPublishRequest(r.versionId);
-                    }}
-                  >
-                    {t('review.resubmit')}
-                  </button>
-                )}
               </div>
             ))}
             {requests.length === 0 && (
-              <p className="text-gray-400 text-sm">{t('review.noRequests')}</p>
+              <p className="text-gray-400 text-sm">{t('review.noSessionRequests')}</p>
             )}
           </div>
         </div>
@@ -167,18 +205,12 @@ export function ReviewPage() {
                   <span className="font-mono text-sm">{selectedRequest.versionId}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">{t('review.frozenDigest')}</span>
-                  <span className="font-mono text-xs">{selectedRequest.frozenDigest}</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-gray-500">{t('common.status')}</span>
-                  <span className={STATUS_COLORS[selectedRequest.status] ?? ''}>
-                    {selectedRequest.status}
-                  </span>
+                  <span>{selectedRequest.status}</span>
                 </div>
               </div>
 
-              {selectedRequest.status === 'SUBMITTED' && (
+              {selectedIsOpen && (
                 <div className="space-y-3">
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">{t('review.decision')}</label>
@@ -214,7 +246,7 @@ export function ReviewPage() {
                 </div>
               )}
 
-              {selectedRequest.status !== 'SUBMITTED' && (
+              {!selectedIsOpen && (
                 <p className="text-gray-500 text-sm">{t('review.alreadyProcessed')}</p>
               )}
             </div>

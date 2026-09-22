@@ -1,21 +1,23 @@
 /**
- * 功能: 404 占位页面
- * 时间: 2026-06-29
+ * 功能: 404 占位页面。文案全部走 i18n，支持运行时中英文切换。
+ * 时间: 2026-09-22
  * 作者: AxeXie
  */
 import { Button, Result } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 export function NotFoundPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   return (
     <Result
       status="404"
-      title="页面不存在"
-      subTitle="您访问的页面不存在或已被移动。"
+      title={t('notFound.title')}
+      subTitle={t('notFound.subTitle')}
       extra={
         <Button type="primary" onClick={() => navigate('/assets')}>
-          返回资产目录
+          {t('notFound.backToCatalog')}
         </Button>
       }
     />

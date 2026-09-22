@@ -5,6 +5,10 @@
  * 1) 死链——版本列表「查看全部」必须指向已注册路由，不得落到全局 404；
  * 2) 能力不可发现——Team、角色绑定、资源 ACL 必须在导航中有带真实 Scope 的入口。
  *
+ * <p>覆盖 TASK-P0BR-065 的两类缺陷：
+ * 3) 幽灵权限码——前端不得声明后端 Permissions.java 中不存在的 asset:write；
+ * 4) 审批入口——/review 必须在导航中且与路由守卫同为 asset:manage。
+ *
  * <p>断言基于真实的 `NAV_ITEMS` 与 `router.routes` 对象，而非源码文本匹配，
  * 因此对格式化与重构不敏感。
  */
@@ -94,6 +98,23 @@ describe('导航可发现性', () => {
   it('不存在重复的导航路径（避免两份权限映射漂移）', () => {
     const keys = nav.map((n) => n.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('发布审批入口存在并声明 asset:manage（TASK-P0BR-065）', () => {
+    const item = nav.find((n) => n.key === '/review');
+    expect(item, '/review 必须作为独立导航项存在').toBeDefined();
+    expect(item?.requiredScopes).toEqual(['asset:manage']);
+  });
+
+  it('全站导航不声明后端不存在的幽灵权限码 asset:write（TASK-P0BR-065）', () => {
+    // 后端 Permissions.java 只有 asset:read/manage/delete/publish/discuss/moderate，
+    // 从未定义 asset:write；任何前端声明都永远不会被 JWT scopes 满足。
+    for (const item of nav) {
+      expect(
+        item.requiredScopes ?? [],
+        `${item.key} 使用了不存在的 asset:write`,
+      ).not.toContain('asset:write');
+    }
   });
 });
 
