@@ -274,3 +274,20 @@ W7 将关键 EVD 从纯 DRAFT 推进至 `PARTIAL`（E2/E3 单元测试已证、E
 | O | 真实 multipart/STS | IMPLEMENTED_UNVERIFIED |
 | P | Email/Redis/MCP 限流 | IMPLEMENTED_UNVERIFIED |
 | Q | E5 drills + 证据闭环 | E5 三项演练 PASS/SKIP 诚实记录；`-CheckCompletion` 仍 FAIL |
+
+## 10. Merge snapshot — 2026-09-22（本地 P0-B 主线 × origin/ai 业务波次）
+
+Merge commit `c633ebc`：`e9d65b7`（本地 P0-B 整改主线，含 TASK-P0BR-064/065）× `f974ad4`（origin/ai Waves A–R）。
+按「以远端业务波次为主干」裁定解决 83 处冲突；P0-B 独有整改（审查页数据流、幽灵端点清理、启动刷新去重、发布链路权限码取齐）以增量方式保留。
+
+| 项 | 结果 |
+| --- | --- |
+| Flyway 编号撞车 | 本地整改迁移 V23–V27 重排为 **V37–V41**；`ck_publish` 约束取两侧并集；V1–V36 未改动 |
+| 全量 `./mvnw -o test` | **748 PASS / 0 FAIL**（合并修复：DEC-011 `ownerTeamId` 测试工厂、发布链路 `bindSourceCommit`、`JdbcTemplate.update(sql, requestId)` 2 参 stub 对齐） |
+| 前端 `pnpm exec vitest run` | **47 files / 206 PASS / 0 FAIL**（串行 `--pool=threads --testTimeout=20000`；并行伪超时已甄别排除） |
+| 前端 `pnpm typecheck` | **PASS** |
+| 受控字典契约 | 前端裸码引用改为 V6/V35 权威码：`license_catalog`/`model_framework`/`model_task`/`dataset_format`/`dataset_modality`/`dataset_language` |
+| 治理门禁前提更新 | 经裁定采纳远端语言功能：`dataset_task`/`dataset_language` 纳入 MVP 清单；语言筛选断言由「必须移除」改为「必须经受控字典 `dataset_language`」（后端 `AssetController` language/languageCodes 入参已支持） |
+| AuthProvider 测试隔离 | 导出 `__resetBootstrapRefreshForTests()` 重置跨挂载 `bootstrapRefresh` 缓存；生产语义（每页加载恰一次 refresh）不变 |
+
+**状态口径不变：P1–P5 仍为 PARTIAL / IMPLEMENTED_UNVERIFIED。** 本快照仅记录合并后的构建与单元/组件级证据（E1–E3）；Compose E4（V05 凭据漂移）、`-CheckCompletion`、E5 演练仍是波次退出阻塞项。
