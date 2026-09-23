@@ -328,31 +328,93 @@ journey_v05_create_model() {
   esac
 }
 
+# V06：真实 DVC 往返（PRD：dvc add/push 后清空本地再 dvc pull，SHA-256 与原文件相同）。
+# DVC CLI 在 worker 镜像内（dvc[s3]+git，minio:9000 原生可达，AWS_* 凭据已注入），
+# 故往返在 worker 容器内执行而非宿主机；凭据不落盘，仅经容器环境与 stdin 脚本引用。
 journey_v06_dvc_roundtrip() {
-  if ! command -v dvc >/dev/null 2>&1; then
-    journey_skip "V06" "DVC 往返 push/pull" "DVC CLI unavailable"
+  local state
+  state="$(docker compose ps --format '{{.Service}} {{.State}}' worker 2>/dev/null)"
+  if [[ "${state}" != *" running"* ]]; then
+    journey_skip "V06" "DVC 往返 push/pull" "worker container not running"
     return
   fi
-  if [ -z "${JOURNEY_ASSET_ID}" ]; then
-    local tmp
-    tmp="$(create_model_asset "dvc-${RUN_ID}" 2>/dev/null || true)"
+  if ! docker compose exec -T worker sh -c 'command -v dvc >/dev/null 2>&1 && command -v git >/dev/null 2>&1' 2>/dev/null; then
+    journey_skip "V06" "DVC 往返 push/pull" "dvc/git not installed in worker image"
+    return
+  fi
+  if ! docker compose exec -T worker sh -c '[ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]' 2>/dev/null; then
+    journey_skip "V06" "DVC 往返 push/pull" "worker missing DVC MinIO credentials (DVC_ACCESS_KEY/DVC_SECRET_KEY unset)"
+    return
+  fi
+  local gitea_token
+  gitea_token="$(get_env GITEA_SERVICE_TOKEN '')"
+  if [ -z "${gitea_token}" ] || [ "${gitea_token}" = "replace-with-bootstrap-generated-token" ]; then
+    journey_skip "V06" "DVC 往返 push/pull" "GITEA_SERVICE_TOKEN not configured in .env"
+    return
+  fi
+  # 优先复用 V05 已建仓资产；缺失时自建探针资产（与 V07 同口径，恢复全局 JOURNEY_ASSET_ID）
+  local repo=""
+  if [ -n "${JOURNEY_ASSET_ID}" ]; then
+    repo="$(psql_q "select repo_full_name from asset where asset_id='${JOURNEY_ASSET_ID}'")"
+  fi
+  if [ -z "${repo}" ]; then
+    local saved_asset="${JOURNEY_ASSET_ID}"
+    local tmp prov
+    tmp="$(create_model_asset "dvc-${RUN_ID}" 90 2>/dev/null || true)"
     case "${tmp}" in
       INFRA:*|PASSWORD_CHANGE_REQUIRED|NO_ASSET_ID|HTTP:*)
-        journey_skip "V06" "DVC 往返 push/pull" "no provisioned asset (${tmp})"
+        journey_skip "V06" "DVC 往返 push/pull" "cannot create probe asset (${tmp})"
+        JOURNEY_ASSET_ID="${saved_asset}"
         return
         ;;
     esac
+    prov="${tmp##*|}"
+    if [ "${prov}" != "COMPLETED" ]; then
+      journey_fail "V06" "DVC 往返 push/pull" "probe asset provisioning=${prov}, expected COMPLETED"
+      JOURNEY_ASSET_ID="${saved_asset}"
+      return
+    fi
+    repo="$(psql_q "select repo_full_name from asset where asset_id='${tmp%%|*}'")"
+    JOURNEY_ASSET_ID="${saved_asset}"
   fi
-  local repo_name
-  repo_name="$(psql_q "select repo_full_name from asset where asset_id='${JOURNEY_ASSET_ID}'")"
-  if [ -z "${repo_name}" ]; then
-    journey_skip "V06" "DVC 往返 push/pull" "asset repo not provisioned yet"
+  if [ -z "${repo}" ]; then
+    journey_fail "V06" "DVC 往返 push/pull" "repo_full_name empty after provisioning"
     return
   fi
-  # SKIP_REASON: DVC 往返测试需要真实 Gitea 仓库 + DVC remote + DVC CLI；
-  # Compose 环境中 Gitea webhook 异步创建仓库，但 git clone + dvc push/pull 涉及
-  # 本地文件系统操作和 SSH 密钥配置，超出自动化旅程脚本范围。
-  journey_skip "V06" "DVC 往返 push/pull" "git clone + dvc roundtrip requires local DVC remote and SSH keys (repo=${repo_name})"
+  # 往返脚本经 stdin 传入（quoted heredoc：宿主机零展开，容器内自行取 AWS_*/注入变量）
+  local out rc=0
+  out="$(docker compose exec -T -e GITEA_TOKEN="${gitea_token}" -e V06_REPO="${repo}" worker bash -s 2>&1 <<'V06EOF'
+set -euo pipefail
+W=/tmp/aihub-v06
+rm -rf "${W}"; mkdir -p "${W}"; cd "${W}"
+git clone -q "http://${GITEA_TOKEN}@gitea:3000/${V06_REPO}.git" repo
+cd repo
+head -c 262144 /dev/urandom | base64 > payload.bin
+sha256sum payload.bin | awk '{print $1}' > "${W}/sha_before"
+dvc init -q
+dvc add payload.bin -q
+dvc remote add -d internal s3://dvc-cache/journey
+dvc remote modify internal endpointurl http://minio:9000 >/dev/null
+dvc remote modify internal access_key_id "${AWS_ACCESS_KEY_ID}" >/dev/null
+dvc remote modify internal secret_access_key "${AWS_SECRET_ACCESS_KEY}" >/dev/null
+dvc push 2>&1 | tail -2
+# PRD 口径：清空本地缓存与文件后 dvc pull 必须原样还原
+rm -rf .dvc/cache payload.bin
+dvc pull 2>&1 | tail -2
+sha256sum payload.bin | awk '{print $1}' > "${W}/sha_after"
+if cmp -s "${W}/sha_before" "${W}/sha_after"; then echo V06_ROUNDTRIP_OK; else echo V06_SHA_MISMATCH; fi
+V06EOF
+)" || rc=$?
+  docker compose exec -T worker sh -c 'rm -rf /tmp/aihub-v06' >/dev/null 2>&1 || true
+  if printf '%s' "${out}" | grep -q 'V06_ROUNDTRIP_OK'; then
+    journey_pass "V06" "DVC 往返 push/pull（worker 容器内 SHA-256 一致还原，repo=${repo}）"
+  elif printf '%s' "${out}" | grep -q 'V06_SHA_MISMATCH'; then
+    journey_fail "V06" "DVC 往返 push/pull" "sha256 differs after dvc pull restore (repo=${repo})"
+  elif printf '%s' "${out}" | grep -Eq '_DIR_MARK|pathspec'; then
+    journey_skip "V06" "DVC 往返 push/pull" "worker image DVC install broken (rebuild worker with pinned pathspec<0.12)"
+  else
+    journey_fail "V06" "DVC 往返 push/pull" "roundtrip chain broken (exit=${rc}): $(printf '%s' "${out}" | tail -c 160 | tr '\n' ' ')"
+  fi
 }
 
 # V07：真实 Gitea push → 平台 webhook 入站可查询（PRD：Commit 在 10 秒内可查询）。
