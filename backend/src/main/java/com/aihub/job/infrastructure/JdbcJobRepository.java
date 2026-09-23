@@ -120,6 +120,10 @@ public class JdbcJobRepository implements JobRepository {
                     ORDER BY next_run_at
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
+                ), previous AS (
+                    SELECT id, status AS previous_status, attempts AS previous_attempts,
+                           updated_at AS previous_updated_at
+                    FROM candidate
                 )
                 UPDATE job_task
                 SET status = 'RUNNING', leased_by = ?, leased_until = ?, updated_at = ?,

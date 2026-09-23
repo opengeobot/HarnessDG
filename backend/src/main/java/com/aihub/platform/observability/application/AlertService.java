@@ -21,6 +21,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.aihub.shared.error.NotFoundException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -67,6 +68,8 @@ public class AlertService {
                 DEAD_DELIVERY_THRESHOLD, OUTBOX_BACKLOG_THRESHOLD, DEAD_JOB_THRESHOLD);
     }
 
+    // 存在多个 public 构造器时 Spring 不会自动消歧，必须显式标注注入入口
+    @Autowired
     public AlertService(JdbcTemplate jdbcTemplate,
                          OutboxRepository outboxRepository,
                          WebhookDeliveryRepository deliveryRepository,

@@ -99,6 +99,44 @@ assert_not_password_change_required() {
   return 0
 }
 
+# 最小权限验证主体（默认拒绝断言的被测主体）：权限集合显式列出，刻意不含任何被测端点所需权限。
+# 该主体不绑定任何角色，故其后端判定只剩「JWT 粗粒度 scope」，403 必然来自权限判定。
+LEAST_PRIV_USER="compose-verify-minimal"
+LEAST_PRIV_PASS="ComposeVerifyOnly-01!"
+LEAST_PRIV_TOKEN=""
+
+# 以既有登录端点换取 access Token；失败输出空串。
+get_access_token() {
+  local u="$1" p="$2" body
+  body="$(curl -s -m 15 -X POST -H 'Content-Type: application/json' \
+    -d "{\"username\":\"${u}\",\"password\":\"${p}\"}" \
+    "${BASE_URL}/api/v1/auth/login" 2>/dev/null)"
+  printf '%s' "${body}" | sed -nE 's/.*"accessToken"\s*:\s*"([^"]+)".*/\1/p'
+}
+
+# 读取 /me 的 forcePasswordChange 标记（/me 在改密门放行名单内，必定可达）。
+force_password_change() {
+  local token="$1" body
+  body="$(http_body GET /api/v1/me "${token}")"
+  printf '%s' "${body}" | sed -nE 's/.*"forcePasswordChange"[[:space:]]*:[[:space:]]*(true|false).*/\1/p' | head -n1
+}
+
+# 按产品既定流程解除首登强制改密门（轮换为同值），返回可用的新 Token。
+resolve_password_change_gate() {
+  local u="$1" p="$2" token="$3" who="$4" force chg code
+  force="$(force_password_change "${token}")"
+  if [ -z "${force}" ]; then echo "  无法读取 ${who} 的 /api/v1/me，无法确认改密门状态" >&2; return 1; fi
+  if [ "${force}" = "false" ]; then printf '%s' "${token}"; return 0; fi
+  chg="$(curl -s -m 15 -X PUT -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${token}" \
+    -d "{\"currentPassword\":\"${p}\",\"newPassword\":\"${p}\"}" \
+    "${BASE_URL}/api/v1/me/password" -w '\n%{http_code}' 2>/dev/null)"
+  code="$(printf '%s' "${chg}" | tail -n1)"
+  if [ "${code}" != "200" ]; then echo "  ${who} 首登改密失败，状态 ${code}" >&2; return 1; fi
+  # 改密会递增 tokenVersion，旧 access Token 不再可用，必须重新登录。
+  get_access_token "${u}" "${p}"
+}
+
 # 登录并回显响应体（用于取 accessToken）；可选将 Set-Cookie 写入 cookie_jar。
 # 用法: http_login_body [cookie_jar] [password]
 http_login_body() {
@@ -668,7 +706,9 @@ assert_admin_user_lifecycle() {
   fi
 
   adminUserId="$(psql_q "select user_id from iam_user where username='${ADMIN_USER}'")"
-  activeAdmins="$(psql_q "select count(*) from iam_user where status='ACTIVE' and scopes @> '[\"user:manage\"]'::jsonb")"
+  # 使用 jsonb_build_array 而非 JSON 字面量：SQL 需经 bash→sh -c→psql 三层解析，
+  # 字面量 '["user:manage"]' 的双引号会在中途被剥离成非法 JSON（与 verify.ps1 同一规避）。
+  activeAdmins="$(psql_q "select count(*) from iam_user where status='ACTIVE' and scopes @> jsonb_build_array('user:manage')")"
   if [ "${activeAdmins}" != "1" ]; then
     echo "  前置条件异常：持有 user:manage 的活跃管理员数量为 ${activeAdmins}，期望 1"; return 1
   fi
@@ -943,7 +983,8 @@ check_asset_gitea_consistency() {
   # Compose 启用 Gitea 时：断言已完成 provision 的资产具备仓库引用，且 Gitea API 可达
   if [ "${BACKEND_UP:-0}" -eq 1 ]; then
     local gitea_code
-    gitea_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:3000/api/v1/version 2>/dev/null || echo 000)"
+    # Gitea 按拓扑不直接暴露 3000 端口，而是经 nginx /git/ 子路径入口访问（compose.yaml ROOT_URL 注释）。
+    gitea_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${BASE_URL}/git/api/v1/version" 2>/dev/null || echo 000)"
     if [ "${gitea_code}" = "200" ]; then
       local completed
       completed="$(psql_q "select count(*) from asset where deleted = 0 and provisioning_status = 'COMPLETED' and repo_full_name is not null")"

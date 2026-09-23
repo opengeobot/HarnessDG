@@ -36,8 +36,13 @@ public class CaffeineCacheConfiguration {
     @Bean
     public CacheManager cacheManager() {
         SimpleCacheManager manager = new SimpleCacheManager();
+        // SimpleCacheManager 不支持动态建缓存：所有 @Cacheable/@CacheEvict 引用的名称必须在此注册，
+        // 否则首次访问即抛 "Cannot find cache named ..."（dictionary* 为 taxonomy 模块注解所用）。
         manager.setCaches(java.util.List.of(
                 buildCache("dictionaryCache", 5, 2000),
+                buildCache("dictionaryTypes", 5, 100),
+                buildCache("dictionaryItems", 5, 500),
+                buildCache("dictionaryValidation", 5, 1000),
                 buildCache("tagCache", 5, 500),
                 buildCache("permissionCache", 30, 1000)
         ));
