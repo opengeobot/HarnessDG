@@ -1,0 +1,7 @@
+# 功能: deploy/compose/** 下的文件会被 bind mount 进 Linux 容器或由容器解析
+#       （init 脚本、nginx.conf、prometheus/grafana 配置、SQL、验收脚本）。
+#       core.autocrlf=true 会让这些文件在 Windows 工作树检出为 CRLF，
+#       容器内 `set -eu\r`、nginx 指令等随之解析失败。
+#       这里强制该子树以 LF 检出，索引本就存 LF，故不产生内容 diff。
+#       时间: 2026-09-23 作者: AxeXie
+deploy/compose/** text eol=lf
