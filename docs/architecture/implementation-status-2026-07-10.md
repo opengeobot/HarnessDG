@@ -308,3 +308,22 @@ Merge commit `c633ebc`：`e9d65b7`（本地 P0-B 整改主线，含 TASK-P0BR-06
 | `-CheckCompletion` | **仍 FAIL**（预期）：`review.accepted` 需人类评审置位（DEC-009 AI 不得自批）；波次 Evidence Manifest 维持 PARTIAL |
 
 **口径更新：AGENTS.md 阻塞项"Compose E4 V05 凭据漂移"已闭合**；剩余阻塞为 `-CheckCompletion` 人工验收与 E5 演练复验。P1–P5 业务波次仍不得表述为 VERIFIED。
+
+## 12. 行为旅程 E4 推进 — 2026-09-23（V07 Webhook 索引由 SKIP 转真实断言）
+
+PRD §13.2 V07 原实现仅统计 `webhook_delivery` 行数、无数据即 SKIP，不构成行为断言。本次闭合真实链路缺口：worker 执行 `REPOSITORY_PROVISION` 建仓成功后自动向 Gitea 注册 push webhook（`GiteaAssetRepositoryProvisioner.registerPushWebhook`，幂等回查 + 注册失败降级 warn 不阻断建仓）；入站验签与注册密钥统一走 `AIHUB_GITEA_WEBHOOK_SECRET`/`AIHUB_GITEA_WEBHOOK_URL` 单源（backend 验签 + worker 注册共用 `GiteaProperties`）；compose 为 Gitea 注入 `GITEA__webhook__ALLOWED_HOST_LIST=backend,external`（默认仅 external，容器名回调会被 Gitea 拒绝）。
+
+`journey_v07_webhook_index` 重写为端到端真实断言：新建探针资产等待建仓 COMPLETED → 经 nginx `/git/` 确认仓库已注册 push webhook → contents API（Gitea 1.24 新建走 POST）写入产生真实 push → 轮询 `webhook_inbox`（source='gitea' AND event_type='push'）10 秒内可查询（PRD 口径）且 `signature_valid=true` → 90 秒内 `WEBHOOK_PROCESS` 作业推进 COMPLETED。环境缺失（表不存在/密钥未配/hook 未注册）判 SKIP，链路断裂（写入失败/10s 无入站/验签失败/处理卡 PENDING）一律 FAIL，不掩盖。
+
+取证（2026-09-23，`docker compose up -d --build backend worker gitea` 滚动后实测）：
+
+| 检查 | 结果 |
+| --- | --- |
+| 后端定向单测 `GiteaAssetRepositoryAdapterTest` + `WebhookInboxApplicationServiceTest` | **25 PASS / 0 FAIL**（含 webhook 注册 payload/降级、HMAC fail-closed 验签） |
+| `validate-spec.ps1` | **PASS**（148 documents / 724 stable IDs） |
+| `docker compose config --quiet` | **PASS** |
+| `verify-journey.sh` 全量实跑 | **17 PASS / 1 SKIP / 0 FAIL**——**V07 PASS（push 入站 0s 可查询并 COMPLETED）**；V05/V08/V09/V10/V11 无回归；唯一 SKIP 为 V06（DVC CLI 不可用，维持环境缺失口径） |
+
+**治理登记**：`TASK-P5-001` 立卡 baseCommit `59f40d28` 已被后续合并提交超越，`validate-task-card` 默认模式（要求 baseCommit==HEAD）FAILED；`-CheckChangedPaths` 列出的 allowedPaths 外路径全部属前序提交累计变更，本任务后端改动均在卡内 allowedPaths。审计字段不做篡改，卡需评审侧重置 baseCommit。
+
+旅程 E4 覆盖口径更新：第 7/11 节"authenticated 业务旅程 notProven"中，V05/V07/V08/V09/V10/V11 六条核心资产旅程已转真实断言 PASS；V06 与 `-CheckCompletion` 人工验收仍为开放项。P1–P5 整体仍不得表述为 VERIFIED。
