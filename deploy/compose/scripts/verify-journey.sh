@@ -355,25 +355,117 @@ journey_v06_dvc_roundtrip() {
   journey_skip "V06" "DVC 往返 push/pull" "git clone + dvc roundtrip requires local DVC remote and SSH keys (repo=${repo_name})"
 }
 
+# V07：真实 Gitea push → 平台 webhook 入站可查询（PRD：Commit 在 10 秒内可查询）。
+# 链路：新建探针资产（worker 建仓时注册 push webhook）→ Gitea contents API 写文件产生
+# 真实 push → 轮询 webhook_inbox 出现 source='gitea' AND event_type='push' 新行（10s 窗口，
+# PRD 口径）→ WEBHOOK_PROCESS 作业将其处理为 COMPLETED（异步放宽到 90s）。
+# 配置缺失（新仓库无 hook）如实 SKIP；hook 已注册但投递/验签失败则 FAIL（不掩盖断链）。
 journey_v07_webhook_index() {
   if ! postgres_reachable; then
     journey_skip "V07" "Webhook 索引" "postgres unreachable"
     return
   fi
-  local inbox delivery
+  local inbox
   inbox="$(psql_q "select to_regclass('public.webhook_inbox') is not null")"
-  delivery="$(psql_q "select to_regclass('public.webhook_delivery') is not null")"
-  if [ "${inbox}" != "t" ] || [ "${delivery}" != "t" ]; then
-    journey_fail "V07" "Webhook 索引" "webhook_inbox/webhook_delivery table missing"
+  if [ "${inbox}" != "t" ]; then
+    journey_fail "V07" "Webhook 索引" "webhook_inbox table missing"
     return
   fi
-  local cnt
-  cnt="$(psql_q 'select count(*) from webhook_delivery')"
-  if [ "${cnt}" -ge 1 ] 2>/dev/null; then
-    journey_pass "V07" "Webhook 索引（delivery rows=${cnt}）"
-  else
-    journey_skip "V07" "Webhook 索引" "tables exist but no Gitea webhook delivery recorded yet"
+  local gitea_token
+  gitea_token="$(get_env GITEA_SERVICE_TOKEN '')"
+  if [ -z "${gitea_token}" ] || [ "${gitea_token}" = "replace-with-bootstrap-generated-token" ]; then
+    journey_skip "V07" "Webhook 索引" "GITEA_SERVICE_TOKEN not configured in .env"
+    return
   fi
+
+  # 1. 新建探针资产并等待建仓完成（webhook 注册发生在这一步，须用新仓库）
+  local saved_asset="${JOURNEY_ASSET_ID}"
+  local tmp asset_id
+  tmp="$(create_model_asset "wh-${RUN_ID}" 90 2>/dev/null || true)"
+  case "${tmp}" in
+    INFRA:*|PASSWORD_CHANGE_REQUIRED|NO_ASSET_ID|HTTP:*)
+      journey_skip "V07" "Webhook 索引" "cannot create probe asset (${tmp})"
+      JOURNEY_ASSET_ID="${saved_asset}"
+      return
+      ;;
+  esac
+  asset_id="${tmp%%|*}"
+  local prov="${tmp##*|}"
+  if [ "${prov}" != "COMPLETED" ]; then
+    journey_fail "V07" "Webhook 索引" "probe asset provisioning=${prov}, expected COMPLETED"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+  local repo
+  repo="$(psql_q "select repo_full_name from asset where asset_id='${asset_id}'")"
+  if [ -z "${repo}" ] || [ "${repo}" = "" ]; then
+    journey_fail "V07" "Webhook 索引" "probe asset ${asset_id} has no repo_full_name"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+
+  # 2. 确认建仓侧已注册 push webhook（worker 未滚动/密钥未配 → 未注册，属环境缺失 SKIP）
+  local hooks
+  hooks="$(curl -s -m 15 -H "Authorization: token ${gitea_token}" \
+    "${BASE_URL}/git/api/v1/repos/${repo}/hooks" 2>/dev/null)"
+  if ! printf '%s' "${hooks}" | grep -q 'webhooks/gitea'; then
+    journey_skip "V07" "Webhook 索引" "push webhook not registered on ${repo} (AIHUB_GITEA_WEBHOOK_* unset or worker stale)"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+
+  # 3. 记录基线后经 contents API 写文件，产生真实 push 事件
+  # 探针文件名含 RUN_ID，必为新建：Gitea 1.24 新建走 POST（PUT 缺 sha 会 422）
+  local before
+  before="$(psql_q "select coalesce(max(id), 0) from webhook_inbox")"
+  local b64 code
+  b64="$(printf 'journey-v07-probe-%s' "${RUN_ID}" | base64 | tr -d '\n')"
+  code="$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST \
+    -H "Authorization: token ${gitea_token}" -H 'Content-Type: application/json' \
+    -d "{\"content\":\"${b64}\",\"message\":\"journey v07 webhook probe push\"}" \
+    "${BASE_URL}/git/api/v1/repos/${repo}/contents/probe-${RUN_ID}.txt" 2>/dev/null)"
+  if [ "${code}" != "200" ] && [ "${code}" != "201" ]; then
+    journey_fail "V07" "Webhook 索引" "gitea contents POST returned ${code} (push not created)"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+
+  # 4. PRD 口径：10 秒内入站行可查询
+  local waited=0 row=""
+  while [ "${waited}" -lt 10 ]; do
+    row="$(psql_q "select count(*) from webhook_inbox where source='gitea' and event_type='push' and id > ${before}")"
+    [ "${row}" -ge 1 ] 2>/dev/null && break
+    sleep 1
+    waited=$((waited + 1))
+  done
+  if [ "${row}" -lt 1 ] 2>/dev/null; then
+    journey_fail "V07" "Webhook 索引" "push webhook not indexed within ${waited}s (delivery or signature verification broken, repo=${repo})"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+  local sig
+  sig="$(psql_q "select bool_and(signature_valid) from webhook_inbox where source='gitea' and event_type='push' and id > ${before}")"
+  if [ "${sig}" != "t" ]; then
+    journey_fail "V07" "Webhook 索引" "indexed push row has signature_valid=false (secret drift between register/verify)"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+
+  # 5. 异步处理收敛：WEBHOOK_PROCESS 作业把入站行推进到 COMPLETED
+  local proc="" w2=0
+  while [ "${w2}" -lt 90 ]; do
+    proc="$(psql_q "select status from webhook_inbox where source='gitea' and event_type='push' and id > ${before} order by id limit 1")"
+    [ "${proc}" = "COMPLETED" ] && break
+    sleep 3
+    w2=$((w2 + 3))
+  done
+  if [ "${proc}" != "COMPLETED" ]; then
+    journey_fail "V07" "Webhook 索引" "inbox row indexed in ${waited}s but processing stuck at ${proc:-PENDING}"
+    JOURNEY_ASSET_ID="${saved_asset}"
+    return
+  fi
+  journey_pass "V07" "Webhook 索引（push 入站 ${waited}s 可查询并 COMPLETED）"
+  JOURNEY_ASSET_ID="${saved_asset}"
 }
 
 # V08：真实上传链 → 校验 → 双主体审批 → 发布三元组。
