@@ -291,3 +291,20 @@ Merge commit `c633ebc`：`e9d65b7`（本地 P0-B 整改主线，含 TASK-P0BR-06
 | AuthProvider 测试隔离 | 导出 `__resetBootstrapRefreshForTests()` 重置跨挂载 `bootstrapRefresh` 缓存；生产语义（每页加载恰一次 refresh）不变 |
 
 **状态口径不变：P1–P5 仍为 PARTIAL / IMPLEMENTED_UNVERIFIED。** 本快照仅记录合并后的构建与单元/组件级证据（E1–E3）；Compose E4（V05 凭据漂移）、`-CheckCompletion`、E5 演练仍是波次退出阻塞项。
+
+## 11. Compose E4 复验闭合 — 2026-09-23（修复合并回归后全量重跑）
+
+合并 c633ebc 引入的 lost-hunk 在 E4 全栈验证中集中暴露，修复提交 `7f1aa5b`（merge-regression 4 文件：AlertService `@Autowired` 消歧、`claimNext` previous CTE 恢复、dictionary 三缓存注册、verify.sh 辅助函数区恢复 + jsonb 转义规避 + V12 Gitea 探测改走 nginx `/git/` 子路径）。
+
+取证环境：`docker compose up -d --build backend worker` 重建后 7 常驻容器 healthy/Up（minio-init Exit 0）；Flyway 40 迁移成功、最新 V41（job attempt trace）；backend/worker 日志零 `tick failed`；`GET nginx:8080/git/api/v1/version` 实测 HTTP 200。
+
+| 检查 | 结果 |
+| --- | --- |
+| Compose `verify.sh` 全量 E4 | **V01–V28 共 38 项 PASS / 0 FAIL / 0 SKIP / 0 警告**（完整日志：`.trae/evidence/verify-sh-e4-20260923.log`） |
+| V05 凭据漂移（历史阻塞项） | **已消除**：改密门经 V05b `resolve_password_change_gate` 正常解除，V05–V05j IAM 全链 PASS |
+| V07 dictionaries 500 | **已修复**：`dictionaryTypes/dictionaryItems/dictionaryValidation` 注册进 SimpleCacheManager |
+| V12 Gitea 一致性 | **实打实断言**：探测经 nginx `/git/` 返回 200，进入真实仓库一致性分支（无"跳过"弱化警告） |
+| E4 行为旅程（P1–P5 AC） | 仍 `notProven`——V01–V28 为公共底座+平台能力冒烟，authenticated 业务旅程覆盖维持第 7 节口径 |
+| `-CheckCompletion` | **仍 FAIL**（预期）：`review.accepted` 需人类评审置位（DEC-009 AI 不得自批）；波次 Evidence Manifest 维持 PARTIAL |
+
+**口径更新：AGENTS.md 阻塞项"Compose E4 V05 凭据漂移"已闭合**；剩余阻塞为 `-CheckCompletion` 人工验收与 E5 演练复验。P1–P5 业务波次仍不得表述为 VERIFIED。

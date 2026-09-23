@@ -2,9 +2,9 @@
 
 ## Current phase
 
-This repository has completed **P0-B platform-foundation remediation** (VERIFIED). P0-A engineering baseline is complete; P0-B exit gate has been validated at E1/E2/E3/E4 evidence levels including Compose full-stack verification (V01-V21 all PASS).
+This repository has completed **P0-B platform-foundation remediation** (VERIFIED). P0-A engineering baseline is complete; P0-B exit gate has been validated at E1/E2/E3/E4 evidence levels including Compose full-stack verification (re-run 2026-09-23 after merge-regression fixes: V01-V28 all PASS with no warnings, see `implementation-status-2026-07-10.md` §11).
 
-**P1–P5 business waves are PARTIAL / IMPLEMENTED_UNVERIFIED**: substantial catalog, version/transfer, publish, MCP, and ops code exists across Waves A–I (REST `/agent/*`, rate limiting, PAT, lineage, subscription notifications are implemented but E4-unverified), but wave exit Evidence Manifests are PARTIAL (E3 proven, E4 notProven). Remaining blockers: Compose E4 V05 credential drift, `-CheckCompletion`, and E5 drills. Do not present P1–P5 as VERIFIED.
+**P1–P5 business waves are PARTIAL / IMPLEMENTED_UNVERIFIED**: substantial catalog, version/transfer, publish, MCP, and ops code exists across Waves A–I (REST `/agent/*`, rate limiting, PAT, lineage, subscription notifications are implemented but E4-unverified), but wave exit Evidence Manifests are PARTIAL (E3 proven, E4 notProven). The Compose E4 V05 credential-drift blocker is closed (2026-09-23). Remaining blockers: authenticated P1–P5 business journeys (`verify-journey.sh`), `-CheckCompletion` human acceptance, and E5 drill re-verification. Do not present P1–P5 as VERIFIED.
 
 Do not present planned P0 capabilities as implemented. The dated implementation snapshot for current P1–P5 status is `docs/architecture/implementation-status-2026-07-10.md` (P0-B closure history remains in `implementation-status-2026-07-02.md`).
 Use `docs/architecture/p0-platform-foundation-traceability.md` to check every P0-B task across module, data, API, permission, audit, UI, and verification.
