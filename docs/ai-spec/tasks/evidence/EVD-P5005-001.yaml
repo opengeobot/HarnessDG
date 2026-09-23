@@ -1,4 +1,13 @@
 schemaVersion: harnessdg.evidence/v1
+# 功能: TASK-P5-005 安全证据清单——E5 演练在新 HEAD 的复验回写。
+# 时间: 2026-09-23 作者: AxeXie
+# E5 复验（2026-09-23）：原 7dc22d4 取证因 CRLF/凭据漂移已不可复现。
+#   修复链：.gitattributes 补 deploy/security/**、**/mvnw LF 检出（4d315b6 + 本次）；
+#   演练脚本 live 探针字段名 bug（"id"→"assetId"）+ 登录凭据回退（对齐 journey V05 轮换）
+#   + DNS rebinding 解析跨平台化（getent→node/python 回退）；断言按平台 XSS 模型修正为
+#   "2xx + JSON-only 交付 + 存储往返"（渲染转义由 SafeMarkdown 单测独立覆盖）。
+#   复跑：Git Bash 全链真实执行 PASS=6 FAIL=0 SKIP=1（唯一 SKIP 为 gitleaks/semgrep
+#   工具缺失，金丝雀替代项 PASS；如实保留不掩盖）。
 evidenceId: EVD-P5005-001
 status: PARTIAL
 
@@ -23,26 +32,26 @@ governance:
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  commitSha: bbd48931b95fd92e7b54d29b91ae16f2331833da
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-23T15:53:00+08:00
+  os: Windows NT 10.0.26200.0 (Git Bash / MSYS)
   timezone: Asia/Shanghai
   java: "21"
-  node: "22"
-  pnpm: "9"
+  node: "20.19.2"
+  pnpm: "10.33.4"
   docker: "available"
-  composeProfiles: []
-  externalDependencyVersions: {}
+  composeProfiles: [backend, worker, postgres, gitea, minio, frontend, nginx]
+  externalDependencyVersions: {compose_stack: aihub-7-up}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: bash ./deploy/security/p5-security-drill.sh
-  startedAt: 2026-07-11T20:48:45+08:00
-  finishedAt: 2026-07-11T20:49:30+08:00
+  workingDirectory: D:/workspace/opengeobot/HarnessDG
+  command: '"C:/Program Files/Git/bin/bash.exe" deploy/security/p5-security-drill.sh'
+  startedAt: 2026-09-23T15:52:10+08:00
+  finishedAt: 2026-09-23T15:54:00+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E5
@@ -54,20 +63,17 @@ coverage:
     - scenarioId: AC-P5-SEC-001-E4
       assertion: verify.sh V08 audit redaction + AUTH_LOGIN_SUCCEEDED event PASS
     - scenarioId: AC-P5-SEC-001-E5-injection-ssrf
-      assertion: "p5-security-drill.sh 5 PASS 2 SKIP: SafeMarkdown <script> escaped (7 tests); PreviewJobHandler PREVIEW_LIMIT_EXCEEDED; SsrfGuardTest; SsrfGuardDnsRebindingTest rejects 127.0.0.1.nip.io"
+      assertion: "E5 复验（2026-09-23，bbd4893）p5-security-drill.sh 6 PASS 1 SKIP：SafeMarkdown <script>/iframe 转义（vitest 7/7）；PreviewJobHandlerTest PREVIEW_LIMIT_EXCEEDED；SsrfGuardTest；SsrfGuardDnsRebindingTest（127.0.0.1.nip.io 实测解析 127.0.0.1）；live 注入往返（旅程夹具资产建 thread→POST 注入评论 2xx→JSON-only 交付→读回命中 payload，证明存储链真实执行）"
   notProven:
     - scenarioId: AC-P5-SEC-001-E5-SAST-dependency-image
       reason: gitleaks/semgrep not installed locally; run-redaction-canary.sh used as substitute (PASS)
-    - scenarioId: AC-P5-SEC-001-E5-live-comment
-      reason: admin JWT login failed after restore drill (V05 credential drift); live prompt-injection POST skipped
 
 artifacts:
   reports:
     - deploy/security/p5-security-drill.sh
     - deploy/security/run-redaction-canary.sh
     - docs/runbooks/security.md
-  logs:
-    - /tmp/p5-security-drill.log
+  logs: []
   screenshots: []
   traces: []
   metrics: []
@@ -80,10 +86,11 @@ secrets:
 limitations:
   skippedTests:
     - gitleaks/semgrep deep SAST (tools unavailable)
-    - live comment prompt-injection POST (no admin JWT)
   assumptions:
     - Zip-bomb coverage via PreviewJobHandlerTest unit path, not live upload
-  environmentDifferences: []
+    - live 注入探针断言 JSON-only 交付 + 存储往返；渲染层转义由 SafeMarkdown vitest 独立覆盖（平台 XSS 模型：原文存储、前端渲染转义）
+  environmentDifferences:
+    - 2026-09-23 复验在 Windows Git Bash 执行（原取证为 Ubuntu WSL）；mvnw/演练脚本经 .gitattributes 强制 LF 后两侧皆可运行
 
 review:
   recordedBy: AI

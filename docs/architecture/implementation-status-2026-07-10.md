@@ -345,4 +345,24 @@ V06 原实现即使 DVC CLI 存在也无条件 SKIP（检测宿主机 PATH，且
 - `EVD-P5001-001`：`status DRAFT→PARTIAL`，`AC-P5-INBOX-001` 由 V07 旅程 E4 闭合（webhook 入站 ≤10s 且 WEBHOOK_PROCESS COMPLETED，幂等/失败路径 E2 单测覆盖）；`AC-P5-REC-001`（Reconciler 全量扫描）未取证，如实保留 notProven，整卡不称 PASS。taskValidation 实测 FAIL（卡面 baseCommit 滞后，§12 已登记的治理项），如实记录不改卡凑过。
 - `EVD-P1018-001`：2026-07-12 波次出口快照已由人类 accept，字段不改写；仅追加注记——快照中的 journey SKIP 项（V06/V07/V08/V09/V10/V11）现已全部转真实断言 PASS。
 
-三份 YAML 经 worker 容器内 `python3 -c yaml.safe_load` 语法验证通过。波次 EVD 全景仍余大量 notProven（P3/P4/P5 波为主），逐项翻转须以对应 AC 的真实运行态取证为准，不得由 journey 泛化推定。
+三份 YAML 经 worker 容器内 `python3 -c yaml.safe_load` 语法验证通过。波次 EVD 全景仍余大量 notProven（P3/P4/P5 波为主），逐项翻转须以对应 AC 的真实运行态取证为准，不得由 journey 泛化推定（E5 安全演练的逐项复验见 §15）。
+
+## 14.1 E5 安全演练复验启动 — 2026-09-23（新 HEAD 首跑取证与根因修复）
+
+AGENTS.md 将「E5 drill re-verification」列为 P1–P5 剩余阻塞项：既有 E5 证据全部绑定旧 commit `7dc22d4`（Compose 栈重建后容器名、凭据与检出环境均已漂移），必须在新 HEAD 复跑并取得真实分布。首跑 `deploy/security/p5-security-drill.sh` 读数 **PASS=0 FAIL=5 SKIP=2**，逐层根因与修复：
+
+1. **`backend/mvnw` CRLF**：WSL 下 `/bin/sh^M: bad interpreter`。`.gitattributes` 补 `**/mvnw text eol=lf`（索引 blob 本已 LF，纯检出侧问题）。
+2. **admin 登录 AUTH_INVALID_CREDENTIALS**：journey `ensure_admin_jwt` 首登强制改密（V05 门禁设计使 bootstrap 原密码失效）。演练脚本改为与 journey 一致的"轮换密码优先、bootstrap 兜底"回退序列，非硬编码旁路。
+3. **live 探针恒 SKIP**：sed 抓 `"id":"` 而 API 实际字段为 `assetId`；且资产讨论列表合法为空。修正字段名并补"无话题则 POST 创建"回退。
+4. **断言与平台 XSS 模型错位（险些引入假 FAIL）**：后端讨论模块**原文存储、不做净化**（grep 证实 discussion 包无 sanitize 逻辑），渲染转义由前端 `SafeMarkdown`（DOMPurify）承担。原"API JSON 含 raw `<script>` 即 FAIL"断言会对正确行为误报。修正为三重真实断言：POST 2xx + `Content-Type` 不得为 `text/html`（封死存储型 XSS 交付路径）+ 评论读回命中 payload（证明存储链真实执行）；渲染转义仍由 SafeMarkdown vitest 独立覆盖。**这是修正错误模型，不是削弱测试。**
+5. **DNS rebinding 探针平台依赖**：`getent` 为 Linux 专有；新增 node `dns.lookup` / python socket 回退（等价解析，`127.0.0.1.nip.io` Windows 实测 →127.0.0.1）。
+
+脚本修复随 `fix(security)` 提交；环境口径：WSL 无 node/pnpm 且 `~/.m2` 为空，**Windows Git Bash 为本机唯一可整链运行 drill 的 bash 环境**，复验在 Git Bash 全链真实执行（Compose 栈 `aihub-7-up` 在跑）。
+
+## 15. E5 安全演练复跑取证与 EVD 回写 — 2026-09-23（PASS=6 / FAIL=0 / SKIP=1）
+
+§14.1 修复链落盘（`4d315b6` + `bbd4893`）后，在 Git Bash 全链真实复跑 `p5-security-drill.sh`（Compose 栈 `aihub-7-up` 在跑）：**PASS=6 FAIL=0 SKIP=1，exit 0**——金丝雀（`run-redaction-canary.sh`，SAST 缺失替代）、SafeMarkdown 转义（vitest 7/7）、PreviewJobHandlerTest、SsrfGuardTest、SsrfGuardDnsRebindingTest、live 注入往返（旅程夹具资产建 thread → POST 注入评论 2xx → JSON-only 交付 → 读回命中 payload）。唯一 SKIP 为本机 gitleaks/semgrep 工具缺失，如实保留。
+
+`EVD-P5005-001` 回写：证据绑定新 HEAD `bbd4893`，`AC-P5-SEC-001-E5-live-comment` 由 notProven 翻转 proven；`AC-P5-SEC-001-E5-SAST-dependency-image`（工具缺失）如实保留 notProven，整卡维持 PARTIAL，`review.accepted` 不代批（DEC-009）。YAML 经 worker 容器 `python3 yaml.safe_load` 校验通过。
+
+E5 复验其余开放项：`P5003` 恢复演练为破坏性（`down -v` 清卷，需备份窗口）；`P5002`（预览授权产物 `deploy/compose/scripts/p5-preview/`）与 `P5004`（`deploy/perf/` 压测产物）目录不存在，属待迭代的授权开发项而非纯取证。
