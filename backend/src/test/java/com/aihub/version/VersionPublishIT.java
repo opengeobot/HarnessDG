@@ -17,6 +17,8 @@ import com.aihub.asset.application.AssetView;
 import com.aihub.asset.domain.AssetType;
 import com.aihub.asset.domain.ModelProfile;
 import com.aihub.asset.domain.Visibility;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.shared.identity.PrincipalType;
@@ -224,9 +226,9 @@ class VersionPublishIT {
 
         String requestId = publishService.submitPublishRequest(versionId);
 
-        // Same submitter tries to approve — should fail
+        // Same submitter tries to approve — should fail with 403 (AUTH_PERMISSION_DENIED).
         assertThatThrownBy(() -> publishService.submitDecision(requestId, "APPROVE", "self-approve"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(AuthorizationException.class)
                 .hasMessageContaining("submitter");
     }
 
@@ -247,10 +249,10 @@ class VersionPublishIT {
                 "UPDATE asset_version SET source_commit = 'drifted_commit_sha' WHERE version_id = :vid",
                 new MapSqlParameterSource("vid", versionId));
 
-        // Approve should detect drift
+        // Approve should detect drift and reject with 409 (VERSION_STATE_NOT_ALLOWED).
         setPrincipal(REVIEWER, Set.of("asset:read", "asset:review"));
         assertThatThrownBy(() -> publishService.submitDecision(requestId, "APPROVE", "approve drift"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("commit");
     }
 }

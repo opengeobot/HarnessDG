@@ -95,4 +95,27 @@ class AssetTest {
         assertThat(asset.projectId()).isEqualTo("prj_01");
         assertThat(asset.tagIds()).containsExactly("tag_001", "tag_002");
     }
+
+    @Test
+    void sagaProvisioningMethodsRefreshUpdatedAt() {
+        // 回归（journey E4 2026-09-23）：加载自 DB 的聚合若经 Saga 路径变更，
+        // advanceProvisioning/attachRepository 必须刷新 updatedAt，
+        // 否则仓储 UPDATE 可能把 NOT NULL 的 updated_at 写回 NULL。
+        Asset asset = new Asset.Builder()
+                .assetId("ast_04").type(AssetType.MODEL).namespace("nlp").name("saga-model")
+                .visibility(Visibility.INTERNAL).status(AssetStatus.ACTIVE)
+                .provisioningStatus(ProvisioningStatus.PENDING)
+                .createdBy("usr_01").updatedBy("usr_01")
+                .createdAt(java.time.Instant.EPOCH).updatedAt(java.time.Instant.EPOCH)
+                .build();
+
+        asset.advanceProvisioning(ProvisioningStatus.IN_PROGRESS);
+        assertThat(asset.updatedAt()).isAfter(java.time.Instant.EPOCH);
+
+        asset.attachRepository(new AssetRepositoryRef("nlp/saga-model", "http://git/nlp/saga-model",
+                "http://git/nlp/saga-model.git"));
+        asset.advanceProvisioning(ProvisioningStatus.COMPLETED);
+        assertThat(asset.updatedAt()).isAfterOrEqualTo(java.time.Instant.EPOCH.plusSeconds(1));
+        assertThat(asset.updatedBy()).isEqualTo("usr_01");
+    }
 }

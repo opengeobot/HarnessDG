@@ -269,9 +269,10 @@ public final class Asset {
         touch(updatedBy);
     }
 
-    /** 绑定已开通的 Git 仓库引用。 */
+    /** 绑定已开通的 Git 仓库引用（Saga 系统操作：刷新 updatedAt，updatedBy 保持原主体）。 */
     public void attachRepository(AssetRepositoryRef ref) {
         this.repository = ref;
+        this.updatedAt = Instant.now();
     }
 
     private void touch(String updatedBy) {
@@ -443,9 +444,10 @@ public final class Asset {
         return cardAssetYaml;
     }
 
-    /** 推进建仓状态（由 Saga/Job 调用）。 */
+    /** 推进建仓状态（由 Saga/Job 调用；系统操作：刷新 updatedAt，updatedBy 保持原主体）。 */
     public void advanceProvisioning(ProvisioningStatus status) {
         this.provisioningStatus = status;
+        this.updatedAt = Instant.now();
     }
 
     public long rowVersion() {

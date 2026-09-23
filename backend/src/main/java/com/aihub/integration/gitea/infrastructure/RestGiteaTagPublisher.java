@@ -8,12 +8,14 @@ package com.aihub.integration.gitea.infrastructure;
 import com.aihub.integration.gitea.domain.GiteaTagPublisher;
 import com.aihub.shared.error.DependencyException;
 import com.aihub.shared.error.ErrorCode;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -42,8 +44,10 @@ public class RestGiteaTagPublisher implements GiteaTagPublisher {
 
     @Override
     public TagPublishResult createProtectedTag(String repoFullName, String tagName, String commitSha) {
+        // owner/repo 必须拆成两段路径变量：单段值会被 URI 模板编码为 %2F，Gitea 返回 404
+        GiteaRepoPath repoPath = GiteaRepoPath.parse(repoFullName);
         try {
-            String existingCommit = fetchTagCommit(repoFullName, tagName);
+            String existingCommit = fetchTagCommit(repoPath, tagName);
             if (existingCommit != null) {
                 if (existingCommit.equalsIgnoreCase(commitSha)) {
                     LOG.info("gitea tag already exists with same commit repo={} tag={}", repoFullName, tagName);
@@ -53,8 +57,8 @@ public class RestGiteaTagPublisher implements GiteaTagPublisher {
                         "git tag conflict: " + tagName + " points to different commit");
             }
 
-            createTag(repoFullName, tagName, commitSha);
-            protectTag(repoFullName, tagName);
+            createTag(repoPath, tagName, commitSha);
+            protectTag(repoPath, tagName);
 
             LOG.info("gitea tag created repo={} tag={}", repoFullName, tagName);
             return new TagPublishResult(TagPublishMode.GITEA_TAG_CREATED, tagName, commitSha);
@@ -68,20 +72,31 @@ public class RestGiteaTagPublisher implements GiteaTagPublisher {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private void createTag(String repoFullName, String tagName, String commitSha) {
-        Map<String, Object> body = Map.of(
+    private void createTag(GiteaRepoPath repoPath, String tagName, String commitSha) {
+        Map<String, Object> body = new HashMap<>(Map.of(
                 "tag_name", tagName,
                 "target", commitSha,
-                "message", "Release " + tagName);
-        restClient.post()
-                .uri("/api/v1/repos/{full}/tags", repoFullName)
-                .body(body)
-                .retrieve()
-                .toBodilessEntity();
+                "message", "Release " + tagName));
+        try {
+            restClient.post()
+                    .uri("/api/v1/repos/{owner}/{repo}/tags", repoPath.owner(), repoPath.repo())
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.Conflict conflict) {
+            // fetchTagCommit 读不到旧 tag 时 POST 会撞 409；Gitea 支持 PUT 覆盖既有 tag，
+            // 重试后由上游 commit 一致性校验兜底，不会改写不一致的发布。
+            body.remove("message");
+            restClient.put()
+                    .uri("/api/v1/repos/{owner}/{repo}/tags/{tag}",
+                            repoPath.owner(), repoPath.repo(), tagName)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
     }
 
-    private void protectTag(String repoFullName, String tagName) {
+    private void protectTag(GiteaRepoPath repoPath, String tagName) {
         try {
             Map<String, Object> body = Map.of(
                     "name_pattern", tagName,
@@ -89,21 +104,22 @@ public class RestGiteaTagPublisher implements GiteaTagPublisher {
                     "allowlist_team", List.of(),
                     "prevent_creation", false);
             restClient.post()
-                    .uri("/api/v1/repos/{full}/tag_protections", repoFullName)
+                    .uri("/api/v1/repos/{owner}/{repo}/tag_protections", repoPath.owner(), repoPath.repo())
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException ex) {
             // 保护规则失败不阻断发布，但记录以便运维补齐
-            LOG.warn("gitea tag protection registration failed repo={} tag={}", repoFullName, tagName);
+            LOG.warn("gitea tag protection registration failed repo={} tag={}", repoPath.fullName(), tagName);
         }
     }
 
     @SuppressWarnings("unchecked")
-    private String fetchTagCommit(String repoFullName, String tagName) {
+    private String fetchTagCommit(GiteaRepoPath repoPath, String tagName) {
         try {
             Map<String, Object> tag = restClient.get()
-                    .uri("/api/v1/repos/{full}/tags/{tag}", repoFullName, tagName)
+                    .uri("/api/v1/repos/{owner}/{repo}/tags/{tag}",
+                            repoPath.owner(), repoPath.repo(), tagName)
                     .retrieve()
                     .body(Map.class);
             if (tag == null) {

@@ -226,7 +226,7 @@ public class JobWorker {
             jobsDead.increment();
             notifyJobDead(job, attemptNo, errorCode);
             LOG.warn("job dead jobId={} type={} attempts={} error={}",
-                    job.jobId(), job.type(), attemptNo, errorCode);
+                    job.jobId(), job.type(), attemptNo, errorCode, ex);
         } else {
             Instant nextRunAt = backoff.nextRunAt(attemptNo, endedAt);
             jobRepository.markRetryWait(job.jobId(), nextRunAt, endedAt);

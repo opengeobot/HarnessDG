@@ -14,6 +14,8 @@ import static org.mockito.Mockito.verify;
 import com.aihub.audit.application.AuditService;
 import com.aihub.authorization.application.AuthorizationService;
 import com.aihub.job.application.JobApplicationService;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.id.IdGenerator;
 import com.aihub.shared.id.IdPrefix;
@@ -77,8 +79,10 @@ class PublishApplicationServiceTest {
         Version draft = Version.createDraft("ver_01", "ast_01", "v1.0.0", "usr_01");
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(draft));
 
+        // 契约（aihub-v1.yaml submitPublishRequest x-error-codes）要求 VERSION_STATE_NOT_ALLOWED → 409，
+        // 裸 IllegalStateException 会被全局兜底映射成 500。
         assertThatThrownBy(() -> service.submitPublishRequest("ver_01"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("PENDING_REVIEW");
     }
 
@@ -88,7 +92,7 @@ class PublishApplicationServiceTest {
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         assertThatThrownBy(() -> service.submitPublishRequest("ver_01"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("manifest digest");
     }
 
@@ -147,7 +151,7 @@ class PublishApplicationServiceTest {
         given(jdbcTemplate.queryForList(anyString(), eq("ver_01"))).willReturn(List.of());
 
         assertThatThrownBy(() -> service.submitPublishRequest("ver_01"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("validation report");
     }
 
@@ -165,7 +169,7 @@ class PublishApplicationServiceTest {
         given(versionRepository.findByVersionId("ver_01")).willReturn(Optional.of(v));
 
         assertThatThrownBy(() -> service.submitDecision("pub_01", "APPROVE", "ok"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("drifted");
     }
 
@@ -200,8 +204,9 @@ class PublishApplicationServiceTest {
                 "frozen_source_commit", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         given(jdbcTemplate.queryForMap(anyString(), eq("pub_01"))).willReturn(request);
 
+        // 自审属于权限越界：契约映射 AUTH_PERMISSION_DENIED(403)。
         assertThatThrownBy(() -> service.submitDecision("pub_01", "APPROVE", "ok"))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(AuthorizationException.class)
                 .hasMessageContaining("submitter cannot approve");
     }
 

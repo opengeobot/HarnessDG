@@ -9,6 +9,8 @@ import com.aihub.job.application.JobApplicationService;
 import com.aihub.notification.application.NotificationRecipientResolver;
 import com.aihub.notification.application.NotificationService;
 import com.aihub.notification.domain.NotificationSeverity;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.id.IdGenerator;
@@ -83,7 +85,11 @@ public class PublishApplicationService {
                         "version not found", Map.of("versionId", versionId)));
 
         if (version.status() != VersionStatus.PENDING_REVIEW) {
-            throw new IllegalStateException("only PENDING_REVIEW versions can be submitted for publish");
+            // 状态机违规是可预期的业务冲突：契约声明 VERSION_STATE_NOT_ALLOWED(409)，
+            // 裸 IllegalStateException 会被全局兜底映射为 500，误导客户端重试。
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "only PENDING_REVIEW versions can be submitted for publish",
+                    Map.of("versionId", versionId, "currentStatus", version.status().name()));
         }
 
         // 幂等：检查是否已存在请求（先于校验报告检查，支持重放）
@@ -98,9 +104,13 @@ public class PublishApplicationService {
             return existingId;
         }
 
+        // 以下三项均为“版本尚不具备发布条件”的可预期状态冲突：契约（aihub-v1.yaml submitPublishRequest
+        // x-error-codes）只声明 VERSION_STATE_NOT_ALLOWED(409)，裸 IllegalStateException 会被兜底映射为 500。
         String digest = version.manifestDigest();
         if (digest == null || digest.isBlank()) {
-            throw new IllegalStateException("version must have a manifest digest before publishing");
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "version must have a manifest digest before publishing",
+                    Map.of("versionId", versionId, "reason", "MANIFEST_DIGEST_MISSING"));
         }
 
         // 要求最新校验报告通过
@@ -109,12 +119,16 @@ public class PublishApplicationService {
                 WHERE version_id = ? ORDER BY created_at DESC LIMIT 1
                 """, versionId).stream().findFirst().orElse(null);
         if (latestReport == null || !"PASSED".equals(String.valueOf(latestReport.get("status")))) {
-            throw new IllegalStateException("version must have a PASSED validation report before submit");
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "version must have a PASSED validation report before submit",
+                    Map.of("versionId", versionId, "reason", "VALIDATION_REPORT_NOT_PASSED"));
         }
 
         String sourceCommit = version.sourceCommit();
         if (sourceCommit == null || sourceCommit.isBlank()) {
-            throw new IllegalStateException("version must have a source commit before publishing");
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "version must have a source commit before publishing",
+                    Map.of("versionId", versionId, "reason", "SOURCE_COMMIT_MISSING"));
         }
 
         String requestId = idGenerator.generate(IdPrefix.PUBLISH_REQUEST);
@@ -172,13 +186,19 @@ public class PublishApplicationService {
         String status = String.valueOf(request.get("status"));
         String versionId = String.valueOf(request.get("version_id"));
 
-        // 提交人不能审批自己
+        // 提交人不能审批自己：属于权限越界，映射为 403（契约 submitDecision x-error-codes
+        // 声明 AUTH_PERMISSION_DENIED），而非被兜底成 500 的裸 IllegalStateException。
         if (submittedBy.equals(reviewerId)) {
-            throw new IllegalStateException("submitter cannot approve their own publish request");
+            throw new AuthorizationException(ErrorCode.AUTH_PERMISSION_DENIED,
+                    "submitter cannot approve their own publish request",
+                    Map.of("requestId", requestId, "reviewerId", reviewerId));
         }
 
+        // 请求状态冲突：仅 SUBMITTED 可决策，映射为 409 VERSION_STATE_NOT_ALLOWED。
         if (!"SUBMITTED".equals(status)) {
-            throw new IllegalStateException("only SUBMITTED requests can receive decisions, current: " + status);
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "only SUBMITTED requests can receive decisions, current: " + status,
+                    Map.of("requestId", requestId, "currentStatus", status));
         }
 
         // 内容漂移检测：审批前重新校验冻结 revision
@@ -190,11 +210,17 @@ public class PublishApplicationService {
         String frozenDigest = String.valueOf(request.get("frozen_digest"));
         Object frozenCommitObj = request.get("frozen_source_commit");
         if (version.manifestDigest() == null || !version.manifestDigest().equals(frozenDigest)) {
-            throw new IllegalStateException("manifest digest drifted since submit; re-validate required");
+            // 冻结内容与当前版本不一致：可预期的状态冲突，映射为 409（需重新校验后再提交）。
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "manifest digest drifted since submit; re-validate required",
+                    Map.of("requestId", requestId, "reason", "MANIFEST_DIGEST_DRIFT"));
         }
         if (frozenCommitObj != null && version.sourceCommit() != null
                 && !version.sourceCommit().equalsIgnoreCase(String.valueOf(frozenCommitObj))) {
-            throw new IllegalStateException("source commit drifted since submit; re-validate required");
+            // source commit 漂移同样映射为 409，便于客户端识别“需重新校验”而非服务端故障。
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "source commit drifted since submit; re-validate required",
+                    Map.of("requestId", requestId, "reason", "SOURCE_COMMIT_DRIFT"));
         }
 
         String reviewId = idGenerator.generate(IdPrefix.REVIEW_DECISION);

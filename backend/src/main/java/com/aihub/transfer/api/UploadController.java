@@ -1,6 +1,15 @@
+/*
+ * 功能: 上传会话 REST 适配器，编排会话创建、分片预签名、完成与取消，主体从 PrincipalContext 注入。
+ * 时间: 2026-09-23
+ * 作者: AxeXie
+ */
 package com.aihub.transfer.api;
 
 import com.aihub.shared.api.CursorPage;
+import com.aihub.shared.error.AuthorizationException;
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.identity.PrincipalContext;
+import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.transfer.application.UploadApplicationService;
 import com.aihub.transfer.application.UploadSessionView;
 import com.aihub.transfer.domain.StoragePort;
@@ -39,7 +48,7 @@ public class UploadController {
         return uploadApplicationService.createSession(
                 assetId, versionId,
                 body.totalBytes(), body.fileCount(),
-                null /* principalId from security context */);
+                requirePrincipalId());
     }
 
     /** 查询上传会话详情。 */
@@ -59,7 +68,7 @@ public class UploadController {
     @GetMapping("/upload-sessions/{sessionId}/parts/{partNumber}/presign")
     public Map<String, String> presignPart(@PathVariable String sessionId,
                                             @PathVariable int partNumber) {
-        URL url = uploadApplicationService.presignPartUpload(sessionId, partNumber, null);
+        URL url = uploadApplicationService.presignPartUpload(sessionId, partNumber, requirePrincipalId());
         return Map.of("url", url.toString());
     }
 
@@ -76,13 +85,13 @@ public class UploadController {
                         .map(f -> new UploadApplicationService.FileMetadata(
                                 f.path(), f.sha256(), f.size(), f.mediaType(), f.sampleContent()))
                         .toList();
-        return uploadApplicationService.completeSession(sessionId, parts, files, null);
+        return uploadApplicationService.completeSession(sessionId, parts, files, requirePrincipalId());
     }
 
     /** 取消上传会话。 */
     @PostMapping("/upload-sessions/{sessionId}/cancel")
     public UploadSessionView cancelSession(@PathVariable String sessionId) {
-        return uploadApplicationService.cancelSession(sessionId, null);
+        return uploadApplicationService.cancelSession(sessionId, requirePrincipalId());
     }
 
     /** 列出资产下的上传会话。 */
@@ -96,6 +105,18 @@ public class UploadController {
 
     /** 创建上传会话请求体。 */
     public record CreateSessionRequest(long totalBytes, int fileCount, Integer ttlSeconds) {}
+
+    /**
+     * 读取当前认证主体 ID；缺失即拒绝（fail-closed），
+     * 上传会话必须以真实主体记账与审计。
+     */
+    private String requirePrincipalId() {
+        return PrincipalContextHolder.current()
+                .map(PrincipalContext::principalId)
+                .filter(id -> id != null && !id.isBlank())
+                .orElseThrow(() -> new AuthorizationException(
+                        ErrorCode.AUTH_UNAUTHENTICATED, "no authenticated principal", Map.of()));
+    }
 
     /** 完成上传会话请求体。 */
     public record CompleteSessionRequest(List<PartEntry> parts, List<FileEntry> files) {}

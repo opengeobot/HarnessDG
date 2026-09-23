@@ -226,6 +226,10 @@ class UploadMaterializeJobHandlerTest {
             assertThat(version.manifestDigest()).isNotNull();
             verify(versionRepository).update(version);
 
+            // 回归：DRAFT→VALIDATING 后必须入队 VERSION_VALIDATE，否则版本永久停留在 VALIDATING
+            verify(jobApplicationService).enqueue(
+                    eq("VERSION_VALIDATE"), contains("ver_1"), eq("principal_1"), isNull(), eq("asset_1"), eq(3));
+
             verify(sessionRepository).update(any(UploadSession.class));
             assertThat(session.status()).isEqualTo(UploadSessionStatus.COMPLETED);
         }

@@ -113,6 +113,13 @@ public class UploadMaterializeJobHandler implements JobHandler {
             LOG.info("upload session already completed sessionId={}, skipping", sessionId);
             return;
         }
+        if (session.status() == UploadSessionStatus.FAILED) {
+            // 作业仍在重试说明上次是 retryable 失败：按 FAILED ─重试→ PROCESSING 重入，
+            // 否则后续 Attempt 会在此静默 no-op，版本永久停留 DRAFT。
+            session.retryProcessing();
+            sessionRepository.update(session);
+            LOG.info("upload session re-entered PROCESSING for retry sessionId={}", sessionId);
+        }
         if (session.status() != UploadSessionStatus.PROCESSING
                 && session.status() != UploadSessionStatus.COMMITTING) {
             LOG.warn("upload session not materializable sessionId={} status={}",
@@ -178,6 +185,9 @@ public class UploadMaterializeJobHandler implements JobHandler {
                 versionRepository.update(version);
                 LOG.info("version transitioned to VALIDATING versionId={} digest={} sourceCommit={}",
                         versionId, manifestDigest, sourceCommit);
+                // 物化后必须由持久化作业推进校验：与 VersionApplicationService.enqueueValidationJob 同型，
+                // 否则版本会永久停留在 VALIDATING（REST transition 路径不适用于上传物化链）。
+                enqueueValidationJob(versionId, assetId, context.principalId());
             }
 
             session.complete();
@@ -247,6 +257,17 @@ public class UploadMaterializeJobHandler implements JobHandler {
             return gitResult.sourceCommit();
         }
         return "local-" + manifestDigest;
+    }
+
+    private void enqueueValidationJob(String versionId, String assetId, String principalId) throws Exception {
+        Map<String, String> payload = Map.of("versionId", versionId);
+        jobApplicationService.enqueue(
+                "VERSION_VALIDATE",
+                objectMapper.writeValueAsString(payload),
+                principalId,
+                null,
+                assetId,
+                3);
     }
 
     private void enqueueStagingCleanup(UploadSession session, String principalId) throws Exception {

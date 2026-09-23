@@ -102,7 +102,8 @@ class ValidationJobHandlerTest {
         verify(versionRepository).update(version);
         // 先删除旧报告再插入新报告
         verify(jdbcTemplate).update(eq("DELETE FROM validation_report WHERE version_id = ?"), eq("ver_1"));
-        verify(jdbcTemplate).update(anyString(), eq("vrp_1"), eq("ver_1"), eq("v1"), eq("PASSED"), anyString(), any(Instant.class));
+        // 回归：findings 是 jsonb 列，INSERT 必须带 ?::jsonb 显式转换，否则 PG 报 42804
+        verify(jdbcTemplate).update(contains("?::jsonb"), eq("vrp_1"), eq("ver_1"), eq("v1"), eq("PASSED"), anyString(), any(Instant.class));
     }
 
     @Test

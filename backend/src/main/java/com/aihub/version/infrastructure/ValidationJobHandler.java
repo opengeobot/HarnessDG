@@ -8,6 +8,7 @@ import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -124,10 +125,13 @@ public class ValidationJobHandler implements JobHandler {
         String findingsJson = objectMapper.writeValueAsString(findings);
 
         jdbcTemplate.update("DELETE FROM validation_report WHERE version_id = ?", versionId);
+        // findings 是 jsonb 列；PgJDBC 以 setString 传参需显式 ::jsonb 转换，否则报 42804 varchar→jsonb。
+        // created_at 必须转 Timestamp：JdbcTemplate 对 java.time.Instant 变参无法推断 SQL 类型，
+        // 会在客户端绑定阶段抛 07006（表现为 BadSqlGrammarException，语句根本不会到达服务端）。
         jdbcTemplate.update("""
                 INSERT INTO validation_report (report_id, version_id, policy_version, status, findings, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, reportId, versionId, POLICY_VERSION, reportStatus, findingsJson, Instant.now());
+                VALUES (?, ?, ?, ?, ?::jsonb, ?)
+                """, reportId, versionId, POLICY_VERSION, reportStatus, findingsJson, Timestamp.from(Instant.now()));
 
         if (allPassed) {
             version.transitionTo(VersionStatus.PENDING_REVIEW);

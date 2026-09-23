@@ -108,9 +108,10 @@ public class NotificationRecipientResolver {
     }
 
     private Map<String, Object> loadAssetScopeRow(String assetId) {
+        // asset 软删列是 deleted smallint（0=存活），不存在 deleted_at 列；误用会抛 42703 使发布请求提交整体失败。
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT organization_id, project_id, owner_team_id, owners::text AS owners_json
-                FROM asset WHERE asset_id = ? AND deleted_at IS NULL
+                FROM asset WHERE asset_id = ? AND deleted = 0
                 """, assetId);
         return rows.isEmpty() ? null : rows.get(0);
     }

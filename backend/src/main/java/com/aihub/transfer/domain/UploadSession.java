@@ -110,6 +110,21 @@ public final class UploadSession {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * 从 FAILED 重入 PROCESSING（state-machines.md §8：FAILED ─重试→ PROCESSING）。
+     *
+     * <p>UPLOAD_MATERIALIZE 作业因可重试依赖故障（如 Gitea 瞬断）把会话标成 FAILED 后，
+     * 后续 Attempt 必须能够继续驱动同一会话，否则版本将永久停留在 DRAFT。
+     */
+    public void retryProcessing() {
+        if (this.status != UploadSessionStatus.FAILED) {
+            throw new IllegalStateException(
+                    "only FAILED sessions can re-enter PROCESSING, current: " + this.status);
+        }
+        this.status = UploadSessionStatus.PROCESSING;
+        this.updatedAt = Instant.now();
+    }
+
     /** 取消会话。 */
     public void cancel() {
         if (this.status == UploadSessionStatus.COMPLETED

@@ -193,6 +193,9 @@ public class MyBatisAssetRepository implements AssetRepository {
         if (value == null) return null;
         if (value instanceof Instant i) return i;
         if (value instanceof OffsetDateTime odt) return odt.toInstant();
+        // PgJDBC 对 timestamptz 经 queryForList 返回 java.sql.Timestamp；此前落入 null，
+        // 导致 Saga 更新把 updated_at 写回 NULL 触发 NOT NULL 违例（2026-09-23 journey E4 根因）。
+        if (value instanceof java.sql.Timestamp ts) return ts.toInstant();
         return null;
     }
 

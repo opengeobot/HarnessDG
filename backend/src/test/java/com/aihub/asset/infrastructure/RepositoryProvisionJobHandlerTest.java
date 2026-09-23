@@ -109,6 +109,10 @@ class RepositoryProvisionJobHandlerTest {
 
         verify(assetRepository).update(asset);
         verify(outboxRepository).append(any(OutboxEvent.class));
+        // 回归（journey E4 2026-09-23）：Saga 更新必须携带非空 updatedAt，
+        // 否则 UPDATE 写 NULL 触发 asset.updated_at NOT NULL 违例、资产永久 PENDING。
+        assertThat(asset.updatedAt()).isNotNull();
+        assertThat(asset.provisioningStatus()).isEqualTo(ProvisioningStatus.COMPLETED);
     }
 
     @Test

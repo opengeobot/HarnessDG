@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -141,10 +142,12 @@ public class PreviewJobHandler implements JobHandler {
             jdbcTemplate.update("DELETE FROM asset_preview WHERE asset_id = ? AND version_id IS NULL", assetId);
         }
 
+        // generated_at 必须转 Timestamp：JdbcTemplate 对 java.time.Instant 变参无法推断 SQL 类型，
+        // 会在客户端绑定阶段抛 07006（表现为 BadSqlGrammarException，语句不会到达服务端）。
         jdbcTemplate.update("""
                 INSERT INTO asset_preview (preview_id, asset_id, version_id, content_type, content, generated_at)
                 VALUES (?, ?, ?, ?, ?, ?)
-                """, previewId, assetId, versionId, "application/json", previewJson, Instant.now());
+                """, previewId, assetId, versionId, "application/json", previewJson, Timestamp.from(Instant.now()));
 
         LOG.info("preview generated previewId={} assetId={}", previewId, assetId);
     }

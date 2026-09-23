@@ -252,6 +252,55 @@ create_dataset_asset() {
   return 0
 }
 
+# ---- 上传链辅助：presign → 容器内 PUT → complete（真实 MinIO 数据面，非手动 transition）----
+# 探测 MinIO 服务是否可从 Compose 网络内驱动（docker compose 可用）。
+minio_drivable() {
+  docker compose ps --format '{{.Service}} {{.State}}' minio 2>/dev/null | grep -q 'running'
+}
+
+# 对指定 version 执行完整上传链，成功返回 0，版本进入 VALIDATING（异步推进到 PENDING_REVIEW）。
+# 参数：<asset_id> <version_id> <payload_path> <size> <sha256>
+run_upload_chain() {
+  local asset_id="$1" ver_id="$2" payload="$3" size="$4" sha="$5"
+  local sb sid pb purl hdr etag cb code
+  sb="$(http_status_and_body POST "/api/v1/assets/${asset_id}/versions/${ver_id}/upload-sessions" \
+    "${ACCESS_TOKEN}" "{\"totalBytes\":${size},\"fileCount\":1}")"
+  code="$(echo "${sb}" | head -n1)"
+  sid="$(json_field "$(echo "${sb}" | tail -n +2)" sessionId)"
+  if [ -z "${sid}" ]; then echo "SESSION_CREATE_FAILED HTTP:${code}"; return 1; fi
+
+  pb="$(http_body GET "/api/v1/upload-sessions/${sid}/parts/1/presign" "${ACCESS_TOKEN}")"
+  purl="$(printf '%s' "${pb}" | sed -nE 's/.*"url"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1 | sed 's#\\/#/#g')"
+  if [ -z "${purl}" ]; then echo "PRESIGN_FAILED"; return 1; fi
+
+  if ! docker compose cp "${payload}" minio:/tmp/journey_p.bin >/dev/null 2>&1; then
+    echo "DOCKER_CP_FAILED"; return 1
+  fi
+  hdr="$(docker compose exec -T minio sh -c \
+    "curl -s -D /tmp/jput.hdr -o /dev/null -T /tmp/journey_p.bin '${purl}'; cat /tmp/jput.hdr" 2>/dev/null | tr -d '\r')"
+  etag="$(printf '%s' "${hdr}" | grep -i '^etag:' | sed -E 's/^[Ee][Tt][Aa][Gg]: *//; s/"//g' | head -n1)"
+  if [ -z "${etag}" ]; then echo "PUT_NO_ETAG"; return 1; fi
+
+  cb="$(http_status_and_body POST "/api/v1/upload-sessions/${sid}/complete" "${ACCESS_TOKEN}" \
+    "{\"parts\":[{\"partNumber\":1,\"etag\":\"${etag}\"}],\"files\":[{\"path\":\"journey.bin\",\"sha256\":\"${sha}\",\"size\":${size},\"mediaType\":\"application/octet-stream\"}]}")"
+  code="$(echo "${cb}" | head -n1)"
+  if [ "${code}" != "200" ] && [ "${code}" != "201" ] && [ "${code}" != "202" ]; then
+    echo "COMPLETE_FAILED HTTP:${code}"; return 1
+  fi
+  echo "OK ${sid}"
+  return 0
+}
+
+# 与 psql_q 相同但不压缩空白，用于诊断信息输出。
+psql_raw() {
+  docker compose exec -T postgres sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"$1\"" 2>/dev/null
+}
+
+# 作业失败诊断：error_message 在 job_attempt（job_task 仅有 error_code）。
+job_diag() {
+  psql_raw "select j.type || '/' || j.status || ' ' || coalesce(left(a.error_message,200),'') from job_task j left join job_attempt a on a.job_id=j.job_id where j.asset_id='$1' order by j.created_at desc limit 1" | head -n1
+}
+
 # ---- PRD §13.2 旅程 ----
 
 journey_v05_create_model() {
@@ -327,10 +376,21 @@ journey_v07_webhook_index() {
   fi
 }
 
+# V08：真实上传链 → 校验 → 双主体审批 → 发布三元组。
+# 逻辑固化自 E4 探针（2026-09-23 第七轮 b 全绿）：presign→容器内 PUT→complete 使版本
+# 经 VALIDATING 进入 PENDING_REVIEW；提交人禁止自审，须独立 reviewer（asset:publish）APPROVE；
+# VERSION_PUBLISH 作业产出 gitTag/sourceCommit/manifestDigest，任一缺失即 FAIL（不再 SKIP）。
 journey_v08_publish_triplet() {
-  local asset_id ver_body ver_id code req_body req_id dec_body pub_body
+  local runner_tmp="${TMPDIR:-/tmp}"
+  local payload="${runner_tmp}/journey_v08_${RUN_ID}.bin"
+  local asset_id tmp ver="" used ver_resp sb ver_id code
+  local fsize fsha chain_out status="" i
+  local req_body req_id reviewer_pass='Journey-Tmp-01P8!' reviewer_perm='Journey-Perm-02P8!'
+  local u_body ruid rt cp dec_body pub_body
+  local git_tag source_commit manifest_digest
+
+  # 1. 复用或创建 MODEL 资产，并确认仓库 provisioning 完成
   if [ -z "${JOURNEY_ASSET_ID}" ]; then
-    local tmp
     tmp="$(create_model_asset "pub-${RUN_ID}" 2>/dev/null || true)"
     case "${tmp}" in
       INFRA:*|PASSWORD_CHANGE_REQUIRED|NO_ASSET_ID|HTTP:*)
@@ -342,68 +402,145 @@ journey_v08_publish_triplet() {
   else
     asset_id="${JOURNEY_ASSET_ID}"
   fi
+  # 回写全局：V08 可能先于 V05 创建资产（V05 SKIP 场景），V09/V11 依赖此对
+  JOURNEY_ASSET_ID="${asset_id}"
+  for i in $(seq 1 20); do
+    status="$(json_field "$(http_body GET "/api/v1/assets/${asset_id}" "${ACCESS_TOKEN}")" provisioningStatus)"
+    [ "${status}" = "COMPLETED" ] && break
+    sleep 3
+  done
+  if [ "${status}" != "COMPLETED" ]; then
+    journey_fail "V08" "版本发布 triplet" "asset provisioning not COMPLETED (status=${status:-unknown})"
+    return
+  fi
 
-  ver_body="$(http_body POST "/api/v1/assets/${asset_id}/versions" "${ACCESS_TOKEN}" '{"version":"1.0.0-journey"}')"
-  ver_id="$(json_field "${ver_body}" versionId)"
+  # 2. 合法 x.y.z 版本号且未被 PUBLISHED 占用（后端强校验 semver，旧 1.0.0-journey 非法）
+  local base6="${RUN_ID: -6}"
+  for i in $(seq 1 10); do
+    ver="1.$(( (10#${base6} / 60) % 900 + 100 )).$(( (10#${base6} % 60) * 10 + i ))"
+    used="$(psql_q "select 1 from asset_version where git_tag='${ver}' and status='PUBLISHED'")"
+    [ -z "${used}" ] && break
+    ver=""
+  done
+  if [ -z "${ver}" ]; then
+    journey_fail "V08" "版本发布 triplet" "no free semantic version candidate"
+    return
+  fi
+
+  ver_resp="$(http_status_and_body POST "/api/v1/assets/${asset_id}/versions" "${ACCESS_TOKEN}" \
+    "{\"version\":\"${ver}\"}" "Idempotency-Key: j8-ver-${RUN_ID}")"
+  code="$(echo "${ver_resp}" | head -n1)"
+  ver_id="$(json_field "$(echo "${ver_resp}" | tail -n +2)" versionId)"
   if [ -z "${ver_id}" ]; then
-    journey_skip "V08" "版本发布 triplet" "draft version creation unavailable"
+    journey_fail "V08" "版本发布 triplet" "draft version creation failed HTTP:${code}"
     return
   fi
   JOURNEY_VERSION_ID="${ver_id}"
 
-  code="$(http_status POST "/api/v1/assets/${asset_id}/versions/${ver_id}/transition" "${ACCESS_TOKEN}" '{"targetStatus":"VALIDATING"}')"
-  if [ "${code}" != "200" ]; then
-    journey_skip "V08" "版本发布 triplet" "VALIDATING transition HTTP ${code}"
+  # 3. 真实 1MiB+1 随机载荷 + sha256，走完整上传链（不再手动 transition 后门）
+  rm -f "${payload}"
+  if ! dd if=/dev/urandom of="${payload}" bs=1048577 count=1 status=none 2>/dev/null; then
+    journey_fail "V08" "版本发布 triplet" "payload generation failed"
     return
   fi
+  fsize="$(stat -c %s "${payload}" 2>/dev/null)"
+  fsha="$(sha256sum "${payload}" 2>/dev/null | awk '{print $1}')"
+  if [ -z "${fsize}" ] || [ -z "${fsha}" ]; then
+    journey_fail "V08" "版本发布 triplet" "payload stat/sha256 failed"
+    return
+  fi
+  if ! minio_drivable; then
+    journey_skip "V08" "版本发布 triplet" "MinIO container not drivable from compose network"
+    rm -f "${payload}"
+    return
+  fi
+  chain_out="$(run_upload_chain "${asset_id}" "${ver_id}" "${payload}" "${fsize}" "${fsha}")" || {
+    journey_fail "V08" "版本发布 triplet" "upload chain failed: ${chain_out}"
+    rm -f "${payload}"
+    return
+  }
+  rm -f "${payload}"
 
-  local i status=""
-  for i in $(seq 1 20); do
+  # 4. 等待异步校验把版本推进到 PENDING_REVIEW（VALIDATING→…，上限 90 秒）
+  status=""
+  for i in $(seq 1 45); do
     status="$(json_field "$(http_body GET "/api/v1/assets/${asset_id}/versions/${ver_id}" "${ACCESS_TOKEN}")" status)"
-    if [ "${status}" = "PENDING_REVIEW" ] || [ "${status}" = "DRAFT" ]; then
-      break
-    fi
-    sleep 1
+    { [ "${status}" = "PENDING_REVIEW" ] || [ "${status}" = "VALIDATION_FAILED" ]; } && break
+    sleep 2
   done
+  if [ "${status}" = "VALIDATION_FAILED" ]; then
+    journey_fail "V08" "版本发布 triplet" "validation failed: $(job_diag "${asset_id}")"
+    return
+  fi
   if [ "${status}" != "PENDING_REVIEW" ]; then
-    journey_skip "V08" "版本发布 triplet" "validation did not reach PENDING_REVIEW (status=${status:-unknown})"
+    journey_fail "V08" "版本发布 triplet" "upload validation did not reach PENDING_REVIEW (status=${status:-unknown})"
     return
   fi
 
-  req_body="$(http_body POST "/api/v1/versions/${ver_id}/publish-requests" "${ACCESS_TOKEN}" '{}')"
-  req_id="$(json_field "${req_body}" requestId)"
+  # 5. admin 提交发布请求；RID 必须锚定业务实体 pub_（外层信封 req_ 是 requestId 同名陷阱）
+  req_body="$(http_body POST "/api/v1/versions/${ver_id}/publish-requests" "${ACCESS_TOKEN}" '{}' \
+    "Idempotency-Key: j8-req-${RUN_ID}")"
+  req_id="$(printf '%s' "${req_body}" | sed -nE 's/.*"requestId"[[:space:]]*:[[:space:]]*"(pub_[^"]+)".*/\1/p' | head -n1)"
   if [ -z "${req_id}" ]; then
-    req_id="$(printf '%s' "${req_body}" | sed -nE 's/.*"requestId"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
-  fi
-  if [ -z "${req_id}" ]; then
-    journey_skip "V08" "版本发布 triplet" "publish request submit failed"
+    journey_fail "V08" "版本发布 triplet" "publish request submit failed: $(printf '%s' "${req_body}" | head -c 200)"
     return
   fi
 
-  dec_body="$(http_body POST "/api/v1/publish-requests/${req_id}/decisions" "${ACCESS_TOKEN}" '{"decision":"APPROVE","comments":"journey-e2e"}')"
+  # 6. 双主体硬约束：提交人不能自审，创建独立 reviewer（asset:publish scope，默认 ACTIVE）
+  u_body="$(http_body POST /api/v1/system/users "${ACCESS_TOKEN}" \
+    "{\"username\":\"jrev-${RUN_ID}\",\"displayName\":\"Journey Reviewer ${RUN_ID}\",\"email\":\"jrev-${RUN_ID}@journey.local\",\"locale\":\"zh-CN\",\"temporaryPassword\":\"${reviewer_pass}\",\"scopes\":[\"asset:publish\"]}" \
+    "Idempotency-Key: j8-user-${RUN_ID}")"
+  ruid="$(printf '%s' "${u_body}" | sed -nE 's/.*"userId"[[:space:]]*:[[:space:]]*"(usr_[^"]+)".*/\1/p' | head -n1)"
+  if [ -z "${ruid}" ]; then
+    journey_fail "V08" "版本发布 triplet" "reviewer creation failed: $(printf '%s' "${u_body}" | head -c 200)"
+    return
+  fi
+  rt="$(json_field "$(http_login_body "jrev-${RUN_ID}" "${reviewer_pass}")" accessToken)"
+  if [ -z "${rt}" ]; then
+    journey_fail "V08" "版本发布 triplet" "reviewer temp login failed (user=${ruid})"
+    return
+  fi
+  cp="$(http_status PUT /api/v1/me/password "${rt}" \
+    "{\"currentPassword\":\"${reviewer_pass}\",\"newPassword\":\"${reviewer_perm}\"}")"
+  if [ "${cp}" != "200" ]; then
+    journey_fail "V08" "版本发布 triplet" "reviewer password change HTTP:${cp}"
+    return
+  fi
+  rt="$(json_field "$(http_login_body "jrev-${RUN_ID}" "${reviewer_perm}")" accessToken)"
+  if [ -z "${rt}" ]; then
+    journey_fail "V08" "版本发布 triplet" "reviewer re-login after password change failed"
+    return
+  fi
+
+  dec_body="$(http_body POST "/api/v1/publish-requests/${req_id}/decisions" "${rt}" \
+    '{"decision":"APPROVE","comments":"journey-e2e-upload-chain"}' "Idempotency-Key: j8-dec-${RUN_ID}")"
   if ! printf '%s' "${dec_body}" | grep -qE '"status"|APPROVED|PUBLISHED'; then
-    journey_skip "V08" "版本发布 triplet" "approve decision did not succeed"
+    journey_fail "V08" "版本发布 triplet" "reviewer APPROVE rejected: $(printf '%s' "${dec_body}" | head -c 200)"
     return
   fi
 
-  for i in $(seq 1 30); do
+  # 7. 等待 VERSION_PUBLISH 作业产出三元组（上限 90 秒）
+  pub_body=""
+  status=""
+  for i in $(seq 1 45); do
     pub_body="$(http_body GET "/api/v1/assets/${asset_id}/versions/${ver_id}" "${ACCESS_TOKEN}")"
     status="$(json_field "${pub_body}" status)"
-    if [ "${status}" = "PUBLISHED" ]; then
-      break
-    fi
-    sleep 1
+    { [ "${status}" = "PUBLISHED" ] || [ "${status}" = "PUBLISH_FAILED" ]; } && break
+    sleep 2
   done
+  if [ "${status}" != "PUBLISHED" ]; then
+    journey_fail "V08" "版本发布 triplet" "publish did not reach PUBLISHED (status=${status:-unknown}): $(job_diag "${asset_id}")"
+    return
+  fi
 
-  local git_tag source_commit manifest_digest
   git_tag="$(printf '%s' "${pub_body}" | sed -nE 's/.*"gitTag"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
   source_commit="$(printf '%s' "${pub_body}" | sed -nE 's/.*"sourceCommit"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
   manifest_digest="$(printf '%s' "${pub_body}" | sed -nE 's/.*"manifestDigest"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
 
   if [ -n "${git_tag}" ] && [ -n "${source_commit}" ] && [ -n "${manifest_digest}" ]; then
-    journey_pass "V08" "版本发布 triplet（tag/commit/digest present）"
+    journey_pass "V08" "版本发布 triplet（upload chain + dual-principal approve, tag=${git_tag}）"
   else
-    journey_skip "V08" "版本发布 triplet" "publish incomplete (tag=${git_tag:-null}, commit=${source_commit:-null}, digest=${manifest_digest:-null})"
+    journey_fail "V08" "版本发布 triplet" "published version missing triplet (tag=${git_tag:-null}, commit=${source_commit:-null}, digest=${manifest_digest:-null})"
   fi
 }
 
