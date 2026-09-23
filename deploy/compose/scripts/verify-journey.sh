@@ -566,16 +566,90 @@ journey_v09_tag_immutable() {
   fi
 }
 
+# PRD §13.2 V10：不同主体搜索私有资产，只有授权主体可见。
+# 逻辑：admin（asset:manage）创建 PRIVATE 探针资产 → 创建仅含 asset:read scope 的
+# 第二主体（走 V08 同款 建用户→临时口令登录→改密→重登 链）→ 双方按唯一 keyword
+# 搜索：探针 assetId 只应出现在 admin 结果中，第二主体结果必须不含（fail closed）。
 journey_v10_two_principal_search() {
-  local user_cnt
-  user_cnt="$(psql_q "select count(*) from iam_user where status='ACTIVE'")"
-  if [ "${user_cnt}" -lt 2 ] 2>/dev/null; then
-    journey_skip "V10" "搜索与权限（多主体）" "only one active user in Compose"
+  local peer_pass='Journey-Tmp-01P10!' peer_perm='Journey-Perm-02P10!'
+  local keyword probe probe_out asset_id code body u_body puid pt cp search_url
+  local admin_hits peer_total
+
+  # 1. admin 创建 PRIVATE 探针资产（唯一 keyword 便于精确断言）
+  keyword="j10priv-${RUN_ID}"
+  probe="{\"type\":\"MODEL\",\"namespace\":\"journey\",\"name\":\"${keyword}\",\"displayName\":\"Journey V10 Probe ${RUN_ID}\",\"description\":\"${keyword}\",\"visibility\":\"PRIVATE\",\"ownerTeamId\":\"${OWNER_TEAM_ID}\",\"model\":{\"framework\":\"PYTORCH\",\"task\":\"TEXT_GENERATION\"}}"
+  body="$(http_status_and_body POST /api/v1/assets "${ACCESS_TOKEN}" "${probe}" "Idempotency-Key: j10-asset-${RUN_ID}")"
+  code="$(echo "${body}" | head -n1)"
+  probe_out="$(echo "${body}" | tail -n +2)"
+  asset_id="$(json_field "${probe_out}" assetId)"
+  if { [ "${code}" != "200" ] && [ "${code}" != "201" ]; } || [ -z "${asset_id}" ]; then
+    journey_skip "V10" "搜索与权限（多主体）" "PRIVATE probe asset creation failed HTTP:${code}"
     return
   fi
-  # SKIP_REASON: 需要第二个已注册并激活的用户凭据，Compose fixture 仅包含 admin 引导用户；
-  # 多主体权限验证需预置非 admin 用户及其角色绑定，属于 fixture 增强范畴。
-  journey_skip "V10" "搜索与权限（多主体）" "second principal credentials not in Compose fixtures; requires pre-seeded non-admin user with role bindings"
+  # 搜索 SQL 硬过滤 provisioning_status='COMPLETED'：必须等建仓作业完成再断言可见性
+  local prov status=""
+  for prov in $(seq 1 20); do
+    status="$(json_field "$(http_body GET "/api/v1/assets/${asset_id}" "${ACCESS_TOKEN}")" provisioningStatus)"
+    [ "${status}" = "COMPLETED" ] && break
+    sleep 3
+  done
+  if [ "${status}" != "COMPLETED" ]; then
+    journey_fail "V10" "搜索与权限（多主体）" "probe asset provisioning not COMPLETED (status=${status:-unknown})"
+    return
+  fi
+
+  # 2. 创建第二主体：仅 asset:read scope（无 asset:manage、无组织绑定 → PRIVATE 不可见）
+  u_body="$(http_body POST /api/v1/system/users "${ACCESS_TOKEN}" \
+    "{\"username\":\"jpeer-${RUN_ID}\",\"displayName\":\"Journey Peer ${RUN_ID}\",\"email\":\"jpeer-${RUN_ID}@journey.local\",\"locale\":\"zh-CN\",\"temporaryPassword\":\"${peer_pass}\",\"scopes\":[\"asset:read\"]}" \
+    "Idempotency-Key: j10-user-${RUN_ID}")"
+  puid="$(json_field "${u_body}" userId)"
+  if [ -z "${puid}" ]; then
+    journey_skip "V10" "搜索与权限（多主体）" "peer user creation failed: $(printf '%s' "${u_body}" | head -c 200)"
+    return
+  fi
+  pt="$(json_field "$(http_login_body "jpeer-${RUN_ID}" "${peer_pass}")" accessToken)"
+  if [ -z "${pt}" ]; then
+    journey_fail "V10" "搜索与权限（多主体）" "peer temp login failed (user=${puid})"
+    return
+  fi
+  cp="$(http_status PUT /api/v1/me/password "${pt}" \
+    "{\"currentPassword\":\"${peer_pass}\",\"newPassword\":\"${peer_perm}\"}")"
+  if [ "${cp}" != "200" ]; then
+    journey_fail "V10" "搜索与权限（多主体）" "peer password change HTTP:${cp}"
+    return
+  fi
+  pt="$(json_field "$(http_login_body "jpeer-${RUN_ID}" "${peer_perm}")" accessToken)"
+  if [ -z "${pt}" ]; then
+    journey_fail "V10" "搜索与权限（多主体）" "peer re-login after password change failed"
+    return
+  fi
+
+  # 3. 双主体按唯一 keyword 搜索：admin 可见、第二主体不可见
+  search_url="/api/v1/assets?keyword=${keyword}&limit=50"
+  admin_hits="$(http_body GET "${search_url}" "${ACCESS_TOKEN}" | grep -c "${asset_id}" || true)"
+  if [ "${admin_hits}" -lt 1 ] 2>/dev/null; then
+    # PRIVATE 资产对 Owner 应可见；搜索字段兜底：直接查详情确认可达后再判 FAIL
+    code="$(http_status GET "/api/v1/assets/${asset_id}" "${ACCESS_TOKEN}")"
+    if [ "${code}" = "200" ]; then
+      journey_fail "V10" "搜索与权限（多主体）" "owner cannot find own PRIVATE asset via keyword search"
+    else
+      journey_fail "V10" "搜索与权限（多主体）" "owner cannot access own PRIVATE asset HTTP:${code}"
+    fi
+    return
+  fi
+  body="$(http_body GET "${search_url}" "${pt}")"
+  # 未授权主体必须搜不到探针：响应中既不出现 assetId，也不出现探针名称
+  if printf '%s' "${body}" | grep -q "${asset_id}"; then
+    journey_fail "V10" "搜索与权限（多主体）" "unauthorized peer sees PRIVATE probe ${asset_id} in search"
+    return
+  fi
+  if printf '%s' "${body}" | grep -q "${keyword}"; then
+    journey_fail "V10" "搜索与权限（多主体）" "unauthorized peer sees PRIVATE probe by name in search"
+    return
+  fi
+  # 反向对照：探针确实进入了搜索索引（admin 可见已证），peer 同 keyword 查询正常返回
+  peer_total="$(printf '%s' "${body}" | sed -nE 's/.*"total"[[:space:]]*:[[:space:]]*([0-9]+).*/\1/p' | head -n1)"
+  journey_pass "V10" "搜索与权限（多主体：PRIVATE 探针仅授权主体可见，peer total=${peer_total:-0}）"
 }
 
 journey_v11_download_ttl() {
