@@ -1,4 +1,21 @@
 schemaVersion: harnessdg.evidence/v1
+# 功能: TASK-P5-002 预览 E5 证据清单——压力演练（cgroup 隔离 + 内容超限失败语义 + PII 金丝雀）实跑回写。
+# 时间: 2026-09-23 作者: AxeXie
+# E5 压力演练（2026-09-23，e33c14a）：新增 deploy/compose/scripts/p5-preview/preview-pressure-drill.sh，
+#   非侵入（不改 compose.yaml）经 docker run 运行时施加 --memory/--cpus，资源参数从运行中主 worker inspect 派生。
+#   场景 A：64m 受限副本 exit=137 oomKilled=true，副本受压期间主栈 5 次探测 0 失败。
+#   场景 B 根因修复链（前两轮 FAIL 取证）：
+#     1) backend 进程内同样运行 JobWorker（JobConfiguration aihub.job.worker.enabled matchIfMissing=true，
+#        api profile 未覆盖）——仅 stop worker 时 backend 以默认 1MB maxBytes 一次领取成功；
+#        修复：同时 stop backend+worker，登录/查询/入队全部改经副本容器内 localhost REST，副本为唯一领取者。
+#     2) JobWorker.handleFailure 终态 attempt 状态为 'DEAD'（非 'FAILED'）——断言改 status in ('FAILED','DEAD')。
+#   场景 B 实跑：120KB payload > 副本 maxBytes 64KB → job 3 次尝试后 DEAD，error_code=INTERNAL_ERROR，
+#     3 条 job_attempt 均含 PREVIEW_LIMIT_EXCEEDED；asset_preview 行数不变（无部分产物）；
+#     PII 金丝雀未出现在 attempt 消息/副本日志/主 worker 日志/backend 日志；恢复后主栈全绿。
+#   汇总 PASS=7 FAIL=0 SKIP=0（.tmp 输出已按脱敏原则删除，命令与结果如实记录于下方 execution/coverage）。
+# 架构观察（超本 Task allowedPaths，登记 followUp 不改代码）：
+#   compose.yaml 角色注释声称 api 仅在线请求 / worker 承载后台任务，但 api profile 未显式
+#   aihub.job.worker.enabled=false，backend 实际参与任务领取。建议后续 Task 修正 profile 或文档。
 evidenceId: EVD-P5002-001
 status: PARTIAL
 
@@ -13,36 +30,39 @@ governance:
     result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-002.md
-    result: null
+    result: FAIL
+    note: "2026-09-23 实跑 2 issues：baseCommit 59f40d2 与当前 HEAD e33c14a 漂移；Compose scope 前置要求 docker compose config。漂移为治理缺口（Task 批准于 P4 波次基线），非本次实施造成；如实登记不掩盖。"
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-002.md -CheckChangedPaths
-    result: null
+    result: FAIL
+    note: "2026-09-23 实跑：越界清单（frontend/**、prd/**、scripts/aih 等）全部来自 baseCommit 漂移后其他已批准 Task 的历史提交差异，非本 Session 变更；本 Session 实际变更仅 deploy/compose/scripts/p5-preview/ 与本 evidence 文件，均在 allowedPaths 内。"
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-002.md -CheckCompletion
-    result: null
+    result: notRun
+    note: "baseCommit 漂移与 review.accepted 未满足前 -CheckCompletion 必然 FAIL（AI 不得自批）；不运行以避免伪证据。"
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  commitSha: e33c14a0de06754baf0b94edbf455cafd30f14af
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-23T17:02:02+08:00
+  os: Windows NT (Git Bash / MSYS) + Docker Compose 7 服务栈
   timezone: Asia/Shanghai
   java: "21"
-  node: "22"
-  pnpm: "9"
+  node: "20.19.2"
+  pnpm: "10.33.4"
   docker: "available"
-  composeProfiles: []
-  externalDependencyVersions: {}
+  composeProfiles: [backend, worker, postgres, gitea, minio, frontend, nginx]
+  externalDependencyVersions: {worker_image: aihub-worker:latest}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: bash ./deploy/security/p5-security-drill.sh # PreviewJobHandlerTest zip-limit path
-  startedAt: 2026-07-11T20:49:16+08:00
-  finishedAt: 2026-07-11T20:49:25+08:00
+  workingDirectory: D:/workspace/opengeobot/HarnessDG
+  command: bash ./deploy/compose/scripts/p5-preview/preview-pressure-drill.sh
+  startedAt: 2026-09-23T16:59:45+08:00
+  finishedAt: 2026-09-23T17:02:02+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E5
@@ -53,30 +73,47 @@ coverage:
       assertion: Configurable aihub.preview.max-bytes/max-rows; PREVIEW_LIMIT_EXCEEDED stable error; preview failure metric
     - scenarioId: AC-P5-PRE-001-E5-zip-limit
       assertion: PreviewJobHandlerTest PREVIEW_LIMIT_EXCEEDED rejects oversized content (p5-security-drill.sh PASS)
+    - scenarioId: AC-P5-PRE-001-E5-pressure-cgroup-isolation
+      assertion: "E5 实跑（2026-09-23，e33c14a）：64m --memory 受限副本 exit=137 oomKilled=true；副本受压全程主栈健康探测 5 次 0 失败——资源故障不外溢。"
+    - scenarioId: AC-P5-PRE-001-E5-pressure-limit-semantics
+      assertion: "E5 实跑：副本注入 AIHUB_PREVIEW_MAX_BYTES=65536 且 stop backend+worker 保证唯一领取者；120KB 金丝雀 payload 入队后 job 3 次尝试 DEAD，error_code=INTERNAL_ERROR，job_attempt 3 条均含 PREVIEW_LIMIT_EXCEEDED，asset_preview 行数不变（无部分产物）。"
+    - scenarioId: AC-P5-PRE-001-E5-pressure-pii-canary
+      assertion: "E5 实跑：PII 金丝雀未泄漏至 job_attempt.error_message、副本容器日志、主 worker 日志、backend 日志。"
+    - scenarioId: AC-P5-PRE-001-E5-pressure-recovery
+      assertion: "E5 实跑：演练结束 backend+worker 恢复、主栈全绿（recovery PASS），演练汇总 PASS=7 FAIL=0 SKIP=0。"
   notProven:
-    - scenarioId: AC-P5-PRE-001-E5-pressure
-      reason: Worker cgroup/isolation pressure drill not executed this session
+    - scenarioId: AC-P5-PRE-001-E5-pressure-compose-mem-limit
+      reason: compose.yaml 声明式 mem_limit 不在 TASK-P5-002 allowedPaths；本演练以运行时 docker run --memory/--cpus 等效施加隔离，编排级资源限额留待独立编排 Task。
+    - scenarioId: AC-P5-PRE-001-E5-format-matrix
+      reason: REQ-PRE-001 完整格式矩阵（parquet 大文件、多 sheet xlsx 等）压力变体未逐一实跑；本轮以 CSV 内容超限 + cgroup OOM 两场景证明隔离与失败语义机制。
 
 artifacts:
   reports:
     - docs/runbooks/ops.md#预览-worker-资源隔离
+    - deploy/compose/scripts/p5-preview/preview-pressure-drill.sh
   logs: []
   screenshots: []
   traces: []
   metrics:
     - aihub_preview_failures_total
-  databaseQueries: []
+  databaseQueries:
+    - "select status||'|'||attempts||'|'||coalesce(error_code,'') from job_task where job_id=?  -- 期望 DEAD|3|INTERNAL_ERROR"
+    - "select count(*) from job_attempt where job_id=? and status in ('FAILED','DEAD') and error_message like '%PREVIEW_LIMIT_EXCEEDED%'  -- 期望 3"
+    - "select count(*) from asset_preview where asset_id=?  -- 演练前后行数一致"
 
 secrets:
   redactionChecked: true
   findings: []
 
 limitations:
-  skippedTests:
-    - Worker cgroup pressure drill
+  skippedTests: []
   assumptions:
     - Zip-bomb coverage via unit test path, not live zip upload
-  environmentDifferences: []
+    - 场景 B 副本经 worker 镜像启动（ENTRYPOINT 强制 worker profile）并共享主栈 postgres/JWT 自签自验闭环；REST 登录/入队走副本容器内 localhost:8080，不依赖宿主 nginx 入口。
+    - job 终态 attempt 记录状态为 DEAD（JobWorker.handleFailure L222），与重试态 FAILED 区分；断言同时计入两者。
+  environmentDifferences:
+    - 2026-09-23 实跑在 Windows Git Bash + Docker Desktop（原 partial 取证为 Ubuntu WSL）。
+    - backend/worker 的 Prometheus metrics 通道因每进程临时 JWT 密钥跨进程 401 不可用；失败计数取证以 job_attempt 数据库断言 + 容器日志替代 aihub_preview_failures_total 指标读取。
 
 review:
   recordedBy: AI

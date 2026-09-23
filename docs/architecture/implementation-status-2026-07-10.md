@@ -377,3 +377,18 @@ E5 复验其余开放项：`P5003` 恢复演练为破坏性（`down -v` 清卷�
 4. **计时口径污染**：Windows Git Bash 下 shell `date` 前后差含 200-400ms 子进程 fork 开销（shell 侧 P95=617ms vs 同负载 curl 进程内 `time_total` P95=17ms），造成假 FAIL。改用 curl `time_total` 统一跨平台测量口径；仅 2xx 入延迟样本（401/403/429 快速拒绝不污染 P95）；presigned 阈值按 PRD §13.5 由 500ms **收紧**至 300ms。
 
 三路径回归（`0a9a76c`）：带平台 JWT 实跑 **4/4 场景完成测量且 PASS**（asset 25ms / mcp 28ms / presigned 31ms / multipart 29ms，均余量充足）；1ms 阈值副本 4/4 FAIL、exit 1、无短路；匿名运行新增**零测量保护**（全 SKIP → exit 1，杜绝"什么都没测却绿灯"）。`EVD-P5004-001` 回写绑定 `0a9a76c`：presigned 场景由 notProven 翻转 proven、新增 failpath proven 断言；100k 规模门禁如实保留 notProven；Task Card `baseCommit` 漂移如实登记（重绑需人类评审，DEC-009），整卡维持 PARTIAL。副作用登记：multipart 场景每轮在 MinIO 创建 5 个开放 multipart 会话（服务端 TTL 2h 自过期）。
+
+## 17. E5 预览压力演练闭合 — 2026-09-23（P5002 实跑 PASS=7 / FAIL=0 / SKIP=0）
+
+§15 登记的开放项 `P5002`（授权产物 `deploy/compose/scripts/p5-preview/` 不存在）本轮闭合：新增非侵入压力演练脚本（不改 compose.yaml；受限副本经 `docker run --memory/--cpus` 运行时施加，资源参数从运行中主 worker inspect 派生，用后即删）。
+
+**场景 A（cgroup 内存隔离）**：64m 受限副本 `exit=137 oomKilled=true`，副本受压全程主栈健康探测 5 次 0 失败——资源故障不外溢。
+
+**场景 B（内容超限失败语义 + PII 金丝雀）前两轮 FAIL 的双重根因**（backend 容器日志 ECS JSON 直接命中，非推测）：
+
+1. **backend 双领取者**：`JobConfiguration` 的 worker 开关为 `matchIfMissing=true` 且 `api` profile 未覆盖——backend 进程内同样运行 JobWorker（5s tick），`stop worker` 后 backend 以默认 `AIHUB_PREVIEW_MAX_BYTES=1MB` 把 120KB 金丝雀 job 一次领取成功（`SUCCEEDED|1|`）。修复：同时 `stop backend worker`，登录/资产查询/入队全部改经副本容器内 `localhost:8080` REST（副本共享主栈 postgres、JWT 每进程自签自验闭环成立），保证受限副本为唯一领取者。**架构观察**：compose.yaml 角色注释"api 仅在线请求 / worker 承载后台任务"与实际行为相悖，登记为 EVD followUp（修正 profile 超出本 Task allowedPaths，不擅动）。
+2. **终态 attempt 断言 bug**：`JobWorker.handleFailure` 第 3 次（终态）attempt 记录状态为 `DEAD` 而非 `FAILED`——原 `status='FAILED'` 统计必缺 1 条。修复为 `status in ('FAILED','DEAD')`。
+
+后另修一处重写引入的 `LOGIN_RESP` 闭合引号语法错误（`bash -n` + head-N 二分定位至 L172）。第三轮实跑全绿：**job 3 次尝试 DEAD、error_code=INTERNAL_ERROR、3 条 job_attempt 均含 PREVIEW_LIMIT_EXCEEDED、asset_preview 行数不变（无部分产物）、PII 金丝雀零泄漏（attempt 消息/副本/主 worker/backend 日志）、演练后主栈恢复全绿**。
+
+`EVD-P5002-001` 回写绑定 `e33c14a`：pressure 四断言（cgroup 隔离/超限语义/金丝雀/恢复）翻转 proven；compose.yaml 声明式 mem_limit 与完整格式矩阵压力变体如实保留 notProven；governance 三项实测结果（spec PASS、task-card FAIL baseCommit 漂移、changedPaths FAIL 漂移历史差异）如实登记不掩盖；整卡维持 PARTIAL、`review.accepted` 不代批（DEC-009）。YAML 经 worker 容器 `python3 yaml.safe_load` 校验通过。E5 复验仅剩 `P5003` 破坏性恢复演练（`down -v` 清卷，待用户确认执行窗口）。
