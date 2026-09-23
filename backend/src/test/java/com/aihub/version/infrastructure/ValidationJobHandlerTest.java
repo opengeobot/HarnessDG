@@ -8,7 +8,6 @@ import com.aihub.version.domain.Version;
 import com.aihub.version.domain.VersionRepository;
 import com.aihub.version.domain.VersionStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -103,7 +102,8 @@ class ValidationJobHandlerTest {
         // 先删除旧报告再插入新报告
         verify(jdbcTemplate).update(eq("DELETE FROM validation_report WHERE version_id = ?"), eq("ver_1"));
         // 回归：findings 是 jsonb 列，INSERT 必须带 ?::jsonb 显式转换，否则 PG 报 42804
-        verify(jdbcTemplate).update(contains("?::jsonb"), eq("vrp_1"), eq("ver_1"), eq("v1"), eq("PASSED"), anyString(), any(Instant.class));
+        // created_at 以 Timestamp 传入（Instant 变参无法推断 SQL 类型，见 ValidationJobHandler L128-134）
+        verify(jdbcTemplate).update(contains("?::jsonb"), eq("vrp_1"), eq("ver_1"), eq("v1"), eq("PASSED"), anyString(), any(java.sql.Timestamp.class));
     }
 
     @Test
@@ -124,7 +124,8 @@ class ValidationJobHandlerTest {
 
         assertThat(version.status()).isEqualTo(VersionStatus.DRAFT);
         verify(versionRepository).update(version);
-        verify(jdbcTemplate).update(anyString(), eq("vrp_1"), eq("ver_1"), eq("v1"), eq("FAILED"), anyString(), any(Instant.class));
+        // created_at 以 Timestamp 传入（Instant 变参无法推断 SQL 类型，见 ValidationJobHandler L128-134）
+        verify(jdbcTemplate).update(anyString(), eq("vrp_1"), eq("ver_1"), eq("v1"), eq("FAILED"), anyString(), any(java.sql.Timestamp.class));
     }
 
     @Test
