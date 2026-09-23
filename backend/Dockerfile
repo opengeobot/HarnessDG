@@ -44,8 +44,11 @@ RUN apt-get update \
         libgit2-dev \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
-# 使用清华 PyPI 镜像（HTTPS）安装锁定版本的 dvc[s3]
-RUN python3 -m pip install --no-cache-dir "dvc[s3]==3.55.2"
+# 使用清华 PyPI 镜像（HTTPS）安装锁定版本的 dvc[s3]；
+# pathspec 必须锁 <0.12：dvc 3.55.2/scmrepo 依赖已被移除的 _DIR_MARK 内部符号，
+# 浮动安装会在构建数月后拉入 pathspec 1.x 导致容器内 `dvc init` 运行期崩溃（V06 旅程实测）。
+RUN python3 -m pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    "dvc[s3]==3.55.2" "pathspec==0.11.2"
 USER aihub
 # Worker 以 worker Profile 启动，复用同一 jar 但承载后台任务角色
 ENTRYPOINT ["java", "-jar", "/app/app.jar", "--spring.profiles.active=worker"]
