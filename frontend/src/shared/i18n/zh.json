@@ -483,6 +483,7 @@
     "previewNotAvailable": "暂无预览数据",
     "previewEmpty": "预览内容为空",
     "previewTruncated": "预览已截断，仅显示前 100 行",
+    "previewColumnTruncated": "部分列已隐藏（限制：50 列）",
     "previewSchema": "Schema 列",
     "previewRowGroups": "Row Groups: {{count}}",
     "validationReport": "校验报告",

@@ -483,6 +483,7 @@
     "previewNotAvailable": "No preview available",
     "previewEmpty": "Preview content is empty",
     "previewTruncated": "Preview truncated, showing first 100 rows only",
+    "previewColumnTruncated": "Some columns were hidden (limit: 50)",
     "previewSchema": "Schema columns",
     "previewRowGroups": "Row Groups: {{count}}",
     "validationReport": "Validation Report",

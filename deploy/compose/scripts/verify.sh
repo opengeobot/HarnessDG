@@ -72,6 +72,33 @@ http_status() {
   curl "${args[@]}" 2>/dev/null || echo "000"
 }
 
+# 仅取响应体（用于解析稳定错误码 code）。
+# 功能: 默认拒绝断言依据响应体 code，不得只看 HTTP 状态码。时间: 2026-09-22 作者: AxeXie
+http_body() {
+  local method="$1"; local path="$2"; local auth="${3:-}"
+  local args=(-s -m 15 -X "${method}" "${BASE_URL}${path}")
+  [ -n "${auth}" ] && args+=(-H "Authorization: Bearer ${auth}")
+  curl "${args[@]}" 2>/dev/null || echo ""
+}
+
+# 稳定错误码提取：断言必须依据响应体 code，不得只看 HTTP 状态码。
+error_code() {
+  local body="$1"
+  printf '%s' "${body}" | sed -nE 's/.*"code"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1
+}
+
+# 前置条件守卫：首登强制改密门产生的 403 与权限判定无关，必须报为前置条件未满足（非 PASS）。
+assert_not_password_change_required() {
+  local body="$1" who="$2" code
+  code="$(error_code "${body}")"
+  if [ "${code}" = "PASSWORD_CHANGE_REQUIRED" ]; then
+    echo "  前置条件未满足：${who} 处于首登强制改密状态（must_change_password），"
+    echo "  其 403 与权限判定无关。请先完成 PUT /api/v1/me/password 改密（V05b 会自动完成）。"
+    return 1
+  fi
+  return 0
+}
+
 # 登录并回显响应体（用于取 accessToken）；可选将 Set-Cookie 写入 cookie_jar。
 # 用法: http_login_body [cookie_jar] [password]
 http_login_body() {

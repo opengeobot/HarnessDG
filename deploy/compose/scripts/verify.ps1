@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 # 功能: AIHub Compose 验收脚本 (PowerShell)。执行 V01-V11 级检查（与 verify.sh V01-V11 等价）。
 #       verify.sh 另含 V12-V28（P1-P5 行为级）；本脚本未同步 V12+，请优先使用 verify.sh 做完整验收。
 # 时间: 2026-07-01
@@ -325,10 +325,39 @@ function Assert-DefaultDeny {
     param([string]$Path)
     $anon = Invoke-Api -Method GET -Path $Path
     if ($anon.Status -ne 401) { throw "无 Token 访问 $Path 返回 $($anon.Status)，期望 401" }
-    if ($script:accessToken) {
-        $auth = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:accessToken)" }
-        # admin 经 rol_admin 持 system:* 权限合法访问 system 端点（Wave A 后），期望 200
-        if ($auth.Status -ne 200) { throw "admin Token 访问 $Path 返回 $($auth.Status)，期望 200（rol_admin 合法访问）" }
+    $anonCode = Get-ErrorCode $anon.Body
+    if ($anonCode -and $anonCode -ne "AUTH_UNAUTHENTICATED") {
+        throw "无 Token 访问 $Path 返回错误码 $anonCode，期望 AUTH_UNAUTHENTICATED"
+    }
+    if ([string]::IsNullOrEmpty($script:LeastPrivToken)) {
+        throw "前置条件未满足：最小权限验证主体不可用，无法证明 $Path 的 403 来自权限判定"
+    }
+    $auth = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:LeastPrivToken)" }
+    Assert-NotPasswordChangeRequired -Body $auth.Body -Who "最小权限验证主体"
+    if ($auth.Status -ne 403) {
+        throw "最小权限主体访问 $Path 返回 $($auth.Status)，期望 403（默认拒绝）"
+    }
+    $code = Get-ErrorCode $auth.Body
+    if ($code -ne "AUTH_PERMISSION_DENIED") {
+        throw "最小权限主体访问 $Path 返回错误码 $code，期望 AUTH_PERMISSION_DENIED（403 必须源于权限判定）"
+    }
+}
+
+# 有权限正向断言（AC-P0B-AUTH-004）：证明系统不是「全部拒绝」，且返回真实数据而非空集合占位。
+function Assert-Permitted {
+    param([string]$Path, [switch]$RequireNonEmptyData)
+    if ([string]::IsNullOrEmpty($script:accessToken)) {
+        throw "前置条件未满足：管理员 Token 不可用，无法执行 $Path 的正向断言"
+    }
+    $resp = Invoke-Api -Method GET -Path $Path -Headers @{ Authorization = "Bearer $($script:accessToken)" }
+    Assert-NotPasswordChangeRequired -Body $resp.Body -Who "管理员 $AdminUser"
+    if ($resp.Status -ne 200) {
+        throw "有权限主体访问 $Path 返回 $($resp.Status)，期望 200（$(Get-ErrorCode $resp.Body)）"
+    }
+    if ($RequireNonEmptyData) {
+        $count = 0
+        try { $count = @((($resp.Body | ConvertFrom-Json).data)).Count } catch { $count = 0 }
+        if ($count -lt 1) { throw "有权限主体访问 $Path 返回空集合占位，未证明数据真实可达" }
     }
 }
 

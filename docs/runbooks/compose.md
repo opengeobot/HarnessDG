@@ -151,9 +151,34 @@ P5 验收在 P0-B 脚本基础上补充对账 Worker 外部系统调用、下载
 | AC-P0B-OBS-001~005 | V11, V21 | 指标/Trace/健康/告警 | E4/E5 |
 | AC-P0B-UI-001~006 | 前端测试/E2E | Auth/Route/i18n/表单/组件 | E2/E4 |
 
-> V05 仅覆盖 IAM 场景的一小部分 E1/E3 冒烟；完整 E4 需 Compose 全栈。V06/V07/V09/V10/V11 的 401/403 仅覆盖拒绝分支的冒烟；完整 E4 需全栈浏览器测试。
+> V06/V07/V09/V10/V11 的 401/403 仅覆盖拒绝分支的冒烟；完整 E4 需全栈浏览器测试。IAM 场景的完整 E4 用例见下节 V05c–V05j。
 
-### 前置：bootstrap 管理员凭据
+### IAM 验收用例（V05c–V05j，各覆盖单一 AC）
+
+按 `p0b-exit-catalog.md` 第 20 行要求，每个 V 编号显式声明其覆盖的 `AC-*`。
+这批评例按 AC 逐一独立执行，使缺陷可精确定位（一个场景失败不掩盖其余场景），
+且判据严格对齐出口目录第 3 节，**不得为使用例变绿而放宽**。
+
+| 用例 | 覆盖 AC | 覆盖 | 前置 |
+| --- | --- | --- | --- |
+| **V05c** | `AC-P0B-IAM-001`、`AC-P0B-IAM-003`、`AC-P0B-IAM-004` | 引导管理员唯一性与自适应哈希、日志/审计无明文；首登改密全链（改密门拦截 → 改密 → 临时口令失效 → force-change 清除 → 审计）；失败登录防枚举（同错误码 + 归一化后同响应体形状） | V05b 通过、postgres 就绪 |
+| **V05d** | `AC-P0B-IAM-006` | access/refresh 同时轮换、旧 jti 标记 `ROTATED`、新 Cookie 属性（HttpOnly/SameSite=Strict/受限 Path/Max-Age）、Family 内 ACTIVE 恰好 1 | V05b 通过、postgres 就绪 |
+| **V05e** | `AC-P0B-IAM-008` | 禁用后旧 access 下一请求即 401、refresh 被拒、重新登录 403 `AUTH_ACCOUNT_DISABLED`、`iam_user.status` 落库 `DISABLED`、`USER_DISABLED` 审计存在 | V05b 通过、postgres 就绪 |
+| **V05f** | `AC-P0B-IAM-009` | 登出下发清除 Cookie、Family 整族吊销、重用被拒、重复登出与无 refresh 登出均幂等 | V05b 通过、postgres 就绪 |
+| **V05g** | `AC-P0B-IAM-007` | 重用已轮换 refresh → 401 `AUTH_REFRESH_REPLAYED`、Family 残留 ACTIVE 为 0、轮换出的新 refresh 亦失效、`AUTH_TOKEN_REPLAY_REJECTED` 审计存在 | V05b 通过、postgres 就绪 |
+| **V05h** | `AC-P0B-IAM-005` | 连续 5 次错误口令后第 5 次为 423 `AUTH_ACCOUNT_LOCKED`、`status=LOCKED` 且 `locked_until` 非空、锁定期间正确口令也被拒、`AUTH_LOGIN_FAILED` 审计存在 | V05b 通过、postgres 就绪 |
+| **V05i** | `AC-P0B-IAM-011` | 同一 refresh JWT 两路真实并发（两个独立连接）恰好 1 次成功、失败方为 `AUTH_REFRESH_REPLAYED`；因输家复用的 jti 已为 `ROTATED`，按 REQ-IAM-004 该 Family 的 ACTIVE 降为 0（无双有效 Token） | V05b 通过、postgres 就绪 |
+| **V05j** | `AC-P0B-IAM-012` | 创建/编辑/重置/禁用/启用各步落库与错误码正确；`USER_CREATED/UPDATED/ENABLED/DISABLED/PASSWORD_RESET` 审计均存在；不能禁用最后一个有效平台管理员（`COMMON_INVALID_ARGUMENT` + 拒绝审计 `USER_DISABLED/DENIED` 落库，且计数恰好 +1） | V05b 通过、postgres 就绪 |
+
+**并发与副作用说明**：V05i 使用两个独立 HTTP 连接同时发起刷新请求（非串行两次调用），
+以满足 `AC-P0B-IAM-011`「两个并发刷新请求」的字面要求。
+V05e–V05j 会创建 `compose-verify-iam3/iam5/iam8/iam12` 等专用验证主体，仅存在于本地验收栈；
+V05j 在检测到「最后一个管理员被允许禁用」时会先自动把该管理员复原为 `ACTIVE` 再报 FAIL，
+避免把验收栈留在无管理员状态。V05j 的拒绝审计断言以「拒绝前基线计数 + 恰好 1」取证，
+并按 `principal_id` 关联 `audit_log.resource_id`（`IdentityAuditAdapter` 落的是目标 principalId，
+不是 `iam_user.user_id`），故历史运行的审计行不会让断言恒真。
+
+### 前置：bootstrap 管理员凭据与验收主体
 
 V05-V08 需要一个可登录的管理员。Compose `backend` 服务通过 `.env` 的
 `AIHUB_BOOTSTRAP_ADMIN_USERNAME` / `AIHUB_BOOTSTRAP_ADMIN_PASSWORD` 引导首个管理员

@@ -1,8 +1,9 @@
 # P0-B 治理、可靠性与观测需求
 
-> 状态：`READY`
+> 状态：`READY`（用户已批准；`REQ-OBS-001` 保持 `OPEN`，受 `AUD-005` 阻塞）
 > 依据：ADR-0002、设计 5.6-5.14、11、13-15。
-> 已确认：`DEC-001`~`DEC-004`、`DEC-006`~`DEC-013`（所有相关 Q 已通过 DEC 闭合）。
+> 已确认：`DEC-013`（zh-CN/en-US 运行时切换、企业后台 UI 基线与 Compose/Playwright 验收）。
+> 阻塞：`REQ-OBS-001` 受 `AUD-005`（OTel 范围冲突）阻塞，其余需求无未决阻塞。
 
 ## REQ-COM-001 统一 ID、上下文、响应与错误
 
@@ -343,9 +344,10 @@ minimumEvidenceLevel: E4
 ## REQ-OBS-001 指标、Trace、健康、诊断与告警
 
 ```yaml
-status: READY
+status: OPEN
 priority: MUST
 phase: P0-B
+blockedBy: [AUD-005]
 permission: system:observe
 minimumEvidenceLevel: E4/E5
 ```
