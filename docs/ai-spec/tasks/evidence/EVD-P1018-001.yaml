@@ -1,5 +1,11 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P1018-001
+# 本 Evidence 为 2026-07-12 波次出口快照（人类已 accept，字段保持原样不改写）。
+# 2026-09-23 后续闭合注记：快照中 verify-journey SKIP 项已全部转真实断言 PASS——
+# V06 DVC 往返（worker 容器内 push/pull SHA-256 一致，提交 4c7dfc8，见 EVD-P2006-001）、
+# V07 webhook 索引（push 入站 ≤10s COMPLETED，提交 8f14d16，见 EVD-P5001-001）、
+# V08/V09 发布链（8ebf588）、V10 多主体（a018911）、V11；全量 Summary PASS=18 SKIP=0 FAIL=0。
+# V07 字典 500 假设项亦已随 P0-B 缓存修复消除（verify.sh 28/28，implementation-status §11）。
 status: PASS
 
 task:

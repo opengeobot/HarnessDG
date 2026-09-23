@@ -332,7 +332,17 @@ PRD §13.2 V07 原实现仅统计 `webhook_delivery` 行数、无数据即 SKIP�
 
 V06 原实现即使 DVC CLI 存在也无条件 SKIP（检测宿主机 PATH，且无任何往返命令）。真实缺口有二：
 
-1. **worker 镜像 DVC 安装损坏**：`dvc[s3]==3.55.2` 浮动依赖拉入 `pathspec 1.1.1`，而 dvc/scmrepo 依赖已被移除的内部符号 `_DIR_MARK`，容器内 `dvc init` 运行期崩溃（实测）。修复：`backend/Dockerfile` pip 安装显式锁定 `pathspec==0.12` 以下并对齐国内镜像规则补 `-i https://pypi.tuna.tsinghua.edu.cn/simple`（原注释声称清华镜像但命令未带，一并改正）。
+1. **worker 镜像 DVC 安装损坏**：`dvc[s3]==3.55.2` 浮动依赖拉入 `pathspec 1.1.1`，而 dvc/scmrepo 依赖已被移除的内部符号 `_DIR_MARK`，容器内 `dvc init` 运行期崩溃（实测）。修复：`backend/Dockerfile` pip 安装显式锁定 `pathspec==0.11.2`（<0.12）并对齐国内镜像规则补 `-i https://pypi.tuna.tsinghua.edu.cn/simple`（原注释声称清华镜像但命令未带，一并改正）。
 2. **旅程执行位置错误**：DVC CLI/git/MinIO 凭据全在 worker 容器内（`minio:9000` 原生可达；宿主侧 9000 未发布），旅程改为 `docker compose exec worker bash -s` 容器内执行：clone 探针资产仓库 → `dvc add` 256KB 随机负载 → `dvc remote add s3://dvc-cache/journey` + `endpointurl http://minio:9000`（凭据取容器已注入的 `AWS_*`，不落盘）→ `dvc push` → 删除 `.dvc/cache` 与本地文件 → `dvc pull` 还原 → SHA-256 与 push 前比对（PRD §13.2 V06 验收口径）。环境缺失（worker 未运行/无 dvc/无凭据/无 token）SKIP；镜像 pathspec 损坏 SKIP（提示重建）；往返断链、SHA 不一致一律 FAIL。
 
 取证（2026-09-23，worker 镜像重建后实测）：`verify-journey.sh` 全量 **18 PASS / 0 SKIP / 0 FAIL**——V06 PASS（SHA-256 一致还原，repo=aihub-svc/mdl-dvc-20260923153516）、V07 PASS（push 入站 1s）、V05/V08–V11 无回归。**PRD §13.2 行为旅程已无 SKIP 遗留**；`-CheckCompletion` 人工验收与 E5 演练复验仍为开放项，P1–P5 整体仍不得表述为 VERIFIED。
+
+## 14. EVD 证据回写 — V06/V07 闭合翻转相关 Evidence（2026-09-23）
+
+按 §12/§13 实测结果回写三份直接受影响的 Evidence Manifest（均为 AI 记录、`review.accepted` 保持既有口径不代批）：
+
+- `EVD-P2006-001`：`status PARTIAL→PASS`、`evidenceLevel E3→E4`，原 notProven "end-to-end dvc pull" 由 V06 旅程闭合翻转（worker 容器内往返 + SHA-256 一致），补填卡面缺失的 REQ/AC 绑定与取证工件；notProven 清零。
+- `EVD-P5001-001`：`status DRAFT→PARTIAL`，`AC-P5-INBOX-001` 由 V07 旅程 E4 闭合（webhook 入站 ≤10s 且 WEBHOOK_PROCESS COMPLETED，幂等/失败路径 E2 单测覆盖）；`AC-P5-REC-001`（Reconciler 全量扫描）未取证，如实保留 notProven，整卡不称 PASS。taskValidation 实测 FAIL（卡面 baseCommit 滞后，§12 已登记的治理项），如实记录不改卡凑过。
+- `EVD-P1018-001`：2026-07-12 波次出口快照已由人类 accept，字段不改写；仅追加注记——快照中的 journey SKIP 项（V06/V07/V08/V09/V10/V11）现已全部转真实断言 PASS。
+
+三份 YAML 经 worker 容器内 `python3 -c yaml.safe_load` 语法验证通过。波次 EVD 全景仍余大量 notProven（P3/P4/P5 波为主），逐项翻转须以对应 AC 的真实运行态取证为准，不得由 journey 泛化推定。

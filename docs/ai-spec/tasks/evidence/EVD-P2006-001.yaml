@@ -1,11 +1,16 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P2006-001
-status: PARTIAL
+# 2026-09-23 翻转：原记录（2026-07-11，E3）notProven 项 "end-to-end dvc pull" 由
+# verify-journey V06 闭合——旅程重写为 worker 容器内真实 DVC 往返
+# （clone→add→push→清空本地→pull→SHA-256 比对），全量实跑 18 PASS/0 SKIP/0 FAIL。
+# 配套修复：backend/Dockerfile 锁定 pathspec==0.11.2（dvc 3.55.2/scmrepo 依赖
+# 已移除的 _DIR_MARK 内部符号，浮动安装致容器内 dvc init 崩溃）。
+status: PASS
 
 task:
   taskId: TASK-P2-006
-  requirements: 
-  scenarios: 
+  requirements: [REQ-DL-001]
+  scenarios: [AC-P2-DL-001]
 
 governance:
   specValidation:
@@ -23,34 +28,52 @@ governance:
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  commitSha: 4c7dfc83d8dc583886779cf558f762818119b7d4
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-23T15:50:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
   timezone: Asia/Shanghai
   java: "21"
   node: "22"
   pnpm: "9"
   docker: "available"
   composeProfiles: []
-  externalDependencyVersions: {}
+  composeServices: [postgres, minio, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    dvc: "3.55.2 (worker image, pathspec pinned 0.11.2)"
+    gitea: "1.24.0"
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
+  workingDirectory: deploy/compose
+  command: >-
+    原 E3 轮（2026-07-11）：cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*'
+    && cd .. && bash ./deploy/compose/scripts/verify.sh（PASS）；
+    E4 翻转轮（2026-09-23）：docker compose up -d --build worker（pathspec 锁定后重建）
+    && bash scripts/verify-journey.sh
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
+  e4EntryPoint: REST（nginx 8080 签发资产/建仓）+ worker 容器内真实 DVC CLI 往返（Gitea HTTP clone + MinIO s3 remote）
 
 coverage:
   proven:
     - GIT_DVC ticket includes gitCloneUrl revision dvcCredentialsUrl expiresAt
-  notProven: end-to-end dvc pull
+    - scenarioId: AC-P2-DL-001
+      assertion: >-
+        E4 翻转（2026-09-23）verify-journey V06 真实往返：复用旅程夹具资产仓库，worker 容器内
+        git clone（Gitea HTTP + service token）→ 256KiB 随机 payload → dvc add →
+        push 至 s3://dvc-cache/journey（endpointurl http://minio:9000，凭据来自
+        compose 注入 AWS_*）→ 删除本地 .dvc/cache 与 payload.bin → dvc pull →
+        还原文件 SHA-256 与原文件一致（V06_ROUNDTRIP_OK）；全量 Summary PASS=18 SKIP=0 FAIL=0。
+      scenarioCategory: normal
+  notProven: []
 
 artifacts:
-  reports: []
+  reports:
+    - verify-journey.sh 全量实跑 Summary: PASS=18 SKIP=0 FAIL=0（2026-09-23，V06 行含 repo=aihub-svc/mdl-dvc-*）
+    - docs/architecture/implementation-status-2026-07-10.md §13（V06 闭合取证与 pathspec 根因）
   logs: []
   screenshots: []
   traces: []

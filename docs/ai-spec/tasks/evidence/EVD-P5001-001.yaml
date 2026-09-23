@@ -1,11 +1,15 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P5001-001
-status: DRAFT
+# 2026-09-23：AC-P5-INBOX-001 由 verify-journey V07 E4 闭合（建仓自动注册 push webhook →
+# 真实 push → backend HMAC 验签入 webhook_inbox → WEBHOOK_PROCESS 作业推进 COMPLETED，
+# 入站 ≤10s 可查询）；实现提交 2c0901e，旅程提交 8f14d16。
+# AC-P5-REC-001（Reconciler 全量扫描）本轮未取证，如实保留 notProven，故整卡 PARTIAL。
+status: PARTIAL
 
 task:
   taskId: TASK-P5-001
-  requirements: 
-  scenarios: 
+  requirements: [REQ-INBOX-001, REQ-REC-001]
+  scenarios: [AC-P5-INBOX-001, AC-P5-REC-001]
 
 governance:
   specValidation:
@@ -13,7 +17,10 @@ governance:
     result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-001.md
-    result: null
+    # 2026-09-23 实测：FAILED (1 issue) baseCommit does not match current HEAD——
+    # 卡面 baseCommit 滞后（治理登记见 implementation-status-2026-07-10.md §12），
+    # 卡文件修正属人类评审职权（DEC-009 AI 不得自批），故如实记录 FAIL 而非改卡凑过。
+    result: FAIL
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-001.md -CheckChangedPaths
     result: null
@@ -23,36 +30,54 @@ governance:
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  commitSha: 4c7dfc83d8dc583886779cf558f762818119b7d4
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-23T15:50:00+08:00
+  os: Microsoft Windows NT 10.0.26200.0
   timezone: Asia/Shanghai
   java: "21"
   node: "22"
   pnpm: "9"
   docker: "available"
   composeProfiles: []
-  externalDependencyVersions: {}
+  composeServices: [postgres, minio, gitea, backend, worker, frontend, nginx]
+  externalDependencyVersions:
+    gitea: "1.24.0"
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  workingDirectory: deploy/compose
+  command: >-
+    docker compose up -d --build backend worker（webhook 实现提交 2c0901e 后滚动）
+    && bash scripts/verify-journey.sh
+  startedAt: 2026-09-23T15:35:00+08:00
+  finishedAt: 2026-09-23T15:50:00+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
+  e4EntryPoint: REST（nginx 8080 建仓/发版）+ 真实 Gitea push → backend webhook 入站 + 持久作业 Worker
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: AC-P5-INBOX-001
+      assertion: >-
+        E4（2026-09-23，verify-journey V07）：夹具资产建仓时后端自动向 Gitea 注册 push
+        webhook（HMAC secret 与 backend 验签单源，GITEA__webhook__ALLOWED_HOST_LIST
+        注入私网回调白名单）；旅程对仓库真实 commit+push 后轮询 webhook_inbox——
+        source=gitea 入站记录 ≤10s 可查询（实测 0-1s），对应 WEBHOOK_PROCESS 持久作业
+        推进至 COMPLETED；全量 Summary PASS=18 SKIP=0 FAIL=0。
+        幂等/重投递与验签失败路径由后端单测（25 项，提交 2c0901e 随附）E2 覆盖。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P5-REC-001
+      reason: Reconciler 全量扫描修复 dry-run 本轮未在运行态取证；verify-journey 无对应断言，属后续取证项。
 
 artifacts:
-  reports: []
+  reports:
+    - verify-journey.sh 全量实跑 Summary: PASS=18 SKIP=0 FAIL=0（2026-09-23，V07 行"push 入站 ≤10s 可查询并 COMPLETED"）
+    - docs/architecture/implementation-status-2026-07-10.md §12（V07 闭合取证）/ §13（全量零 SKIP）
   logs: []
   screenshots: []
   traces: []
@@ -65,8 +90,10 @@ secrets:
 
 limitations:
   skippedTests: []
-  assumptions: []
-  environmentDifferences: []
+  assumptions:
+    - TASK-P5-001 卡面 baseCommit 滞后当前 HEAD，task-card 校验器 FAIL（治理项，见 §12 登记）；本 Evidence 以旅程实测为主观测证据，不掩盖该缺口。
+  environmentDifferences:
+    - V07 断言在宿主机经 nginx 8080 驱动 REST，webhook 回调发生在 compose 私网（gitea→backend:8080），宿主侧不可见属预期拓扑。
 
 review:
   recordedBy: AI
