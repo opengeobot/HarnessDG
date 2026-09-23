@@ -11,3 +11,6 @@
 deploy/compose/** text eol=lf
 deploy/security/** text eol=lf
 scripts/** text eol=lf
+# backend/mvnw 等 POSIX wrapper 在 WSL/Linux 下由 E5 演练脚本直接执行，
+# autocrlf 检出为 CRLF 会导致 `/bin/sh^M: bad interpreter`；索引本已 LF。
+**/mvnw text eol=lf
