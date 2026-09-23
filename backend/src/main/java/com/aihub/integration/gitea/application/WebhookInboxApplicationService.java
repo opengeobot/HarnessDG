@@ -4,6 +4,7 @@
  */
 package com.aihub.integration.gitea.application;
 
+import com.aihub.integration.gitea.infrastructure.GiteaProperties;
 import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobRepository;
 import com.aihub.job.domain.JobStatus;
@@ -20,7 +21,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +29,9 @@ import org.springframework.stereotype.Service;
  *
  * <p>编排 Gitea Webhook 接收流程：HMAC-SHA256 签名验证 → JSON 解析 → 幂等入库 → CRITICAL 事件检测。
  * 控制器仅作为适配器委托本服务。
+ *
+ * <p>密钥来自 {@link GiteaProperties#webhookSecret()}：与建仓侧 push webhook 注册共用同一配置单源，
+ * 避免「注册用的 secret」与「验签用的 secret」漂移导致整条链路 fail-closed。
  */
 @Service
 public class WebhookInboxApplicationService {
@@ -48,13 +51,13 @@ public class WebhookInboxApplicationService {
             PlatformMetrics platformMetrics,
             JobRepository jobRepository,
             IdGenerator idGenerator,
-            @Value("${aihub.gitea.webhook-secret:}") String webhookSecret) {
+            GiteaProperties giteaProperties) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.platformMetrics = platformMetrics;
         this.jobRepository = jobRepository;
         this.idGenerator = idGenerator;
-        this.webhookSecret = webhookSecret;
+        this.webhookSecret = giteaProperties.webhookSecret();
     }
 
     /**

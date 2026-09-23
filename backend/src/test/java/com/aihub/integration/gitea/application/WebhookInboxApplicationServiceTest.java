@@ -41,8 +41,11 @@ class WebhookInboxApplicationServiceTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private WebhookInboxApplicationService buildService(String secret) {
+        // 验签密钥现由 GiteaProperties 单源提供（与建仓侧注册共用）；构造仅填 secret 的属性记录。
+        var properties = new com.aihub.integration.gitea.infrastructure.GiteaProperties(
+                false, "http://gitea.test", "token", "main", 0, 0, secret, "");
         return new WebhookInboxApplicationService(jdbcTemplate, objectMapper, platformMetrics,
-                jobRepository, idGenerator, secret);
+                jobRepository, idGenerator, properties);
     }
 
     private String computeSignature(String secret, byte[] body) throws Exception {

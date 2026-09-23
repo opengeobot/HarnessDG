@@ -12,7 +12,9 @@ import com.aihub.shared.error.DependencyException;
 import com.aihub.shared.error.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -60,6 +62,7 @@ public class GiteaAssetRepositoryProvisioner implements AssetRepositoryProvision
             GiteaRepoPath repoPath = GiteaRepoPath.parse(String.valueOf(repo.get("full_name")));
             writeFile(repoPath, ASSET_YAML_PATH, request.assetYaml(), "chore: initialize asset.yaml");
             writeFile(repoPath, README_PATH, request.readme(), "docs: initialize asset card");
+            registerPushWebhook(repoPath);
             return new AssetRepositoryRef(
                     repoPath.fullName(),
                     stringOrNull(repo.get("html_url")),
@@ -71,6 +74,69 @@ public class GiteaAssetRepositoryProvisioner implements AssetRepositoryProvision
                     "failed to provision gitea repository",
                     Map.of("namespace", request.namespace(), "name", request.name()),
                     ex);
+        }
+    }
+
+    /**
+     * 为刚开通的仓库注册 push webhook，使 Git 事件进入平台 Inbox（V07 旅程的链路前提）。
+     *
+     * <p><b>降级而非阻断</b>：webhook 注册属于「增强」而非「开通」——建仓与初始卡片已经成功，
+     * 注册失败（Gitea 拒绝内网回调、权限不足等）绝不能把已成功的开通反判为失败并重试整条链路，
+     * 因此吞掉异常只告警。事件完整性由 Reconciler 兜底。
+     *
+     * <p><b>幂等</b>：先查既有 hooks，命中同回调地址则跳过；重试收敛场景不产生重复 hook。
+     */
+    private void registerPushWebhook(GiteaRepoPath repoPath) {
+        if (!properties.webhookRegistrationEnabled()) {
+            return;
+        }
+        try {
+            if (webhookExists(repoPath)) {
+                LOG.debug("push webhook already registered for {}", repoPath.fullName());
+                return;
+            }
+            Map<String, Object> body = Map.of(
+                    "type", "gitea",
+                    "active", true,
+                    "name", "gitea",
+                    "events", List.of("push"),
+                    "branch_filter", "*",
+                    "config", Map.of(
+                            "url", properties.webhookUrl(),
+                            "content_type", "json",
+                            "secret", properties.webhookSecret()));
+            restClient.post()
+                    .uri("/api/v1/repos/{owner}/{repo}/hooks", repoPath.owner(), repoPath.repo())
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            LOG.info("registered push webhook for repo {}", repoPath.fullName());
+        } catch (RestClientException | UnsupportedOperationException ex) {
+            // UnsupportedOperationException：JDK HttpClient 不允许设置受限头；属环境限制，降级。
+            LOG.warn("push webhook registration failed for repo {} (degraded: reconciler covers gaps)",
+                    repoPath.fullName());
+        }
+    }
+
+    /** 回查仓库既有 hooks；查询失败按「未注册」处理，交由注册调用的降级路径兜底。 */
+    @SuppressWarnings("unchecked")
+    private boolean webhookExists(GiteaRepoPath repoPath) {
+        try {
+            List<Map<String, Object>> hooks = restClient.get()
+                    .uri("/api/v1/repos/{owner}/{repo}/hooks", repoPath.owner(), repoPath.repo())
+                    .retrieve()
+                    .body(List.class);
+            if (hooks == null) {
+                return false;
+            }
+            return hooks.stream()
+                    .filter(Objects::nonNull)
+                    .map(h -> h.get("config"))
+                    .filter(Map.class::isInstance)
+                    .map(c -> String.valueOf(((Map<?, ?>) c).get("url")))
+                    .anyMatch(properties.webhookUrl()::equals);
+        } catch (RestClientException ex) {
+            return false;
         }
     }
 

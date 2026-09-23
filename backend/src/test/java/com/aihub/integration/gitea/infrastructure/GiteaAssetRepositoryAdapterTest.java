@@ -169,7 +169,7 @@ class GiteaAssetRepositoryAdapterTest {
 
     /** 默认超时按属性默认值（连接 5s / 读取 30s），测试中按需覆盖读取超时。 */
     private GiteaProperties properties() {
-        return new GiteaProperties(true, baseUrl, "test-token", "main", 0, 0);
+        return new GiteaProperties(true, baseUrl, "test-token", "main", 0, 0, null, null);
     }
 
     private static ProvisionRequest request() {
@@ -417,7 +417,7 @@ class GiteaAssetRepositoryAdapterTest {
                 String hangingUrl = "http://127.0.0.1:" + hanging.getAddress().getPort();
 
                 GiteaProperties bounded = new GiteaProperties(
-                        true, hangingUrl, "test-token", "main", 1000, 1500);
+                        true, hangingUrl, "test-token", "main", 1000, 1500, null, null);
                 GiteaAssetRepositoryProvisioner boundedProvisioner =
                         new GiteaAssetRepositoryProvisioner(RestClient.builder(), bounded);
 
@@ -443,7 +443,7 @@ class GiteaAssetRepositoryAdapterTest {
         @Test
         @DisplayName("超时配置非法时回落到有限默认值，不产生无界调用")
         void nonPositiveTimeoutsFallBackToFiniteDefaults() {
-            GiteaProperties invalid = new GiteaProperties(true, baseUrl, "t", null, 0, -1);
+            GiteaProperties invalid = new GiteaProperties(true, baseUrl, "t", null, 0, -1, null, null);
 
             assertThat(invalid.connectTimeoutMillis()).isPositive();
             assertThat(invalid.readTimeoutMillis()).isPositive();

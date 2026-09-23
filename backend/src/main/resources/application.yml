@@ -84,6 +84,9 @@ aihub:
     default-branch: ${AIHUB_GITEA_DEFAULT_BRANCH:main}
     # Webhook HMAC 签名密钥（生产环境必填，fail-closed 策略下为空将拒绝所有 Gitea 事件）
     webhook-secret: ${AIHUB_GITEA_WEBHOOK_SECRET:}
+    # 建仓后自动注册 push webhook 的平台回调地址（容器网络内可达，如 http://backend:8080/api/v1/webhooks/gitea）
+    # 为空则跳过注册：与 webhook-secret 任一缺失即不注册，验签侧保持 fail-closed。
+    webhook-url: ${AIHUB_GITEA_WEBHOOK_URL:}
   # 认证签名密钥（部署期注入 Secret）。测试 Profile 无须配置，由实现按 dev-only 临时密钥兜底。
   security:
     jwt:

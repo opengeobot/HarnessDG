@@ -33,6 +33,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param defaultBranch        仓库默认分支
  * @param connectTimeoutMillis 建立连接超时（毫秒），必须为正
  * @param readTimeoutMillis    读取响应超时（毫秒），必须为正且满足 4 × 本值 < 任务租约时长
+ * @param webhookSecret        Webhook HMAC-SHA256 密钥（敏感，禁止记录）；入站验签与出站注册共用同一值
+ * @param webhookUrl           平台入站回调地址（如 http://backend:8080/api/v1/webhooks/gitea）；
+ *                             为空则跳过建仓后的 push webhook 注册（无 Gitea 的开发环境保持现状）
  */
 @ConfigurationProperties(prefix = "aihub.gitea")
 public record GiteaProperties(
@@ -41,7 +44,9 @@ public record GiteaProperties(
         String token,
         String defaultBranch,
         int connectTimeoutMillis,
-        int readTimeoutMillis) {
+        int readTimeoutMillis,
+        String webhookSecret,
+        String webhookUrl) {
 
     /** 连接超时默认值：与平台其它外部依赖保持同一量级。 */
     private static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 3000;
@@ -58,5 +63,17 @@ public record GiteaProperties(
         if (readTimeoutMillis <= 0) {
             readTimeoutMillis = DEFAULT_READ_TIMEOUT_MILLIS;
         }
+        // 归一化为非 null：入站验签与出站注册都以「空=未配置」判定，避免各处 null 检查漂移。
+        if (webhookSecret == null) {
+            webhookSecret = "";
+        }
+        if (webhookUrl == null) {
+            webhookUrl = "";
+        }
+    }
+
+    /** 是否已配置可用的 push webhook 注册（回调地址与密钥齐备）。 */
+    public boolean webhookRegistrationEnabled() {
+        return !webhookUrl.isBlank() && !webhookSecret.isBlank();
     }
 }

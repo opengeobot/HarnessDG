@@ -92,6 +92,8 @@ services:
       GITEA__storage__MINIO_USE_SSL: "false"
       GITEA__storage__MINIO_BUCKET_LOOKUP_TYPE: path
       GITEA__storage__SERVE_DIRECT: "true"
+      # Webhook 出站白名单：Gitea 默认仅允许 external，回调 backend 容器名属私网，必须显式放行。
+      GITEA__webhook__ALLOWED_HOST_LIST: backend,external
     volumes:
       - gitea-data:/data
     # ports:
@@ -127,6 +129,9 @@ services:
       AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
+      # 入站验签与建仓侧 webhook 注册共用同一密钥单源；URL 为 Gitea 可达的容器网络回调地址。
+      AIHUB_GITEA_WEBHOOK_SECRET: ${AIHUB_GITEA_WEBHOOK_SECRET}
+      AIHUB_GITEA_WEBHOOK_URL: ${AIHUB_GITEA_WEBHOOK_URL:-http://backend:8080/api/v1/webhooks/gitea}
       AIHUB_MINIO_ENDPOINT: http://minio:9000
       AIHUB_MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_URL}
       AIHUB_MINIO_ACCESS_KEY: ${AIHUB_MINIO_ACCESS_KEY}
@@ -156,6 +161,9 @@ services:
       AIHUB_GITEA_ENABLED: "true"
       AIHUB_GITEA_BASE_URL: http://gitea:3000
       AIHUB_GITEA_TOKEN: ${GITEA_SERVICE_TOKEN}
+      # REPOSITORY_PROVISION 在 worker 执行，push webhook 注册开关必须注入 worker 才生效。
+      AIHUB_GITEA_WEBHOOK_SECRET: ${AIHUB_GITEA_WEBHOOK_SECRET}
+      AIHUB_GITEA_WEBHOOK_URL: ${AIHUB_GITEA_WEBHOOK_URL:-http://backend:8080/api/v1/webhooks/gitea}
       AIHUB_MINIO_ENDPOINT: http://minio:9000
       AIHUB_DVC_BUCKET: dvc-cache
       AWS_ACCESS_KEY_ID: ${DVC_ACCESS_KEY}
