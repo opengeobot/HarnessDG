@@ -392,3 +392,19 @@ E5 复验其余开放项：`P5003` 恢复演练为破坏性（`down -v` 清卷�
 后另修一处重写引入的 `LOGIN_RESP` 闭合引号语法错误（`bash -n` + head-N 二分定位至 L172）。第三轮实跑全绿：**job 3 次尝试 DEAD、error_code=INTERNAL_ERROR、3 条 job_attempt 均含 PREVIEW_LIMIT_EXCEEDED、asset_preview 行数不变（无部分产物）、PII 金丝雀零泄漏（attempt 消息/副本/主 worker/backend 日志）、演练后主栈恢复全绿**。
 
 `EVD-P5002-001` 回写绑定 `e33c14a`：pressure 四断言（cgroup 隔离/超限语义/金丝雀/恢复）翻转 proven；compose.yaml 声明式 mem_limit 与完整格式矩阵压力变体如实保留 notProven；governance 三项实测结果（spec PASS、task-card FAIL baseCommit 漂移、changedPaths FAIL 漂移历史差异）如实登记不掩盖；整卡维持 PARTIAL、`review.accepted` 不代批（DEC-009）。YAML 经 worker 容器 `python3 yaml.safe_load` 校验通过。E5 复验仅剩 `P5003` 破坏性恢复演练（`down -v` 清卷，待用户确认执行窗口）。
+
+## 18. E5 下载量热度统计闭合 — 2026-09-23（P5008 实跑 8/8 + 9/9，防枚举修复）
+
+`TASK-P5-008`（DEC-016 下载量热度统计；代码自 `2a80692`/`2482eb1` 已存在但 E4/E5 未证）本轮闭合到 E5：
+
+**E5 第一轮（REST/mv/权限面，8/8 PASS）**：`GET /api/v1/assets/{id}/stats` totalDownloads==`mv_download_stats` 聚合；byVersion 版本级聚合非空；`GET /api/v1/system/metrics/downloads` 排行含 TOP 资产；匿名/伪造 token 双端点 401 fail-closed；`REFRESH MATERIALIZED VIEW CONCURRENTLY` 后 mv 总量==audit_log JOIN asset_version 实时聚合（98）。
+
+**实跑暴露并修复 AC-P5-OBS-001 防枚举缺口（allowedPaths 内）**：原 `DownloadStatsService.getAssetStats` 仅查 `asset:read`，任何持该 scope 主体可枚举任意资产（含他人 PRIVATE）下载量——直接违反验收条款"无权主体不能枚举他人下载行为"。修复：注入 `AssetRepository`+`AssetAccessPolicy`，`canAccess` 过滤不可见即 `ASSET_NOT_FOUND`(404)（与 `loadAccessible`/lineage/relations 同语义，防存在性探测）；ArchUnit 九规则合规（过滤在 Service 层）。`DownloadStatsServiceTest` 3→5 用例（含 `verifyNoInteractions(downloadStatsPort)` 零聚合断言）。
+
+**E5 扩展（多 Principal + 防枚举，9/9 PASS，backend 镜像滚动重建后）**：PRIVATE 探针 + 仅 `asset:read` 第二用户（V10 临时口令改密链）→ peer 查探针 404、owner 200 total=0；peer 对 INTERNAL TOP 资产 PUBLISHED 版本真实签发下载票据（mv 92→93 增量==1）；`DOWNLOAD_TICKET_ISSUED` 去重主体==4；stats REST==mv==peer 视图（93）。
+
+**既有回归修复（越界登记）**：`ValidationJobHandlerTest`（version 模块，不在本 Task allowedPaths）两处 Mockito 断言 `any(Instant.class)`→`any(java.sql.Timestamp.class)`——生产代码 `8ebf588` 起以 Timestamp 传 created_at 规避 PG 07006 而测试未同步，属使全量 verify 可绿的既有回归闭环，EVD 头部如实登记。
+
+**验证**：`mvnw -o verify` BUILD SUCCESS（单元 751/751 真实运行、0 failures；IT 123 全 Skip——Testcontainers 在本机 Windows npipe 组合下 "Could not find a valid Docker environment"，既有环境限制，运行时行为以 Compose E5 实跑为准）；`pnpm lint`(0 errors)/`typecheck`/`build` 通过；`pnpm test` 并行全栈时 14 个 5000ms 超时（CPU 争抢、本 Session 前端零改动），单文件隔离 11/11 绿，空闲负载下 `--no-file-parallelism` 串行全量复跑 47 files / 206 tests 全 PASS、0 超时（exit 0）。
+
+**治理缺口（不掩盖）**：task-card 校验 FAIL——① baseCommit `59f40d2` 与 HEAD 漂移；② **REQ-OBS-001 状态 OPEN（blockedBy AUD-005 OTel 范围冲突）被 P5 任务卡引用**——规格与任务卡矛盾，按 AGENTS.md 上报，AI 不自行翻转需求状态。`EVD-P5008-001` 定稿为 PARTIAL：6 项 proven（聚合/一致性/多主体/防枚举/fail-closed/E3 单测）、2 项 notProven（卡片徽章浏览器截图、MCP 同语义），4 条 followUps；`review.accepted=false` 不代批（DEC-009）。
