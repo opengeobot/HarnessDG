@@ -327,3 +327,12 @@ PRD §13.2 V07 原实现仅统计 `webhook_delivery` 行数、无数据即 SKIP�
 **治理登记**：`TASK-P5-001` 立卡 baseCommit `59f40d28` 已被后续合并提交超越，`validate-task-card` 默认模式（要求 baseCommit==HEAD）FAILED；`-CheckChangedPaths` 列出的 allowedPaths 外路径全部属前序提交累计变更，本任务后端改动均在卡内 allowedPaths。审计字段不做篡改，卡需评审侧重置 baseCommit。
 
 旅程 E4 覆盖口径更新：第 7/11 节"authenticated 业务旅程 notProven"中，V05/V07/V08/V09/V10/V11 六条核心资产旅程已转真实断言 PASS；V06 与 `-CheckCompletion` 人工验收仍为开放项。P1–P5 整体仍不得表述为 VERIFIED。
+
+## 13. V06 DVC 往返旅程闭合 — 2026-09-23（journey 全量 18 PASS / 0 SKIP / 0 FAIL）
+
+V06 原实现即使 DVC CLI 存在也无条件 SKIP（检测宿主机 PATH，且无任何往返命令）。真实缺口有二：
+
+1. **worker 镜像 DVC 安装损坏**：`dvc[s3]==3.55.2` 浮动依赖拉入 `pathspec 1.1.1`，而 dvc/scmrepo 依赖已被移除的内部符号 `_DIR_MARK`，容器内 `dvc init` 运行期崩溃（实测）。修复：`backend/Dockerfile` pip 安装显式锁定 `pathspec==0.12` 以下并对齐国内镜像规则补 `-i https://pypi.tuna.tsinghua.edu.cn/simple`（原注释声称清华镜像但命令未带，一并改正）。
+2. **旅程执行位置错误**：DVC CLI/git/MinIO 凭据全在 worker 容器内（`minio:9000` 原生可达；宿主侧 9000 未发布），旅程改为 `docker compose exec worker bash -s` 容器内执行：clone 探针资产仓库 → `dvc add` 256KB 随机负载 → `dvc remote add s3://dvc-cache/journey` + `endpointurl http://minio:9000`（凭据取容器已注入的 `AWS_*`，不落盘）→ `dvc push` → 删除 `.dvc/cache` 与本地文件 → `dvc pull` 还原 → SHA-256 与 push 前比对（PRD §13.2 V06 验收口径）。环境缺失（worker 未运行/无 dvc/无凭据/无 token）SKIP；镜像 pathspec 损坏 SKIP（提示重建）；往返断链、SHA 不一致一律 FAIL。
+
+取证（2026-09-23，worker 镜像重建后实测）：`verify-journey.sh` 全量 **18 PASS / 0 SKIP / 0 FAIL**——V06 PASS（SHA-256 一致还原，repo=aihub-svc/mdl-dvc-20260923153516）、V07 PASS（push 入站 1s）、V05/V08–V11 无回归。**PRD §13.2 行为旅程已无 SKIP 遗留**；`-CheckCompletion` 人工验收与 E5 演练复验仍为开放项，P1–P5 整体仍不得表述为 VERIFIED。
