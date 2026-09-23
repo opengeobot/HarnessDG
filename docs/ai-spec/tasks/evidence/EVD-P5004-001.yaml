@@ -1,4 +1,17 @@
 schemaVersion: harnessdg.evidence/v1
+# 功能: TASK-P5-004 性能证据清单——E5 冒烟在新 HEAD 的复验回写。
+# 时间: 2026-09-23 作者: AxeXie
+# E5 复验演进（2026-09-23）：
+#   1) 7dc22d4 原取证绑定的脚本为双脚本拼接死代码版（09bf76a 删除死代码并修复
+#      超阈值短路与错误率统计缺陷）。
+#   2) 09bf76a 上复跑发现三处测量失真并全部根因收口：
+#      presigned 恒 SKIP = 发现逻辑错误（资产 status 是生命周期态而非版本状态、
+#      versions 端点无 status 参数、首资产零版本），非"无 ACCESS_TOKEN"；
+#      multipart 全 500 = 脚本调用不存在的 /api/v1/uploads/sessions 端点且用假 ID；
+#      mcp 20 并发约半数 429 = rate-limit burst=10 的设计行为（PRD §13.5 规定 20 并发）。
+#   3) 0a9a76c 修复：真实端点 + 遍历资产客户端过滤 PUBLISHED/DRAFT 版本夹具、
+#      延迟改取 curl 进程内 time_total（消除 Git Bash fork 开销 200-400ms 假 FAIL）、
+#      仅 2xx 记录延迟样本、presigned 阈值按 PRD 收紧至 300ms、零测量防虚假绿灯。
 evidenceId: EVD-P5004-001
 status: PARTIAL
 
@@ -13,7 +26,8 @@ governance:
     result: PASS
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-004.md
-    result: null
+    result: FAIL
+    failureReason: "baseCommit(59f40d2) 与当前 HEAD(0a9a76c) 不一致；Task Card 为历史授权基线，E5 复验仅改动已授权脚本 deploy/compose/scripts/perf-smoke.sh，不改业务代码/契约/迁移。Task Card 重绑 baseCommit 需人类评审（DEC-009），不在本 evidence 范围。"
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-004.md -CheckChangedPaths
     result: null
@@ -23,26 +37,26 @@ governance:
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
+  commitSha: 0a9a76cc324ec567a29ac191874b649302011afd
   dirtyWorktree: false
   dirtyPaths: []
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-23T16:23:35+08:00
+  os: Windows NT 10.0.26200.0 (Git Bash / MSYS)
   timezone: Asia/Shanghai
   java: "21"
-  node: "22"
-  pnpm: "9"
+  node: "20.19.2"
+  pnpm: "10.33.4"
   docker: "available"
-  composeProfiles: []
-  externalDependencyVersions: {}
+  composeProfiles: [backend, worker, postgres, gitea, minio, frontend, nginx]
+  externalDependencyVersions: {compose_stack: aihub-7-up}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: bash ./deploy/compose/scripts/perf-smoke.sh
-  startedAt: 2026-07-11T20:55:40+08:00
-  finishedAt: 2026-07-11T20:55:41+08:00
+  workingDirectory: D:/workspace/opengeobot/HarnessDG
+  command: ACCESS_TOKEN=$(platform login) bash deploy/compose/scripts/perf-smoke.sh
+  startedAt: 2026-09-23T16:21:30+08:00
+  finishedAt: 2026-09-23T16:22:30+08:00
   exitCode: 0
   result: PASS
   evidenceLevel: E5
@@ -52,7 +66,11 @@ coverage:
     - scenarioId: PRD-V16
       assertion: verify-journey.sh journey_v16_webhook_reconcile PASS — reconciliation_checkpoint table exists
     - scenarioId: AC-P5-PERF-001-E5-smoke
-      assertion: "perf-smoke.sh 100 concurrent GET /api/v1/assets?limit=20: samples=100 P95=133ms <= 500ms threshold (anonymous 401 latency)"
+      assertion: "E5 复验（2026-09-23，0a9a76c）perf-smoke.sh 带平台 JWT 实跑 4/4 场景完成测量且 PASS：asset-search 100并发 samples=100 P95=25ms<=500ms；mcp-search 20并发 samples=12/20 P95=28ms<=1000ms（8 个 429 为 rate-limit burst=10 设计行为，如实计入错误率 8/20）；presigned-url 10并发 P95=31ms<=300ms（阈值按 PRD §13.5 收紧）；multipart-upload 5并发 P95=29ms<=1000ms。延迟取 curl 进程内 time_total，仅 2xx 入样。"
+    - scenarioId: AC-P5-PERF-001-E5-presigned
+      assertion: "presigned-url 场景闭合（2026-09-23，0a9a76c）：发现逻辑修正后真实探测到 PUBLISHED 版本夹具（ast_01m36cpqtbzfjhmyptt1ejd4d5/ver_01m36cpybmr3fem87tp98a1rkf），GET /api/v1/versions/{id}/download 10并发全 2xx、票据签发 P95=31ms<=300ms。此前 09bf76a 上恒 SKIP 的归因（无 ACCESS_TOKEN）已被证伪：真因为脚本版本状态语义错误与端点/夹具缺失。"
+    - scenarioId: AC-P5-PERF-001-E5-failpath
+      assertion: "失败路径真实可达（0a9a76c 实测）：1ms 阈值副本运行 → 4 场景全部 FAIL 且 exit 1、无短路；匿名运行（无 ACCESS_TOKEN）→ 全场景 SKIP → 零测量保护 exit 1，杜绝虚假绿灯。"
   notProven:
     - scenarioId: PRD-V16-simulate
       reason: Lost webhook simulation / reconciler rebuild not exercised in journey script
@@ -63,13 +81,19 @@ artifacts:
   reports:
     - deploy/compose/scripts/perf-smoke.sh
     - deploy/compose/scripts/p5-perf-baseline.md
-  logs:
-    - /tmp/perf-smoke.log
+  logs: []
   screenshots: []
   traces: []
   metrics:
-    - search_p95_ms=133
-    - search_samples=100
+    - asset_search_p95_ms=25
+    - asset_search_samples=100
+    - mcp_search_p95_ms=28
+    - mcp_search_samples=12
+    - mcp_search_rate_limited=8of20
+    - presigned_url_p95_ms=31
+    - presigned_url_samples=10
+    - multipart_create_p95_ms=29
+    - multipart_create_samples=5
   databaseQueries: []
 
 secrets:
@@ -81,7 +105,12 @@ limitations:
     - 100k asset scale perf gate (no seed data)
   assumptions:
     - Smoke baseline uses current dev-scale DB post-restore drill
-  environmentDifferences: []
+    - mcp-search 采用共享平台 JWT（bootstrap 账号）：rate-limit 按 principal+tool 计，20 并发超 burst=10 属 PRD §13.5 场景下的预期限流
+    - multipart-upload 场景每次运行在 MinIO 创建 5 个开放 multipart 会话（服务端 TTL 2h 自过期）；共享 dev 数据可接受，已在脚本注释登记
+  environmentDifferences:
+    - 2026-09-23 复验在 Windows Git Bash 执行（原取证为 Ubuntu 24.04）；旧 shell date 计时在 Git Bash 下受 fork 开销污染（P95 虚高 ~600ms），0a9a76c 改 curl time_total 后跨平台测量口径一致
+  followUps:
+    - 后端契约缺陷候选：不存在的 upload-sessions 路径与假 assetId/versionId 均返回 500 INTERNAL_ERROR（应 404/400）；未在本 evidence 范围修复，待 Task Card 授权后处理
 
 review:
   recordedBy: AI

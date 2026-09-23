@@ -366,3 +366,14 @@ AGENTS.md 将「E5 drill re-verification」列为 P1–P5 剩余阻塞项：既�
 `EVD-P5005-001` 回写：证据绑定新 HEAD `bbd4893`，`AC-P5-SEC-001-E5-live-comment` 由 notProven 翻转 proven；`AC-P5-SEC-001-E5-SAST-dependency-image`（工具缺失）如实保留 notProven，整卡维持 PARTIAL，`review.accepted` 不代批（DEC-009）。YAML 经 worker 容器 `python3 yaml.safe_load` 校验通过。
 
 E5 复验其余开放项：`P5003` 恢复演练为破坏性（`down -v` 清卷，需备份窗口）；`P5002`（预览授权产物 `deploy/compose/scripts/p5-preview/`）与 `P5004`（`deploy/perf/` 压测产物）目录不存在，属待迭代的授权开发项而非纯取证。
+
+## 16. E5 perf 冒烟复验闭合 — 2026-09-23（4/4 场景实测 PASS，`0a9a76c`）
+
+`EVD-P5004-001` 原取证绑定 `7dc22d4` 死代码版脚本。`09bf76a` 删死代码后复跑暴露三处测量失真，逐项根因收口（全部实测 + 后端代码审计证实，非推测）：
+
+1. **presigned-url 恒 SKIP**：脚本用 `assets?status=PUBLISHED` 发现夹具——但资产 `status` 是生命周期态（ACTIVE/DEPRECATED/ARCHIVED），PUBLISHED 是**版本**状态；且 `VersionController.listVersions` 根本不支持 status 参数；首资产又恰为零版本。probe 全量扫描 54 资产实测 9 个有 PUBLISHED 版本。修复为遍历资产 + 客户端按 VersionView `status` 过滤。原 EVD"无 ACCESS_TOKEN"归因**已被证伪并改写**。
+2. **multipart-upload 全 500**：脚本调用不存在的 `/api/v1/uploads/sessions` 且用假 ID（触发 `asset_version` 外键违反 → 兜底 500）。真实端点为 `POST /api/v1/assets/{assetId}/versions/{versionId}/upload-sessions`（probe 用真实 DRAFT 版本实测 200）。后端"未声明路径/假 ID → 500 而非 404/400"登记为契约缺陷候选 follow-up。
+3. **mcp-search ~半数 429**：`application.yml` agent rate-limit `requests-per-minute=60, burst=10`（per principal+tool）——PRD §13.5 规定 20 并发，burst=10 精确解释 10×200+10×429。**限流按设计生效，非缺陷**；429 如实计入错误率、不加入"允许"名单。
+4. **计时口径污染**：Windows Git Bash 下 shell `date` 前后差含 200-400ms 子进程 fork 开销（shell 侧 P95=617ms vs 同负载 curl 进程内 `time_total` P95=17ms），造成假 FAIL。改用 curl `time_total` 统一跨平台测量口径；仅 2xx 入延迟样本（401/403/429 快速拒绝不污染 P95）；presigned 阈值按 PRD §13.5 由 500ms **收紧**至 300ms。
+
+三路径回归（`0a9a76c`）：带平台 JWT 实跑 **4/4 场景完成测量且 PASS**（asset 25ms / mcp 28ms / presigned 31ms / multipart 29ms，均余量充足）；1ms 阈值副本 4/4 FAIL、exit 1、无短路；匿名运行新增**零测量保护**（全 SKIP → exit 1，杜绝"什么都没测却绿灯"）。`EVD-P5004-001` 回写绑定 `0a9a76c`：presigned 场景由 notProven 翻转 proven、新增 failpath proven 断言；100k 规模门禁如实保留 notProven；Task Card `baseCommit` 漂移如实登记（重绑需人类评审，DEC-009），整卡维持 PARTIAL。副作用登记：multipart 场景每轮在 MinIO 创建 5 个开放 multipart 会话（服务端 TTL 2h 自过期）。
