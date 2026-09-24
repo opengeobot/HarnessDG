@@ -12,6 +12,7 @@ import {
   E2E_AUTHOR,
   E2E_AUTHZ_READER,
   E2E_MANAGER,
+  activateVersionsTab,
   adminToken,
   bootstrapCredentials,
   directApiStatus,
@@ -131,7 +132,8 @@ test.describe('AC-P0B-UI-006: 版本列表入口不再死链', () => {
 
     await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
 
-    // 版本列表面板的「查看全部」必须指向已注册路由。
+    // 版本列表面板的「查看全部」必须指向已注册路由（面板位于 versions Tab 内，先激活）。
+    await activateVersionsTab(page);
     const viewAll = viewAllVersionsButton(page);
     await expect(viewAll).toBeVisible({ timeout: 10_000 });
     await viewAll.click();

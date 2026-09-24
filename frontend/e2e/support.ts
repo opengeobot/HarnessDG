@@ -66,6 +66,18 @@ export async function openAssetDetailViaCatalog(page: Page, displayName: string)
   await expect(page.getByText(/页面不存在|Page not found/)).toHaveCount(0);
 }
 
+/**
+ * 在资产详情页激活「版本」Tab。
+ *
+ * <p>版本列表面板（含「查看全部」入口）渲染在 versions Tab 内；antd Tabs 默认
+ * 不渲染未激活面板，因此点击「查看全部」前必须先切过去——这是用户本来的操作路径。
+ */
+export async function activateVersionsTab(page: Page) {
+  const tab = page.getByRole('tab', { name: /^版本$|^Versions$/ });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
 /** 在资产详情页点击版本列表的「查看全部」，返回该按钮定位器。 */
 export function viewAllVersionsButton(page: Page) {
   return page
@@ -80,13 +92,18 @@ export function viewAllVersionsButton(page: Page) {
 /* ------------------------------------------------------------------ */
 
 /**
- * 资产所有者主体：具备 {@code asset:manage}（资产创建/更新的实际强制点）与 {@code project:view}，
+ * 资产所有者主体：具备资产全生命周期所需的细粒度 Scope——P1 权限细化后
+ * 创建（{@code asset:create}）与建版本（{@code asset:update}）是独立强制点，
+ * 不再由 {@code asset:manage} 覆盖；同时保留 {@code asset:manage} 供审批/预览入口。
  * 刻意不含 {@code authorization:read}，用于证明导航按权限过滤。
+ *
+ * <p>注意：后端无 scope 更新 REST 端点，已存在的旧 scopes 夹具用户不会被幂等逻辑热更；
+ * 修改本列表后须清理验收栈中的同名用户（见 EVD limitations 记录）。
  */
 export const E2E_AUTHOR = {
   username: 'e2e050-asset-owner',
   password: 'E2e050-Author-01!z',
-  scopes: ['project:view', 'asset:read', 'asset:manage'],
+  scopes: ['project:view', 'asset:read', 'asset:create', 'asset:update', 'asset:manage'],
 } as const;
 
 /**
@@ -121,6 +138,20 @@ export const E2E_AUTHZ_READER = {
   scopes: ['authorization:read'],
 } as const;
 
+/**
+ * 目录隔离最小主体：仅有 {@code asset:read}，刻意不是 e2e050-org 组织成员，
+ * 且不含 {@code authorization:manage}。
+ *
+ * <p>用于证明行级 INTERNAL 过滤对普通主体生效：AssetSearchDao.appendAccessScopeFilter
+ * 首行对 platformAdmin（AuthorizationService 以 authorization:manage 判定）直接放行全部行，
+ * 故隔离用例不可复用 E2E_MANAGER，必须用此无管理 Scope 的最小主体。
+ */
+export const E2E_ASSET_OUTSIDER = {
+  username: 'e2e050-outsider',
+  password: 'E2e050-AssetOutsider-01!z',
+  scopes: ['asset:read'],
+} as const;
+
 export const E2E_ORG = { code: 'e2e050-org', name: 'E2E 050 Org' } as const;
 export const E2E_TEAM_NAME = 'E2E050 Team' as const;
 export const E2E_ASSET = {
@@ -129,10 +160,50 @@ export const E2E_ASSET = {
   displayName: 'E2E 050 版本入口目标',
 } as const;
 
+/**
+ * DATASET 夹具坐标：数据集体验 E2E（dataset.spec）使用，画像字段断言依赖这些值。
+ *
+ * <p>format/modality 必须是 dataset_format / dataset_modality 字典的 ACTIVE itemCode
+ * （V6__taxonomy_dictionary.sql 种子为大写：PARQUET、TEXT）。后端写入路径
+ * AssetApplicationService.validateGovernanceFields → DictionaryApplicationService.validateItemCode
+ * 按 itemCode 精确匹配（大小写敏感），小写值会被 400 DICTIONARY_VALUE_INVALID 拒绝。
+ */
+export const E2E_DATASET = {
+  namespace: 'nlp',
+  name: 'e2e050-dataset-target',
+  displayName: 'E2E 050 数据集入口目标',
+  format: 'PARQUET',
+  modality: 'TEXT',
+} as const;
+
+/**
+ * 发布链 E2E（publish-flow.spec）专属 MODEL 夹具。
+ *
+ * <p>既有 spec 对 E2E_ASSET / E2E_DATASET 的版本列表与默认选中项存在隐含独占假设
+ * （dataset.spec 断言选择器回显 /1\.0\.[01]/、version-management.spec 精确匹配唯一 DRAFT Tag），
+ * 故新状态（额外 DRAFT 版本）的测试必须落在独立资产上，避免跨 spec 夹具污染。
+ */
+export const E2E_PUBLISH_ASSET = {
+  namespace: 'nlp',
+  name: 'e2e050-publish-target',
+  displayName: 'E2E 050 发布链目标',
+} as const;
+
+/** 发布链 E2E 专属 DATASET 夹具（DVC 入口/凭据断言使用）。 */
+export const E2E_DVC_DATASET = {
+  namespace: 'nlp',
+  name: 'e2e050-dvc-target',
+  displayName: 'E2E 050 DVC 目标',
+  format: 'PARQUET',
+  modality: 'TEXT',
+} as const;
+
 export interface E2eFixtures {
   organizationId: string;
   teamId: string;
   assetId: string;
+  /** DATASET 类型夹具资产（带画像字段），供 dataset.spec 使用。 */
+  datasetAssetId: string;
   authorPrincipalId: string;
   managerPrincipalId: string;
 }
@@ -289,20 +360,53 @@ async function ensureOrganizationMember(
   expect([201, 409], `把 ${principalId} 加入组织返回 HTTP ${response.status()}`).toContain(response.status());
 }
 
-/** 幂等创建夹具资产；已存在时按坐标查回。 */
+/**
+ * 等待资产建仓完成（provisioningStatus == COMPLETED）。
+ *
+ * <p>后端契约：AssetSearchDao BASE_SELECT 以 `AND a.provisioning_status = 'COMPLETED'`
+ * 过滤目录检索——新建资产在异步建仓完成前不出现在目录（用例的搜索/类型过滤断言必然失败）。
+ * 建仓由持久 Job 驱动（JobConfiguration 默认 worker 间隔 5s），GET /assets/{assetId}
+ * 详情端点不受该门槛限制，故用详情轮询。FAILED 视为夹具契约异常立即失败；
+ * 上限 60s 防挂死。
+ */
+async function waitForAssetReady(
+  api: APIRequestContext,
+  token: string,
+  assetId: string,
+): Promise<void> {
+  const deadline = Date.now() + 60_000;
+  let last: string | undefined;
+  for (;;) {
+    const resp = await api.get(`${API_BASE}/assets/${assetId}`, {
+      headers: bearer(token),
+      failOnStatusCode: false,
+    });
+    const data = dataOf(await readJson(resp)) as { provisioningStatus?: string } | null;
+    last = data?.provisioningStatus;
+    if (last === 'COMPLETED') {
+      return;
+    }
+    expect(last, `资产 ${assetId} 建仓进入失败态`).not.toBe('FAILED');
+    expect(Date.now(), `资产 ${assetId} 建仓等待超时（最后状态 ${last ?? 'unknown'}）`).toBeLessThan(deadline);
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+}
+
+/** 幂等创建夹具资产；已存在时按坐标查回。返回前确保建仓 COMPLETED。 */
 async function ensureAsset(
   api: APIRequestContext,
   authorToken: string,
   organizationId: string,
   teamId: string,
+  coordinates: { namespace: string; name: string; displayName: string } = E2E_ASSET,
 ): Promise<string> {
   const created = await api.post(`${API_BASE}/assets`, {
-    headers: { ...bearer(authorToken), 'Idempotency-Key': `idmp_e2e050_asset_${E2E_ASSET.name}` },
+    headers: { ...bearer(authorToken), 'Idempotency-Key': `idmp_e2e050_asset_${coordinates.name}` },
     data: {
       type: 'MODEL',
-      namespace: E2E_ASSET.namespace,
-      name: E2E_ASSET.name,
-      displayName: E2E_ASSET.displayName,
+      namespace: coordinates.namespace,
+      name: coordinates.name,
+      displayName: coordinates.displayName,
       visibility: 'INTERNAL',
       organizationId,
       ownerTeamId: teamId,
@@ -311,18 +415,139 @@ async function ensureAsset(
   });
   const createdData = dataOf(await readJson(created)) as { assetId?: string } | null;
   if (created.status() === 201 && createdData?.assetId) {
+    await waitForAssetReady(api, authorToken, createdData.assetId);
     return createdData.assetId;
   }
 
   const listed = await api.get(`${API_BASE}/assets`, {
     headers: bearer(authorToken),
-    params: { namespace: E2E_ASSET.namespace, keyword: E2E_ASSET.name, size: 50 },
+    params: { namespace: coordinates.namespace, keyword: coordinates.name, size: 50 },
     failOnStatusCode: false,
   });
   const page = dataOf(await readJson(listed)) as { items?: { assetId: string; name: string }[] } | null;
-  const match = page?.items?.find((item) => item.name === E2E_ASSET.name);
-  expect(match, `夹具资产 ${E2E_ASSET.name} 既无法创建（HTTP ${created.status()}）也无法查回`).toBeTruthy();
+  const match = page?.items?.find((item) => item.name === coordinates.name);
+  expect(match, `夹具资产 ${coordinates.name} 既无法创建（HTTP ${created.status()}）也无法查回`).toBeTruthy();
+  await waitForAssetReady(api, authorToken, match!.assetId);
   return match!.assetId;
+}
+
+/**
+ * 幂等创建 DATASET 夹具资产（带 dataset 画像）。
+ *
+ * <p>后端契约：CreateAssetRequest.DatasetInput(format, modality, …)；Asset 仅在
+ * type==DATASET 时采纳 profile（Asset.java L205），故画像断言必须落在 DATASET 资产上。
+ * 返回前确保建仓 COMPLETED。
+ */
+async function ensureDatasetAsset(
+  api: APIRequestContext,
+  authorToken: string,
+  organizationId: string,
+  teamId: string,
+  coordinates: {
+    namespace: string;
+    name: string;
+    displayName: string;
+    format: string;
+    modality: string;
+  } = E2E_DATASET,
+): Promise<string> {
+  const created = await api.post(`${API_BASE}/assets`, {
+    headers: { ...bearer(authorToken), 'Idempotency-Key': `idmp_e2e050_asset_${coordinates.name}` },
+    data: {
+      type: 'DATASET',
+      namespace: coordinates.namespace,
+      name: coordinates.name,
+      displayName: coordinates.displayName,
+      visibility: 'INTERNAL',
+      organizationId,
+      ownerTeamId: teamId,
+      dataset: { format: coordinates.format, modality: coordinates.modality },
+    },
+    failOnStatusCode: false,
+  });
+  const createdData = dataOf(await readJson(created)) as { assetId?: string } | null;
+  if (created.status() === 201 && createdData?.assetId) {
+    await waitForAssetReady(api, authorToken, createdData.assetId);
+    return createdData.assetId;
+  }
+
+  const listed = await api.get(`${API_BASE}/assets`, {
+    headers: bearer(authorToken),
+    params: { namespace: coordinates.namespace, keyword: coordinates.name, type: 'DATASET', size: 50 },
+    failOnStatusCode: false,
+  });
+  const page = dataOf(await readJson(listed)) as { items?: { assetId: string; name: string }[] } | null;
+  const match = page?.items?.find((item) => item.name === coordinates.name);
+  expect(match, `DATASET 夹具资产 ${coordinates.name} 既无法创建（HTTP ${created.status()}）也无法查回`).toBeTruthy();
+  await waitForAssetReady(api, authorToken, match!.assetId);
+  return match!.assetId;
+}
+
+/**
+ * 为发布链 spec（publish-flow）幂等创建其专属夹具资产。
+ *
+ * <p>刻意不复用 E2E_ASSET / E2E_DATASET：dataset.spec 与 version-management.spec 对它们的
+ * 版本列表存在隐含独占假设（默认选中项回显 /1\.0\.[01]/、唯一 DRAFT Tag），
+ * 在其上追加 DRAFT 版本会造成跨 spec 污染。新状态测试一律落在本函数返回的独立资产上。
+ */
+export async function ensurePublishFlowAssets(
+  api: APIRequestContext,
+  base: Pick<E2eFixtures, 'organizationId' | 'teamId'>,
+  authorToken: string,
+): Promise<{ publishAssetId: string; dvcAssetId: string }> {
+  const publishAssetId = await ensureAsset(
+    api, authorToken, base.organizationId, base.teamId, E2E_PUBLISH_ASSET,
+  );
+  const dvcAssetId = await ensureDatasetAsset(
+    api, authorToken, base.organizationId, base.teamId, E2E_DVC_DATASET,
+  );
+  return { publishAssetId, dvcAssetId };
+}
+
+/** 以指定凭据登录并返回 access Token（供 spec 在 beforeAll 做夹具写入）。 */
+export async function loginAs(
+  api: APIRequestContext,
+  username: string,
+  password: string,
+): Promise<string> {
+  return loginApi(api, username, password);
+}
+
+/**
+ * 幂等确保资产上存在指定版本，并返回其 versionId。
+ *
+ * <p>创建走 POST /assets/{assetId}/versions（需 asset:update）；已存在时按版本号查回。
+ * 首次创建必须 201，否则视为夹具契约异常。
+ */
+export async function ensureAssetVersion(
+  api: APIRequestContext,
+  token: string,
+  assetId: string,
+  version: string,
+): Promise<string> {
+  const findExisting = async (): Promise<string | null> => {
+    const listed = await api.get(`${API_BASE}/assets/${assetId}/versions?limit=50`, {
+      headers: bearer(token),
+      failOnStatusCode: false,
+    });
+    const page = dataOf(await readJson(listed)) as
+      | { items?: { versionId: string; version: string }[] }
+      | null;
+    return page?.items?.find((v) => v.version === version)?.versionId ?? null;
+  };
+
+  const existing = await findExisting();
+  if (existing) {
+    return existing;
+  }
+  const created = await api.post(
+    `${API_BASE}/assets/${assetId}/versions`,
+    { headers: bearer(token), data: { version }, failOnStatusCode: false },
+  );
+  expect(created.status(), `创建版本 ${version} 返回 HTTP ${created.status()}`).toBe(201);
+  const id = await findExisting();
+  expect(id, `版本 ${version} 创建后无法查回 versionId`).toBeTruthy();
+  return id!;
 }
 
 /**
@@ -338,10 +563,16 @@ export async function prepareFixtures(adminToken: string, apiRequest?: APIReques
     const authorPrincipalId = await ensureUser(api, adminToken, E2E_AUTHOR);
     const managerPrincipalId = await ensureUser(api, adminToken, E2E_MANAGER);
     await ensureUser(api, adminToken, E2E_AUTHZ_READER);
+    // 刻意不将 outsider 加入组织：目录隔离用例依赖其"非成员 + 非平台管理员"身份。
+    await ensureUser(api, adminToken, E2E_ASSET_OUTSIDER);
     await ensureOrganizationMember(api, adminToken, organizationId, authorPrincipalId);
     const authorToken = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
     const assetId = await ensureAsset(api, authorToken, organizationId, teamId);
-    return { organizationId, teamId, assetId, authorPrincipalId, managerPrincipalId };
+    const datasetAssetId = await ensureDatasetAsset(api, authorToken, organizationId, teamId);
+    return {
+      organizationId, teamId, assetId, datasetAssetId,
+      authorPrincipalId, managerPrincipalId,
+    };
   } finally {
     if (!apiRequest) {
       await api.dispose();

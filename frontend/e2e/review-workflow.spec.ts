@@ -14,11 +14,15 @@ import { adminToken, bootstrapCredentials, login } from './support';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
-/** 本卡夹具作者：具备审批入口所需 asset:manage（决策端点因闭环断链不可达，未用到 asset:publish）。 */
+/**
+ * 本卡夹具作者：具备审批入口所需 asset:manage 与资产/版本创建所需的
+ * asset:create、asset:update（P1 权限细化后的独立强制点；
+ * 决策端点因闭环断链不可达，未用到 asset:publish）。
+ */
 const REVIEW_AUTHOR = {
   username: 'e2e065-review-author',
   password: 'E2e065-ReviewAuthor-01!z',
-  scopes: ['project:view', 'asset:read', 'asset:manage'],
+  scopes: ['project:view', 'asset:read', 'asset:create', 'asset:update', 'asset:manage'],
 } as const;
 
 const REVIEW_READER = {
@@ -272,35 +276,39 @@ test.describe('AC-P0B-UI-006: 发布审批入口导航可见性随 scope 变化'
 });
 
 test.describe('AC-P0B-UI-003: 审查页真实查询与诚实状态', () => {
-  test('夹具作者打开 /review：可达、诚实空态、查询真实资产后仍不捏造待审批行', async ({ page }) => {
+  test('夹具作者打开 /review：可达、深链诚实提示；真实资产深链后不捏造发布请求行', async ({ page }) => {
+    // e9d65b7 重构后 /review 为 ?assetId= 深链驱动（无页内输入框/查询按钮），
+    // 断言按当前真实形态：无深链→提示；有深链→GET publish-requests 真实空列表。
     await login(page, REVIEW_AUTHOR.username, REVIEW_AUTHOR.password);
 
     await navEntry(page, /发布审批|Release Review/).click();
-    await expect(page).toHaveURL(/\/review$/);
+    await expect(page).toHaveURL(/\/review(\?|$)/);
     await expect(page.getByText(/页面不存在|Page not found/)).toHaveCount(0);
 
-    // 未查询时的诚实提示与空会话列表。
-    await expect(page.getByText(/输入资产 ID 后查询版本|Enter an Asset ID and query versions/)).toBeVisible();
-    await expect(page.getByText(/本会话暂未提交发布请求|No publish requests submitted this session/)).toBeVisible();
+    // 无深链时的诚实提示（version.deepLinkHint）与通往资产目录的引导。
+    await expect(page.getByText(/请从资产详情页进入|Open from asset detail/)).toBeVisible();
 
-    // 真实夹具资产查询：版本存在但均非 PENDING_REVIEW（运行态断链，见头注），
-    // 页面必须显示「暂无待审批版本」而不是把 DRAFT 渲染成可审批行。
-    await page.getByPlaceholder(/输入资产 ID|Enter Asset ID/).fill(fixtures.assetId);
-    await page.getByRole('button', { name: /查\s*询|Query/i }).click();
-    await expect(page.getByText(/该资产暂无待审批版本|No versions pending review for this asset/)).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.getByRole('button', { name: /提交发布/ })).toHaveCount(0);
+    // 真实夹具资产深链：夹具只创建了 DRAFT 版本（运行态断链，见头注），
+    // 后端 GET publish-requests 必须返回空，页面显示「暂无发布请求」而非捏造可审批行。
+    await page.goto(`/review?assetId=${fixtures.assetId}`);
+    await expect(page.getByText(/暂无发布请求|No publish requests/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/提交发布请求已提交|发布请求已提交|Publish request submitted/)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /重新提交|Resubmit/ })).toHaveCount(0);
   });
 
   test('页面文案随语言切换（无硬编码残留）', async ({ page }) => {
     await login(page, REVIEW_AUTHOR.username, REVIEW_AUTHOR.password);
     await page.goto('/review');
-    await expect(page.getByRole('heading', { name: '发布审批' })).toBeVisible();
+    // antd Card title 渲染为 div 而非 heading role：用文本级定位并限定 main 区域
+    // （侧边导航菜单同样含「发布审批」文案，避免 strict 冲突）。
+    const main = page.getByRole('main');
+    await expect(main.getByText('发布审批', { exact: true })).toBeVisible();
+    await expect(page.getByText(/请从资产详情页进入/)).toBeVisible();
 
     await switchLanguage(page, 'English');
-    await expect(page.getByRole('heading', { name: 'Release Review' })).toBeVisible();
-    await expect(page.getByText('发布审批')).toHaveCount(0);
+    await expect(main.getByText('Release Review', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Open from asset detail/)).toBeVisible();
+    await expect(main.getByText('发布审批')).toHaveCount(0);
   });
 
   test('404 页文案随语言切换（D6 硬编码整改的正向证据）', async ({ page }) => {
@@ -344,8 +352,11 @@ test.describe('AC-P0B-UI-003: 后端独立授权与失败路径（UI 非安全�
   test('DRAFT 版本提交发布请求：后端拒绝且 UI 显示错误而非假成功（正向闭环断链证据）', async ({
     page,
   }) => {
-    // 后端侧：运行态实测为 500 INTERNAL_ERROR——业务状态机要求 PENDING_REVIEW，
-    // 而 PENDING_REVIEW 因 UPLOAD_MATERIALIZE/VERSION_VALIDATE 作业无入队方而不可达。
+    // 后端侧：业务状态机要求 PENDING_REVIEW，而 PENDING_REVIEW 因
+    // UPLOAD_MATERIALIZE/VERSION_VALIDATE 作业无入队方而运行态不可达。
+    // 状态机违规已由后端契约化为 409 VERSION_STATE_NOT_ALLOWED
+    // （PublishApplicationService 注释：此前裸 IllegalStateException 兜底 500 会误导客户端重试），
+    // 断言按契约口径 409 + 错误码，属对齐整改而非放宽。
     const api = await request.newContext();
     let draftVersionId: string | undefined;
     try {
@@ -362,17 +373,18 @@ test.describe('AC-P0B-UI-003: 后端独立授权与失败路径（UI 非安全�
         headers: bearer(authorToken),
         failOnStatusCode: false,
       });
-      expect(res.status()).toBe(500); // 实测口径；非放宽——闭环缺口记入 Evidence limitations
+      expect(res.status()).toBe(409); // 契约口径 VERSION_STATE_NOT_ALLOWED；闭环缺口仍记入 Evidence limitations
+      const errBody = (await readJson(res)) as { code?: string } | null;
+      expect(errBody?.code).toBe('VERSION_STATE_NOT_ALLOWED');
     } finally {
       await api.dispose();
     }
 
-    // UI 侧：审查页对 DRAFT 无「提交发布」入口（只渲染 PENDING_REVIEW 行），
-    // 因此不存在把 DRAFT 假提交成功的路径；错误展示逻辑由上方诚实空态用例覆盖。
+    // UI 侧：审查页只渲染后端真实返回的发布请求行；夹具 DRAFT 版本不存在发布请求，
+    // 深链后列表保持诚实空态，不存在把 DRAFT 假提交成功的路径。
     await login(page, REVIEW_AUTHOR.username, REVIEW_AUTHOR.password);
-    await page.goto('/review');
-    await page.getByPlaceholder(/输入资产 ID|Enter Asset ID/).fill(fixtures.assetId);
-    await page.getByRole('button', { name: /查\s*询|Query/i }).click();
+    await page.goto(`/review?assetId=${fixtures.assetId}`);
+    await expect(page.getByText(/暂无发布请求|No publish requests/)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByText(/发布请求已提交|Publish request submitted/)).toHaveCount(0);
   });

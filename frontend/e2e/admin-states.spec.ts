@@ -10,6 +10,7 @@ import {
   E2E_ASSET,
   E2E_AUTHOR,
   E2E_MANAGER,
+  activateVersionsTab,
   adminToken,
   bootstrapCredentials,
   login,
@@ -145,6 +146,7 @@ test.describe('AC-P0B-UI-003: 版本列表页面状态', () => {
 
     // 经应用内导航到达（容器 nginx 的 /assets/ 静态规则遮蔽 SPA 深链，详见 evidence limitations）。
     await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
+    await activateVersionsTab(page);
     await viewAllVersionsButton(page).click();
 
     await expect(page.locator('.ant-skeleton')).toBeVisible();
@@ -159,6 +161,7 @@ test.describe('AC-P0B-UI-003: 版本列表页面状态', () => {
     await stubList(page, pattern, SERVER_ERROR);
 
     await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
+    await activateVersionsTab(page);
     await viewAllVersionsButton(page).click();
 
     await expect(page.getByText(/加载失败|Load failed/)).toBeVisible({ timeout: 15_000 });
