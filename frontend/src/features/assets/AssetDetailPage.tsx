@@ -106,9 +106,12 @@ function buildArtifactTree(artifacts: ArtifactView[]): DataNode[] {
         const sub = toNodes(child.children);
         const title = child.artifact ? (
           <Space size={8} wrap>
-            <Typography.Text strong>{name}</Typography.Text>
+            <Typography.Text strong title={child.artifact.dvcFile ?? undefined}>{name}</Typography.Text>
             <Tag>{formatBytes(child.artifact.size)}</Tag>
             {child.artifact.mediaType && <Tag color="blue">{child.artifact.mediaType}</Tag>}
+            {child.artifact.dvcHash && (
+              <Tag color="purple">{`DVC ${child.artifact.dvcHash.slice(0, 10)}`}</Tag>
+            )}
             <Typography.Text type="secondary" code style={{ fontSize: 11 }}>
               {child.artifact.sha256.slice(0, 12)}
             </Typography.Text>
@@ -164,11 +167,17 @@ export function AssetDetailPage() {
   };
 
   const versions: VersionView[] = versionsQuery.data?.items ?? [];
-  const selectedVersion = useMemo(
-    () => versions.find((v) => v.versionId === selectedVersionId) ?? versions[0],
+  const selectedVersion = useMemo(() => {
+    const explicit = versions.find((v) => v.versionId === selectedVersionId);
+    if (explicit) return explicit;
+    // REQ-DST-DETAIL-001：latestPublished 只能由服务端精确计算；
+    // URL 无显式选择时回退到最近一个已发布版本，无已发布版本则不自动选中，
+    // 避免默认落在 DRAFT/最新创建版本上猜测 latest。
+    return versions
+      .filter((v) => v.status === 'PUBLISHED')
+      .sort((a, b) => (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))[0];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [versionsQuery.data, selectedVersionId],
-  );
+  }, [versionsQuery.data, selectedVersionId]);
   const effectiveVersionId = selectedVersion?.versionId;
 
   const artifactsQuery = useQuery({

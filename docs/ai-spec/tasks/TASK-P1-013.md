@@ -4,7 +4,7 @@ taskId: TASK-P1-013
 status: READY
 implementationAuthorized: true
 phase: P1
-baseCommit: 14bf9f747b953d901b4b8aeaccd999b3445fa08e
+baseCommit: 08c25af85190780fe94305bd85586b9e857327fb
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED; P1 catalog/讨论/血缘已部分落地；本任务为 P1 详情页统一外壳差距闭合，依赖 DEC-008 端态 REQ-DST-DETAIL-001
 stageGateEvidenceRefs:

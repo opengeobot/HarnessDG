@@ -409,7 +409,12 @@
     "unlockThread": "Unlock",
     "confirmLock": "Lock this thread?",
     "threadLocked": "Thread locked",
-    "threadUnlocked": "Thread unlocked"
+    "threadUnlocked": "Thread unlocked",
+    "subscribe": "Subscribe",
+    "unsubscribe": "Unsubscribe",
+    "subscribed": "Subscribed to discussion notifications",
+    "unsubscribed": "Unsubscribed from discussion notifications",
+    "subscriptionFailed": "Failed to update subscription"
   },
   "upload": {
     "title": "Upload Center",

@@ -409,7 +409,12 @@
     "unlockThread": "解锁",
     "confirmLock": "确认锁定此讨论线程？",
     "threadLocked": "线程已锁定",
-    "threadUnlocked": "线程已解锁"
+    "threadUnlocked": "线程已解锁",
+    "subscribe": "订阅讨论",
+    "unsubscribe": "取消订阅",
+    "subscribed": "已订阅讨论通知",
+    "unsubscribed": "已取消订阅讨论通知",
+    "subscriptionFailed": "订阅状态更新失败"
   },
   "upload": {
     "title": "上传中心",

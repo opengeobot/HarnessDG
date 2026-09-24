@@ -1,6 +1,6 @@
 /**
- * 功能: 资产目录 API 调用，经统一 client 访问后端 /api/v1 资产资源。
- * 时间: 2026-06-29
+ * 功能: 资产目录 API 调用，经统一 client 访问后端 /api/v1 资产资源（含讨论订阅）。
+ * 时间: 2026-06-29，2026-09-24 增加讨论订阅封装
  * 作者: AxeXie
  */
 import { apiClient } from '@/shared/api';
@@ -215,4 +215,26 @@ export function unlockThread(
   threadId: string,
 ): Promise<ThreadView> {
   return apiClient.post<ThreadView>(`/discussions/${threadId}/unlock`);
+}
+
+/**
+ * 查询当前用户是否订阅该资产的讨论通知。
+ * 后端 GET /assets/{assetId}/discussions/subscription 返回 ApiResponse<Boolean>，
+ * 经 apiClient 解包后为裸布尔值。
+ */
+export function getDiscussionSubscription(assetId: string): Promise<boolean> {
+  return apiClient.get<boolean>(`/assets/${assetId}/discussions/subscription`);
+}
+
+/**
+ * 订阅或取消订阅资产讨论通知。
+ * 后端 POST 返回 204 No Content（空响应体），请求字段为 `subscribed`。
+ */
+export function setDiscussionSubscription(
+  assetId: string,
+  subscribed: boolean,
+): Promise<void> {
+  return apiClient.post<void>(`/assets/${assetId}/discussions/subscription`, {
+    subscribed,
+  });
 }

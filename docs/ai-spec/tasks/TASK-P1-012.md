@@ -4,7 +4,7 @@ taskId: TASK-P1-012
 status: READY
 implementationAuthorized: true
 phase: P1
-baseCommit: 38fd44d2dcbc1a611cfdfd923337e5599c3b3feb
+baseCommit: 08c25af85190780fe94305bd85586b9e857327fb
 stageGatePassed: true
 stageGateEvidence: P0-B VERIFIED; DEC-010 continuous implementation; P0BR-046 gate lifted
 stageGateEvidenceRefs:
@@ -46,6 +46,7 @@ allowedPaths:
   - backend/src/test/java/com/aihub/asset/discussion
   - frontend/src/features/assets/DiscussionPanel.tsx
   - frontend/src/features/assets/DiscussionPanel.test.tsx
+  - docs/ai-spec/tasks/TASK-P1-012.md
   - docs/ai-spec/tasks/evidence/EVD-P1012-001.yaml
 preExistingDirtyPaths: []
 forbiddenPaths:

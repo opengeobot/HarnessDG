@@ -26,11 +26,13 @@ import {
   createComment,
   createThread,
   editComment,
+  getDiscussionSubscription,
   hideComment,
   listComments,
   listThreads,
   lockThread,
   retractComment,
+  setDiscussionSubscription,
   unhideComment,
   unlockThread,
 } from './api';
@@ -316,6 +318,24 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
     onError: (err: unknown) => message.error(isApiError(err) ? err.message : t('discussion.commentFailed')),
   });
 
+  // 资产级讨论订阅：新评论通过平台通知（Notification/Outbox）触达订阅者
+  const subscriptionQuery = useQuery({
+    queryKey: ['discussion-subscription', assetId],
+    queryFn: () => getDiscussionSubscription(assetId),
+  });
+
+  const subscriptionMut = useMutation({
+    mutationFn: (next: boolean) => setDiscussionSubscription(assetId, next),
+    onSuccess: (_data, next) => {
+      message.success(next ? t('discussion.subscribed') : t('discussion.unsubscribed'));
+      void queryClient.invalidateQueries({ queryKey: ['discussion-subscription', assetId] });
+    },
+    onError: (err: unknown) =>
+      message.error(isApiError(err) ? err.message : t('discussion.subscriptionFailed')),
+  });
+
+  const subscribed = subscriptionQuery.data ?? false;
+
   // Top-level comments (no parent)
   const topLevelComments = useMemo(
     () => (commentsQuery.data ?? []).filter((c) => !c.parentId),
@@ -325,7 +345,18 @@ export function DiscussionPanel({ assetId }: DiscussionPanelProps) {
   const threads = threadsQuery.data?.items ?? [];
 
   return (
-    <Card title={t('discussion.title')}>
+    <Card
+      title={t('discussion.title')}
+      extra={
+        <Button
+          size="small"
+          loading={subscriptionMut.isPending || subscriptionQuery.isLoading}
+          onClick={() => subscriptionMut.mutate(!subscribed)}
+        >
+          {subscribed ? t('discussion.unsubscribe') : t('discussion.subscribe')}
+        </Button>
+      }
+    >
       <Flex vertical gap={12}>
         {/* New thread input */}
         <Flex gap={8}>
