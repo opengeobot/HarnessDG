@@ -23,7 +23,7 @@ governance:
 
 source:
   branch: ai
-  commitSha: pending-commit
+  commitSha: 178ee6b
   dirtyWorktree: false
   dirtyPaths: []
 

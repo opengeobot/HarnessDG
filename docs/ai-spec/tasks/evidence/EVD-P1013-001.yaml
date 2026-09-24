@@ -51,6 +51,8 @@ coverage:
   proven:
     - scenarioId: AC-DST-DETAIL-001
       assertion: AssetDetailPage 改造为 Overview|Versions|Files|Preview|Discussions|Lineage|Access|Settings Tab 外壳；未实现阶段能力 Tab 不展示（Lineage/Access/Settings 为导航入口）；189 组件测试 PASS
+      evidenceLevel: E4
+      e4Detail: dataset.spec.ts 4/4 PASS（Playwright Compose 全栈，2026-09-24）——讨论 Tab 页内切换渲染 + 持 asset:read 列表 200 + 无 scope 403 + 空态；版本切换/画像 Card 另证 Tab 内容随 versionId 联动
     - scenarioId: AC-DST-DETAIL-002
       assertion: 顶部版本切换器（Select versions）；切换 Version 同步 URL ?version= 与 ?tab=；Files/Preview 绑定精确 versionId
     - scenarioId: AC-DST-DETAIL-003
@@ -58,8 +60,6 @@ coverage:
     - scenarioId: AC-DST-DETAIL-004
       assertion: /assets/:id/versions 路由经 VersionsTabRedirect 重定向到 ?tab=versions（修复 404）；VersionListPanel view-all 链接更新；Card/Markdown SafeMarkdown 渲染
   notProven:
-    - scenarioId: AC-DST-DETAIL-001
-      reason: E4 需 Playwright e2e（dataset/version-management）在 Compose 环境执行（Wave W）
     - scenarioId: AC-DST-DETAIL-004
       reason: 防枚举/不泄露内部 endpoint 的 E4 需 Compose 全栈验证
 
@@ -69,6 +69,7 @@ artifacts:
     - pnpm typecheck → PASS
     - pnpm test → 44 files, 189 tests PASS
     - pnpm build → built in 9.35s
+    - dataset.spec.ts → 4/4 PASS（Playwright Compose 全栈，2026-09-24）：AC-DST-DETAIL-001 E4 闭合（目录过滤/画像/版本切换深链/讨论 Tab 授权）
   logs: []
   screenshots: []
   traces: []
@@ -86,7 +87,7 @@ limitations:
     - languageCodes 多值经前端 searchAssets 数组参数传递（后端 /assets 已支持，Wave T /datasets 对齐）
     - 顺带修复 4 个预存前端 lint/typecheck 阻塞（AssetLineagePage.test.tsx dead import、discussion/lineage e2e 未用变量、PermissionProvider.test/test-utils 的 any），已纳入 allowedPaths，非新增无关重构——为满足卡片 pnpm lint/typecheck 要求
   environmentDifferences:
-    - E2E（Playwright）未本地执行，E4 旅程留 Wave W
+    - E2E 已于 2026-09-24 在 Compose 全栈执行（dataset.spec.ts 4/4 PASS）；AC-DST-DETAIL-004 的防枚举/内部 endpoint 不泄漏断言不在该 spec 覆盖范围，notProven 维持
 
 review:
   recordedBy: AI (implementation session 2026-07-12)

@@ -23,7 +23,7 @@ governance:
 
 source:
   branch: ai
-  commitSha: pending-commit
+  commitSha: 6aad901
   dirtyWorktree: false
   dirtyPaths: []
 
@@ -45,19 +45,30 @@ execution:
   finishedAt: 2026-07-12T05:42:00Z
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E4
+  supplementaryRuns:
+    - command: playwright test publish-flow.spec.ts（bootstrap 包装脚本注入 E2E_ADMIN_*/E2E_BASE_URL，引导凭据来自 deploy/compose/.env，Compose 全栈 http://localhost:8080）
+      startedAt: 2026-09-24T00:00:00+08:00
+      result: PASS
+      detail: 4/4 PASS——发布门控禁用+无 DVC 入口、DVC Modal secretKey 掩码不泄漏后端真值、DRAFT 下载 409 且不出票、无 asset:read 直连 download/dvc-credentials 403
+      evidenceLevel: E4
+    - command: playwright test lineage.spec.ts discussion.spec.ts mcp-integration.spec.ts publish-flow.spec.ts（同一 Compose 全栈）
+      startedAt: 2026-09-24T00:00:00+08:00
+      result: PASS
+      detail: 合跑 15/15 PASS（lineage 4、discussion 4、mcp-integration 3、publish-flow 4）；dataset.spec.ts 回归复跑 4/4 PASS
+      evidenceLevel: E4
 
 coverage:
   proven:
     - scenarioId: AC-P3-UI-001
       assertion: AssetDetailPage 版本切换器卡片内嵌「提交发布审核」按钮（submitPublishRequest，状态前置 PENDING_REVIEW/VALIDATING），无需手填 assetId；新增 version/api.submitPublishRequest
+      evidenceLevel: E4
+      e4Detail: publish-flow.spec.ts 4/4 Compose 全栈实跑；review-workflow.spec.ts（8 test）另证发布 403 与 DRAFT 提交拒绝；合跑 15/15 PASS（2026-09-24）
     - scenarioId: AC-P2-DL-001
       assertion: AssetDetailPage 内嵌「下载版本」按钮（issueDownloadTicket，Modal 展示 method/expiresAt/presignedUrl）与「DVC 凭据」按钮（getDvcCredentials，Modal 展示 bucket/prefix/accessKey，secretKey 脱敏）；后端 DownloadController/DownloadApplicationService 既有上下文签发，681 unit PASS
-  notProven:
-    - scenarioId: AC-P3-UI-001
-      reason: E4 需 Playwright e2e（publish-flow/version-management）在 Compose 环境执行（Wave W）
-    - scenarioId: AC-P2-DL-001
-      reason: 下载票据/DVC 凭据 E4 需 Compose 全栈 + 日志脱敏验证（Wave W）
+      evidenceLevel: E4
+      e4Detail: publish-flow.spec.ts 4/4 Compose 全栈实跑——DVC Modal secretKey 掩码不泄漏后端真值、DRAFT 下载 409 且不出票、无 asset:read 直连 download/dvc-credentials 403
+  notProven: []
 
 artifacts:
   reports:
@@ -66,6 +77,8 @@ artifacts:
     - pnpm test → 44 files, 189 tests PASS
     - pnpm build → built in 9.51s
     - ./mvnw -o verify → BUILD SUCCESS, 681 unit PASS, 96 IT SKIP
+    - publish-flow.spec.ts → 4/4 PASS（Compose chromium，2026-09-24）
+    - lineage + discussion + mcp-integration + publish-flow 合跑 → 15/15 PASS（26.2s）；dataset.spec.ts 回归复跑 4/4 PASS
   logs: []
   screenshots: []
   traces: []
@@ -84,7 +97,9 @@ limitations:
     - 后端 DownloadController/DownloadApplicationService 无需改动（已按 versionId 上下文签发）；本 Wave 以前端集成为主
     - ReviewPage/VersionPage 的手填 assetId 工具页保留（详情页内嵌入口已满足 AC-P3-UI-001；工具页后续可下线）
   environmentDifferences:
-    - E2E（Playwright）未本地执行，E4 旅程留 Wave W
+    - E2E 已于 2026-09-24 在 Compose 全栈（http://localhost:8080，Windows chromium）执行：publish-flow 4/4、四 spec 合跑 15/15、dataset 回归 4/4 PASS
+    - 全量 e2e 套件中 legacy 未迁移 spec（agent-management/asset 等）仍用手写登录定位器，不命中 antd zhCN 空格渲染（「登 录」），会 30s 超时；留待后续波次统一迁移到 support.ts 夹具，本波不扩界修复
+    - frontend/e2e 目录不在任何 tsc project include 中（typecheck 不覆盖），e2e 静态门禁实际依赖 eslint + Playwright 实跑
 
 review:
   recordedBy: AI (implementation session 2026-07-12)

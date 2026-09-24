@@ -67,6 +67,7 @@ artifacts:
   reports:
     - ./mvnw -o verify → BUILD SUCCESS, 681 unit PASS, 96 IT SKIPPED
     - redocly lint → valid (2 pre-existing warnings)
+    - lineage.spec.ts → 4/4 PASS（Playwright Compose 全栈，2026-09-24）：DERIVED_FROM 边经 REST 建立后 UI 双向展示 + 方向切换反证 + 无 asset:read 直连 lineage 端点 403
   logs: []
   screenshots: []
   traces: []
@@ -86,6 +87,7 @@ limitations:
     - redocly diff 未运行（CLI 2.38.0 移除 diff 子命令）；OpenAPI 变更为纯增量（新增 deleteAssetRelation 操作 + 错误码 + 描述），非 breaking
   environmentDifferences:
     - Testcontainers IT 从 JVM 不可达 Docker（disabledWithoutDocker 跳过），E4 旅程留 Wave W
+    - 2026-09-24 Compose 实测：lineage.spec.ts 4/4 PASS 覆盖血缘「建立+展示+授权」UI 路径；AC-P1-AST-010 的删除 API（DELETE relations）与 AC-P2-UPL-003 的 Materialization 旅程不在该 spec 断言范围，notProven 维持
 
 review:
   recordedBy: AI (implementation session 2026-07-12)

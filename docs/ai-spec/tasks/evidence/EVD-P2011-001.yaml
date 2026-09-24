@@ -69,6 +69,7 @@ artifacts:
   reports:
     - ./mvnw -o verify → BUILD SUCCESS, 677 unit PASS, 96 IT SKIPPED
     - redocly lint → valid (2 pre-existing warnings)
+    - dataset.spec.ts → 4/4 PASS（Playwright Compose 全栈，2026-09-24）：目录 taskCodes 类型过滤 UI E4 佐证 AC-DST-TAX-001；画像 Card/版本切换深链/讨论列表另证 EVD-P1013 的 AC-DST-DETAIL-001
   logs: []
   screenshots: []
   traces: []
@@ -88,6 +89,7 @@ limitations:
     - languageCodes 多值未在应用层 AssetSearchQuery 增加（会破坏 allowedPaths 外的 AssetController/AssetRequestMapper/McpToolCatalog/AgentController）；/datasets 与 /assets 对齐至 taskCodes/modalityCodes/formatCodes 多值，language 保持单值（与 /assets 一致）；languageCodes 多值列为后续 follow-up
   environmentDifferences:
     - Testcontainers IT 从 JVM 不可达 Docker（disabledWithoutDocker 跳过），E4 旅程留 Wave W
+    - 2026-09-24 Compose 实测：dataset.spec.ts 4/4 PASS 覆盖目录过滤 UI 路径；AC-DST-PRE-004（预览越权防枚举）与 AC-DST-TAX-002（Facet 权限下推 IT）不在该 spec 断言范围，notProven 维持
 
 review:
   recordedBy: AI (implementation session 2026-07-12)
