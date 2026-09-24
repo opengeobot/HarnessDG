@@ -30,7 +30,8 @@
     "back": "← Back",
     "operationFailed": "Operation failed",
     "loadFailed": "Load failed",
-    "loadFailedRetry": "Load failed, please try again later"
+    "loadFailedRetry": "Load failed, please try again later",
+    "networkError": "Network request failed"
   },
   "nav": {
     "assetCatalog": "Asset Catalog",
@@ -861,7 +862,6 @@
     "noScopes": "No scopes available",
     "notAuthenticated": "Not authenticated",
     "apiTokens": "API Tokens",
-    "tokensComingSoon": "Token management coming soon",
     "createToken": "Create Token",
     "noTokenPermission": "Requires token:create permission",
     "noTokens": "No tokens yet",

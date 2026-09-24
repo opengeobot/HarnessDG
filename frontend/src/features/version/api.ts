@@ -79,16 +79,6 @@ export function listDecisions(
   );
 }
 
-/** 发布版本 */
-export function publishVersion(
-  versionId: string,
-  gitTag: string,
-): Promise<VersionView> {
-  return apiClient.post<VersionView>(`/versions/${versionId}/publish`, {
-    gitTag,
-  });
-}
-
 /** 提交发布请求（详情/版本上下文集成，无需手填 assetId） */
 export function submitPublishRequest(
   versionId: string,

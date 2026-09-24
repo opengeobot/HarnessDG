@@ -14,7 +14,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import type { ApiErrorBody, ApiResponse } from '@/shared/types';
-import { currentAcceptLanguage } from '@/shared/i18n';
+import i18n, { currentAcceptLanguage } from '@/shared/i18n';
 import { ApiError } from './errors';
 import {
   getAccessToken,
@@ -138,7 +138,7 @@ function toApiError(error: AxiosError): ApiError {
   return new ApiError(
     {
       code: 'COMMON_NETWORK_ERROR',
-      message: error.message || '网络请求失败',
+      message: i18n.t('common.networkError'),
       i18nKey: 'error.common.network',
       retryable: true,
     },

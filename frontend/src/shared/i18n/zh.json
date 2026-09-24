@@ -30,7 +30,8 @@
     "back": "← 返回",
     "operationFailed": "操作失败",
     "loadFailed": "加载失败",
-    "loadFailedRetry": "加载失败，请稍后重试"
+    "loadFailedRetry": "加载失败，请稍后重试",
+    "networkError": "网络请求失败"
   },
   "nav": {
     "assetCatalog": "资产目录",
@@ -861,7 +862,6 @@
     "noScopes": "无可用权限",
     "notAuthenticated": "未登录",
     "apiTokens": "API Token",
-    "tokensComingSoon": "Token 管理功能即将上线",
     "createToken": "创建 Token",
     "noTokenPermission": "需要 token:create 权限",
     "noTokens": "暂无 Token",
