@@ -1,63 +1,157 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P5007-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P5-007
-  requirements: 
-  scenarios: 
+  requirements: [REQ-REL-001]
+  scenarios: [AC-P5-REL-001]
 
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
     result: PASS
+    detail: 2026-09-24 实跑通过（148 文档 / 725 ID 校验无错误）。
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-007.md
-    result: null
+    result: FAIL
+    detail: >-
+      baseCommit 59f40d28…（任务批准点）落后当前 HEAD 62c92f0c…；
+      plain 模式要求 baseCommit == HEAD。AI 依 DEC-009 不得自我重签任务卡，
+      须由人类验证权威在发布候选上重新批准 baseCommit 后复跑。
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-007.md -CheckChangedPaths
-    result: null
+    result: FAIL
+    detail: >-
+      以陈旧 baseCommit 为基线，git diff 列出数百个历史波次文件 outside allowedPaths，
+      属基线陈旧假象而非本会话越界（本会话实际仅改动 allowedPaths 三处）；
+      validator 该模式已验证 baseCommit 为 HEAD 祖先，重签 baseCommit 后预期转 PASS。
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-007.md -CheckCompletion
-    result: null
+    result: FAIL
+    detail: >-
+      2026-09-24 实跑 exit 1。除上述基线问题外，如实揭示：AC-P5-REL-001 无 E5 完成证据、
+      本 Manifest status 非 PASS、notProven 非空、review 未接受——
+      即任务当前真实处于 IMPLEMENTED_UNVERIFIED，不得宣告完成。
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
-  dirtyWorktree: false
-  dirtyPaths: []
+  commitSha: 62c92f0c2bc535573600fd0f8db53ea90af85e79
+  dirtyWorktree: true
+  dirtyPaths:
+    - docs/ai-spec/02-delivery/traceability-matrix.md
+    - docs/ai-spec/tasks/evidence/EVD-P5007-001.yaml
+    - deploy/compose/scripts/p5-completion-audit/
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-24T00:00:00+08:00
+  os: Windows 11 + WSL2 Ubuntu 24.04 LTS（bash 工具链）；vitest 经 WSL→Windows node.exe interop 执行
   timezone: Asia/Shanghai
   java: "21"
-  node: "22"
-  pnpm: "9"
-  docker: "available"
+  node: "20.19.2 (Windows node.exe via WSL interop shim)"
+  pnpm: "10.33.4 (Windows 全局，经转发 shim 调用)"
+  docker: "available（Compose 全栈在跑；E4 V01–V28 结论沿用 2026-09-23 复跑，本任务未重复起净栈）"
   composeProfiles: []
-  externalDependencyVersions: {}
+  externalDependencyVersions:
+    vitest: "4.1.10"
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
-  exitCode: 0
-  result: PASS
-  evidenceLevel: E3
+  workingDirectory: d:/workspace/opengeobot/HarnessDG（WSL /mnt/d/workspace/opengeobot/HarnessDG）
+  command: >-
+    AUDIT_JOURNEY_LOG=... AUDIT_PERF_LOG=... AUDIT_SECURITY_LOG=...
+    bash deploy/compose/scripts/p5-completion-audit/p5-completion-audit.sh
+    （A1–A8 覆盖 REQ-REL-001 十条款中可静态/编排审计的条款；
+    journey/perf/security 日志由 verify-journey.sh、perf-smoke.sh、p5-security-drill.sh 实跑导出注入）
+  startedAt: 2026-09-24T10:00:00+08:00
+  finishedAt: 2026-09-24T16:00:00+08:00
+  exitCode: 1
+  result: FAIL
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: ""
+  note: >-
+    exit 1 是审计器对条款 8 真实违例的正确结论（发布阻断缺口如实报告），非工具故障；
+    违例修复重绑前，任何"审计通过"表述均不成立。
+
+auditResults:
+  summary: PASS=29 FAIL=1 SKIP=1 GAP=3（HEAD 62c92f0c，含本 EVD 定稿后的终态复跑）
+  clauses:
+    - id: 条款1-干净环境启动-Compose
+      verdict: NOT_PROVEN
+      evidence: >-
+        未在本审计窗口 down -v 重建净栈（破坏性操作待用户窗口）；
+        Compose 全栈 E4 结论沿用 2026-09-23 复跑（V01–V28 全 PASS，HEAD 不同）。
+    - id: 条款2-全量-MUST-Journey
+      verdict: PASS
+      evidence: >-
+        verify-journey.sh 实跑 18 PASS / 0 SKIP / 0 FAIL（日志注入 A7 校验通过）；
+        Compose 功能验证 V01–V28 全 PASS（2026-09-23 复跑记录）。
+    - id: 条款3-故障注入并恢复
+      verdict: PASS
+      evidence: >-
+        P5006 运维故障演练（§19，2026-09-24）DEAD_JOB/DEAD_DELIVERY/OUTBOX_BACKLOG/依赖 DOWN
+        全链 FIRING→RESOLVED；本轮安全演练 drill 再次实测 6/0/1 exit 0。
+    - id: 条款4-Reconciler-无未解释差异
+      verdict: NOT_PROVEN
+      evidence: 无本审计窗口内的 Reconciler 全量对账差异报告；P5006 演练覆盖部分作业链。
+    - id: 条款5-备份-隔离恢复-随机-DVC-校验
+      verdict: NOT_PROVEN
+      evidence: TASK-P5-003 破坏性恢复演练待用户窗口（down -v + pg_dump 恢复 + DVC 随机校验）。
+    - id: 条款6-性能与安全门禁
+      verdict: PASS
+      evidence: perf-smoke 4/4 场景 P95 阈内错误率 0；p5-security-drill PASS=6 FAIL=0 SKIP=1 exit 0（本轮 WSL interop 打通后真实取证）。
+    - id: 条款7-五类契约无漂移
+      verdict: PASS
+      evidence: >-
+        A8：OpenAPI 14 顶层前缀全映射、MCP 11 工具与 McpToolCatalog 全等、
+        事件契约 eventType 后端引用 9 文件、Flyway 由 A4 覆盖（V1/V2 不可变 + applied 对齐）、
+        前端无 codegen 生成物（手写 types.ts，SKIP 如实声明）。
+    - id: 条款8-EVD-绑定同一发布候选-Commit
+      verdict: FAIL
+      evidence: >-
+        A2：81/117 份 EVD commitSha 不可解析（72 orphan 7dc22d44… + 2 orphan 4c7dfc83… +
+        7 pending-commit 占位：EVD-P1013/P1014/P1015/P2011/P2012/P3009/P3010）；
+        另 33 份绑历史 Commit、2 份为 null。发布前必须统一重绑至发布候选 Commit
+        或由验证权威声明版本组合基线。本 EVD 自身已重绑 62c92f0c。
+    - id: 条款9-无-MUST-SKIP-无-Noop-入可部署-Profile
+      verdict: PARTIAL
+      evidence: >-
+        A5：三个 Noop 均绑定 aihub.gitea.enabled=false 而 compose 实配 true（Noop 不装配，PASS）；
+        A3：16 份关键 EVD PARTIAL、journey MUST 项 0 SKIP；15+1 份 PARTIAL 的出口裁决需人工评审（DEC-009）。
+    - id: 条款10-发布说明与剩余项如实登记
+      verdict: PASS
+      evidence: >-
+        本 EVD + 矩阵 CAP-REL-001 行如实登记全部缺口与 NOT_PROVEN 条款，
+        不宣告 P1–P5 波次 VERIFIED；发布说明正文属发布动作本身，不在本任务范围。
 
 coverage:
   proven: []
-  notProven: 
+  notProven:
+    - scenarioId: AC-P5-REL-001
+      reason: >-
+        要求 E5（发布候选全量审计闭环 + 人工验收）。审计工具链与 E4 级真实执行已建立，
+        但条款 1/4/5 在本窗口 NOT_PROVEN（净栈重建与 P5003 恢复演练待用户窗口、
+        Reconciler 全量对账报告缺失），条款 8 存在发布阻断级真实违例（81 不可解析 + 33 drift + 2 null），
+        且 TASK-P5-007 baseCommit 陈旧须人类重签——缺口关闭前不得宣告 PASS/VERIFIED。
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: true
+  migrationMatched: true
+  uiMatched: null
+  runbookMatched: true
 
 artifacts:
-  reports: []
-  logs: []
+  reports:
+    - docs/ai-spec/02-delivery/traceability-matrix.md#CAP-REL-001
+    - deploy/compose/scripts/p5-completion-audit/p5-completion-audit.sh
+  logs:
+    - 取证日志位于执行环境 WSL /tmp（非版本库）：p5007-audit2.log、p5007-journey.log、p5007-perf.log、p5007-security2.log
   screenshots: []
   traces: []
   metrics: []
   databaseQueries: []
+  auditEvents: []
 
 secrets:
   redactionChecked: true
@@ -65,8 +159,28 @@ secrets:
 
 limitations:
   skippedTests: []
-  assumptions: []
-  environmentDifferences: []
+  assumptions:
+    - 审计在 Windows+WSL 混合环境对 HEAD 62c92f0c 执行；Compose E4 旅程结论沿用 2026-09-23 复跑（V01–V28 全 PASS），本窗口未重复起净栈。
+  environmentDifferences:
+    - >-
+      WSL 默认无 node/pnpm 工具链；取证经 /tmp/wsl-node-shim2 转发 shim
+      （node.exe v20.19.2 + pnpm.cjs 10.33.4）完成 SafeMarkdown vitest 7/7。
+      p5-security-drill.sh L50 的 2>/dev/null 曾掩盖 pnpm 路径翻译缺陷根因（错误可见性缺陷入 followUps）。
+    - >-
+      审计脚本开发中修复两处系统性误报/漏报：OpenAPI yaml CRLF 未剥 \r 致 A8 假 miss；
+      A5 grep 选项位置错误（-A2 置于 pattern 后被 GNU grep 当文件参数）致 havingValue 恒空、
+      构成条款 9 漏报风险。修复后终态复跑确认。
+    - >-
+      TASK-P5-007 baseCommit 59f40d28… 陈旧（任务批准后 HEAD 已推进至 62c92f0c…），
+      致 plain/ChangedPaths/Completion 三项治理校验 FAIL；AI 依 DEC-009 不自我重签，交人类验证权威处理。
+
+followUps:
+  - 人类验证权威在发布候选上重签 TASK-P5-007 baseCommit 并复跑三项治理校验。
+  - 统一重绑 81 份不可解析 EVD（72×7dc22d44 + 2×4c7dfc83 + 7×pending-commit）与 33 份 drift、2 份 null 至发布候选 Commit。
+  - 安排 TASK-P5-003 破坏性恢复演练窗口（条款 1/5 与 E5 必需：down -v 净栈 + 备份→隔离恢复→随机 Published DVC 校验）。
+  - 出具 Reconciler 全量对账差异报告（条款 4）。
+  - 16 份 PARTIAL 关键 EVD 的人工评审裁决（DEC-009）。
+  - 修复 p5-security-drill.sh 错误输出可见性（去掉 2>/dev/null 掩盖）。
 
 review:
   recordedBy: AI

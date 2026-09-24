@@ -40,6 +40,7 @@
 | `CAP-PAT` | PAT 令牌 | PRD §8.1 | V34 `iam_token` PAT + tokens API | `POST/GET/DELETE /tokens`、AccessPage | E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
 | `CAP-RATE-LIMIT` | Agent/MCP 速率限制 | PRD §11.2 | `RateLimiter` token bucket | `aihub.agent.rate-limit.*`、`McpController` + Agent 写端点 | E4 未证 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
 | `CAP-AI-001` | AI 编程 IDE 实施门禁 | REQ-AI-IDE-001、DEC-009 | manifest/task schema/validator | 本地 preflight/scope/completion 校验已具备；受保护 CI 未接入 | AC-AI-IDE-001..008；本地正反例 + PR required check | `READY / CI_GAP` |
+| `CAP-REL-001` | 发布候选全量恢复与一致性审计 | REQ-REL-001、DEC-010 | `p5-completion-audit.sh`（十条款 A1–A8 自动化）、journey/perf/security 日志 | 审计脚本已实跑：journey 18/0/0、perf 无 FAIL、安全演练 6/0/1、五类契约 MCP 11 全等/OpenAPI 14 前缀对齐/Flyway A4；Noop 均不入部署 Profile | 终态 `PASS=29 FAIL=1 SKIP=1 GAP=3`：条款 8 真实违例——81/117 份 EVD commitSha 不可解析（72 orphan `7dc22d44…` + 2 orphan `4c7dfc83…` + 7 `pending-commit`）、33 绑历史 Commit、2 null；发布前必须统一重绑至发布候选 Commit；TASK-P5-007 baseCommit 陈旧待人类重签；P5003 破坏性恢复演练待用户窗口；E5 未闭环 | `PARTIAL / IMPLEMENTED_UNVERIFIED` |
 
 ## 3. 后续补全规则
 
