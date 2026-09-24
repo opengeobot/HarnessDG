@@ -5,6 +5,7 @@
  */
 package com.aihub.transfer.api;
 
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.api.CursorPage;
 import com.aihub.shared.error.AuthorizationException;
 import com.aihub.shared.error.ErrorCode;
@@ -41,40 +42,40 @@ public class UploadController {
 
     /** 创建上传会话。 */
     @PostMapping("/assets/{assetId}/versions/{versionId}/upload-sessions")
-    public UploadSessionView createSession(
+    public ApiResponse<UploadSessionView> createSession(
             @PathVariable String assetId,
             @PathVariable String versionId,
             @RequestBody CreateSessionRequest body) {
-        return uploadApplicationService.createSession(
+        return TransferApiContext.respond(uploadApplicationService.createSession(
                 assetId, versionId,
                 body.totalBytes(), body.fileCount(),
-                requirePrincipalId());
+                requirePrincipalId()));
     }
 
     /** 查询上传会话详情。 */
     @GetMapping("/upload-sessions/{sessionId}")
-    public UploadSessionView getSession(@PathVariable String sessionId) {
-        return uploadApplicationService.getSession(sessionId);
+    public ApiResponse<UploadSessionView> getSession(@PathVariable String sessionId) {
+        return TransferApiContext.respond(uploadApplicationService.getSession(sessionId));
     }
 
     /** 按资产查询上传会话详情（含分片状态，用于恢复）。 */
     @GetMapping("/assets/{assetId}/upload-sessions/{sessionId}")
-    public UploadSessionView getSessionForAsset(@PathVariable String assetId,
+    public ApiResponse<UploadSessionView> getSessionForAsset(@PathVariable String assetId,
                                                  @PathVariable String sessionId) {
-        return uploadApplicationService.getSessionForAsset(assetId, sessionId);
+        return TransferApiContext.respond(uploadApplicationService.getSessionForAsset(assetId, sessionId));
     }
 
     /** 签发 Part 上传预签名 URL。 */
     @GetMapping("/upload-sessions/{sessionId}/parts/{partNumber}/presign")
-    public Map<String, String> presignPart(@PathVariable String sessionId,
+    public ApiResponse<Map<String, String>> presignPart(@PathVariable String sessionId,
                                             @PathVariable int partNumber) {
         URL url = uploadApplicationService.presignPartUpload(sessionId, partNumber, requirePrincipalId());
-        return Map.of("url", url.toString());
+        return TransferApiContext.respond(Map.of("url", url.toString()));
     }
 
     /** 完成上传会话。 */
     @PostMapping("/upload-sessions/{sessionId}/complete")
-    public UploadSessionView completeSession(@PathVariable String sessionId,
+    public ApiResponse<UploadSessionView> completeSession(@PathVariable String sessionId,
                                               @RequestBody CompleteSessionRequest body) {
         List<StoragePort.PartInfo> parts = body.parts().stream()
                 .map(p -> new StoragePort.PartInfo(p.partNumber(), p.etag()))
@@ -85,22 +86,23 @@ public class UploadController {
                         .map(f -> new UploadApplicationService.FileMetadata(
                                 f.path(), f.sha256(), f.size(), f.mediaType(), f.sampleContent()))
                         .toList();
-        return uploadApplicationService.completeSession(sessionId, parts, files, requirePrincipalId());
+        return TransferApiContext.respond(
+                uploadApplicationService.completeSession(sessionId, parts, files, requirePrincipalId()));
     }
 
     /** 取消上传会话。 */
     @PostMapping("/upload-sessions/{sessionId}/cancel")
-    public UploadSessionView cancelSession(@PathVariable String sessionId) {
-        return uploadApplicationService.cancelSession(sessionId, requirePrincipalId());
+    public ApiResponse<UploadSessionView> cancelSession(@PathVariable String sessionId) {
+        return TransferApiContext.respond(uploadApplicationService.cancelSession(sessionId, requirePrincipalId()));
     }
 
     /** 列出资产下的上传会话。 */
     @GetMapping("/assets/{assetId}/upload-sessions")
-    public CursorPage<UploadSessionView> listSessions(
+    public ApiResponse<CursorPage<UploadSessionView>> listSessions(
             @PathVariable String assetId,
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") int limit) {
-        return uploadApplicationService.listSessions(assetId, cursor, limit);
+        return TransferApiContext.respond(uploadApplicationService.listSessions(assetId, cursor, limit));
     }
 
     /** 创建上传会话请求体。 */

@@ -387,13 +387,17 @@ public class PublishApplicationService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> listPublishRequests(String assetId) {
         authorizationService.requirePermission(Permissions.ASSET_READ);
+        // publish_request 无 created_at 列：提交时间即 submitted_at（V17 schema），
+        // 此前误写 pr.created_at 导致深链 /review?assetId= 查询 500。
+        // 对外仍输出 created_at 键名，与前端 ReviewPage 的 r.created_at 映射保持一致。
         return jdbcTemplate.queryForList("""
                 SELECT pr.request_id, pr.version_id, pr.frozen_digest, pr.frozen_source_commit,
-                       pr.policy_version, pr.status, pr.submitted_by, pr.decided_at, pr.created_at
+                       pr.policy_version, pr.status, pr.submitted_by, pr.decided_at,
+                       pr.submitted_at AS created_at
                 FROM publish_request pr
                 JOIN asset_version av ON pr.version_id = av.version_id
                 WHERE av.asset_id = ?
-                ORDER BY pr.created_at DESC
+                ORDER BY pr.submitted_at DESC
                 """, assetId);
     }
 

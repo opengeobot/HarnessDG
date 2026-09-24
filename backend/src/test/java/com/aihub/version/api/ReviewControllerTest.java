@@ -81,7 +81,7 @@ class ReviewControllerTest {
         mockMvc.perform(post("/api/v1/versions/ver_001/publish-requests")
                         .header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.requestId").value("pbr_001"));
+                .andExpect(jsonPath("$.data.requestId").value("pbr_001"));
     }
 
     @Test
@@ -95,7 +95,7 @@ class ReviewControllerTest {
                                 {"decision":"APPROVE","comments":"LGTM"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("submitted"));
+                .andExpect(jsonPath("$.data.status").value("submitted"));
     }
 
     @Test
@@ -105,7 +105,7 @@ class ReviewControllerTest {
         mockMvc.perform(post("/api/v1/versions/ver_001/deprecate")
                         .header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("deprecated"));
+                .andExpect(jsonPath("$.data.status").value("deprecated"));
     }
 
     @Test
@@ -115,6 +115,6 @@ class ReviewControllerTest {
         mockMvc.perform(post("/api/v1/versions/ver_001/archive")
                         .header(HttpHeaders.AUTHORIZATION, bearer()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("archived"));
+                .andExpect(jsonPath("$.data.status").value("archived"));
     }
 }

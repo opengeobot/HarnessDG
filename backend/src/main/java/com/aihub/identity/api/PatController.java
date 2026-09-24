@@ -5,6 +5,7 @@
  */
 package com.aihub.identity.api;
 
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.identity.application.CreatedPatView;
 import com.aihub.identity.application.PatApplicationService;
 import com.aihub.identity.application.PatView;
@@ -36,14 +37,14 @@ public class PatController {
     /** 创建 PAT（完整 Token 仅返回一次）。 */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public CreatedPatView createPat(@RequestBody CreatePatRequest request) {
-        return patService.createPat(request.name(), request.scopes(), request.ttlDays());
+    public ApiResponse<CreatedPatView> createPat(@RequestBody CreatePatRequest request) {
+        return IdentityApiContext.respond(patService.createPat(request.name(), request.scopes(), request.ttlDays()));
     }
 
     /** 列出当前用户的 PAT。 */
     @GetMapping
-    public List<PatView> listPats() {
-        return patService.listOwnPats();
+    public ApiResponse<List<PatView>> listPats() {
+        return IdentityApiContext.respond(patService.listOwnPats());
     }
 
     /** 吊销 PAT。 */

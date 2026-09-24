@@ -172,11 +172,12 @@ class UploadTransferIT {
 
     @Test
     void downloadTicketDeniedForUnpublishedVersion() {
-        // Version is DRAFT, not PUBLISHED — download should fail
+        // Version is DRAFT, not PUBLISHED — download fails as 409 business conflict
+        // (VERSION_STATE_NOT_ALLOWED), not a 500 fallback.
         setPrincipal(OWNER, Set.of("asset:read", "asset:download"));
 
         assertThatThrownBy(() -> downloadService.issueTicket(versionId, null))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(com.aihub.shared.error.ConflictException.class);
     }
 
     @Test

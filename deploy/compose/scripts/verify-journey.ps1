@@ -171,7 +171,10 @@ if (-not $assetId) {
         Invoke-Api -Method POST -Path "/api/v1/assets/$assetId/versions/$verId/transition" -Headers $auth -Body '{"targetStatus":"VALIDATING"}' | Out-Null
         Start-Sleep -Seconds 2
         $pubReq = Invoke-Api -Method POST -Path "/api/v1/versions/$verId/publish-requests" -Headers $auth -Body '{}'
-        $reqId = Get-JsonField $pubReq.Body "requestId"
+        # Envelope: top-level requestId (req_) shadows data.requestId (pub_)
+        # under Get-JsonField leftmost match; unwrap data explicitly.
+        $reqId = ""
+        try { $reqId = ($pubReq.Body | ConvertFrom-Json).data.requestId } catch { $reqId = "" }
         if ($reqId) {
             Invoke-Api -Method POST -Path "/api/v1/publish-requests/$reqId/decisions" -Headers $auth -Body '{"decision":"APPROVE"}' | Out-Null
             Start-Sleep -Seconds 3

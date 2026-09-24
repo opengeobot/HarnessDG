@@ -6,6 +6,7 @@
 package com.aihub.version.api;
 
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.version.application.PreviewApplicationService;
@@ -44,16 +45,16 @@ public class PreviewController {
      * @return 预览视图
      */
     @GetMapping
-    public PreviewApplicationService.PreviewView getPreview(@PathVariable String assetId,
+    public ApiResponse<PreviewApplicationService.PreviewView> getPreview(@PathVariable String assetId,
                                                             @RequestParam(required = false) String versionId) {
-        return previewApplicationService.getPreview(assetId, versionId);
+        return VersionApiContext.respond(previewApplicationService.getPreview(assetId, versionId));
     }
 
     /**
      * 触发预览生成 Job。
      */
     @PostMapping("/generate")
-    public Map<String, String> triggerPreviewGeneration(@PathVariable String assetId,
+    public ApiResponse<Map<String, String>> triggerPreviewGeneration(@PathVariable String assetId,
                                                         @RequestBody GeneratePreviewRequest body) {
         authorizationService.requirePermission("asset:manage");
         String principalId = PrincipalContextHolder.current()
@@ -64,7 +65,7 @@ public class PreviewController {
                 body.content(),
                 body.contentType(),
                 principalId);
-        return Map.of("jobId", jobId);
+        return VersionApiContext.respond(Map.of("jobId", jobId));
     }
 
     /** 触发预览生成请求。 */

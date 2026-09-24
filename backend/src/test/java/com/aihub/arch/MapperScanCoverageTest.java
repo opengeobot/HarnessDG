@@ -17,9 +17,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
+import org.apache.ibatis.annotations.Mapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.util.ClassUtils;
 
@@ -82,6 +86,67 @@ class MapperScanCoverageTest {
                 "com.aihub.asset.discussion.infrastructure.CommentRevisionMapper");
     }
 
+    /**
+     * 反向不变量：{@code @MapperScan} 必须以 {@code @Mapper} 限定，且 Mapper 接口不得由
+     * Spring 托管的适配器类实现。
+     *
+     * <p>前半段守护扫描收窄：一旦省略 {@code annotationClass}，MyBatis 会把扫描包内**每个**接口都
+     * 注册成 Mapper 代理，纯出站端口（曾经的 {@code GiteaRepositoryExistencePort}、
+     * {@code GiteaTagVerificationPort}、{@code MinioObjectExistencePort}）就与其 Rest 适配器构成
+     * 两个同类型 Bean，{@code ObjectProvider.getIfAvailable()} 抛
+     * {@code NoUniqueBeanDefinitionException}，对账任务（ASSET_REPO_RECONCILE、
+     * MINIO_STORAGE_RECONCILE）反复重试至 DEAD。
+     *
+     * <p>后半段堵住同源的镜像退路：若改为给端口接口补 {@code @Mapper} 来满足前半段，Rest 适配器
+     * 自身仍会因 {@code @Component} 注册，双 Bean 故障原样复现。故障只在运行期暴露，故在此固定
+     * 编译期不变量。
+     */
+    @Test
+    @DisplayName("@MapperScan 必须以 @Mapper 限定，且 Mapper 接口不得由 Spring 托管适配器实现")
+    void mapperScanMustBeAnnotationScopedAndMappersMustStayPureProxies() {
+        assertThat(declaredMapperScan().annotationClass())
+                .as("@MapperScan 必须限定 annotationClass = Mapper.class，"
+                        + "否则 infrastructure 包内所有接口都会被注册为 Mapper 代理")
+                .isEqualTo(Mapper.class);
+
+        JavaClasses classes = new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("com.aihub");
+
+        Set<String> mapperInterfaceNames = classes.stream()
+                .filter(javaClass -> javaClass.isInterface())
+                .filter(javaClass -> javaClass.isAnnotatedWith(Mapper.class))
+                .map(javaClass -> javaClass.getName())
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(mapperInterfaceNames).isNotEmpty();
+
+        List<String> conflictingAdapters = classes.stream()
+                .filter(javaClass -> !javaClass.isInterface())
+                .filter(MapperScanCoverageTest::isSpringManaged)
+                .filter(javaClass -> javaClass.getAllRawInterfaces().stream()
+                        .anyMatch(itf -> mapperInterfaceNames.contains(itf.getName())))
+                .map(javaClass -> javaClass.getName())
+                .sorted()
+                .toList();
+
+        assertThat(conflictingAdapters)
+                .as("以下 Spring 托管 Bean 实现了 @Mapper 接口，会与 MapperScan 代理构成同类型双 Bean；"
+                        + "@Mapper 只能标注由 MyBatis 独占生成的纯 Mapper 接口")
+                .isEmpty();
+    }
+
+    private static boolean isSpringManaged(com.tngtech.archunit.core.domain.JavaClass javaClass) {
+        return javaClass.isAnnotatedWith(Component.class)
+                || javaClass.isAnnotatedWith(Service.class)
+                || javaClass.isAnnotatedWith(Repository.class);
+    }
+
+    private static MapperScan declaredMapperScan() {
+        MapperScan scan = AihubApplication.class.getAnnotation(MapperScan.class);
+        assertThat(scan).as("AihubApplication 必须声明 @MapperScan 才能注册 Mapper").isNotNull();
+        return scan;
+    }
+
     private static List<String> mapperClassNames(JavaClasses classes) {
         return classes.stream()
                 .filter(javaClass -> javaClass.isInterface())
@@ -93,8 +158,7 @@ class MapperScanCoverageTest {
 
     /** 读取 {@code @MapperScan} 声明的扫描模式（{@code value} 与 {@code basePackages} 两种写法）。 */
     private static Set<String> declaredScanPatterns() {
-        MapperScan scan = AihubApplication.class.getAnnotation(MapperScan.class);
-        assertThat(scan).as("AihubApplication 必须声明 @MapperScan 才能注册 Mapper").isNotNull();
+        MapperScan scan = declaredMapperScan();
         Set<String> patterns = new LinkedHashSet<>();
         Stream.concat(Arrays.stream(scan.value()), Arrays.stream(scan.basePackages()))
                 .filter(pattern -> !pattern.isBlank())

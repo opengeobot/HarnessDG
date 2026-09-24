@@ -24,9 +24,12 @@ public class PreviewQueryRepository implements PreviewQueryPort {
 
     @Override
     public Optional<PreviewRecord> findLatestPreview(String assetId, String versionId) {
+        // versionId is nullable; a bare "? IS NULL" leaves PG unable to infer
+        // the parameter type (could not determine data type of parameter),
+        // so an explicit CAST is required.
         var rows = jdbcTemplate.queryForList(
                 "SELECT preview_id, content_type, content, generated_at FROM asset_preview "
-                        + "WHERE asset_id = ? AND (? IS NULL OR version_id = ?) "
+                        + "WHERE asset_id = ? AND (CAST(? AS varchar) IS NULL OR version_id = ?) "
                         + "ORDER BY generated_at DESC LIMIT 1",
                 assetId, versionId, versionId);
         if (rows.isEmpty()) {

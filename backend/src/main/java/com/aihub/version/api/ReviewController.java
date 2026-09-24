@@ -1,5 +1,6 @@
 package com.aihub.version.api;
 
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.version.application.PublishApplicationService;
 import java.util.Map;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,37 +28,37 @@ public class ReviewController {
      * 提交发布请求。
      */
     @PostMapping("/versions/{versionId}/publish-requests")
-    public Map<String, String> submitPublishRequest(@PathVariable String versionId) {
+    public ApiResponse<Map<String, String>> submitPublishRequest(@PathVariable String versionId) {
         String requestId = publishApplicationService.submitPublishRequest(versionId);
-        return Map.of("requestId", requestId);
+        return VersionApiContext.respond(Map.of("requestId", requestId));
     }
 
     /**
      * 提交审批决策。
      */
     @PostMapping("/publish-requests/{requestId}/decisions")
-    public Map<String, String> submitDecision(@PathVariable String requestId,
+    public ApiResponse<Map<String, String>> submitDecision(@PathVariable String requestId,
                                               @RequestBody DecisionRequest body) {
         publishApplicationService.submitDecision(requestId, body.decision(), body.comments());
-        return Map.of("status", "submitted");
+        return VersionApiContext.respond(Map.of("status", "submitted"));
     }
 
     /**
      * 弃用版本。
      */
     @PostMapping("/versions/{versionId}/deprecate")
-    public Map<String, String> deprecateVersion(@PathVariable String versionId) {
+    public ApiResponse<Map<String, String>> deprecateVersion(@PathVariable String versionId) {
         publishApplicationService.deprecateVersion(versionId);
-        return Map.of("status", "deprecated");
+        return VersionApiContext.respond(Map.of("status", "deprecated"));
     }
 
     /**
      * 归档版本。
      */
     @PostMapping("/versions/{versionId}/archive")
-    public Map<String, String> archiveVersion(@PathVariable String versionId) {
+    public ApiResponse<Map<String, String>> archiveVersion(@PathVariable String versionId) {
         publishApplicationService.archiveVersion(versionId);
-        return Map.of("status", "archived");
+        return VersionApiContext.respond(Map.of("status", "archived"));
     }
 
     public record DecisionRequest(String decision, String comments) {}

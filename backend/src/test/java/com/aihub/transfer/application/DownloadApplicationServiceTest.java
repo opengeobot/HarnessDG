@@ -105,7 +105,7 @@ class DownloadApplicationServiceTest {
         when(versionRepository.findByVersionId("ver_1")).thenReturn(Optional.of(version));
 
         assertThatThrownBy(() -> service.issueTicket("ver_1", null))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(com.aihub.shared.error.ConflictException.class)
                 .hasMessageContaining("PUBLISHED");
     }
 

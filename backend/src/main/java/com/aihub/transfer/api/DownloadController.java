@@ -1,5 +1,6 @@
 package com.aihub.transfer.api;
 
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.transfer.application.DownloadApplicationService;
 import com.aihub.transfer.application.DownloadApplicationService.DownloadTicket;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,8 +32,8 @@ public class DownloadController {
      * @return 下载票据视图
      */
     @GetMapping("/download")
-    public DownloadTicket issueDownloadTicket(@PathVariable String versionId,
-                                              @RequestParam(required = false) String artifactId) {
-        return downloadApplicationService.issueTicket(versionId, artifactId);
+    public ApiResponse<DownloadTicket> issueDownloadTicket(@PathVariable String versionId,
+                                                           @RequestParam(required = false) String artifactId) {
+        return TransferApiContext.respond(downloadApplicationService.issueTicket(versionId, artifactId));
     }
 }

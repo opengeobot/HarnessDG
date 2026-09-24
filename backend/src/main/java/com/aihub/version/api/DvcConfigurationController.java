@@ -1,5 +1,6 @@
 package com.aihub.version.api;
 
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.version.application.DvcConfigurationService;
 import com.aihub.version.application.DvcConfigurationService.DvcCredentials;
 import com.aihub.version.application.DvcConfigurationService.DvcRemoteConfig;
@@ -30,8 +31,8 @@ public class DvcConfigurationController {
      * @return DVC Remote 配置视图
      */
     @GetMapping("/config")
-    public DvcRemoteConfig getRemoteConfig(@PathVariable String assetId) {
-        return dvcConfigurationService.generateRemoteConfig(assetId);
+    public ApiResponse<DvcRemoteConfig> getRemoteConfig(@PathVariable String assetId) {
+        return VersionApiContext.respond(dvcConfigurationService.generateRemoteConfig(assetId));
     }
 
     /**
@@ -41,7 +42,7 @@ public class DvcConfigurationController {
      * @return DVC 短期凭据视图
      */
     @GetMapping("/credentials")
-    public DvcCredentials getCredentials(@PathVariable String assetId) {
-        return dvcConfigurationService.issueCredentials(assetId);
+    public ApiResponse<DvcCredentials> getCredentials(@PathVariable String assetId) {
+        return VersionApiContext.respond(dvcConfigurationService.issueCredentials(assetId));
     }
 }

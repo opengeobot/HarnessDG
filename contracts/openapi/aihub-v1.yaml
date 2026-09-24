@@ -1586,7 +1586,12 @@ paths:
           description: PAT 已创建
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CreatedPatView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CreatedPatView' }
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
     get:
@@ -1602,8 +1607,13 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/PatView' }
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/PatView' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /tokens/{tokenId}:
@@ -1637,7 +1647,12 @@ paths:
           description: Agent 接入配置包
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AgentBundleView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AgentBundleView' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /assets:
@@ -3068,9 +3083,14 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  requestId: { type: string }
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          requestId: { type: string }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3096,9 +3116,14 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status: { type: string }
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status: { type: string }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3119,9 +3144,14 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status: { type: string }
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status: { type: string }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3142,9 +3172,14 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status: { type: string }
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status: { type: string }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3167,7 +3202,12 @@ paths:
           description: 预览内容
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PreviewView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/PreviewView' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3199,9 +3239,14 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  jobId: { type: string }
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          jobId: { type: string }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3220,7 +3265,12 @@ paths:
           description: DVC Remote 配置
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/DvcRemoteConfig' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/DvcRemoteConfig' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3239,7 +3289,12 @@ paths:
           description: DVC 短期凭据
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/DvcCredentials' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/DvcCredentials' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3263,7 +3318,12 @@ paths:
           description: 上传会话列表
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/CursorPageUploadSessionView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/CursorPageUploadSessionView' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /assets/{assetId}/versions/{versionId}/upload-sessions:
@@ -3293,7 +3353,12 @@ paths:
           description: 会话已创建
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UploadSessionView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadSessionView' }
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3312,7 +3377,12 @@ paths:
           description: 会话详情
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UploadSessionView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadSessionView' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /assets/{assetId}/upload-sessions/{sessionId}:
@@ -3331,7 +3401,12 @@ paths:
           description: 会话详情
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UploadSessionView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadSessionView' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /upload-sessions/{sessionId}/parts/{partNumber}/presign:
@@ -3351,10 +3426,15 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  url: { type: string }
-                required: [url]
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          url: { type: string }
+                        required: [url]
         '404': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -3400,7 +3480,12 @@ paths:
           description: 会话已完成
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UploadSessionView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadSessionView' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
 
   /upload-sessions/{sessionId}/cancel:
@@ -3418,7 +3503,12 @@ paths:
           description: 会话已取消
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UploadSessionView' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/UploadSessionView' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
 
   # ── 下载票据（DownloadController） ──
@@ -3431,7 +3521,7 @@ paths:
       summary: 签发下载票据
       tags: [transfer]
       x-implementation-status: implemented-unverified
-      x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, AUTH_PERMISSION_DENIED]
+      x-error-codes: [VERSION_NOT_FOUND, ASSET_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED]
       x-required-permissions: [asset:read]
       parameters:
         - { name: artifactId, in: query, schema: { type: string } }
@@ -3440,7 +3530,12 @@ paths:
           description: 下载票据
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/DownloadTicket' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/DownloadTicket' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 

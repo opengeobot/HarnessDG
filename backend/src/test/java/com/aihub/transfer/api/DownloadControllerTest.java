@@ -86,8 +86,8 @@ class DownloadControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("asset:read")))
                         .param("artifactId", "art_01"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.method").value("PRESIGNED_URL"))
-                .andExpect(jsonPath("$.presignedUrl").value("https://minio/dvc-cache/obj"));
+                .andExpect(jsonPath("$.data.method").value("PRESIGNED_URL"))
+                .andExpect(jsonPath("$.data.presignedUrl").value("https://minio/dvc-cache/obj"));
     }
 
     @Test
@@ -100,9 +100,9 @@ class DownloadControllerTest {
         mockMvc.perform(get("/api/v1/versions/ver_01/download")
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("asset:read"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.method").value("GIT_DVC"))
-                .andExpect(jsonPath("$.gitCloneUrl").value("https://git.example.com/repo.git"))
-                .andExpect(jsonPath("$.dvcCredentialsUrl").value("/api/v1/assets/ast_01/dvc/credentials"));
+                .andExpect(jsonPath("$.data.method").value("GIT_DVC"))
+                .andExpect(jsonPath("$.data.gitCloneUrl").value("https://git.example.com/repo.git"))
+                .andExpect(jsonPath("$.data.dvcCredentialsUrl").value("/api/v1/assets/ast_01/dvc/credentials"));
     }
 
     @Test

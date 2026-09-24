@@ -5,6 +5,7 @@
  */
 package com.aihub.integration.api;
 
+import com.aihub.shared.api.ApiResponse;
 import com.aihub.integration.application.AgentBundleApplicationService;
 import com.aihub.integration.application.AgentBundleView;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +27,7 @@ public class IntegrationsController {
 
     /** 返回 Agent 接入配置包。 */
     @GetMapping("/agent-bundle")
-    public AgentBundleView getAgentBundle() {
-        return agentBundleService.getAgentBundle();
+    public ApiResponse<AgentBundleView> getAgentBundle() {
+        return IntegrationApiContext.respond(agentBundleService.getAgentBundle());
     }
 }

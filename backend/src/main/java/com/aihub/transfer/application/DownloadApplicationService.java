@@ -6,6 +6,7 @@ import com.aihub.audit.application.AuditEvent;
 import com.aihub.audit.application.AuditService;
 import com.aihub.audit.domain.AuditResult;
 import com.aihub.authorization.application.AuthorizationService;
+import com.aihub.shared.error.ConflictException;
 import com.aihub.shared.error.ErrorCode;
 import com.aihub.shared.error.NotFoundException;
 import com.aihub.shared.identity.PrincipalContextHolder;
@@ -61,16 +62,22 @@ public class DownloadApplicationService {
      * @return 下载票据视图
      */
     public DownloadTicket issueTicket(String versionId, String artifactId) {
+        // 权限先行（fail closed）：与 PublishApplicationService / VersionApplicationService
+        // 同族先例一致，防止未授权调用者通过 404/409 差异探测版本存在性与状态。
+        authorizationService.requirePermission("asset:read");
+
         Version version = versionRepository.findByVersionId(versionId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND,
                         "version not found", Map.of("versionId", versionId)));
 
         if (version.status() != VersionStatus.PUBLISHED) {
-            throw new IllegalStateException(
-                    "only PUBLISHED versions can be downloaded, current: " + version.status());
+            // 状态机违规是可预期的业务冲突：需求（p2-version-transfer REQ-DLD）与
+            // PublishApplicationService 同类先例均要求 VERSION_STATE_NOT_ALLOWED(409)，
+            // 裸 IllegalStateException 会被全局兜底映射为 500，误导客户端重试。
+            throw new ConflictException(ErrorCode.VERSION_STATE_NOT_ALLOWED,
+                    "only PUBLISHED versions can be downloaded, current: " + version.status(),
+                    Map.of("versionId", versionId, "currentStatus", version.status().name()));
         }
-
-        authorizationService.requirePermission("asset:read");
 
         Asset asset = assetRepository.findByAssetId(version.assetId())
                 .orElseThrow(() -> new NotFoundException(ErrorCode.ASSET_NOT_FOUND,
