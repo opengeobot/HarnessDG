@@ -1,43 +1,278 @@
-# AIHub Platform Alert Rules (P5 ops reference)
-# Sync with deploy/compose/grafana/alerting-rules.yaml for Compose deployments.
+# =============================================================================
+# AIHub Platform 告警规则规格（权威源）
+# 任务: TASK-P5-006 (REQ-OPS-001 / AC-P5-OPS-001 / DEC-010)
+# 时间: 2026-09-23
+# 作者: AxeXie
+#
+# 定位: 本文件是 P5 告警的"规格契约"(spec-of-record)，覆盖 REQ-OPS-001 要求的
+#       8 类告警面，每条规则统一携带 severity / threshold+window / dedupe /
+#       owner / runbook / silence / 恢复条件。
+#
+# 指标接线状态(2026-09-23 代码事实源核实):
+#   - LIVE  (真实接线, 规则可生效): job_queue_size{status=...} (JobConfiguration
+#     jobMetrics 注册的 Micrometer Gauge)、aihub_reconciliation_discrepancies_total、
+#     aihub_webhook_deliveries_total、aihub_audit_events_total、
+#     http_server_requests_seconds_*、hikaricp_*、jvm_*、up{}。
+#   - DEAD  (Micrometer setter 零调用方, 恒 0, 规则永不生效): aihub_job_dead_count、
+#     aihub_job_queue_depth、aihub_webhook_inbox_pending、aihub_upload_sessions_active、
+#     aihub_asset_count_by_status。本规格已将指向这些死 gauge 的表达式改到 live 指标。
+#
+# 运行期落地边界(越项, 不在本卡 allowedPaths, 需后续卡同步):
+#   - Compose 中 Prometheus 实际挂载加载的是 deploy/compose/grafana/alerting-rules.yaml,
+#     与本权威源存在漂移; 同步该文件需含 deploy/compose 的 allowedPath。
+#   - deploy/compose/prometheus/prom.yaml 抓取 /actuator/prometheus 未配置凭据,
+#     backend 该端点需 JWT, 抓取当前返回 401, 故 Prometheus 侧规则求值链未打通;
+#     抓取鉴权修复需 backend 安全配置 + prom.yaml (均不在本卡 allowedPaths)。
+#   - 应用内告警(AlertService -> system_alert) 是独立运行链, 不受上述抓取限制,
+#     见 docs/runbooks/ops.md 故障演练章节与 EVD-P5006-001。
+#
+# silence 统一指向 docs/runbooks/ops.md#告警静默与升级; owner 统一 oncall-platform。
+# =============================================================================
 groups:
+  # ---- 1. DEAD / 积压 / 租约过期 (job) ----
   - name: aihub-job-alerts
     rules:
       - alert: JobDead
-        expr: aihub_job_dead_count > 0
+        # live: job_queue_size{status="dead"} (原 aihub_job_dead_count 为死 gauge, 恒 0)
+        # threshold: >0 (与 AlertService DEAD_JOB_THRESHOLD=1 对齐); window: 1m
+        expr: job_queue_size{status="dead"} > 0
         for: 1m
         labels:
           severity: critical
-          runbook: docs/runbooks/ops.md#dead-job-演练步骤
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#dead-job演练步骤
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 system_alert alert_type=DEAD_JOB / JOB_DEAD (AlertService 幂等)"
         annotations:
-          summary: "Dead jobs detected"
-          description: "{{ $value }} jobs have exceeded max retry attempts. Check GET /api/v1/system/jobs?status=DEAD"
+          summary: "可靠任务进入 DEAD 状态"
+          description: "{{ $value }} 个任务超过最大重试次数进入 DEAD。查 GET /api/v1/system/jobs?status=DEAD, 分析 error_code, 人工重试或修复根因。恢复条件: DEAD 清零(重试成功或人工处置)。"
 
       - alert: JobQueueBacklog
-        expr: aihub_job_queue_depth > 50
+        # live: job_queue_size (原 aihub_job_queue_depth 为死 gauge, 恒 0)
+        # threshold: pending+retry_wait >50; window: 5m
+        expr: job_queue_size{status=~"pending|retry_wait"} > 50
         for: 5m
         labels:
           severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#dead-job演练步骤
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "无独立应用内告警(积压非 DEAD), 由 Job 对账/租约 Reconciler 兜底"
         annotations:
-          summary: "Job queue backlog exceeds 50 ({{ $labels.type }})"
+          summary: "任务队列积压超过 50"
+          description: "pending/retry_wait 任务数 {{ $value }} 持续 5 分钟。确认 Worker 容器运行与 JobWorkerScheduler tick 正常。恢复条件: 积压回落 <50。"
 
+  # ---- 2. 错误率 / 延迟 (HTTP, Spring Boot 内置 live 指标) ----
+  - name: aihub-http-alerts
+    rules:
+      - alert: HighErrorRate
+        # live: http_server_requests_seconds_count (Micrometer 内置)
+        # threshold: 5xx 占比 >5%; window: 5m 比率 + 5m 持续
+        expr: rate(http_server_requests_seconds_count{status=~"5.."}[5m]) / rate(http_server_requests_seconds_count[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#告警类型与响应
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "按 uri 标签天然去重, 无应用内对应"
+        annotations:
+          summary: "HTTP 5xx 错误率超过 5%"
+          description: "当前 5xx 比率 {{ $value | humanizePercentage }} (uri={{ $labels.uri }})。查 backend 日志与 /actuator/health。恢复条件: 比率回落 <5%。"
+
+      - alert: HighLatency
+        # live: http_server_requests_seconds_bucket (percentiles-histogram 已启用)
+        # threshold: P95 >2s; window: 5m 直方图 + 5m 持续
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#告警类型与响应
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "无应用内对应"
+        annotations:
+          summary: "HTTP P95 延迟超过 2s"
+          description: "当前 P95 {{ $value }}s。查 DB 连接池(hikaricp_*)与慢查询。恢复条件: P95 回落 <2s。"
+
+  # ---- 3. 资源 (DB 连接池 / JVM 堆, live) ----
+  - name: aihub-resource-alerts
+    rules:
+      - alert: DatabaseConnectionPoolExhausted
+        # live: hikaricp_connections_pending (Micrometer 内置)
+        # threshold: pending >10; window: 2m
+        expr: hikaricp_connections_pending > 10
+        for: 2m
+        labels:
+          severity: critical
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#告警类型与响应
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "无应用内对应"
+        annotations:
+          summary: "DB 连接池接近耗尽"
+          description: "{{ $value }} 个连接在 HikariCP 等待队列。查慢事务/连接泄漏。恢复条件: pending 回落 <10。"
+
+      - alert: JvmHeapHigh
+        # live: jvm_memory_used_bytes / jvm_memory_max_bytes (Micrometer 内置)
+        # threshold: heap 使用 >85%; window: 10m
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#告警类型与响应
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "无应用内对应"
+        annotations:
+          summary: "JVM 堆使用超过 85%"
+          description: "当前堆使用 {{ $value | humanizePercentage }}。查内存泄漏/大对象。恢复条件: 使用回落 <85%。"
+
+  # ---- 4. Tag/Manifest/DVC 一致性 + Reconciler MANUAL/SECURITY (live counter) ----
+  - name: aihub-consistency-alerts
+    rules:
+      - alert: ReconciliationDiscrepancy
+        # live: aihub_reconciliation_discrepancies_total (6 个 Reconciler 调用)
+        # 用窗口增量而非累积值, 避免历史差异后永久告警; threshold: 5m 增量 >0; window: 5m
+        expr: increase(aihub_reconciliation_discrepancies_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#一致性备份故障演练
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 webhook_inbox 审计行 (outbox-reconcile-*/pubver-reconcile-*) 留痕"
+        annotations:
+          summary: "对账检测到一致性差异"
+          description: "过去 5 分钟新增 {{ $value }} 条对账差异 (reconciler={{ $labels.reconciler }}, category={{ $labels.category }})。查 reconciliation_checkpoint 与 webhook_inbox 审计行。恢复条件: 修复后差异不再新增。"
+
+      - alert: ReconcilerManualReview
+        # live: aihub_reconciliation_discrepancies_total{category="MANUAL_REVIEW"}
+        # strict profile (compose/production) 下 GITEA_UNAVAILABLE/格式异常 -> MANUAL_REVIEW
+        # threshold: 15m 增量 >0; window: 15m
+        expr: increase(aihub_reconciliation_discrepancies_total{category="MANUAL_REVIEW"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#一致性备份故障演练
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 MANUAL_REVIEW 状态 + webhook_inbox 审计行"
+        annotations:
+          summary: "对账进入 MANUAL_REVIEW 需人工介入"
+          description: "过去 15 分钟 {{ $value }} 条差异转 MANUAL_REVIEW。人工核对 PG↔Gitea/MinIO 事实源, 按 runbook 补偿。恢复条件: 人工处置完成。"
+
+  # ---- 5. Webhook 连续失败 (live counter, 替代原 inbox 积压死 gauge) ----
   - name: aihub-webhook-alerts
     rules:
+      - alert: WebhookDeliveryDead
+        # live: aihub_webhook_deliveries_total{status="DEAD"} (WebhookDeliveryService 调用)
+        # 原 WebhookInboxBacklog 指向死 gauge aihub_webhook_inbox_pending, 已改为投递 DEAD 语义
+        # threshold: 10m 内新增 DEAD >0; window: 10m
+        expr: increase(aihub_webhook_deliveries_total{status="DEAD"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#webhook故障演练
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 system_alert alert_type=DEAD_DELIVERY (AlertService 阈值 5)"
+        annotations:
+          summary: "Webhook 投递进入 DEAD"
+          description: "过去 10 分钟 {{ $value }} 次投递重试耗尽转 DEAD。查 webhook_delivery.last_error 与目标 URL/签名。恢复条件: 修复目标后新投递成功。"
+
       - alert: WebhookInboxBacklog
+        # DEAD 指标: aihub_webhook_inbox_pending 无 Micrometer 接线 (setter 零调用方, 恒 0)
+        # 本规则当前"规格保留 / 不生效", 用于暴露 webhook_inbox PENDING 无 live gauge 的缺口。
+        # 积压告警当前由应用内 AlertService OUTBOX_BACKLOG 承担 (见 ops.md)。
+        # 后续卡需为 webhook_inbox PENDING 接线 live gauge 后本规则方可生效。
         expr: aihub_webhook_inbox_pending > 100
         for: 5m
         labels:
           severity: warning
-          runbook: docs/runbooks/ops.md#webhook-故障演练
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#webhook故障演练
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 system_alert alert_type=OUTBOX_BACKLOG (AlertService 阈值 100)"
+          status: "NOT_WIRED: 指标无 Micrometer 接线, 规则暂不生效, 见文件头 DEAD 清单"
         annotations:
-          summary: "Webhook inbox backlog exceeds 100"
+          summary: "[规格保留/未接线] Webhook inbox 积压超过 100"
+          description: "aihub_webhook_inbox_pending 当前恒 0 (setter 零调用方)。需为 webhook_inbox PENDING 计数接线后本规则生效。"
 
-  - name: aihub-consistency-alerts
+  # ---- 6. Token 重放 / 异常拒绝 (live 审计 counter 近似) ----
+  - name: aihub-auth-alerts
     rules:
-      - alert: ReconciliationDiscrepancy
-        expr: aihub_reconciliation_discrepancies_total > 0
+      - alert: AuthDenialSpike
+        # live: aihub_audit_events_total{result="DENIED"} (recordAuditEvent)
+        # 以授权拒绝激增近似 "token 异常拒绝/重放"; threshold: 5m DENIED 增量 >20; window: 5m
+        expr: increase(aihub_audit_events_total{result="DENIED"}[5m]) > 20
+        for: 5m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#告警类型与响应
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "审计事件表留痕; 无独立应用内告警"
+        annotations:
+          summary: "授权拒绝激增(可能 token 异常/重放)"
+          description: "过去 5 分钟 {{ $value }} 次 DENIED。查审计 eventType=AUTH_* 与来源 principal。恢复条件: 拒绝回落 <20/5m。"
+
+  # ---- 7. 服务 / 关键依赖不可用 (up{} live, 受抓取 401 限制, 见文件头) ----
+  - name: aihub-availability-alerts
+    rules:
+      - alert: BackendDown
+        # live: up{} (Prometheus 内置抓取健康)
+        # 注意: 当前 prom.yaml 抓取 /actuator/prometheus 无凭据 -> 401 -> up 恒 0, 会误报;
+        # 抓取鉴权修复(越项)后本规则方可可靠。应用侧依赖不可用另有
+        # system_alert SYSTEM_DEPENDENCY_UNHEALTHY:postgres (PostgresDependencyProbe, 见 ops.md)。
+        expr: up{job="aihub-backend"} < 1
+        for: 2m
+        labels:
+          severity: critical
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#告警类型与响应
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 system_alert SYSTEM_DEPENDENCY_UNHEALTHY:<dep> (CRITICAL)"
+          status: "CAVEAT: 抓取 401 期间 up 恒 0, 会持续误报, 需抓取鉴权修复"
+        annotations:
+          summary: "backend 抓取失败/不可用"
+          description: "up{job=aihub-backend} < 1 持续 2 分钟。先确认是否抓取 401(见 ops.md 限制), 再查 /actuator/health。恢复条件: up=1。"
+
+  # ---- 8. 存储容量 / 备份失败 (无 live counter, 规格保留 + 应用内/Runbook 承担) ----
+  - name: aihub-storage-backup-alerts
+    rules:
+      - alert: StorageQuotaWarning
+        # 应用内承担: AlertService emitStorageQuotaWarning (MinioStorageReconciler 调用,
+        # system_alert STORAGE_QUOTA_WARNING, 阈值 aihub.minio.quota-warning-percent=80)。
+        # Prometheus 侧无 live counter -> 本规则规格保留/不生效, 后续卡需为配额占比接线。
+        # expr 为永不触发的占位 (标签组合不存在时 absent() 为 0, 有匹配时恒为 0, 永不 > 0)。
+        expr: absent(up{no="match"}) > 0
         for: 0m
         labels:
           severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#一致性备份故障演练
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "应用内 system_alert alert_type=STORAGE_QUOTA_WARNING"
+          status: "NOT_WIRED: 无 live counter, 由应用内 STORAGE_QUOTA_WARNING 承担, 见文件头 DEAD 清单"
         annotations:
-          summary: "Reconciliation discrepancies detected"
+          summary: "[规格保留/未接线] 存储配额超阈值"
+          description: "当前由应用内 MinioStorageReconciler -> AlertService.emitStorageQuotaWarning 承担。需为配额占比接线后本规则生效。"
+
+      - alert: BackupFailed
+        # 无 live counter: 备份由主机侧 deploy/compose/scripts/backup.sh 执行, 无应用指标。
+        # 失败检测 = backup.sh 退出码 + manifest/checksums 校验 (Runbook 流程)。
+        # 本规则规格保留/不生效, 暴露 "备份失败无 Prometheus 告警" 的缺口。
+        # expr 为永不触发的占位 (标签组合不存在时 absent() 为 0, 有匹配时恒为 0, 永不 > 0)。
+        expr: absent(up{no="match"}) > 0
+        for: 0m
+        labels:
+          severity: warning
+          owner: oncall-platform
+          runbook: docs/runbooks/ops.md#一致性-备份故障演练
+          silence: docs/runbooks/ops.md#告警静默与升级
+          dedupe: "无应用内告警; backup.sh 退出码 + verify-restore.sh 校验"
+          status: "NOT_WIRED: 无 live counter, 由 backup.sh 退出码/Runbook 承担, 见文件头 DEAD 清单"
+        annotations:
+          summary: "[规格保留/未接线] 备份失败"
+          description: "备份失败当前无应用/Prometheus 告警, 依赖 backup.sh 退出码与 restore 校验流程 (见 backup-restore.md)。需为备份任务接线指标后本规则生效。"

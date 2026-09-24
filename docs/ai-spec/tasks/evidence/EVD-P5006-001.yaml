@@ -1,72 +1,150 @@
 schemaVersion: harnessdg.evidence/v1
+# 功能: TASK-P5-006 运维证据清单——REQ-OPS-001 Dashboard/告警/Runbook 的 E5 故障演练取证。
+# 时间: 2026-09-24 作者: AxeXie
+# E5 演练取证（2026-09-24，HEAD 44bbc67）：
+#   以 deploy/observability/p5-ops-fault-drill.sh 为主证据，走应用内 AlertService 链
+#   （system_alert 表为权威断言源，API 层仅做 HTTP 200 抽样），4 轮迭代后 exit 0：
+#   PASS=18 FAIL=0 SKIP=3。3 个 SKIP 均为已声明的结构性限制（见 coverage.notProven），
+#   不为通过而伪造。告警规则表达式经 promtool --entrypoint promtool check rules 校验：
+#   SUCCESS 14 rules found（修复 0>0 非法占位为 absent(up{no="match"})>0）。
 evidenceId: EVD-P5006-001
-status: DRAFT
+status: PARTIAL
 
 task:
   taskId: TASK-P5-006
-  requirements: 
-  scenarios: 
+  requirements: [REQ-OPS-001]
+  scenarios: [AC-P5-OPS-001]
 
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
     result: PASS
+    detail: "148 文档 / 724 稳定 ID，exit 0。"
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-006.md
-    result: null
+    result: FAIL
+    failureReason: "baseCommit(59f40d2) 与当前 HEAD(44bbc67) 不一致；Task Card 为历史授权基线，本 evidence 仅在已授权 allowedPaths(deploy/observability、docs/runbooks、本 EVD) 内取证，不改业务代码/契约/迁移。Task Card 重绑 baseCommit 需人类评审（DEC-009），不在本 evidence 范围（与 EVD-P5004/P5008 同口径）。"
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-006.md -CheckChangedPaths
-    result: null
+    result: FAIL
+    failureReason: "工具按 baseCommit(59f40d2)..HEAD 全旅程历史差异判定越界，将既往波次的 EVD/任务卡/frontend 全列为 outside allowedPaths——属 baseCommit 漂移的结构性污染，非本 Session 改动。本 Session 实际改动仅落在 deploy/observability/alerting-rules.yaml、deploy/observability/p5-ops-fault-drill.sh、docs/runbooks/ops.md 与本 EVD（PublishApplicationServiceTest.java 与状态文档显示 M 仅为 CRLF 行尾噪音，git diff --numstat 无内容差异）。"
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P5-006.md -CheckCompletion
-    result: null
+    result: FAIL
+    failureReason: "完成校验要求 EVD status=PASS 且 source commit=HEAD、level>=E5、review.accepted=true。本卡 3 个 SKIP 为结构性未证项（Prometheus live 求值/停库自举/backup.sh host 全链），status 如实定为 PARTIAL；review.accepted 需人类评审，AI 不得自批（DEC-009）。因此 completionValidation FAIL 为预期结构性残留，非缺陷掩盖。"
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
-  dirtyWorktree: false
-  dirtyPaths: []
+  commitSha: 44bbc674924665bde68a91054ac3c3f1ef139c7e
+  dirtyWorktree: true
+  dirtyPaths:
+    - deploy/observability/alerting-rules.yaml
+    - deploy/observability/p5-ops-fault-drill.sh
+    - docs/runbooks/ops.md
+    - docs/ai-spec/tasks/evidence/EVD-P5006-001.yaml
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-09-24T09:12:00+08:00
+  os: Windows NT 10.0.26200.0 (WSL bash 5.0.17 / GNU)
   timezone: Asia/Shanghai
   java: "21"
-  node: "22"
-  pnpm: "9"
+  node: "20.19.2"
+  pnpm: "10.33.4"
   docker: "available"
-  composeProfiles: []
-  externalDependencyVersions: {}
+  composeProfiles: [backend, worker, postgres, gitea, minio, frontend, nginx]
+  externalDependencyVersions:
+    compose_stack: aihub-up
+    prometheus_rule_image: prom/prometheus:v2.53.0
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: cd backend && ./mvnw -o test -Dtest='*Asset*,*Auth*,*Mcp*,*Agent*' && cd .. && bash ./deploy/compose/scripts/verify.sh
-  startedAt: 2026-07-11T19:25:10+08:00
-  finishedAt: 2026-07-11T19:50:10+08:00
+  workingDirectory: D:/workspace/opengeobot/HarnessDG
+  command: bash deploy/observability/p5-ops-fault-drill.sh
+  startedAt: 2026-09-24T09:02:00+08:00
+  finishedAt: 2026-09-24T09:09:00+08:00
   exitCode: 0
   result: PASS
-  evidenceLevel: E3
+  evidenceLevel: E5
+  summary: "PASS=18 FAIL=0 SKIP=3（3 SKIP 为已声明结构性限制，见 coverage.notProven）"
+  priorFailures:
+    - "二轮 exit 1（PASS=14 FAIL=3）：3 FAIL 全为 API 401。根因经核实为 compose 未配 AIHUB_JWT_*_KEY_PEM，backend 重启生成临时 RSA 密钥对使旧 token 失效——fail-closed 正确语义，非脚本缺陷；修脚本加 login_retry + 重启后 token 双分支探测（401→记录 fail-closed PASS+重登录 / 200→keys persisted）。"
+    - "promtool 首校验失败：占位表达式 0>0 非法（vector selector 需至少一个非空 matcher），改 absent(1)>bool 0 又报 absent 需向量入参，终版 absent(up{no=\"match\"})>0 通过。"
 
 coverage:
-  proven: []
-  notProven: 
+  proven:
+    - scenarioId: AC-P5-OPS-001
+      assertion: "健康门控→登录→3s 加速重启（compose override 注入 AIHUB_ALERT_CHECK_INTERVAL）→API smoke 200 全链真实执行，演练脚本 exit 0。"
+    - scenarioId: AC-P5-OPS-001-DEAD-JOB
+      assertion: "脏基线 46 条真实 DEAD：注入后 DEDUPE_TICKS 窗口内 DEAD_JOB/JOB_DEAD FIRING 行数不变（去重不重复落行）；对最新两 FIRING 行 POST /system/alerts/{id}:acknowledge 均 HTTP 200 且 system_alert.status→RESOLVED（alt_01m36xfbxpyj65t2h7z6kd2pm3 / alt_01m36xfbxwrrydb5bhws04eqc7）；注入行删除、真实 DEAD 保留。"
+    - scenarioId: AC-P5-OPS-001-DEAD-DELIVERY
+      assertion: "5 条 DEAD 投递注入 → DEAD_DELIVERY alert FIRING(WARNING, count>=5) → 清理 → 自动 RESOLVED。"
+    - scenarioId: AC-P5-OPS-001-OUTBOX-BACKLOG
+      assertion: "150 条 pending outbox 注入 → OUTBOX_BACKLOG alert FIRING(WARNING, pending>=100) → 清理 → 自动 RESOLVED。"
+    - scenarioId: AC-P5-OPS-001-DEPENDENCY
+      assertion: "SystemDependencyServiceTest PASS：日志 09:08:23 dependency unhealthy dependency=gitea status=DOWN → CRITICAL alert + fan-out notification（单元/规约路径覆盖）。"
+    - scenarioId: AC-P5-OPS-001-RECONCILE-AUDIT
+      assertion: "webhook_inbox COMPLETED 行插入/计数/清理 PASS（metric + audit 路径）。"
+    - scenarioId: AC-P5-OPS-001-BACKUP
+      assertion: "容器内 pg_dumpall -U aihub --clean --if-exists 成功输出 25577 行 PASS。"
+    - scenarioId: AC-P5-OPS-001-RULES
+      assertion: "deploy/observability/alerting-rules.yaml 经 docker run --entrypoint promtool prom/prometheus:v2.53.0 check rules → SUCCESS 14 rules found；runbook 锚点全部对齐 docs/runbooks/ops.md 章节。"
+    - scenarioId: AC-P5-OPS-001-E4
+      assertion: "bash ./deploy/compose/scripts/verify.sh exit 0，V01–V28 全 PASS（含 V21 告警 Schema 与端点、V11 观测与诊断），无 FAIL。"
+  notProven:
+    - scenarioId: AC-P5-OPS-001-PROM-LIVE
+      reason: "Prometheus 侧 live 规则求值未打通：/actuator/prometheus 返回 401（结构性抓取配置缺口，Drill 5 SKIP）；应用内 AlertService 链为权威取证路径已覆盖，Prometheus 表达式仅经 promtool 静态校验。"
+    - scenarioId: AC-P5-OPS-001-DEP-LIVE
+      reason: "停库 live 依赖演练自举不可行：告警链依赖 postgres 写库，停库即失能（Drill 4 live SKIP）；由 SystemDependencyServiceTest 单元 + 规约覆盖。"
+    - scenarioId: AC-P5-OPS-001-BACKUP-FULL
+      reason: "backup.sh 完整链（manifest + checksums + restore）需 host 级三数据目录执行，容器内仅验证 pg_dumpall 路径（Drill 6 live SKIP）；完整流程按 docs/runbooks/backup-restore.md 走。"
 
 artifacts:
-  reports: []
+  reports:
+    - deploy/observability/p5-ops-fault-drill.sh
+    - deploy/observability/alerting-rules.yaml
+    - docs/runbooks/ops.md
   logs: []
   screenshots: []
   traces: []
-  metrics: []
-  databaseQueries: []
+  metrics:
+    - "/api/v1/system/alerts（HTTP 200 抽样）"
+    - "/api/v1/system/alerts/{alertId}:acknowledge（人工 RESOLVED）"
+  databaseQueries:
+    - "SELECT COUNT(*) FROM system_alert WHERE alert_type='DEAD_JOB' AND status='FIRING'  -- 去重不增行断言"
+    - "SELECT status FROM system_alert WHERE alert_id=?  -- acknowledge 后 RESOLVED 断言"
+    - "SELECT COUNT(*) FROM job_task WHERE status='DEAD'  -- 脏基线 46 条"
+    - "pg_dumpall -U aihub --clean --if-exists  -- 备份链 25577 行"
 
 secrets:
   redactionChecked: true
   findings: []
 
 limitations:
-  skippedTests: []
-  assumptions: []
-  environmentDifferences: []
+  skippedTests:
+    - "Prometheus live 求值（/actuator/prometheus 401 结构性）"
+    - "停库 live 依赖演练（告警链自举悖论）"
+    - "backup.sh host 级全链（需三数据目录）"
+  assumptions:
+    - "system_alert 表为告警 FIRING/RESOLVED 权威断言源（psql -t -A 单行输出），API 层仅 HTTP 200 抽样，与 AlertService.acknowledge 按 alert_id 单行 FIRING→RESOLVED 语义一致。"
+    - "JWT 密钥跨重启行为：compose 未配 AIHUB_JWT_*_KEY_PEM 时 backend 每次启动生成临时 RSA 密钥对，重启前 token 失效属 fail-closed 正确语义；Restart（同进程配置未变）token 仍有效——两种路径跨轮均实测。"
+  environmentDifferences:
+    - "任务卡 requiredValidationCommands 第 4 条引用 docker-compose.yml，仓库实际为 deploy/compose/compose.yaml（Test-Path docker-compose.yml=False）；compose 校验以 `docker compose -f deploy/compose/compose.yaml config --quiet` exit 0 执行。"
+    - "三轮实跑 Drill 4 处 WSL bash 终端崩溃（exit 1073807364=0xC0000005），新终端恢复后第四轮全绿。"
+
+followUps:
+  - "修复 Prometheus 抓取 /actuator/prometheus 401：需在 deploy/observability compose 侧为 prometheus 配置 bearer/basic 抓取凭据或后端暴露只读 metrics 端点，使 live 规则求值可 E5 取证（本卡 allowedPaths 内为规格 + promtool 静态校验）。"
+  - "alerting-rules.yaml 与 compose 挂载同步：确认部署 profile 中规则文件已挂载进 prometheus 容器并热加载，避免规格与实际抓取漂移。"
+  - "Ops Dashboard 死面板：前端若干面板引用的指标端点尚无接线（gauge 零接线），需独立前端 Task 补齐（不在本卡 allowedPaths）。"
+  - "TASK-P5-006 baseCommit 59f40d2 漂移 + 卡面 docker-compose.yml 文件名偏差：需治理侧以受保护流程重绑基线并修正命令（AGENTS.md：AI 不得自批）。"
+  - "运维脏基线：job_task 真实 DEAD 行持续增长（error_code 多为 INTERNAL_ERROR），需业务波次根因分析后经 POST /api/v1/system/jobs/{jobId}:retry 处置，禁止直接删库清行（丢根因证据）。"
+  - ".gitattributes 未覆盖 deploy/observability/**：新增的 p5-ops-fault-drill.sh 在 core.autocrlf=true 下 Windows 检出可能变 CRLF 破坏 shebang（当前索引 blob 为 LF，实跑在 WSL bash 未受影响）；.gitattributes 不在本卡 allowedPaths，需治理侧追加 `deploy/observability/** text eol=lf`。"
+
+contractConsistency:
+  openapiMatched: true
+  eventSchemaMatched: true
+  migrationMatched: true
+  uiMatched: null # 本卡未改 UI；dashboard 死面板缺口见 followUps
+  runbookMatched: true
+  note: "本卡未改契约/迁移；告警端点(:acknowledge/:resolve)、job 端点(:retry/:cancel)与 docs/runbooks/ops.md 锚点已对齐校验。"
 
 review:
   recordedBy: AI

@@ -408,3 +408,15 @@ E5 复验其余开放项：`P5003` 恢复演练为破坏性（`down -v` 清卷�
 **验证**：`mvnw -o verify` BUILD SUCCESS（单元 751/751 真实运行、0 failures；IT 123 全 Skip——Testcontainers 在本机 Windows npipe 组合下 "Could not find a valid Docker environment"，既有环境限制，运行时行为以 Compose E5 实跑为准）；`pnpm lint`(0 errors)/`typecheck`/`build` 通过；`pnpm test` 并行全栈时 14 个 5000ms 超时（CPU 争抢、本 Session 前端零改动），单文件隔离 11/11 绿，空闲负载下 `--no-file-parallelism` 串行全量复跑 47 files / 206 tests 全 PASS、0 超时（exit 0）。
 
 **治理缺口（不掩盖）**：task-card 校验 FAIL——① baseCommit `59f40d2` 与 HEAD 漂移；② **REQ-OBS-001 状态 OPEN（blockedBy AUD-005 OTel 范围冲突）被 P5 任务卡引用**——规格与任务卡矛盾，按 AGENTS.md 上报，AI 不自行翻转需求状态。`EVD-P5008-001` 定稿为 PARTIAL：6 项 proven（聚合/一致性/多主体/防枚举/fail-closed/E3 单测）、2 项 notProven（卡片徽章浏览器截图、MCP 同语义），4 条 followUps；`review.accepted=false` 不代批（DEC-009）。
+
+## 19. E5 运维故障演练闭合 — 2026-09-24（P5006 实跑 PASS=18 / FAIL=0 / SKIP=3）
+
+`TASK-P5-006`（REQ-OPS-001 Dashboard/告警/Runbook，E5）本轮完成演练取证闭合：
+
+**告警规则权威化**：`deploy/observability/alerting-rules.yaml` 补齐 severity/阈值/dedupe/runbook 锚点/owner 元数据；promtool（`docker run --entrypoint promtool prom/prometheus:v2.53.0 check rules`）抓到两处真实非法占位表达式（`0 > 0` 缺 metric name；`absent(1)` 需向量入参），终版 `absent(up{no="match"}) > 0` 校验 **SUCCESS: 14 rules found**；runbook 锚点与 `docs/runbooks/ops.md` 章节标题全量对齐。
+
+**E5 演练脚本四轮迭代**（`deploy/observability/p5-ops-fault-drill.sh`，3s 加速 `AIHUB_ALERT_CHECK_INTERVAL`）：二轮 3×FAIL 根因查实为 compose 未配 `AIHUB_JWT_*_KEY_PEM` → backend 重启生成临时 RSA 密钥、旧 token 失效（fail-closed 正确语义，非脚本缺陷）；脚本改为重启后 token 双分支探测（401→记录 fail-closed 证据+重登录 / 200→keys persisted），Restart 与 Recreate 两种路径跨轮均实测。第四轮 **exit 0：PASS=18 FAIL=0 SKIP=3**：DEAD_JOB 脏基线去重不增行 + 两条 `POST :acknowledge` 人工 RESOLVED；DEAD_DELIVERY 与 OUTBOX_BACKLOG（150 条注入）自动 FIRING→RESOLVED；依赖 DOWN→CRITICAL 单测边沿链；webhook_inbox 审计行；`pg_dumpall` 25577 行。3 个 SKIP 均为如实声明的结构性限制（停库自举悖论、`/actuator/prometheus` 401、backup.sh host 级全链）。
+
+**运维发现（脏基线）**：`job_task` 存在 40–46 条真实 DEAD 行持续增长（error_code 几乎全 `INTERNAL_ERROR`）；纠正 ops.md 中虚构的 `requeueDead` 表述——真实恢复路径为 `POST /api/v1/system/jobs/{jobId}:retry`（`job:manage`，走审计），**禁止直接删库清行**。`ops.md` 新增「告警静默与升级」「E5 故障演练记录」两章节。
+
+**治理与证据**：五条卡面验证命令实跑——validate-spec PASS（148 文档/724 ID）；task-card / -CheckChangedPaths / -CheckCompletion 均 FAIL（baseCommit `59f40d2` 漂移的结构性污染 + completion 需人类评审，与 §17/§18 同口径如实登记）；`docker compose config --quiet` exit 0（卡面 `docker-compose.yml` 文件名偏差登记）；`verify.sh` 实跑 **V01–V28 全 PASS exit 0**。`EVD-P5006-001` 定稿 PARTIAL：9 项 proven / 3 项 notProven / 6 条 followUps（Prometheus 401 抓取、规则挂载同步、dashboard 死面板、卡面偏差、DEAD 脏基线根因、deploy/observability LF 属性），绑定执行 HEAD `44bbc67`，`review.accepted=false` 不代批（DEC-009）。P5 波次剩余：`TASK-P5-007` 完成审计、`P5003` 破坏性恢复演练（待用户窗口）。
