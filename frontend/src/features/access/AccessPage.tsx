@@ -183,7 +183,7 @@ export function AccessPage() {
                 render: (v: string) => new Date(v).toLocaleString(),
               },
               {
-                title: t('common.actions'),
+                title: t('common.action'),
                 render: (_, record) => (
                   record.status === 'ACTIVE' ? (
                     <Popconfirm

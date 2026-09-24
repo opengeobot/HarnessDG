@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
+  Empty,
   Flex,
   Form,
   Input,
@@ -130,7 +131,12 @@ export function RoleBindingsPage() {
         error={bindingsQuery.error}
         onRetry={() => bindingsQuery.refetch()}
       >
-        <Table<RoleBindingView> rowKey="bindingId" columns={columns} dataSource={bindingsQuery.data ?? []} />
+        <Table<RoleBindingView>
+          rowKey="bindingId"
+          columns={columns}
+          dataSource={bindingsQuery.data ?? []}
+          locale={{ emptyText: <Empty description={t('admin.roleBindings.empty')} /> }}
+        />
       </QueryBoundary>
 
       <Modal

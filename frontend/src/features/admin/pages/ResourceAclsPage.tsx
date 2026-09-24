@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App,
   Button,
+  Empty,
   Flex,
   Form,
   Input,
@@ -135,7 +136,12 @@ export function ResourceAclsPage() {
         error={aclsQuery.error}
         onRetry={() => aclsQuery.refetch()}
       >
-        <Table<ResourceAclView> rowKey="aclId" columns={columns} dataSource={aclsQuery.data ?? []} />
+        <Table<ResourceAclView>
+          rowKey="aclId"
+          columns={columns}
+          dataSource={aclsQuery.data ?? []}
+          locale={{ emptyText: <Empty description={t('admin.resourceAcls.empty')} /> }}
+        />
       </QueryBoundary>
 
       <Modal

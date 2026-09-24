@@ -494,7 +494,9 @@
     "deprecate": "Deprecate",
     "archive": "Archive",
     "deepLinkHint": "Open from asset detail or use ?assetId= query parameter",
-    "assetIdLabel": "Asset ID"
+    "assetIdLabel": "Asset ID",
+    "submitValidation": "Submit Validation",
+    "transitionFailed": "State transition failed"
   },
   "review": {
     "title": "Release Review",
@@ -503,12 +505,10 @@
     "requestSubmitted": "Publish request submitted: {{id}}",
     "decisionSubmitted": "Decision submitted: {{decision}}",
     "decisionFailed": "Decision submission failed",
-    "pendingVersions": "Versions Awaiting Publish Request",
-    "queryHint": "Enter an Asset ID and query versions.",
-    "emptyPending": "No versions pending review for this asset",
-    "submitPublish": "Submit Publish",
-    "sessionRequests": "Publish Requests This Session",
-    "noSessionRequests": "No publish requests submitted this session",
+    "publishRequests": "Publish Requests",
+    "noRequests": "No publish requests",
+    "submitter": "Submitter",
+    "resubmit": "Resubmit",
     "decisionPanel": "Review Decision",
     "requestId": "Request ID",
     "frozenDigest": "Frozen Digest",
@@ -617,41 +617,6 @@
       "roleName": "Role Name",
       "permissionSet": "Permission Set",
       "selectPermissionCodes": "Select permission codes"
-    },
-    "roleBindings": {
-      "title": "Role Bindings",
-      "bindingCreated": "Role binding created",
-      "bindingDeleted": "Role binding deleted",
-      "principalId": "Principal ID",
-      "principalIdPlaceholder": "e.g. an ID starting with usr_ or prn_",
-      "role": "Role",
-      "rolePlaceholder": "Select an existing role",
-      "scopeType": "Scope Type",
-      "scopeId": "Scope ID",
-      "scopeIdPlaceholder": "Leave empty for platform scope",
-      "createdAt": "Created At",
-      "createBinding": "Create Binding",
-      "confirmDelete": "Delete this role binding?",
-      "empty": "No role bindings",
-      "selectRoleRequired": "Please select a role"
-    },
-    "resourceAcls": {
-      "title": "Resource ACLs",
-      "aclCreated": "Resource ACL created",
-      "aclDeleted": "Resource ACL deleted",
-      "principalId": "Principal ID",
-      "principalIdPlaceholder": "e.g. an ID starting with usr_",
-      "resourceType": "Resource Type",
-      "resourceTypePlaceholder": "Select a resource type",
-      "resourceId": "Resource ID",
-      "resourceIdPlaceholder": "Target resource business ID",
-      "permissions": "Permissions",
-      "permissionPlaceholder": "Select permission codes",
-      "createdAt": "Created At",
-      "createAcl": "Create ACL",
-      "confirmDelete": "Delete this resource ACL?",
-      "empty": "No resource ACLs",
-      "selectPermissionsRequired": "Select at least one permission"
     },
     "projects": {
       "title": "Project Management",
@@ -822,6 +787,7 @@
       "scopeType": "Scope Type",
       "scopeId": "Scope ID",
       "scopeIdPlaceholder": "Leave empty for PLATFORM",
+      "empty": "No role bindings",
       "createdAt": "Created At"
     },
     "resourceAcls": {
@@ -836,6 +802,7 @@
       "resourceId": "Resource ID",
       "permissions": "Permissions",
       "selectPermissions": "Select permission codes",
+      "empty": "No resource ACLs",
       "createdAt": "Created At"
     },
     "alerts": {
