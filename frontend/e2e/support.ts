@@ -1,7 +1,7 @@
 /*
  * 功能: E2E 共享支撑——凭据来源、登录动作、夹具主体准备与通用定位器。
  *       引导口令一律从环境变量读取，绝不写入仓库；未提供凭据时由各 spec 显式 skip。
- * 时间: 2026-09-18
+ * 时间: 2026-09-24
  * 作者: AxeXie
  */
 import { expect, request, type APIRequestContext, type Page } from '@playwright/test';
@@ -43,6 +43,18 @@ export async function login(page: Page, username: string, password: string) {
 export async function openAssetsViaNav(page: Page) {
   await page.locator('.ant-menu-item').filter({ hasText: /资产目录|Asset Catalog/ }).click();
   await expect(page).toHaveURL(/\/assets$/);
+}
+
+/**
+ * 经侧边导航进入 Agent 接入页（mcp-integration.spec 使用）。
+ *
+ * <p>{@code location /} 虽有 SPA fallback，但 access JWT 仅存内存，整页加载后的续期时序
+ * 不在本 spec 断言范围；与资产目录同理走应用内导航，行为确定，并顺带证明导航项按
+ * {@code authorization:read} 出现。
+ */
+export async function openIntegrationsViaNav(page: Page) {
+  await page.locator('.ant-menu-item').filter({ hasText: /Agent 接入|Agent Integration/ }).click();
+  await expect(page).toHaveURL(/\/integrations$/);
 }
 
 /**
@@ -152,6 +164,19 @@ export const E2E_ASSET_OUTSIDER = {
   scopes: ['asset:read'],
 } as const;
 
+/**
+ * 讨论主体：具备 {@code asset:read} + {@code asset:discuss} + {@code asset:moderate}。
+ *
+ * <p>后端契约：createThread/createComment 强制 asset:discuss，lockThread/unlockThread
+ * 强制 asset:moderate，listThreads 仅需 asset:read；现有 E2E_AUTHOR / E2E_MANAGER 均不含
+ * discuss/moderate，故讨论 UI 旅程必须使用此独立主体。需为组织成员以获得 INTERNAL 资产访问。
+ */
+export const E2E_DISCUSSANT = {
+  username: 'e2e050-discussant',
+  password: 'E2e050-Discussant-01!z',
+  scopes: ['asset:read', 'asset:discuss', 'asset:moderate'],
+} as const;
+
 export const E2E_ORG = { code: 'e2e050-org', name: 'E2E 050 Org' } as const;
 export const E2E_TEAM_NAME = 'E2E050 Team' as const;
 export const E2E_ASSET = {
@@ -206,6 +231,8 @@ export interface E2eFixtures {
   datasetAssetId: string;
   authorPrincipalId: string;
   managerPrincipalId: string;
+  /** 讨论主体 principalId：ThreadView.createdBy 返回的是 principalId 而非 username（discussion.spec 断言用）。 */
+  discussantPrincipalId: string;
 }
 
 function bearer(token: string): Record<string, string> {
@@ -484,6 +511,30 @@ async function ensureDatasetAsset(
 }
 
 /**
+ * 幂等确保血缘关系边存在（lineage.spec 使用）。
+ *
+ * <p>契约：POST /assets/{parentAssetId}/relations，body {@code {childAssetId, relationType}}，
+ * 需 asset:manage（E2E_AUTHOR 具备）。(parent, child, type) 唯一，重复创建返回 409，
+ * 幂等夹具予以容忍。
+ */
+export async function ensureLineageRelation(
+  api: APIRequestContext,
+  token: string,
+  parentAssetId: string,
+  childAssetId: string,
+  relationType: string,
+): Promise<void> {
+  const response = await api.post(`${API_BASE}/assets/${parentAssetId}/relations`, {
+    headers: bearer(token),
+    data: { childAssetId, relationType },
+    failOnStatusCode: false,
+  });
+  expect([201, 409], `创建血缘边 ${parentAssetId}->${childAssetId}(${relationType}) 返回 HTTP ${response.status()}`).toContain(
+    response.status(),
+  );
+}
+
+/**
  * 为发布链 spec（publish-flow）幂等创建其专属夹具资产。
  *
  * <p>刻意不复用 E2E_ASSET / E2E_DATASET：dataset.spec 与 version-management.spec 对它们的
@@ -565,13 +616,16 @@ export async function prepareFixtures(adminToken: string, apiRequest?: APIReques
     await ensureUser(api, adminToken, E2E_AUTHZ_READER);
     // 刻意不将 outsider 加入组织：目录隔离用例依赖其"非成员 + 非平台管理员"身份。
     await ensureUser(api, adminToken, E2E_ASSET_OUTSIDER);
+    const discussantPrincipalId = await ensureUser(api, adminToken, E2E_DISCUSSANT);
     await ensureOrganizationMember(api, adminToken, organizationId, authorPrincipalId);
+    // 讨论主体必须是组织成员，否则 INTERNAL 资产行级过滤会拒绝 listThreads。
+    await ensureOrganizationMember(api, adminToken, organizationId, discussantPrincipalId);
     const authorToken = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
     const assetId = await ensureAsset(api, authorToken, organizationId, teamId);
     const datasetAssetId = await ensureDatasetAsset(api, authorToken, organizationId, teamId);
     return {
       organizationId, teamId, assetId, datasetAssetId,
-      authorPrincipalId, managerPrincipalId,
+      authorPrincipalId, managerPrincipalId, discussantPrincipalId,
     };
   } finally {
     if (!apiRequest) {
