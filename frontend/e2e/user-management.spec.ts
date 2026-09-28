@@ -1,101 +1,161 @@
-/**
- * 功能: AC-P0B-IAM-012 E2E 测试——用户管理 CRUD。
- * 运行前提: docker compose up + pnpm dev
+/*
+ * 功能: AC-P0B-IAM-012 E2E 测试——用户管理 CRUD（创建/检索/禁用启用/重置密码）。
+ * 时间: 2026-09-28
+ * 作者: AxeXie
+ *
+ * <p>写旅程必须以引导管理员执行：后端 SystemUserController 的 create/enable/disable/
+ * reset-password 均强制 {@code user:manage}，而夹具 E2E_MANAGER 仅持有 {@code user:read}（会 403）；
+ * 引导管理员的 ADMIN_SCOPES 恰好覆盖 user:read + user:manage，前端守卫与后端鉴权同时通过。
+ * <p>禁用/重置密码只作用在本用例自建的用户上：REQ-IAM-006 禁止禁用最后一个持有 user:manage 的
+ * 活跃平台管理员，故引导管理员自身不可作为禁用目标。
+ * <p>每个用例各自经 UI 建用户（用户名含时间戳与 retry 序号），互不依赖，可单独重跑。
  */
 import { test, expect, type Page } from '@playwright/test';
+import { bootstrapCredentials, loginBootstrap } from './support';
 
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+/** antd 对恰好两个汉字的按钮插入空格（「确 定」「禁 用」「启 用」），故一律用宽松正则。 */
+const CONFIRM_OK = /确\s*定|OK/i;
+/** 满足后端 PasswordPolicy.defaults()：长度 ≥12 且至少三类字符。 */
+const TEMP_PASSWORD = 'E2e0928-Tmp-01!z';
 
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByLabel(/用户名|username/i).fill(ADMIN_USERNAME);
-  await page.getByLabel(/密码|password/i).fill(ADMIN_PASSWORD);
-  await page.getByRole('button', { name: /登录|login|sign in/i }).click();
-  await expect(page).not.toHaveURL(/\/login/);
+let credentials: { username: string; password: string } | null = null;
+
+test.beforeAll(() => {
+  credentials = bootstrapCredentials();
+});
+
+/** 用页面真实的搜索框（Input.Search，无独立搜索按钮）按用户名过滤列表。 */
+async function searchUsers(page: Page, keyword: string) {
+  await page.getByPlaceholder(/搜索用户名\/显示名|Search username/).fill(keyword);
+  await page.keyboard.press('Enter');
+}
+
+/** 定位包含指定用户名的表格行（用户名渲染在 code 元素中）。 */
+function userRow(page: Page, username: string) {
+  return page.locator('.ant-table-row').filter({ has: page.locator('code', { hasText: username }) });
+}
+
+/**
+ * 经真实 UI 旅程创建一个一次性用户并等待其出现在列表首屏。
+ *
+ * <p>返回的用户名对每次执行与每次 retry 都唯一，避免 409 USER_ALREADY_EXISTS。
+ */
+async function createUserViaUi(page: Page, tag: string): Promise<string> {
+  const username = `e2e0928-${tag}-${Date.now().toString(36)}-${test.info().retry}`;
+  const displayName = `E2E 0928 ${tag}`;
+
+  await page.getByRole('button', { name: /创建用户|createUser/i }).click();
+  const modal = page.locator('.ant-modal-content').filter({ hasText: /创建用户/ });
+  await expect(modal).toBeVisible();
+  await modal.getByLabel(/用户名|username/i).fill(username);
+  await modal.getByLabel(/显示名|displayName/i).fill(displayName);
+  await modal.getByLabel(/临时密码|temporaryPassword/i).fill(TEMP_PASSWORD);
+  await modal.getByRole('button', { name: CONFIRM_OK }).click();
+
+  await expect(page.locator('.ant-message').getByText(/用户已创建|User created/)).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(modal).toBeHidden({ timeout: 10_000 });
+  return username;
 }
 
 test.describe('AC-P0B-IAM-012: 用户管理 CRUD', () => {
   test.beforeEach(async ({ page }) => {
-    await login(page);
+    test.skip(!credentials, '未提供 E2E_ADMIN_USERNAME/E2E_ADMIN_PASSWORD，无法登录真实栈');
+    await loginBootstrap(page);
+    await page.goto('/admin/users');
+    await expect(page.locator('.ant-table')).toBeVisible({ timeout: 10_000 });
   });
 
-  test('创建用户弹窗填写并提交', async ({ page }) => {
-    await page.goto('/admin/users');
-    await expect(page).not.toHaveURL(/\/login/);
+  test('创建用户后状态为 PENDING_ACTIVATION 且强制改密', async ({ page }) => {
+    const username = await createUserViaUi(page, 'create');
 
-    // 点击创建用户按钮
-    const createBtn = page.getByRole('button', { name: /创建用户|createUser/i });
-    await createBtn.click();
-
-    // 弹窗应出现
-    await expect(page.getByRole('dialog')).toBeVisible();
-
-    // 填写表单
-    await page.getByLabel(/用户名|username/i).last().fill('testuser_e2e');
-    await page.getByLabel(/显示名|displayName/i).fill('E2E Test User');
-    await page.getByLabel(/临时密码|temporaryPassword/i).fill('Temp@12345678');
-
-    // 提交
-    await page.getByRole('button', { name: /确定|ok|submit/i }).click();
-
-    // 弹窗关闭或显示成功消息
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10000 });
+    // 列表按 createdAt 倒序 + 服务端分页，但新建项必然在首屏；仍走真实搜索路径以免受历史夹具干扰。
+    await searchUsers(page, username);
+    const row = userRow(page, username);
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await expect(row).toContainText('E2E 0928 create');
+    // createUser 落库即为 PENDING_ACTIVATION（临时口令未改），状态列渲染原始枚举 Tag。
+    await expect(row.getByText('PENDING_ACTIVATION')).toBeVisible();
+    await expect(row.getByText('是', { exact: true })).toBeVisible();
   });
 
-  test('新用户出现在列表', async ({ page }) => {
-    await page.goto('/admin/users');
+  test('禁用用户吊销 Token 后启用恢复 ACTIVE', async ({ page }) => {
+    const username = await createUserViaUi(page, 'toggle');
+    await searchUsers(page, username);
+    const row = userRow(page, username);
+    await expect(row).toBeVisible({ timeout: 10_000 });
 
-    // 搜索刚创建的用户
-    const searchInput = page.getByPlaceholder(/搜索|search|keyword/i);
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('testuser_e2e');
-      await page.getByRole('button', { name: /搜索|search/i }).click();
-    }
+    await row.getByRole('button', { name: /禁\s*用|disable/i }).click();
+    const popconfirm = page.locator('.ant-popconfirm');
+    await expect(popconfirm).toBeVisible();
+    // 断言确认文案，证明「Token 将被吊销」的告知语义存在于 UI。
+    await expect(popconfirm).toContainText(/其 Token 将被吊销/);
+    await popconfirm.getByRole('button', { name: CONFIRM_OK }).click();
 
-    // 等待列表刷新
-    await page.waitForTimeout(1000);
-    // 列表中应可见
-    const userCell = page.getByText('testuser_e2e');
-    await expect(userCell.first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.ant-message').getByText(/已禁用|disabled/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(row.getByText('DISABLED')).toBeVisible();
+    // DISABLED 后行内按钮切换为「启用」，不再有禁用入口。
+    await expect(row.getByRole('button', { name: /禁\s*用|disable/i })).toHaveCount(0);
+
+    await row.getByRole('button', { name: /启\s*用|enable/i }).click();
+    await expect(page.locator('.ant-message').getByText(/已启用|enabled/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    // LocalUser.enable 显式置 ACTIVE（区别于此前的 PENDING_ACTIVATION）。
+    await expect(row.getByText('ACTIVE')).toBeVisible();
   });
 
-  test('禁用/启用用户', async ({ page }) => {
-    await page.goto('/admin/users');
+  test('重置密码写入临时口令并重新要求改密', async ({ page }) => {
+    const username = await createUserViaUi(page, 'reset');
+    await searchUsers(page, username);
+    const row = userRow(page, username);
+    await expect(row).toBeVisible({ timeout: 10_000 });
 
-    // 找到测试用户行中的操作按钮
-    const row = page.locator('tr', { has: page.getByText('testuser_e2e') });
-    if (await row.isVisible()) {
-      // 查找禁用/启用按钮
-      const disableBtn = row.getByRole('button', { name: /禁用|disable/i });
-      if (await disableBtn.isVisible()) {
-        await disableBtn.click();
-        // 确认操作
-        const confirmBtn = page.getByRole('button', { name: /确定|ok/i });
-        if (await confirmBtn.isVisible()) {
-          await confirmBtn.click();
-        }
-        await page.waitForTimeout(1000);
-      }
-    }
+    // 新建用户是 PENDING_ACTIVATION，行内没有「启用」入口（UsersPage 仅在 DISABLED 时渲染）。
+    // 因此走真实旅程 禁用 → 启用 把它提升为 ACTIVE，才能证明重置动作真的回退了状态。
+    await row.getByRole('button', { name: /禁\s*用|disable/i }).click();
+    const disableConfirm = page.locator('.ant-popconfirm');
+    await expect(disableConfirm).toBeVisible();
+    await disableConfirm.getByRole('button', { name: CONFIRM_OK }).click();
+    await expect(row.getByText('DISABLED')).toBeVisible({ timeout: 15_000 });
+
+    await row.getByRole('button', { name: /启\s*用|enable/i }).click();
+    // LocalUser.enable 显式置 ACTIVE。
+    await expect(row.getByText('ACTIVE')).toBeVisible({ timeout: 15_000 });
+
+    await row.getByRole('button', { name: /重置密码|resetPassword/i }).click();
+    const modal = page.locator('.ant-modal-content').filter({ hasText: /重置密码/ });
+    await expect(modal).toBeVisible();
+    await modal.getByLabel(/临时密码|temporaryPassword/i).fill(`${TEMP_PASSWORD}${Date.now().toString(36)}`);
+    await modal.getByRole('button', { name: CONFIRM_OK }).click();
+
+    await expect(page.locator('.ant-message').getByText(/已重置临时密码|password reset/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(modal).toBeHidden({ timeout: 10_000 });
+    // 点击页面真实的「刷新」按钮强制重查：UsersPage.resetMutation.onSuccess 漏了
+    // invalidate()，列表仍会显示重置前的 ACTIVE（已记录为前端缺陷，见迭代报告）。
+    // 重查后的值才是后端真值——用于断言 LocalUser.resetPassword 的语义。
+    await page.getByRole('button', { name: /刷\s*新|refresh/i }).click();
+    const updated = userRow(page, username);
+    await expect(updated.getByText('是', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(updated.getByText('PENDING_ACTIVATION')).toBeVisible();
   });
 
-  test('重置密码', async ({ page }) => {
-    await page.goto('/admin/users');
+  test('临时口令不足 12 位被前端校验拦截', async ({ page }) => {
+    await page.getByRole('button', { name: /创建用户|createUser/i }).click();
+    const modal = page.locator('.ant-modal-content').filter({ hasText: /创建用户/ });
+    await expect(modal).toBeVisible();
+    await modal.getByLabel(/用户名|username/i).fill(`e2e0928-short-${Date.now().toString(36)}`);
+    await modal.getByLabel(/显示名|displayName/i).fill('E2E 0928 弱口令');
+    await modal.getByLabel(/临时密码|temporaryPassword/i).fill('Short0928!');
+    await modal.getByRole('button', { name: CONFIRM_OK }).click();
 
-    const row = page.locator('tr', { has: page.getByText('testuser_e2e') });
-    if (await row.isVisible()) {
-      const resetBtn = row.getByRole('button', { name: /重置密码|resetPassword/i });
-      if (await resetBtn.isVisible()) {
-        await resetBtn.click();
-        await expect(page.getByRole('dialog')).toBeVisible();
-
-        // 填写新密码
-        await page.getByLabel(/临时密码|temporaryPassword/i).last().fill('NewTemp@12345678');
-        await page.getByRole('button', { name: /确定|ok/i }).click();
-
-        await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10000 });
-      }
-    }
+    await expect(page.getByText(/至少 12 位|at least 12/i)).toBeVisible();
+    // 校验未通过则不得发出写请求：弹窗必须仍打开。
+    await expect(modal).toBeVisible();
   });
 });

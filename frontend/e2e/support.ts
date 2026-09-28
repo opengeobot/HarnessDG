@@ -1,10 +1,10 @@
 /*
  * 功能: E2E 共享支撑——凭据来源、登录动作、夹具主体准备与通用定位器。
  *       引导口令一律从环境变量读取，绝不写入仓库；未提供凭据时由各 spec 显式 skip。
- * 时间: 2026-09-24
+ * 时间: 2026-09-28
  * 作者: AxeXie
  */
-import { expect, request, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, request, test, type APIRequestContext, type Page } from '@playwright/test';
 
 const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
@@ -78,6 +78,13 @@ export async function openAssetDetailViaCatalog(page: Page, displayName: string)
   await expect(page.getByText(/页面不存在|Page not found/)).toHaveCount(0);
 }
 
+/** 以引导管理员凭据登录 UI；凭据缺失时 skip 当前用例（各 admin/profile spec 共用）。 */
+export async function loginBootstrap(page: Page) {
+  const credentials = bootstrapCredentials();
+  test.skip(!credentials, '未提供 E2E_ADMIN_USERNAME/E2E_ADMIN_PASSWORD，无法登录真实栈');
+  await login(page, credentials!.username, credentials!.password);
+}
+
 /**
  * 在资产详情页激活「版本」Tab。
  *
@@ -88,6 +95,23 @@ export async function activateVersionsTab(page: Page) {
   const tab = page.getByRole('tab', { name: /^版本$|^Versions$/ });
   await tab.click();
   await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
+ * 从资产详情页进入「资产设置」独立路由页。
+ *
+ * <p>设置页是 {@code /assets/{assetId}/settings} 的独立路由（AssetSettingsPage 由
+ * {@code useParams} 取 assetId，页内无返回导航），而整页加载 {@code /assets/**} 会被
+ * 前端容器 nginx 的静态资源规则遮蔽；入口只能是详情页「设置」Tab 内的链接按钮，
+ * 即用户真实路径。
+ */
+export async function openAssetSettingsViaNav(page: Page) {
+  const tab = page.getByRole('tab', { name: /^设\s*置$|^Settings$/ });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: /设\s*置|Settings/ }).click();
+  await expect(page).toHaveURL(/\/assets\/[^/]+\/settings$/);
+  await expect(page.locator('.ant-card').filter({ hasText: /生命周期|Lifecycle/ }).first()).toBeVisible();
 }
 
 /** 在资产详情页点击版本列表的「查看全部」，返回该按钮定位器。 */
@@ -177,6 +201,47 @@ export const E2E_DISCUSSANT = {
   scopes: ['asset:read', 'asset:discuss', 'asset:moderate'],
 } as const;
 
+/**
+ * 生命周期主体：具备 {@code asset:deprecate}。
+ *
+ * <p>后端契约：AssetApplicationService.deprecateAsset 强制 {@code asset:deprecate}
+ * （archive/restore 为 {@code asset:manage}，delete 为 {@code asset:delete}），
+ * 而 E2E_AUTHOR 不含该 Scope。后端无 scope 更新 REST 端点（SystemUserController 的
+ * PATCH 仅接受 displayName/email/locale），已落库的夹具用户无法热更，
+ * 故新增此独立主体而不是修改 E2E_AUTHOR——后者会让全部既有绿基线用例失去主体。
+ */
+export const E2E_LIFECYCLE_OWNER = {
+  username: 'e2e0928-lifecycle-owner',
+  password: 'E2e0928-Lifecycle-01!z',
+  scopes: ['project:view', 'asset:read', 'asset:create', 'asset:update', 'asset:manage', 'asset:deprecate'],
+} as const;
+
+/**
+ * 运维只读主体：具备平台运维类 Scope。
+ *
+ * <p>引导管理员 JWT 只携带粗粒度 Scope，前端路由守卫会拒绝其访问这些页面；
+ * 且后端对应 Controller 逐端点强制细粒度 Scope——ConfigurationController
+ * 强制 system:configure、JobController/IdempotencyController 强制 job:read、
+ * SystemAlertController/SystemDiagnosticsController/NotificationAdminController
+ * 强制 system:observe、AuditLogController 强制 audit:read、NotificationController
+ * 强制 notification:read（以上编码均已在 Permissions.java 注册，非幽灵权限码）。
+ * 故必须显式列出，用于逐项点击验收栈中从未被 E2E 覆盖过的管理端页面。
+ *
+ * <p>刻意不含 user:read / authorization:read / dictionary:read：
+ * 用于反向证明侧边导航与路由守卫是逐项判定，而非有任一管理 Scope 即整体放开。
+ */
+export const E2E_OPS_OBSERVER = {
+  username: 'e2e0928-ops-observer',
+  password: 'E2e0928-OpsObserver-01!z',
+  scopes: [
+    'job:read',
+    'system:observe',
+    'system:configure',
+    'audit:read',
+    'notification:read',
+  ],
+} as const;
+
 export const E2E_ORG = { code: 'e2e050-org', name: 'E2E 050 Org' } as const;
 export const E2E_TEAM_NAME = 'E2E050 Team' as const;
 export const E2E_ASSET = {
@@ -214,13 +279,28 @@ export const E2E_PUBLISH_ASSET = {
   displayName: 'E2E 050 发布链目标',
 } as const;
 
-/** 发布链 E2E 专属 DATASET 夹具（DVC 入口/凭据断言使用）。 */
+/**
+ * 发布链 E2E 专属 DATASET 夹具（DVC 入口/凭据断言使用）。
+ */
 export const E2E_DVC_DATASET = {
   namespace: 'nlp',
   name: 'e2e050-dvc-target',
   displayName: 'E2E 050 DVC 目标',
   format: 'PARQUET',
   modality: 'TEXT',
+} as const;
+
+/**
+ * 生命周期 E2E（asset.spec 弃用/归档/恢复旅程）专属 MODEL 夹具。
+ *
+ * <p>刻意不复用 E2E_ASSET：publish-flow.spec 会在其上留下 PUBLISHED 版本，而
+ * AssetApplicationService.archiveAsset 对 publishedCount>0 的资产返回 409
+ * ASSET_HAS_ACTIVE_VERSIONS——归档步骤必然失败。本资产禁止发布版本。
+ */
+export const E2E_LIFECYCLE_ASSET = {
+  namespace: 'nlp',
+  name: 'e2e0928-lifecycle-target',
+  displayName: 'E2E 0928 生命周期目标',
 } as const;
 
 export interface E2eFixtures {
@@ -233,6 +313,8 @@ export interface E2eFixtures {
   managerPrincipalId: string;
   /** 讨论主体 principalId：ThreadView.createdBy 返回的是 principalId 而非 username（discussion.spec 断言用）。 */
   discussantPrincipalId: string;
+  /** 生命周期旅程专属资产（asset.spec 弃用/归档/恢复使用），不受发布链版本影响。 */
+  lifecycleAssetId: string;
 }
 
 function bearer(token: string): Record<string, string> {
@@ -448,7 +530,9 @@ async function ensureAsset(
 
   const listed = await api.get(`${API_BASE}/assets`, {
     headers: bearer(authorToken),
-    params: { namespace: coordinates.namespace, keyword: coordinates.name, size: 50 },
+    // includeArchived：夹具资产可能被上一次中断的运行留在 ARCHIVED 态，默认检索不返回该状态，
+    // 会使「按坐标查回」失败；查回属于夹具幂等逻辑，不放宽业务断言。
+    params: { namespace: coordinates.namespace, keyword: coordinates.name, size: 50, includeArchived: true },
     failOnStatusCode: false,
   });
   const page = dataOf(await readJson(listed)) as { items?: { assetId: string; name: string }[] } | null;
@@ -555,6 +639,29 @@ export async function ensurePublishFlowAssets(
   return { publishAssetId, dvcAssetId };
 }
 
+/**
+ * 幂等把资产状态归一为 ACTIVE。
+ *
+ * <p>生命周期旅程以「弃用 → 归档 → 恢复」为顺序，中途归档会使资产不再出现在目录默认
+ * 结果集（AssetApplicationService.searchAssets 默认 statuses={ACTIVE, DEPRECATED}），
+ * 用例一旦失败中断，下一次运行便无法经 UI 回到该资产。故夹具准备阶段直接调用
+ * POST /assets/{id}/restore：ACTIVE 态返回 409（状态机拒绝），容忍即可。
+ */
+async function ensureAssetActive(
+  api: APIRequestContext,
+  token: string,
+  assetId: string,
+): Promise<void> {
+  const response = await api.post(`${API_BASE}/assets/${assetId}/restore`, {
+    headers: bearer(token),
+    data: {},
+    failOnStatusCode: false,
+  });
+  expect([200, 409], `把资产 ${assetId} 归一为 ACTIVE 返回 HTTP ${response.status()}`).toContain(
+    response.status(),
+  );
+}
+
 /** 以指定凭据登录并返回 access Token（供 spec 在 beforeAll 做夹具写入）。 */
 export async function loginAs(
   api: APIRequestContext,
@@ -617,15 +724,28 @@ export async function prepareFixtures(adminToken: string, apiRequest?: APIReques
     // 刻意不将 outsider 加入组织：目录隔离用例依赖其"非成员 + 非平台管理员"身份。
     await ensureUser(api, adminToken, E2E_ASSET_OUTSIDER);
     const discussantPrincipalId = await ensureUser(api, adminToken, E2E_DISCUSSANT);
+    const lifecyclePrincipalId = await ensureUser(api, adminToken, E2E_LIFECYCLE_OWNER);
+    // 运维只读主体：只用于点击运维类管理页面，不需要组织成员身份（相关端点仅按 Scope 判定）。
+    await ensureUser(api, adminToken, E2E_OPS_OBSERVER);
     await ensureOrganizationMember(api, adminToken, organizationId, authorPrincipalId);
     // 讨论主体必须是组织成员，否则 INTERNAL 资产行级过滤会拒绝 listThreads。
     await ensureOrganizationMember(api, adminToken, organizationId, discussantPrincipalId);
+    // 生命周期主体同理需要组织成员身份，才能通过目录行级过滤看到 INTERNAL 夹具资产。
+    await ensureOrganizationMember(api, adminToken, organizationId, lifecyclePrincipalId);
     const authorToken = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
     const assetId = await ensureAsset(api, authorToken, organizationId, teamId);
     const datasetAssetId = await ensureDatasetAsset(api, authorToken, organizationId, teamId);
+    const lifecycleToken = await loginApi(
+      api, E2E_LIFECYCLE_OWNER.username, E2E_LIFECYCLE_OWNER.password,
+    );
+    const lifecycleAssetId = await ensureAsset(
+      api, lifecycleToken, organizationId, teamId, E2E_LIFECYCLE_ASSET,
+    );
+    await ensureAssetActive(api, lifecycleToken, lifecycleAssetId);
     return {
       organizationId, teamId, assetId, datasetAssetId,
       authorPrincipalId, managerPrincipalId, discussantPrincipalId,
+      lifecycleAssetId,
     };
   } finally {
     if (!apiRequest) {

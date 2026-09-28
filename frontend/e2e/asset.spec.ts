@@ -1,141 +1,184 @@
 /*
- * 功能: P1 资产目录 E2E 测试——创建→搜索→详情→更新→弃用→归档→恢复全流程。
- * 时间: 2026-07-08
+ * 功能: P1 资产目录 E2E——目录检索→登记→详情→生命周期（弃用/归档/恢复）→缺失态。
+ * 时间: 2026-09-28
  * 作者: AxeXie
+ *
+ * <p>全程应用内导航：前端容器 nginx 的 {@code location /assets/} 静态规则遮蔽 SPA 深链，
+ * 整页加载 {@code /assets}、{@code /assets/{id}} 分别得到 301/403/404（见 EVD-P0BR-050-001）。
+ * <p>生命周期旅程落在专用夹具资产与专用主体（E2E_LIFECYCLE_OWNER 具备 asset:deprecate）上，
+ * 避免与 publish-flow.spec 的 PUBLISHED 版本冲突（归档对 publishedCount>0 返回 409）。
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, request, type Page } from '@playwright/test';
+import {
+  E2E_ASSET,
+  E2E_AUTHOR,
+  E2E_LIFECYCLE_ASSET,
+  E2E_LIFECYCLE_OWNER,
+  E2E_ORG,
+  E2E_TEAM_NAME,
+  adminToken,
+  bootstrapCredentials,
+  directApiStatus,
+  login,
+  openAssetDetailViaCatalog,
+  openAssetSettingsViaNav,
+  openAssetsViaNav,
+  prepareFixtures,
+} from './support';
 
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = 'admin123';
+let credentials: { username: string; password: string } | null = null;
 
-/**
- * 辅助：登录管理员账号。
- */
-async function loginAdmin(page: import('@playwright/test').Page) {
-  await page.goto('/login');
-  await page.getByLabel(/用户名|username/i).fill(ADMIN_USERNAME);
-  await page.getByLabel(/密码|password/i).fill(ADMIN_PASSWORD);
-  await page.getByRole('button', { name: /登录|login|sign in/i }).click();
-  await expect(page).not.toHaveURL(/\/login/);
+/** antd 对恰好两个汉字的按钮插入空格（「确 定」「创 建」「设 置」），故一律用宽松正则。 */
+const POPCONFIRM_OK = /确\s*定|OK|Yes/i;
+
+test.beforeAll(async () => {
+  credentials = bootstrapCredentials();
+  if (!credentials) {
+    return;
+  }
+  const api = await request.newContext();
+  try {
+    await prepareFixtures(await adminToken(api), api);
+  } finally {
+    await api.dispose();
+  }
+});
+
+test.beforeEach(async ({ page }) => {
+  test.skip(!credentials, '未提供 E2E_ADMIN_USERNAME/E2E_ADMIN_PASSWORD，无法登录真实栈');
+  await login(page, E2E_AUTHOR.username, E2E_AUTHOR.password);
+});
+
+/** 在登记弹窗内按表单项标签定位控件（antd Select 的 combobox 语义落在内层 input 上）。 */
+function formItem(page: Page, label: RegExp) {
+  return page
+    .locator('.ant-modal .ant-form-item')
+    .filter({ has: page.locator('label', { hasText: label }) })
+    .first();
+}
+
+/** 选择受控下拉中匹配文本的选项。 */
+async function selectOption(page: Page, label: RegExp, optionText: RegExp) {
+  await formItem(page, label).locator('input[role="combobox"]').click();
+  await page
+    .locator('.ant-select-dropdown:visible .ant-select-item-option')
+    .filter({ hasText: optionText })
+    .first()
+    .click();
 }
 
 test.describe('P1 资产目录完整生命周期', () => {
-  test.beforeEach(async ({ page }) => {
-    await loginAdmin(page);
-  });
-
-  test('资产列表页加载并显示内容', async ({ page }) => {
-    await page.goto('/assets');
-    // 页面标题
-    await expect(page.getByText(/资产目录|Asset Catalog/)).toBeVisible();
-    // 类型切换控件
-    await expect(page.getByText(/全部|All/)).toBeVisible();
-    await expect(page.getByText(/模型|Model/)).toBeVisible();
-    await expect(page.getByText(/数据集|Dataset/)).toBeVisible();
-    // 搜索框
-    await expect(page.getByPlaceholder(/搜索|Search/)).toBeVisible();
+  test('资产列表页经导航加载并显示检索控件', async ({ page }) => {
+    await openAssetsViaNav(page);
+    // 限定到页面标题：裸 getByText 会同时命中侧边栏菜单项「资产目录」。
+    await expect(page.getByRole('heading', { name: /资产目录|Asset Catalog/ })).toBeVisible();
+    // 类型切换控件：Segmented 的「模型/数据集」与表格行的类型 Tag 文本相同，
+    // 必须限定到 Segmented 容器，否则 strict violation（实测命中 5 个元素）。
+    const segmented = page.locator('.ant-segmented');
+    await expect(segmented.getByTitle('全部')).toBeVisible();
+    await expect(segmented.getByTitle('模型')).toBeVisible();
+    await expect(segmented.getByTitle('数据集')).toBeVisible();
+    await expect(page.getByPlaceholder(/搜索名称、描述或标签|Search name, description or tags/i)).toBeVisible();
+    // 真实夹具资产在默认结果集中可见（证明检索确实打到后端而非空壳页面）
+    await expect(page.getByRole('link', { name: E2E_ASSET.displayName })).toBeVisible({ timeout: 15_000 });
   });
 
   test('通过弹窗登记新资产', async ({ page }) => {
-    await page.goto('/assets');
+    const suffix = Date.now().toString(36);
+    await openAssetsViaNav(page);
     await page.getByRole('button', { name: /登记资产|Register Asset/ }).click();
+    await expect(page.locator('.ant-modal-title')).toHaveText(/登记资产|Register/);
 
-    // 弹窗标题
-    await expect(page.getByText(/登记资产|Register Asset/)).toBeVisible();
+    await selectOption(page, /所属组织|Organization/, new RegExp(E2E_ORG.name));
+    await selectOption(page, /Owner 团队|Owner Team/, new RegExp(`${E2E_TEAM_NAME}\\s*\\(`));
+    await page.getByLabel(/命名空间|Namespace/).fill('nlp');
+    await page.getByLabel(/^名称$|^Name$/).fill(`e2e-0928-${suffix}`);
+    // 该字段标签是 assets.create.displayNameLabel =「展示名称」，不是「显示名」。
+    await page.getByLabel(/展示名称|displayName/i).fill(`E2E 0928 登记 ${suffix}`);
 
-    // 选择类型
-    await page.getByLabel(/类型|Type/).click();
-    await page.getByText(/模型|Model/).click();
+    await page.getByRole('button', { name: /创\s*建|Create/ }).click();
 
-    // 填写必填字段
-    await page.getByLabel(/命名空间|Namespace/).fill('e2e-test');
-    await page.getByLabel(/名称|Name/).fill('test-model-' + Date.now());
-
-    // 可见性
-    await page.getByLabel(/可见性|Visibility/).click();
-    await page.getByText(/内部|Internal/).click();
-
-    // 提交
-    await page.getByRole('button', { name: /创建|Create/ }).click();
-
-    // 应显示成功提示
-    await expect(page.getByText(/e2e-test/)).toBeVisible({ timeout: 10000 });
+    // 成功提示回显 namespace/name，证明写入走真实 REST 契约
+    await expect(page.locator('.ant-message').getByText(new RegExp(`nlp/e2e-0928-${suffix}`))).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator('.ant-modal-title')).toHaveCount(0);
   });
 
   test('搜索与过滤资产', async ({ page }) => {
-    await page.goto('/assets');
-    // 使用搜索框
-    const searchInput = page.getByPlaceholder(/搜索|Search/);
-    await searchInput.fill('test');
+    await openAssetsViaNav(page);
+    const searchInput = page.getByPlaceholder(/搜索名称、描述或标签|Search name, description or tags/i);
+    await searchInput.fill(E2E_ASSET.displayName);
     await searchInput.press('Enter');
-    // 页面应刷新结果
-    await page.waitForTimeout(1000);
 
-    // 过滤面板
+    // 命中真实夹具资产，且过滤面板字段齐备
+    await expect(page.getByRole('link', { name: E2E_ASSET.displayName })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/语言|Language/)).toBeVisible();
     await expect(page.getByText(/敏感等级|Sensitivity/)).toBeVisible();
   });
 
   test('资产详情页展示完整信息', async ({ page }) => {
-    // 先导航到资产列表
-    await page.goto('/assets');
-    // 如果有资产则点击第一个
-    const firstAsset = page.locator('table tbody tr').first();
-    if (await firstAsset.isVisible()) {
-      await firstAsset.locator('a').click();
-      // 详情页应包含基本信息卡片
-      await expect(page.getByText(/基本信息|Basic Info/)).toBeVisible();
-      // 坐标信息
-      await expect(page.getByText(/坐标|Coordinate/)).toBeVisible();
-    }
+    await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
+    // 「坐标」标签同时出现在基本信息卡与 Quick Use 卡（两处真实渲染），
+    // 裸 getByText 必然 strict violation，故定位到基本信息卡内的标签。
+    const basic = page.locator('.ant-card').filter({ hasText: /基本信息|Basic Info/ }).first();
+    await expect(basic).toBeVisible();
+    await expect(basic.getByText(/坐标|Coordinate/)).toBeVisible();
+    // namespace 与 name 在页面上只以坐标串出现（aria 快照：cell 文本为
+    // aih://nlp/model/e2e050-version-target），因此按坐标断言而非独立文本节点。
+    await expect(basic.getByRole('cell').filter({ hasText: /^aih:\/\// })).toContainText(
+      `aih://${E2E_ASSET.namespace}/model/${E2E_ASSET.name}`,
+    );
   });
 
   test('资产生命周期操作: 弃用→归档→恢复', async ({ page }) => {
-    await page.goto('/assets');
+    // 独立主体：asset:deprecate 是弃用的强制点，E2E_AUTHOR 不具备
+    await login(page, E2E_LIFECYCLE_OWNER.username, E2E_LIFECYCLE_OWNER.password);
+    await openAssetDetailViaCatalog(page, E2E_LIFECYCLE_ASSET.displayName);
+    await openAssetSettingsViaNav(page);
 
-    // 找到第一个资产并进入设置页
-    const firstAssetLink = page.locator('table tbody tr').first().locator('a').first();
-    if (await firstAssetLink.isVisible()) {
-      await firstAssetLink.click();
+    const lifecycle = page.locator('.ant-card').filter({ hasText: /生命周期|Lifecycle/ }).first();
+    await expect(lifecycle).toBeVisible();
 
-      // 导航到设置页
-      await page.getByRole('button', { name: /设置|Settings/ }).click();
-      await expect(page.getByText(/资产设置|Asset Settings/)).toBeVisible();
+    // 弃用（原因可选，此处留空走后端默认）
+    await lifecycle.getByRole('button', { name: /弃用|Deprecate/ }).click();
+    await page.getByRole('button', { name: POPCONFIRM_OK }).click();
+    await expect(page.locator('.ant-message').getByText(/已弃用|Deprecated/)).toBeVisible({ timeout: 15_000 });
 
-      // 弃用
-      const deprecateBtn = page.getByRole('button', { name: /弃用|Deprecate/ });
-      if (await deprecateBtn.isVisible()) {
-        // 选择弃用原因
-        await page.getByLabel(/弃用原因|Deprecation Reason/).click();
-        await page.getByText(/已过时|Outdated/).click();
-        await deprecateBtn.click();
-        // 确认
-        await page.getByRole('button', { name: /确认|Confirm|OK/ }).click();
-        await expect(page.getByText(/已弃用|Deprecated/)).toBeVisible({ timeout: 5000 });
-      }
+    // 归档：DEPRECATED 态提供归档入口
+    await expect(lifecycle.getByRole('button', { name: /归\s*档|Archive/ })).toBeVisible({ timeout: 15_000 });
+    await lifecycle.getByRole('button', { name: /归\s*档|Archive/ }).click();
+    await page.getByRole('button', { name: POPCONFIRM_OK }).click();
+    await expect(page.locator('.ant-message').getByText(/已归档|Archived/)).toBeVisible({ timeout: 15_000 });
 
-      // 归档
-      const archiveBtn = page.getByRole('button', { name: /归档|Archive/ });
-      if (await archiveBtn.isVisible()) {
-        await archiveBtn.click();
-        await page.getByRole('button', { name: /确认|Confirm|OK/ }).click();
-        await expect(page.getByText(/已归档|Archived/)).toBeVisible({ timeout: 5000 });
-      }
+    // 恢复：ARCHIVED 态提供恢复入口，恢复后回到 ACTIVE（保证下一次运行仍可从目录进入）
+    await expect(lifecycle.getByRole('button', { name: /恢复|Restore/ })).toBeVisible({ timeout: 15_000 });
+    await lifecycle.getByRole('button', { name: /恢复|Restore/ }).click();
+    await page.getByRole('button', { name: POPCONFIRM_OK }).click();
+    await expect(page.locator('.ant-message').getByText(/已恢复|Restored/)).toBeVisible({ timeout: 15_000 });
 
-      // 恢复
-      const restoreBtn = page.getByRole('button', { name: /恢复|Restore/ });
-      if (await restoreBtn.isVisible()) {
-        await restoreBtn.click();
-        await page.getByRole('button', { name: /确认|Confirm|OK/ }).click();
-        await expect(page.getByText(/已恢复|Restored/)).toBeVisible({ timeout: 5000 });
-      }
-    }
+    await openAssetsViaNav(page);
+    await expect(page.getByRole('link', { name: E2E_LIFECYCLE_ASSET.displayName })).toBeVisible({ timeout: 15_000 });
   });
 
-  test('Skeleton 加载态展示', async ({ page }) => {
-    // 导航到详情页，在数据加载完成前应有 Skeleton
-    await page.goto('/assets/non-existent-id');
-    // 不存在的资产应显示 Empty
-    await expect(page.getByText(/不存在|does not exist/)).toBeVisible({ timeout: 5000 });
+  test('缺失资产在 UI 与后端均返回不存在', async ({ page }) => {
+    // 后端独立判定：不可访问与不存在统一 404 ASSET_NOT_FOUND（防枚举，见 AssetAccessPolicy）
+    const status = await directApiStatus(
+      '/assets/00000000000000000000000000as',
+      E2E_AUTHOR.username,
+      E2E_AUTHOR.password,
+    );
+    expect(status).toBe(404);
+
+    // UI 判定：注入 404 后由真实详情页渲染空态（深链本身被 nginx 遮蔽，不能整页加载）
+    await page.route('**/api/v1/assets/*', async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'ASSET_NOT_FOUND', message: 'asset not found', retryable: false }),
+      });
+    });
+    await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
+    await expect(page.getByText(/资产不存在|not found|不存在/i).first()).toBeVisible({ timeout: 15_000 });
   });
 });

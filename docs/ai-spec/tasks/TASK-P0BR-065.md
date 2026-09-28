@@ -337,4 +337,115 @@ Remaining risks or follow-ups:
   - nginx location /assets/ 遮蔽 SPA 深链（EVD-050 既有）：e2e 走主机 vite 5173 的口径不变
 ```
 
+## 11. 复核增补（2026-09-28，基线 `aa0a8a7`）
+
+本轮以真实 Compose 栈复跑全量 Playwright，并逐模块复核设计-实现一致性。
+
+### 11.1 e2e 基线恢复（本卡 `frontend/e2e` 授权范围内）
+
+全量：**85 passed / 1 skipped / 0 flaky（2.1m，`--retries=0`）**；`pnpm typecheck` 通过；
+`pnpm exec vitest run --pool=threads --testTimeout=20000 --no-file-parallelism`
+→ **48 files / 212 tests 全 PASS**。
+
+修复的定位器缺陷（均为测试代码，未放宽任何断言文案）：
+
+| 位置 | 现象 | 根因 |
+| --- | --- | --- |
+| profile.spec ×3 | `getByLabel(/新密码/)` strict violation | 同时命中「新密码」与「确认新密码」；改用 `#newPassword` 等 Form 派生 id |
+| profile.spec ×1 | 「登录名」断言找不到 username | 见 11.2 缺陷 D-02，改为断言 principalId 真值 + `test.fixme` 固定设计口径 |
+| agent-management.spec ×1 | 「确 定」30s 超时 | 见 11.3 缺陷 D-04（antd tags Enter 语义）；改为点选 dropdown option |
+| asset.spec ×2 | `getByText(/资产目录/)`、`getByText(/模型/)` strict violation | 与侧边栏 menuitem、表格类型 Tag 文本重叠；改用 `getByRole('heading')` 与 `.ant-segmented` + `getByTitle` |
+| asset.spec ×1 | `getByLabel(/显示名/)` 超时 | 真实标签是「展示名称」（`assets.create.displayNameLabel`） |
+| asset.spec ×1 | `getByText(/坐标/)` strict violation；`nlp` 无独立节点 | 两卡各渲染一次「坐标」；namespace/name 仅以坐标串出现 → 断言坐标 cell |
+
+`./validate-task-card.ps1 -CheckChangedPaths` **按设计 FAIL**：工作树含 `build-logs/`、
+`frontend/playwright-report/`、`frontend/test-results/` 等未忽略的取证产物。
+**本卡实际变更（6 个文件）全部命中 `allowedPaths` 的 `frontend/e2e`**；上述产物不入库。
+
+### 11.2 新增产品缺陷（需新 Task Card，本卡 forbiddenPaths 含 backend）
+
+- **D-01 重置口令后列表不刷新**：`frontend/src/features/admin/pages/UsersPage.tsx` L117-121
+  `resetMutation.onSuccess` 是该文件 5 个 mutation 中唯一漏 `void invalidate()` 的一处，
+  重置成功后行内状态/时间不回显。修复在 `frontend/src/features/admin/**`，
+  而 065 的 `allowedPaths` 不含该目录，且 050/061 等含 `features/admin` 的卡 objective 与本缺陷无关。
+- **D-02「登录名」实为 principalId**：`ProfilePage.tsx` L72 渲染 `principal?.subject`，而后端
+  `AuthenticationApplicationService.toPrincipalView` L387-388、`currentPrincipal` L324 与
+  `PrincipalQueryApplicationService` L35 **三处一律以 principalId 填充 subject**。夹具用户
+  `e2e050-asset-owner` 在页面上完全不可见。修复需后端改 `/me` 载荷（新增 username 或改 subject 语义）
+  + 前端渲染，双超本卡授权。
+- **D-03 资产详情不单独展示 namespace/name**：页面仅渲染坐标串
+  `aih://nlp/model/e2e050-version-target`（aria 快照证实 cell 文本即坐标）。属可接受设计，
+  已在 e2e 按坐标断言；如需独立字段展示另立卡。
+
+### 11.3 antd `Select mode="tags"` 的 Enter 语义（D-04，测试侧已规避）
+
+探针三轮 `--repeat-each=3 --retries=0` 实测证伪了上一轮「focus 竞态」的猜测：
+
+```text
+ACTIVE_ELEMENT=INPUT#tools.ant-select-selection-search-input   ← focus 正确
+VALUE_AFTER_TYPE=asset_search                                  ← 输入正确
+ITEMS=                                                          ← Enter 后 Tag 数恒为 0
+DROPDOWN=ant-select-dropdown ...|asset_searchasset_search
+OPTIONS=1                                                       ← dropdown 内有可点选项
+ITEMS=asset_search                                              ← 点选后 Tag 必定生成
+```
+
+结论：tags 模式下 `keyboard.press('Enter')` 在新建选项未处于 active 态时被 rc-select
+键盘处理器吞掉，**稳定失败而非偶发**；正解是点选 `.ant-select-item-option`。
+`agent-management.spec.ts` 已按此改写并把该结论写入注释。
+`user-management.spec.ts` L30 / `permission.spec.ts` L85 / `support.ts` L76 的 Enter
+属其它控件（AutoComplete/搜索提交），本轮全绿，未改动。
+
+### 11.4 管理端点击覆盖增补（本卡 `frontend/e2e` 授权范围内）
+
+复核发现既有 12 个 spec 对管理中心 18 个页面中的 11 个**从未发起过一次真实点击**
+（全 e2e 目录对 `/admin/jobs`、`/admin/notifications`、`/admin/dependencies`、
+`/admin/audit-logs` 等路径零匹配），故新增 `frontend/e2e/admin-pages.spec.ts`：
+11 个管理页 + 4 个顶级入口页（`/version`、`/upload`、`/review`、`/access`）逐项
+「侧边导航真实点击 → 断言 URL → 断言页面主容器渲染 → 断言无 `.ant-result-error`」。
+
+主体按后端可见性规则分派（不是随意挑选）：
+
+| 主体 | 覆盖页面 | 依据 |
+| --- | --- | --- |
+| `E2E_AUTHOR` | 组织 / Team / 项目；版本 / 上传 / 审批 | 三列表走成员过滤，须为组织成员（`ProjectController` L60-65 等） |
+| `E2E_OPS_OBSERVER` | 任务 / 幂等 / 告警 / 依赖 / 配置 / 审计 / 通知（含「系统管理」Tab） | 后端逐一核对：`JOB_READ`、`SYSTEM_OBSERVE`、`SYSTEM_CONFIGURE`、`AUDIT_READ`、`NOTIFICATION_READ` |
+| `E2E_MANAGER` | 标签 / 权限 / 字典 | 仅需 `tag:read`、`authorization:read`、`dictionary:read` |
+| `E2E_ASSET_OUTSIDER` | `/access` 反向边界 | 无 `authorization:read` → 入口不可见 + 路由 403 |
+
+关键实现约束（已写入 spec 注释）：`AppLayout.tsx` L106 用的是 `defaultOpenKeys`，
+其值依赖挂载时的 `location.pathname`，因此从 `/profile` 起步必须显式点击展开「管理中心」；
+`LoginPage` 无参跳转 `/assets`，无 `asset:read` 的主体登录后停在 403 页，
+故所有用例统一先 `goto('/profile')`，避免把落地 403 与目标页状态混为一谈；
+antd `Tabs` 保留非活跃面板 DOM，切「系统管理」Tab 后断言必须限定
+`.ant-tabs-tabpane-active .ant-table`。
+
+E4 证据：单文件 **9 passed / 13.6s**（一次通过，零迭代）；
+`--repeat-each=2` **18 passed / 26.8s**（无 flaky）；
+`eslint e2e/admin-pages.spec.ts` 与 `tsc -p tsconfig.app.json` 均 exit 0；
+全量 Playwright **94 passed / 1 skipped（2.1m，`--retries=0`）**，即 11.1 的 85 绿基线 + 本卡新增 9。
+注：`frontend/e2e` 不在 `tsconfig.app.json`（`include: ["src"]`）与 `tsconfig.node.json`
+（只含 `vite.config.ts`/`playwright.config.ts`）的编译范围内，因此不受 `pnpm typecheck` 门禁；
+但 `eslint.config.js` 仅忽略 `dist`/`node_modules`，e2e 仍受 lint 约束。
+
+### 11.5 本轮新增登记缺陷（均需新 Task Card，本卡授权不足）
+
+- **D-05 路由重复注册**：`frontend/src/app/routes.tsx` L80/L88 与 L81/L89 分别重复注册
+  `admin/role-bindings`、`admin/resource-acls`；`createBrowserRouter` 按顺序匹配，后两条是死代码。
+- **D-06 已撤销**：原述「`AccessPage` 取数无权限门控」不成立（L49/L54 有 `enabled: canManageTokens`），
+  残余问题并入 D-09。
+- **D-07 i18n 死键**：`admin.alerts.readonlyHint`（`zh.json`）在 `AlertsPage.tsx` 中无任何引用，
+  文案「只读浏览…」实际不展示。
+- **D-08 通知中心「系统管理」Tab 无权限判定**：`features/admin/pages/NotificationsPage.tsx`
+  L34-47 的 Tab 项不含 `system:observe` 判定，L148-166 的三个 admin query 无 `enabled` 门控；
+  仅持 `notification:read` 的主体切到该 Tab 必得 403 错误态。本卡 e2e 用 `E2E_OPS_OBSERVER`
+  （同时持两 Scope）不触发，属**规避而非验证**。
+- **D-09 PAT 三层权限口径不一致**：前端路由要求 `authorization:read`（`routes.tsx` L66）、
+  前端取数要求 `token:create`（`AccessPage.tsx` L49/L54）、后端 `GET /api/v1/tokens`
+  （`PatController` L44-48）**无任何 requirePermission**。后端修复落在 `backend/**`，属本卡 `forbiddenPaths`。
+- **D-10 组织列表与成员抽屉权限错配**：组织行只需 `project:view` 即可见，但行内「成员管理」
+  数据源 `OrganizationController.listMembers` L102-106 要求 `ORGANIZATION_MANAGE`；夹具中
+  无任何主体同时满足「看得到组织行 + 打得开成员抽屉」。故本卡 e2e 只断言行内两个按钮文案可见，
+  **刻意不点开抽屉**，并在 spec 注释中标注该口径。
+
 报告中必须区分 `E1`、`E2`、`E3`、`E4`、`E5`，不得用低等级证据概括高等级结论。
