@@ -79,6 +79,7 @@ GOV（决策与基线）
 | `TASK-P0BR-063` | 修复任务入队时 trace 上下文未被填充致 job_task/job_attempt.trace_id 恒为 NULL | AC-P0B-JOB-003 | GOV-002、P0BR-023 |
 | `TASK-P0BR-064` | 修复发布链路的未注册权限码 asset:write 与 Handler 内 Instant 绑定（审计/告警静默丢行） | AC-P0B-AUTH-004、AC-P0B-AUD-001 | GOV-002、P0BR-063 |
 | `TASK-P0BR-065` | 审查页数据流真实化（删除捏造队列）、前端幽灵权限码 asset:write 纠偏、/review 导航入口、幽灵端点清理、占位文案 i18n（差距层 0） | AC-P0B-UI-002/003/005/006 | GOV-002、P0BR-050、P0BR-064 |
+| `TASK-P0BR-066` | 管理端权限口径与状态刷新缺陷整改（D-01/D-02/D-05/D-07/D-08/D-09/D-10，065 §11 复核产物） | AC-P0B-UI-003/006 | P0BR-065 |
 
 ### 4.2 身份与授权纵向旅程
 
