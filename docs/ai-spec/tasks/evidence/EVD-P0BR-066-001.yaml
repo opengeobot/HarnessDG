@@ -1,0 +1,199 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-066-001
+# 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈取证：Playwright 全量 97 passed / 0 failed /
+# 1 skipped（exit 0），唯一 skip 为 baseCommit 之前既有的 profile.spec D-02 test.fixme
+# （引入于 5ccbf47，早于 baseCommit ff2e388，非本卡产物，且 D-02 已由用户决策移出本卡范围）。
+# 本卡六项 D-01/D-05/D-07/D-08/D-09/D-10 全部取得 E4 或 E2+E4 双层证据，见 coverage.proven。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由用户在 review 后执行；
+# 其后仅追加本 Evidence 与卡 §7/§10 收尾文档，不改变任何代码（与 065 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-066
+  requirements: [REQ-UI-001, REQ-AUTH-001]
+  scenarios: [AC-P0B-UI-003, AC-P0B-UI-006]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS # 148 documents / 726 stable IDs，2026-09-28 复跑
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-066.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-066.md -CheckChangedPaths
+    result: PASS # 全部变更命中 allowedPaths；两个既存脏文件登记于 preExistingDirtyPaths
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-066.md -CheckCompletion
+    # 设计内的失败：review.accepted 需由验证权威置 true（AI 不得自批，DEC-009）；
+    # 且门禁要求 dirtyWorktree=false（代码须先提交为干净 Commit）。
+    # 其余门禁项（changedPathValidation/scenario 覆盖/exitCode/evidenceLevel）已按交接态如实填写。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: ff2e3886d307d5f7a430993aa606515f6834ca5a # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - docs/ai-spec/tasks/TASK-P0BR-066.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-066-001.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - frontend/e2e/admin-pages.spec.ts
+    - frontend/e2e/asset.spec.ts
+    - frontend/e2e/dataset.spec.ts
+    - frontend/e2e/support.ts
+    - frontend/e2e/user-management.spec.ts
+    - frontend/src/app/layout/navigation.ts
+    - frontend/src/app/router/routes.tsx
+    - frontend/src/app/router/routes.test.tsx
+    - frontend/src/features/admin/pages/AlertsPage.tsx
+    - frontend/src/features/admin/pages/NotificationsPage.test.tsx
+    - frontend/src/features/admin/pages/NotificationsPage.tsx
+    - frontend/src/features/admin/pages/OrganizationsPage.test.tsx
+    - frontend/src/features/admin/pages/OrganizationsPage.tsx
+    - frontend/src/features/admin/pages/UsersPage.tsx
+    - build-logs/verify-bom.ps1 # 09-24 既存取证脚本，登记于 preExistingDirtyPaths
+    - docs/architecture/iteration-plan-2026-09-24.md # 09-24 既存变更，登记于 preExistingDirtyPaths
+
+environment:
+  observedAt: 2026-09-28T09:37:13Z
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  java: N/A - 纯前端范围，本卡未触达后端
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+  externalDependencyVersions: {}
+
+execution:
+  workingDirectory: frontend/
+  command: >-
+    cd frontend; pnpm test:e2e（真实 Compose 栈全量：Running 98 tests using 1 worker →
+    97 passed / 1 skipped / 0 failed，3.0m，exit 0）；
+    同轮配套取证见 governance 块与 artifacts.logs；
+    cd frontend; pnpm lint（exit 0，2 条既存 react-refresh/only-export-components 警告、0 error）；
+    cd frontend; pnpm typecheck（tsc -b --noEmit，exit 0）；
+    cd frontend; pnpm exec vitest run --pool=threads --testTimeout=20000 --no-file-parallelism
+    （49 files / 217 tests 全过，1445.94s）；
+    cd frontend; pnpm build（✓ 3257 modules，33.82s，exit 0）；
+    e2e 收敛过程如实记录：首轮全量 1 failed（asset.spec.ts:139「弃用→归档→恢复」恢复后断言），
+    与已修 L83 同因（验收栈历史夹具挤出目录首屏 limit=10），
+    以仓内既有约定抽出 support.expectAssetLinkViaSearch 并复用（先页内真实搜索再断言，非放宽断言）；
+    另单跑 dataset.spec.ts 4 passed（10.3s）验证按 G6 版本回退语义重写的用例。
+  startedAt: 2026-09-28T08:44:00Z
+  finishedAt: 2026-09-28T09:40:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Vite dev server (localhost:5173) -> Nginx gateway (localhost:8080) -> backend/compose stack
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: D-01 重置口令后列表行状态/时间即时回显（user-management.spec 经真实 REST 写路径回归，全量跑内复验）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: D-08 通知中心 Tab 门控——仅持 notification:read 的主体 E2E_NOTIFICATION_READER 打开通知中心不渲染「系统管理」Tab（admin-pages.spec.ts:204）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: D-08 反向——持 system:observe 的运维主体打开通知中心「系统管理」Tab 出成功表格且 .ant-result-error count=0（admin-pages.spec.ts:181）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: D-10 组织成员入口门控——持 organization:manage 的主体看到成员入口并成功加载成员抽屉（admin-pages.spec.ts:99）；
+        无该 scope 的主体不渲染入口、列表仍正常出数（admin-pages.spec.ts:80 + Vitest OrganizationsPage.test.tsx 对照）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: D-09 /access 口径统一 token:create——无 token:create 但持 authorization:read 的主体入口隐藏且直连 403（admin-pages.spec.ts:296）；
+        仅持 token:create 的主体正常打开并取回 PAT 列表（admin-pages.spec.ts:311）
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-UI-006
+      assertion: D-05 路由去重——routes.test.tsx 断言每个 admin 路径在路由表中唯一注册、且导航与路由守卫 scope 口径一致（Vitest 217/217 内）
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-UI-006
+      assertion: D-07 admin.alerts.readonlyHint 生效——AlertsPage.tsx:99 渲染只读提示，zh.json:816/en.json:816 双份齐备；
+        E4 直接断言文案在运维主体的 /admin/alerts 页面可见（admin-pages.spec.ts:157 用例内新增断言，单文件复跑 12 passed / 21.5s）
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: 运维越权边界——运维主体看不到越权入口且直连未授权页面被 RouteGuard 与后端双重拒绝（admin-pages.spec.ts:223）
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-UI-003
+      assertion: 数据集详情版本回退语义（dataset.spec.ts 4 passed）——无 URL version 参数时仅回退最近 PUBLISHED 版本、
+        无 PUBLISHED 则选择器保持「选择版本」空占位（不猜 DRAFT）；选中后 URL 与选择器回显同步、切换版本 URL 更新
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: D-02 /profile 登录名回显本地用户 username——契约 CurrentPrincipal 无该字段，本卡移除并移交后续契约先行卡；e2e 断言以 test.fixme 锁定（profile.spec.ts:84）
+      reason: contracts 属本卡 forbiddenPaths；需 OpenAPI CurrentPrincipal 新增可选字段 + 后端视图改动
+
+contractConsistency:
+  openapiMatched: true # 仅核对既有 x-required-permissions（listPats=[token:create]、listOrganizationMembers=[organization:manage]）；本卡无契约变更
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无 Flyway 迁移
+  uiMatched: true # zh/en 文案与导航/路由元数据同步
+  runbookMatched: null # 本卡无需变更运行手册
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-066.md（本卡 §7/§10）
+    - frontend/src/features/admin/pages/UsersPage.tsx（D-01 invalidate）
+    - frontend/src/app/router/routes.tsx + routes.test.tsx（D-05 去重与唯一注册断言，新增测试文件）
+    - frontend/src/features/admin/pages/AlertsPage.tsx（D-07 readonlyHint 生效）
+    - frontend/src/features/admin/pages/NotificationsPage.tsx + .test.tsx（D-08 Tab 门控）
+    - frontend/src/app/layout/navigation.ts（D-09 导航口径 token:create）
+    - frontend/src/features/admin/pages/OrganizationsPage.tsx + .test.tsx（D-10 成员入口门控）
+    - frontend/e2e/support.ts（expectAssetLinkViaSearch helper + 夹具主体注册修复）
+    - frontend/e2e/admin-pages.spec.ts（D-07/D-08/D-09/D-10 E4 断言）
+  logs:
+    - build-logs/e2e-066-final-2026-09-28.log（D-07 断言新增后的终态全量复跑：97 passed / 1 skipped / 0 failed，exit 0）
+    - build-logs/e2e-066-2026-09-28.log（首次达成的全量绿色基线，同一统计口径）
+    - build-logs/vitest-066-2026-09-28.log（49 files / 217 tests 全绿，1445.94s）
+    - build-logs/fe-build-066-2026-09-28.log（3257 modules / 33.82s，exit 0）
+    - build-logs/fe-lint-066-final-2026-09-28.log / fe-typecheck-066-final-2026-09-28.log（终态复跑，exit 0）
+    - build-logs/governance-066-2026-09-28.log（三条治理校验全 PASS，exit 0）
+    - build-logs/e2e-066-full-fail-2026-09-28.log（1 failed 现场，asset.spec.ts:139）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 全量：98 tests / 97 passed / 1 skipped / 0 failed（3.0m，workers=1、retries=0）
+    - Playwright 单文件：dataset.spec.ts 4 passed / 10.3s；admin-pages.spec.ts 12 passed / 21.5s
+    - Vitest：49 files / 217 tests 全过（1445.94s，serial）
+    - pnpm build：✓ 3257 modules / 33.82s（exit 0）；lint/typecheck：exit 0
+  databaseQueries: []
+  auditEvents:
+    - 本卡不新增审计事件类型；D-01 重置口令与 D-09 PAT 列表读写均由后端既有审计实现承担
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env，仅注入子进程环境变量；本清单、e2e 报告与归档日志均不含 Token/口令明文。
+    - e2e 源码沿用仓内既有夹具常量惯例（用户名可读、口令来自环境变量），未新增任何硬编码口令。
+
+limitations:
+  skippedTests:
+    - test: profile.spec.ts:84「登录名回显本地用户 username」
+      reason: >-
+        该 test.fixme 由 5ccbf47（早于本卡 baseCommit ff2e388）引入，属 D-02 议题；
+        D-02 已由用户在 2026-09-28 批准问句中决策「本卡移除 D-02，另立契约优先新卡」，
+        故本卡不实现、也不删除该断言（删除即等同于放宽断言）。
+        因此 coverage.notProven 保留 1 条，-CheckCompletion 在此项与 review.accepted 上按设计失败，
+        须由 D-02 契约先行卡闭环后再由验证权威放行。
+  assumptions:
+    - Compose 全栈已运行且 healthy（7 容器 Up，postgres/backend/gitea/minio 标记 healthy），验证窗口内无重启。
+    - 验收栈累积历史夹具资产（E2E 0928 登记 mul*）会占满目录默认首屏（limit=10 倒序）；
+      本卡 e2e 沿用仓内既有约定（openAssetDetailViaCatalog，050/065 已记录同因）先页内真实搜索再断言，
+      覆盖「检索确实打到后端」的真实用户路径，非放宽断言。
+  environmentDifferences:
+    - >-
+      Playwright 走主机 Vite dev server 5173 而非 nginx 8080 容器前端
+      （nginx 的 location /assets/ 静态规则遮蔽 SPA 深链，属既有基础设施缺陷，见 EVD-P0BR-050-001 limitations）；
+      API 流量仍经真实 nginx 8080 转发到后端，故写路径与权限拒绝均为真实后端行为。
+    - 本地非 CI：retries=0、reporter=list；本轮全量一次性达成 97 passed / 0 failed。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

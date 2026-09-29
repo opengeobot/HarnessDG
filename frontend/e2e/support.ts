@@ -78,6 +78,21 @@ export async function openAssetDetailViaCatalog(page: Page, displayName: string)
   await expect(page.getByText(/页面不存在|Page not found/)).toHaveCount(0);
 }
 
+/**
+ * 在资产目录页断言目标资产链接可见。
+ *
+ * <p>与 {@link openAssetDetailViaCatalog} 同因：目录默认 limit=10 倒序分页，
+ * 验收栈累积的历史夹具会把目标挤出首屏。先按显示名走页内真实搜索，再断言结果——
+ * 覆盖的是「检索确实打到后端」这一真实用户路径，而不是放宽断言。
+ */
+export async function expectAssetLinkViaSearch(page: Page, displayName: string) {
+  const search = page.getByPlaceholder(/搜索名称、描述或标签|Search name, description or tags/i);
+  await expect(search).toBeVisible();
+  await search.fill(displayName);
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('link', { name: displayName })).toBeVisible({ timeout: 15_000 });
+}
+
 /** 以引导管理员凭据登录 UI；凭据缺失时 skip 当前用例（各 admin/profile spec 共用）。 */
 export async function loginBootstrap(page: Page) {
   const credentials = bootstrapCredentials();
@@ -214,6 +229,47 @@ export const E2E_LIFECYCLE_OWNER = {
   username: 'e2e0928-lifecycle-owner',
   password: 'E2e0928-Lifecycle-01!z',
   scopes: ['project:view', 'asset:read', 'asset:create', 'asset:update', 'asset:manage', 'asset:deprecate'],
+} as const;
+
+/**
+ * 组织管理主体：{@code project:view} + {@code organization:manage}。
+ *
+ * <p>后端契约：listOrganizations 仅要求 project:view 并按成员关系过滤，
+ * listOrganizationMembers/addOrganizationMember 要求 organization:manage。
+ * D-10 把行内「成员管理」入口按后一口径门控后，需要一个合法持权主体证明
+ * 收紧没有把管理员一并挡在门外；既有夹具无人持该 Scope，且已落库用户
+ * 无法热更 Scope（PATCH 仅接受 displayName/email/locale），故新增独立主体。
+ */
+export const E2E_ORG_MANAGER = {
+  username: 'e2e0928-org-manager',
+  password: 'E2e0928-OrgManager-01!z',
+  scopes: ['project:view', 'organization:manage'],
+} as const;
+
+/**
+ * 凭据管理主体：仅持 {@code token:create}，刻意不含 authorization:read。
+ *
+ * <p>后端契约：listPats 要求 token:create（PatApplicationService 服务层
+ * requirePermission 已 fail-closed）。D-09 把 /access 守卫口径从
+ * authorization:read 收敛到 token:create 后，此主体用于证明合法主体不被误挡。
+ */
+export const E2E_TOKEN_MANAGER = {
+  username: 'e2e0928-token-manager',
+  password: 'E2e0928-TokenManager-01!z',
+  scopes: ['token:create'],
+} as const;
+
+/**
+ * 通知只读主体：仅持 {@code notification:read}，刻意不含 system:observe。
+ *
+ * <p>后端契约：Outbox/Webhook 投递端点要求 system:observe，用户通知仅要求
+ * notification:read。D-08 把「系统管理」Tab 按 system:observe 门控后，
+ * 此主体用于证明仅持读权限的主体不再触发该取数。
+ */
+export const E2E_NOTIFICATION_READER = {
+  username: 'e2e0928-notification-reader',
+  password: 'E2e0928-NotifyReader-01!z',
+  scopes: ['notification:read'],
 } as const;
 
 /**
@@ -727,7 +783,14 @@ export async function prepareFixtures(adminToken: string, apiRequest?: APIReques
     const lifecyclePrincipalId = await ensureUser(api, adminToken, E2E_LIFECYCLE_OWNER);
     // 运维只读主体：只用于点击运维类管理页面，不需要组织成员身份（相关端点仅按 Scope 判定）。
     await ensureUser(api, adminToken, E2E_OPS_OBSERVER);
+    // 组织管理主体与凭据主体：仅按 Scope 判定页面可见性；但 listOrganizations 对
+    // 非 platformAdmin 主体按成员关系过滤，故 org-manager 必须入组织才能看到夹具组织行。
+    const orgManagerPrincipalId = await ensureUser(api, adminToken, E2E_ORG_MANAGER);
+    await ensureUser(api, adminToken, E2E_TOKEN_MANAGER);
+    // 通知只读主体：仅验证「我的通知」成功态与系统管理 Tab 不渲染，不需要组织成员身份。
+    await ensureUser(api, adminToken, E2E_NOTIFICATION_READER);
     await ensureOrganizationMember(api, adminToken, organizationId, authorPrincipalId);
+    await ensureOrganizationMember(api, adminToken, organizationId, orgManagerPrincipalId);
     // 讨论主体必须是组织成员，否则 INTERNAL 资产行级过滤会拒绝 listThreads。
     await ensureOrganizationMember(api, adminToken, organizationId, discussantPrincipalId);
     // 生命周期主体同理需要组织成员身份，才能通过目录行级过滤看到 INTERNAL 夹具资产。

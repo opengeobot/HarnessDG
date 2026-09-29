@@ -12,6 +12,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
+import { usePermission } from '@/app/permission';
 import {
   listNotifications,
   listOutboxEvents,
@@ -24,28 +25,34 @@ import type { NotificationView, OutboxEventView, WebhookDeliveryView } from '../
 
 export function NotificationsPage() {
   const { t } = useTranslation();
+  const { hasScope } = usePermission();
   useDocumentTitle(t('admin.notifications.title'));
+
+  // Outbox / Webhook 投递端点要求 system:observe；仅 notification:read 的主体不得触发该取数
+  const canObserveSystem = hasScope('system:observe');
+  const items = [
+    {
+      key: 'user',
+      label: t('admin.notifications.userTab'),
+      children: <UserNotificationsTab />,
+    },
+    ...(canObserveSystem
+      ? [
+          {
+            key: 'admin',
+            label: t('admin.notifications.adminTab'),
+            children: <NotificationAdminTab />,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Flex vertical gap={16}>
       <Typography.Title level={4} style={{ margin: 0 }}>
         {t('admin.notifications.title')}
       </Typography.Title>
-      <Tabs
-        defaultActiveKey="user"
-        items={[
-          {
-            key: 'user',
-            label: t('admin.notifications.userTab'),
-            children: <UserNotificationsTab />,
-          },
-          {
-            key: 'admin',
-            label: t('admin.notifications.adminTab'),
-            children: <NotificationAdminTab />,
-          },
-        ]}
-      />
+      <Tabs defaultActiveKey="user" items={items} />
     </Flex>
   );
 }

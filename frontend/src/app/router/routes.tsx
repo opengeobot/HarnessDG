@@ -63,7 +63,7 @@ export const router = createBrowserRouter([
       { path: 'assets/:assetId/versions/:versionId', element: guarded(<VersionDetailPage />, ['asset:read']) },
       { path: 'upload', element: guarded(<UploadPage />, ['asset:manage']) },
       { path: 'review', element: guarded(<ReviewPage />, ['asset:manage']) },
-      { path: 'access', element: guarded(<AccessPage />, ['authorization:read']) },
+      { path: 'access', element: guarded(<AccessPage />, ['token:create']) },
       { path: 'integrations', element: guarded(<IntegrationsPage />, ['authorization:read']) },
       { path: 'profile', element: guarded(<ProfilePage />) },
       {
@@ -85,8 +85,6 @@ export const router = createBrowserRouter([
           { path: 'configurations', element: guarded(<ConfigurationsPage />, ['system:configure']) },
           { path: 'jobs', element: guarded(<JobsPage />, ['job:read']) },
           { path: 'idempotency', element: guarded(<IdempotencyPage />, ['job:read']) },
-          { path: 'role-bindings', element: guarded(<RoleBindingsPage />, ['authorization:read']) },
-          { path: 'resource-acls', element: guarded(<ResourceAclsPage />, ['authorization:read']) },
           { path: 'alerts', element: guarded(<AlertsPage />, ['system:observe']) },
           { path: 'audit-logs', element: guarded(<AuditLogsPage />, ['audit:read']) },
           { path: 'notifications', element: guarded(<NotificationsPage />, ['notification:read']) },

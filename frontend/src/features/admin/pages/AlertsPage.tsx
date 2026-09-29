@@ -92,9 +92,12 @@ export function AlertsPage() {
   return (
     <Flex vertical gap={16}>
       <Flex justify="space-between" align="center" wrap gap={12}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          {t('admin.alerts.title')}
-        </Typography.Title>
+        <Flex vertical gap={4}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {t('admin.alerts.title')}
+          </Typography.Title>
+          <Typography.Text type="secondary">{t('admin.alerts.readonlyHint')}</Typography.Text>
+        </Flex>
         <Space>
           <Button onClick={() => query.refetch()}>{t('common.refresh')}</Button>
         </Space>

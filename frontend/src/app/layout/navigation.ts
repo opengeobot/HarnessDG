@@ -24,7 +24,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: '/version', labelKey: 'nav.versionCenter', requiredScopes: ['asset:read'] },
   { key: '/review', labelKey: 'nav.reviewCenter', requiredScopes: ['asset:manage'] },
   { key: '/upload', labelKey: 'nav.uploadCenter', requiredScopes: ['asset:manage'] },
-  { key: '/access', labelKey: 'nav.accessCredentials', requiredScopes: ['authorization:read'] },
+  // PAT 列表后端 listPats 要求 token:create（非 authorization:read），守卫口径以契约为准
+  { key: '/access', labelKey: 'nav.accessCredentials', requiredScopes: ['token:create'] },
   { key: '/integrations', labelKey: 'nav.agentIntegration', requiredScopes: ['authorization:read'] },
   {
     key: '/admin',

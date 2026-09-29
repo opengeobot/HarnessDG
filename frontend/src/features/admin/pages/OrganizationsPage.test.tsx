@@ -78,4 +78,17 @@ describe('OrganizationsPage', () => {
     renderWithProviders(<OrganizationsPage />);
     expect(screen.getByRole('button', { name: /刷\s*新/ })).toBeInTheDocument();
   });
+
+  // TASK-P0BR-066 / D-10：成员端点契约要求 organization:manage，
+  // 组织列表仅需 project:view；无 manage 的主体不得看到成员管理入口，也不得触发成员取数。
+  it('无 organization:manage 时隐藏成员管理入口且不取数', async () => {
+    renderWithProviders(<OrganizationsPage />, {
+      authContext: { scopes: new Set(['project:view']) },
+    });
+    expect(await screen.findByText('ACME Corp')).toBeInTheDocument();
+    // 行内「Team 管理」与列表同为 project:view 口径，应保持在位（对照组）
+    expect(screen.getByText(/Team 管理/)).toBeInTheDocument();
+    expect(screen.queryByText(/成员管理|memberManagement/i)).not.toBeInTheDocument();
+    expect(mockListMembers).not.toHaveBeenCalled();
+  });
 });

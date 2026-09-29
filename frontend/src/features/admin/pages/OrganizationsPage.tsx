@@ -25,6 +25,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
+import { usePermission } from '@/app/permission';
 import {
   addOrganizationMember,
   createOrganization,
@@ -44,6 +45,10 @@ export function OrganizationsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // 成员管理端点（listOrganizationMembers 等）契约要求 organization:manage；
+  // 组织列表本身仅要求 project:view，故入口需独立门控。
+  const { hasScope } = usePermission();
+  const canManageMembers = hasScope('organization:manage');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [memberOrg, setMemberOrg] = useState<OrganizationView | null>(null);
@@ -68,7 +73,7 @@ export function OrganizationsPage() {
   const membersQuery = useQuery({
     queryKey: ['admin', 'organizations', memberOrg?.organizationId, 'members'],
     queryFn: () => listOrganizationMembers(memberOrg!.organizationId),
-    enabled: memberOrg !== null,
+    enabled: memberOrg !== null && canManageMembers,
   });
 
   const invalidateMembers = () =>
@@ -122,9 +127,11 @@ export function OrganizationsPage() {
       key: 'action',
       render: (_, record) => (
         <Space>
-          <Button type="link" size="small" onClick={() => setMemberOrg(record)}>
-            {t('admin.organizations.memberManagement')}
-          </Button>
+          {canManageMembers ? (
+            <Button type="link" size="small" onClick={() => setMemberOrg(record)}>
+              {t('admin.organizations.memberManagement')}
+            </Button>
+          ) : null}
           <Button type="link" size="small" onClick={() => navigate(`/admin/organizations/${record.organizationId}/teams`)}>
             {t('admin.organizations.teamManagement')}
           </Button>

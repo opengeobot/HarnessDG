@@ -107,34 +107,30 @@ test.describe('DATASET 资产体验（E2E 050 夹具）', () => {
   });
 
   // ── 用例 3：版本切换器驱动 URL 同步（AC-DST-DETAIL-002）─────────────────
-  // AssetDetailPage L155 selectedVersionId=searchParams.get('version')（初始 URL 无该参数）；
-  // L532-543 顶部 Select（该页唯一）value=effectiveVersionId（无 URL 参数时回退 versions[0]），
-  // onChange=(v)=>setParam('version', v)。受控 Select 点击「当前已选项」不会触发 onChange，
-  // 故夹具提供 1.0.0/1.0.1 两个 DRAFT 版本；用例读取当前回显后切换到「另一个」，
-  // URL 必须写入 ?version=<目标id> 且选择器回显切换——不依赖后端 created_at DESC 的时间戳先后。
+  // AssetDetailPage L158 selectedVersionId=searchParams.get('version')（初始 URL 无该参数）；
+  // L541-553 顶部 Select value=effectiveVersionId。0620940（G6 版本回退语义）后，
+  // 无 URL 参数且无 PUBLISHED 版本时**不再自动选中 DRAFT**（REQ-DST-DETAIL-001：
+  // latestPublished 只能由服务端精确计算，避免猜测 latest），选择器显示「选择版本」占位。
+  // 夹具资产仅有 1.0.0/1.0.1 两个 DRAFT，故初始为空占位；先选 1.0.0 断言 URL 写入，
+  // 再切到 1.0.1 断言 URL 更新——两次真实 onChange，仍完整覆盖同步契约。
   test('版本切换——页内选择不同版本后 URL 写入 version=<id> 且选择器回显', async ({ page }) => {
     await login(page, E2E_AUTHOR.username, E2E_AUTHOR.password);
     await openAssetDetailViaCatalog(page, E2E_DATASET.displayName);
 
-    // 进入详情时 URL 不携带 version 参数（初始态），交互后写入——变化本身即证明同步契约。
+    // 进入详情时 URL 不携带 version 参数；无已发布版本 → 选择器为空占位（G6 语义）。
     await expect(page).not.toHaveURL(/version=/);
-    const switcher = page.locator('.ant-select-selection-item');
-    await expect(switcher).toBeVisible({ timeout: 10_000 });
-    const current = await switcher.innerText();
-    expect(current, `选择器回显应为夹具版本之一，实际「${current}」`).toMatch(/1\.0\.[01]/);
-    const switchedToFirst = current.includes(SECOND_VERSION);
-    const targetLabel = switchedToFirst ? FIXTURE_VERSION : SECOND_VERSION;
-    const targetVersionId = switchedToFirst ? versionId : secondVersionId;
+    await expect(page.getByText('选择版本')).toBeVisible({ timeout: 10_000 });
 
     // 该页仅有版本切换一个 Select（已 Grep 核实 AssetDetailPage 全部 Select 实例）。
     await page.locator('.ant-select-selector').click();
-    await page
-      .locator('.ant-select-item-option')
-      .filter({ hasText: targetLabel })
-      .click();
+    await page.locator('.ant-select-item-option').filter({ hasText: FIXTURE_VERSION }).click();
+    await expect(page).toHaveURL(new RegExp(`version=${versionId}`), { timeout: 10_000 });
+    await expect(page.locator('.ant-select-selection-item')).toContainText(FIXTURE_VERSION);
 
-    await expect(page).toHaveURL(new RegExp(`version=${targetVersionId}`), { timeout: 10_000 });
-    await expect(page.locator('.ant-select-selection-item')).toContainText(targetLabel);
+    await page.locator('.ant-select-selector').click();
+    await page.locator('.ant-select-item-option').filter({ hasText: SECOND_VERSION }).click();
+    await expect(page).toHaveURL(new RegExp(`version=${secondVersionId}`), { timeout: 10_000 });
+    await expect(page.locator('.ant-select-selection-item')).toContainText(SECOND_VERSION);
   });
 
   // ── 用例 4：讨论 Tab 列表端点授权契约 ──────────────────────────────────

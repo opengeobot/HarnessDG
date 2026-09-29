@@ -19,6 +19,7 @@ import {
   adminToken,
   bootstrapCredentials,
   directApiStatus,
+  expectAssetLinkViaSearch,
   login,
   openAssetDetailViaCatalog,
   openAssetSettingsViaNav,
@@ -78,9 +79,10 @@ test.describe('P1 资产目录完整生命周期', () => {
     await expect(segmented.getByTitle('全部')).toBeVisible();
     await expect(segmented.getByTitle('模型')).toBeVisible();
     await expect(segmented.getByTitle('数据集')).toBeVisible();
-    await expect(page.getByPlaceholder(/搜索名称、描述或标签|Search name, description or tags/i)).toBeVisible();
-    // 真实夹具资产在默认结果集中可见（证明检索确实打到后端而非空壳页面）
-    await expect(page.getByRole('link', { name: E2E_ASSET.displayName })).toBeVisible({ timeout: 15_000 });
+    // 真实夹具资产经页内搜索可见（证明检索确实打到后端而非空壳页面）。
+    // 不断言默认结果集：验收栈累积的历史资产会把夹具挤出首屏分页（limit=10），
+    // 与 openAssetDetailViaCatalog 处的既有说明同因；搜索后断言更贴近用户真实路径。
+    await expectAssetLinkViaSearch(page, E2E_ASSET.displayName);
   });
 
   test('通过弹窗登记新资产', async ({ page }) => {
@@ -157,8 +159,9 @@ test.describe('P1 资产目录完整生命周期', () => {
     await page.getByRole('button', { name: POPCONFIRM_OK }).click();
     await expect(page.locator('.ant-message').getByText(/已恢复|Restored/)).toBeVisible({ timeout: 15_000 });
 
+    // 恢复后必须能重新从目录检索到该资产（ACTIVE 态对普通用户可见）。
     await openAssetsViaNav(page);
-    await expect(page.getByRole('link', { name: E2E_LIFECYCLE_ASSET.displayName })).toBeVisible({ timeout: 15_000 });
+    await expectAssetLinkViaSearch(page, E2E_LIFECYCLE_ASSET.displayName);
   });
 
   test('缺失资产在 UI 与后端均返回不存在', async ({ page }) => {

@@ -136,13 +136,16 @@ test.describe('AC-P0B-IAM-012: 用户管理 CRUD', () => {
       timeout: 15_000,
     });
     await expect(modal).toBeHidden({ timeout: 10_000 });
-    // 点击页面真实的「刷新」按钮强制重查：UsersPage.resetMutation.onSuccess 漏了
-    // invalidate()，列表仍会显示重置前的 ACTIVE（已记录为前端缺陷，见迭代报告）。
-    // 重查后的值才是后端真值——用于断言 LocalUser.resetPassword 的语义。
-    await page.getByRole('button', { name: /刷\s*新|refresh/i }).click();
+    // D-01 修复后 resetMutation.onSuccess 会 invalidate 列表：无需手动「刷新」，
+    // 行内状态必须由 UI 自行回显为重置后的真值（此前的缺陷是列表停留在重置前状态）。
     const updated = userRow(page, username);
     await expect(updated.getByText('是', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(updated.getByText('PENDING_ACTIVATION')).toBeVisible();
+    // 再点一次「刷新」确认回显值与后端真值一致，而非前端的乐观状态。
+    await page.getByRole('button', { name: /刷\s*新|refresh/i }).click();
+    const refetched = userRow(page, username);
+    await expect(refetched.getByText('是', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(refetched.getByText('PENDING_ACTIVATION')).toBeVisible();
   });
 
   test('临时口令不足 12 位被前端校验拦截', async ({ page }) => {

@@ -46,4 +46,28 @@ describe('NotificationsPage', () => {
       expect(screen.getByText(/用户通知|admin\.notifications\.userTab/i)).toBeInTheDocument();
     });
   });
+
+  // TASK-P0BR-066 / D-08：Outbox 与 Webhook 投递端点契约要求 system:observe，
+  // 仅持 notification:read 的主体不应看到「系统管理」Tab，也不应触发对应取数。
+  it('仅 notification:read 的主体不渲染「系统管理」Tab 且不取数', async () => {
+    renderWithProviders(<NotificationsPage />, {
+      authContext: { scopes: new Set(['notification:read']) },
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/用户通知|admin\.notifications\.userTab/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/系统管理|admin\.notifications\.adminTab/i)).not.toBeInTheDocument();
+    expect(mockListOutboxEvents).not.toHaveBeenCalled();
+    expect(mockListWebhookDeliveries).not.toHaveBeenCalled();
+    expect(mockGetOutboxPendingCount).not.toHaveBeenCalled();
+  });
+
+  it('持 system:observe 的主体可见「系统管理」Tab', async () => {
+    renderWithProviders(<NotificationsPage />, {
+      authContext: { scopes: new Set(['notification:read', 'system:observe']) },
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/系统管理|admin\.notifications\.adminTab/i)).toBeInTheDocument();
+    });
+  });
 });

@@ -118,6 +118,8 @@ export function UsersPage() {
       message.success(t('admin.users.passwordReset'));
       setResetting(null);
       resetForm.resetFields();
+      // 重置密码会改变用户的 passwordChangeRequired 等状态，必须让列表失效回显
+      void invalidate();
     },
     onError,
   });
