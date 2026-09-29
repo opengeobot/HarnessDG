@@ -15,6 +15,7 @@ import java.util.List;
  * @param userId              关联用户 ID（usr_，Agent 主体为 null）
  * @param principalType       主体类型
  * @param subject             外部主体标识（此处与 principalId 一致）
+ * @param username            登录名（仅 USER 主体；AGENT/CLIENT 为 null，TASK-P0BR-067）
  * @param displayName         展示名称
  * @param organizationId      组织 ID（P0-B 暂为 null）
  * @param roles               角色集合（Task 5 前为空）
@@ -26,6 +27,7 @@ public record CurrentPrincipalView(String principalId,
                                    String userId,
                                    PrincipalType principalType,
                                    String subject,
+                                   String username,
                                    String displayName,
                                    String organizationId,
                                    List<String> roles,

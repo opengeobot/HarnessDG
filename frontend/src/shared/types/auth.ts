@@ -14,6 +14,8 @@ export interface CurrentPrincipal {
   userId?: string | null;
   principalType: PrincipalType;
   subject: string;
+  /** 登录名（仅 USER 主体返回；机器主体为 null，TASK-P0BR-067） */
+  username?: string | null;
   displayName?: string | null;
   organizationId?: string | null;
   roles: string[];

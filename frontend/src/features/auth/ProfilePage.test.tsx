@@ -11,6 +11,7 @@ const mockPrincipal = {
   principalId: 'prn_1',
   userId: 'usr_1',
   subject: 'alice',
+  username: 'alice.wang',
   displayName: 'Alice Wang',
   locale: 'zh-CN',
   roles: ['platform_admin'],
@@ -43,11 +44,22 @@ describe('ProfilePage', () => {
     renderWithProviders(<ProfilePage />);
     expect(screen.getByText('prn_1')).toBeInTheDocument();
     expect(screen.getByText('usr_1')).toBeInTheDocument();
-    expect(screen.getByText('alice')).toBeInTheDocument();
+    // 登录名优先回显 username（TASK-P0BR-067），而非 subject
+    expect(screen.getByText('alice.wang')).toBeInTheDocument();
     expect(screen.getByText('Alice Wang')).toBeInTheDocument();
     expect(screen.getByText('zh-CN')).toBeInTheDocument();
     expect(screen.getByText('platform_admin')).toBeInTheDocument();
     expect(screen.getByText('user:read')).toBeInTheDocument();
+  });
+
+  it('username 缺失时登录名回退 subject（兼容旧后端）', () => {
+    delete (mockPrincipal as Partial<typeof mockPrincipal>).username;
+    try {
+      renderWithProviders(<ProfilePage />);
+      expect(screen.getByText('alice')).toBeInTheDocument();
+    } finally {
+      mockPrincipal.username = 'alice.wang';
+    }
   });
 
   it('forcePasswordChange=true 时显示警告', () => {

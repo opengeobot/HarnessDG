@@ -69,7 +69,7 @@ export function ProfilePage() {
         <Descriptions column={1} bordered size="small">
           <Descriptions.Item label={t('profile.principalId')}>{principal?.principalId}</Descriptions.Item>
           <Descriptions.Item label={t('profile.userId')}>{principal?.userId ?? '-'}</Descriptions.Item>
-          <Descriptions.Item label={t('profile.loginName')}>{principal?.subject}</Descriptions.Item>
+          <Descriptions.Item label={t('profile.loginName')}>{principal?.username ?? principal?.subject}</Descriptions.Item>
           <Descriptions.Item label={t('profile.displayName')}>{principal?.displayName ?? '-'}</Descriptions.Item>
           <Descriptions.Item label={t('profile.language')}>{principal?.locale}</Descriptions.Item>
           <Descriptions.Item label={t('profile.roles')}>

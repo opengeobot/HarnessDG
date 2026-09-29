@@ -1,0 +1,259 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-067-001
+# 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈取证：Playwright 全量 99 tests →
+# 99 passed / 0 failed / 0 skipped（exit 0，2.9m），其中含本卡将 profile.spec.ts 的
+# D-02 test.fixme 解除为正式断言（USER 主体登录名回显 username），并新增
+# AC-P0B-UI-002 最小权限主体（仅 notification:read）的登录名回显 + /assets 越权 403 用例。
+# 契约项按卡 §6.8 记 redocly lint PASS + oasdiff breaking「No breaking changes」；
+# CI 的 redocly diff 步骤为既存缺陷（上游已移除 diff 子命令），如实登记 notProven。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由用户在 review 后执行
+# （与 065/066 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-067
+  requirements: [REQ-IAM-002, REQ-UI-001]
+  scenarios: [AC-P0B-UI-002, AC-P0B-UI-003]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 148 documents / 727 stable IDs，2026-09-29 复跑
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-067.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-067.md -CheckChangedPaths
+    # 全部变更命中 allowedPaths；三个既存脏文件登记于 preExistingDirtyPaths；
+    # 取证日志统一为 build-logs/*.log（.gitignore `*.log` 命中，066 §260 同惯例），
+    # Playwright 产物目录（playwright-report/test-results）终态取证后已删除不入库。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-067.md -CheckCompletion
+    # 设计内的失败：review.accepted 需由验证权威置 true（AI 不得自批，DEC-009）；
+    # 且门禁要求 dirtyWorktree=false（代码须先提交为干净 Commit）。
+    # 其余门禁项（changedPathValidation/scenario 覆盖/exitCode/evidenceLevel）已按交接态如实填写。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: e9aa2a0af826ed3b37ea69288e48dcfe594c4ee9 # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - contracts/openapi/aihub-v1.yaml
+    - backend/src/main/java/com/aihub/identity/application/CurrentPrincipalView.java
+    - backend/src/main/java/com/aihub/identity/application/AuthenticationApplicationService.java
+    - backend/src/main/java/com/aihub/identity/api/IdentityResponses.java
+    - backend/src/test/java/com/aihub/identity/api/AuthControllerTest.java
+    - frontend/src/shared/types/auth.ts
+    - frontend/src/features/auth/ProfilePage.tsx
+    - frontend/src/features/auth/ProfilePage.test.tsx
+    - frontend/e2e/profile.spec.ts
+    - docs/ai-spec/tasks/TASK-P0BR-067.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-067-001.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/architecture/iteration-plan-2026-09-24.md # 09-24 既存变更，登记于 preExistingDirtyPaths
+    - build-logs/verify-bom.ps1 # 09-24 既存取证脚本，登记于 preExistingDirtyPaths
+    - docs/architecture/test-report-2026-09-29.md # 本 goal 点击测试报告（非本卡产物），登记于 preExistingDirtyPaths
+
+environment:
+  observedAt: 2026-09-29T11:02:52Z
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 LTS (Temurin, JAVA_HOME=D:\tools\jdks\temurin-21.0.9；mvnw 使用)
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+  externalDependencyVersions: { oasdiff: 1.32.1, "@redocly/cli": 2.55.0(@latest) }
+
+execution:
+  workingDirectory: backend/ + frontend/ + contracts/
+  command: >-
+    cd backend; ./mvnw.cmd -q verify（真实堆栈容器可用环境下全量：聚合 surefire 757 tests /
+    0 failures / 0 errors / 10 skipped，exit 0；较上游 066 基线 +1 即本卡新增
+    meReturnsNullUsernameForAgentPrincipal；10 项 skip 均为环境依赖类既有跳过，见 limitations）；
+    cd frontend; pnpm lint / pnpm typecheck（profile.spec.ts 终稿后复跑 067-fe-lint2/typecheck2，exit 0）；
+    cd frontend; pnpm exec vitest run --no-file-parallelism（49 files / 218 tests 全过，
+    较 066 基线 +1 即 ProfilePage.test.tsx 新增 username 回退用例）；
+    cd frontend; pnpm build（✓ 3257 modules / 25.38s，exit 0）；
+    cd frontend; pnpm test:e2e（真实 Compose 栈全量终态：Running 99 tests using 1 worker →
+    99 passed / 0 failed / 0 skipped，2.9m，exit 0）；
+    contracts; npx @redocly/cli@latest lint contracts/openapi/aihub-v1.yaml
+    --config contracts/openapi/redocly.yaml（CI 等价 Node 20，PASS，3 warnings 不阻断）；
+    contracts; oasdiff breaking EVD-P0BR-067-base.yaml(=git show baseCommit 导出) 
+    contracts/openapi/aihub-v1.yaml（「No breaking changes to report」，exit 0）。
+  startedAt: 2026-09-29T01:40:00Z
+  finishedAt: 2026-09-29T11:05:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Vite dev server (localhost:5173) -> Nginx gateway (localhost:8080) -> backend/compose stack
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4：USER 主体（E2E_AUTHOR）真实登录后 /profile「登录名」显示本人 username（非 principalId）——
+        profile.spec.ts 的 D-02 test.fixme 已解除为正式断言
+        toHaveText(E2E_AUTHOR.username)，全量 e2e 首轮 98 passed 与终态 99 passed 均含该用例。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4（契约后端侧）：真实 REST 链路上 GET /api/v1/me 响应含 username——e2e 用例经
+        nginx 8080 打到真实后端后断言页面值，即契约新字段在端到端可观测；
+        E2（WebMvcTest 契约测试）：AuthControllerTest.meReturnsCurrentPrincipalWhenAuthenticated
+        断言 USER 主体 $.data.username=="alice"。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E2（scenarioEvidencePlan 口径「后端契约测试断言 AGENT 主体 username 为 null」）：
+        AuthControllerTest.meReturnsNullUsernameForAgentPrincipal 以 AGENT CurrentPrincipalView
+        （username=null）stub /me，断言 principalType=AGENT、subject 透传且
+        jsonPath("$.data.username").value(nullValue())——证明序列化链
+        （CurrentPrincipalView→CurrentPrincipalPayload.from）对 AGENT 不伪造该字段。
+        行为切片表标注的 E3 口径未在真实依赖集成层单独覆盖，见 limitations.notProven 说明。
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E2：username 缺失（null）时 /profile 回退展示主体标识、不出现裸 "null" 且不崩溃——
+        ProfilePage.test.tsx 新增回退用例（Vitest 218/218 内）。
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E2+E4：匿名/无 Token 直连 /me 仍被拒（fail-closed 不回归）——
+        AuthControllerTest.meRequiresAuthentication（401）；e2e error-paths.spec 未登录重定向用例
+        在 99 passed 全量内复验。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-UI-002
+      assertion: >-
+        E4：仅持 notification:read 的最小权限主体（E2E_NOTIFICATION_READER）真实登录后
+        /profile「登录名」仍显示本人 username（/me 主体自身信息不受权限裁剪），
+        且直连 /assets 被 RouteGuard 渲染 403「缺少访问权限」、资产表格 count=0
+        （profile.spec.ts 本卡新增 describe；全量 99 passed 含该用例）——越权口径不因新字段回归。
+      scenarioCategory: denial
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        契约非破坏性：CurrentPrincipal 新增可选 username（string/nullable/maxLength 64，
+        不进 required）——redocly lint PASS + oasdiff breaking「No breaking changes to report」
+        （卡 §6.8 认定的替代取证路径）。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        卡 §8/requiredValidationCommands 第 10 项的 redocly diff --fail-on-breaking：
+        @redocly/cli 上游（2.55.0 及 1.34.1/1.29.0/1.25.0 各版本）均已移除 diff 子命令，
+        该命令在 CI 等价环境同样不可执行；仓内 CI（.github/workflows/ci.yml L147-162）
+        的 breaking-diff 步骤因此是既存缺陷（PR-to-main 时该步骤会 Unknown arguments 非零退出）。
+      reason: >-
+        工具链上游缺陷，非本卡改动引入；本卡不改 CI（deploy/CI 不在 allowedPaths），
+        以 §6.8 的 oasdiff 替代路径取证并在卡 §6.8 如实申报，须由后续治理卡修复 CI 步骤。
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        行为切片表（卡 §4）为「AGENT 主体 GET /me username 为 null」标注的最低证据 E3
+        （真实依赖集成层，如 Testcontainers 上真实 Agent 凭据交换后调用 /me）未单独取得。
+      reason: >-
+        scenarioEvidencePlan 对该项的权威口径是「后端契约测试（mvnw verify 子集）」，已按 E2
+        WebMvcTest 达成；E3 与 EvidencePlan 两口径不一致属卡内既有矛盾，实施期未获授权扩测，
+        如实登记并提请验证权威裁定。
+    - scenarioId: AC-P0B-UI-002
+      assertion: >-
+        page-catalog.md PAGE-AUTH-002 的「/profile 展示登录名（username）」口径登记：
+        卡 §2 设计口径缺口的实质是把该展示承诺写入权威页面目录。
+      reason: >-
+        page-catalog.md 不在本卡 allowedPaths（14 路径）内，AI 不得越径改动；
+        该登记属批准人裁定动作（卡 §7 末项），移交验证权威随 review 一并同步，
+        非本卡证据缺口。
+    - scenarioId: AC-P0B-UI-002
+      assertion: >-
+        卡 §6.2「/me USER 响应示例补 username」：实地核对 contracts/openapi/aihub-v1.yaml，
+        /me 端点（getCurrentPrincipal）与 CurrentPrincipal schema 均无既有 example 块
+        （契约整体不依赖 operation 级示例，仅 locale 有内联 example）。
+      reason: >-
+        为单字段发明全套示例结构超出本卡最小改动范围；字段语义已由 schema 描述、
+        后端契约测试与 E4 端到端三重覆盖。如验证权威认定必须补示例，可随 CI 修复卡一并处理。
+
+contractConsistency:
+  openapiMatched: true # CurrentPrincipal.username 已入契约；backend payload 与 frontend shared/types/auth.ts 手工同步一致（§6.7）
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无 Flyway 迁移（username 已在 V1 local_user）
+  uiMatched: true # profile.loginName 键沿用，zh/en 已对称，无新增键（§5 TAXONOMY_I18N）
+  runbookMatched: null # 本卡无需变更运行手册
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-067.md（本卡 §7/§10）
+    - contracts/openapi/aihub-v1.yaml（CurrentPrincipal.username 可选字段）
+    - backend/.../CurrentPrincipalView.java + AuthenticationApplicationService.java（USER 填充 / AGENT、CLIENT 分支 null）
+    - backend/.../IdentityResponses.java（CurrentPrincipalPayload.from 透传——草案漏列的必经改动，见卡 §3 校正 1）
+    - backend/src/test/.../AuthControllerTest.java（USER 含 username、AGENT null、401 契约测试）
+    - frontend/src/shared/types/auth.ts + ProfilePage.tsx（username ?? subject 回退）+ ProfilePage.test.tsx（回退用例）
+    - frontend/e2e/profile.spec.ts（fixme 解除 + AC-P0B-UI-002 最小权限主体用例）
+  logs:
+    - build-logs/067-e2e-full3.log（终态全量：99 passed / 0 failed / 0 skipped，2.9m，exit 0）
+    - build-logs/067-e2e-full2.log（fixme 解除后首轮全量：98 passed，exit 0）
+    - build-logs/067-e2e-full.log（凭据未注入导致 98 skipped 的对照轮——证明 skip 为 fail-closed 注入问题而非用例跳过）
+    - build-logs/067-mvnw-verify2.log（终态 mvnw -q verify 全量，exit 0；聚合 757/0/0/10）
+    - build-logs/067-mvnw-verify.log（AGENT 契约测试补齐前的复证轮）
+    - build-logs/067-mvnw-agent-test.log（AuthControllerTest 单类 6/6，exit 0）
+    - build-logs/067-fe-test.log / 067-fe-test2.log / 067-fe-test3.log（Vitest 串行终态 49 files / 218 tests）
+    - build-logs/067-fe-lint.log / 067-fe-lint2.log、067-fe-typecheck.log / 067-fe-typecheck2.log（profile.spec.ts 终稿后复跑，exit 0）
+    - build-logs/067-fe-build.log（✓ 3257 modules / 25.38s，exit 0）
+    - build-logs/067-compose-build.log / 067-compose-up.log（E4 栈重建与 7 容器 Up healthy）
+    - build-logs/EVD-P0BR-067-oasdiff.log（oasdiff breaking「No breaking changes to report」）
+    - build-logs/EVD-P0BR-067-base.yaml.log（git show baseCommit:contracts/openapi/aihub-v1.yaml 导出的变更前基线）
+    - build-logs/governance-067.log（前三条治理校验全 PASS exit 0；-CheckCompletion 按交接态如实失败 7 项，
+      全部对应 dirtyWorktree/review.accepted 等待验证权威处置项，与 limitations 一致）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 全量终态：99 tests / 99 passed / 0 skipped / 0 failed（2.9m，workers=1、retries=0）
+    - mvnw verify 聚合：757 tests / 0 failures / 0 errors / 10 skipped（较 066 基线 +1）
+    - Vitest：49 files / 218 tests 全过（serial，1294.24s）
+    - pnpm build：✓ 3257 modules / 25.38s；lint/typecheck exit 0
+    - redocly lint：PASS（3 warnings 不阻断）；oasdiff breaking：no breaking changes
+  databaseQueries: []
+  auditEvents:
+    - 本卡无新增审计事件类型；username 仅出现在 /me 响应体，未写入任何新日志行/审计载荷（卡 §5 AUDIT/SECRETS 核对）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_* 键），仅在同一命令内注入子进程
+      E2E_ADMIN_USERNAME/E2E_ADMIN_PASSWORD 环境变量、全程不回显口令；本清单、e2e 报告与归档日志均不含口令/Token 明文。
+    - 首轮 pnpm test:e2e 未注入凭据时全部用例按 fail-closed 设计显式 skip（98 skipped 而非误报通过），
+      归档为 067-e2e-full.log 作为对照证据。
+    - username 不是 Secret（卡 §5 SECRETS）；e2e 源码沿用仓内夹具常量惯例，未新增任何硬编码口令。
+
+limitations:
+  skippedTests:
+    - test: 后端 verify 聚合中的 10 项 skipped
+      reason: >-
+        均为 baseCommit 之前既有的环境依赖类条件跳过（如依赖可选外部服务的 IT 前置条件），
+        非本卡引入；本卡新增/触及的 AuthControllerTest 6/6、Identity 模块相关测试全部执行。
+        按卡 §8 SKIP 判定口径，此 10 项不为本卡任何 scenario 提供 PASS 依据，
+        本卡全部 scenario 证据均出自实际执行的测试与 E4 全量。
+  assumptions:
+    - Compose 全栈已运行且 healthy（7 容器 Up；backend/postgres/gitea/minio 标记 healthy），验证窗口内后端为 067 契约重建镜像。
+    - Playwright 走主机 Vite dev server 5173 而非 nginx 8080 容器前端（nginx 的 location /assets/ 静态规则遮蔽
+      SPA 深链，属既有基础设施缺陷，见 EVD-P0BR-050-001 limitations）；API 流量仍经真实 nginx 8080
+      转发到后端，故 /me 响应与权限拒绝均为真实后端行为。
+    - 本地非 CI：retries=0、reporter=list；终态一次性 99 passed。
+  environmentDifferences:
+    - >-
+      行为切片表 §4 对 AGENT /me 项标注 E3，而 scenarioEvidencePlan 对同一项的取证口径为
+      「后端契约测试（mvnw verify 子集）」（E2 WebMvcTest）。本卡按 EvidencePlan 权威口径取证，
+      E3 差异已登记 coverage.notProven 提请验证权威裁定。
+    - >-
+      CI 的 redocly diff --fail-on-breaking 步骤为既存缺陷（上游移除 diff 子命令），
+      本卡以 oasdiff v1.32.1 breaking 为替代取证路径（卡 §6.8 记载的完整版本探测过程见该节）。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

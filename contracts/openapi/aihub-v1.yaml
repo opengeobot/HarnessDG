@@ -3760,6 +3760,11 @@ components:
           pattern: '^usr_'
         principalType: { $ref: '#/components/schemas/PrincipalType' }
         subject: { type: string }
+        username:
+          type: [string, 'null']
+          maxLength: 64
+          description: 登录名。仅 USER 主体返回其本地账户用户名，供个人中心等场景回显；
+            AGENT/CLIENT 等机器主体为 null。不作为标识引用字段（引用一律用 principalId/userId）。
         displayName: { type: [string, 'null'] }
         organizationId: { type: [string, 'null'] }
         roles:

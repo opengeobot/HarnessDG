@@ -283,7 +283,7 @@ public class AuthenticationApplicationService {
         long expiresIn = secondsUntil(access);
         CurrentPrincipalView principal = new CurrentPrincipalView(
                 agent.principalId(), null, PrincipalType.AGENT, agent.principalId(),
-                agent.displayName(), null, List.of(), List.copyOf(agent.scopes()), "zh-CN", false);
+                null, agent.displayName(), null, List.of(), List.copyOf(agent.scopes()), "zh-CN", false);
         audit("CLIENT_TOKEN_ISSUED", AuditResult.SUCCEEDED, agent.principalId(), agent.principalId(),
                 null, Map.of("subjectId", subjectId));
         // Agent 凭据交换默认不签发刷新令牌（凭据可再次交换）。
@@ -322,7 +322,7 @@ public class AuthenticationApplicationService {
                     .orElseThrow(() -> new NotFoundException(
                             ErrorCode.AGENT_NOT_FOUND, "agent not found", Map.of()));
             return new CurrentPrincipalView(agent.principalId(), null, PrincipalType.AGENT, agent.principalId(),
-                    agent.displayName(), null, List.of(), List.copyOf(agent.scopes()), "zh-CN", false);
+                    null, agent.displayName(), null, List.of(), List.copyOf(agent.scopes()), "zh-CN", false);
         }
         LocalUser user = userRepository.findByPrincipalId(principalId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.USER_NOT_FOUND, "user not found", Map.of()));
@@ -386,7 +386,7 @@ public class AuthenticationApplicationService {
         Set<String> effectiveScopes = effectiveScopeResolver.resolve(user.principalId(), user.scopes());
         return new CurrentPrincipalView(
                 user.principalId(), user.userId(), PrincipalType.USER, user.principalId(),
-                user.displayName(), null, List.of(), List.copyOf(effectiveScopes),
+                user.username(), user.displayName(), null, List.of(), List.copyOf(effectiveScopes),
                 user.locale(), user.mustChangePassword());
     }
 

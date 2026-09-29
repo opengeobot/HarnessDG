@@ -10,7 +10,14 @@
  * displayName 由 prepareFixtures 固定写入，可作确定性断言依据。
  */
 import { test, expect, request, type Page } from '@playwright/test';
-import { E2E_AUTHOR, adminToken, bootstrapCredentials, login, prepareFixtures } from './support';
+import {
+  E2E_AUTHOR,
+  E2E_NOTIFICATION_READER,
+  adminToken,
+  bootstrapCredentials,
+  login,
+  prepareFixtures,
+} from './support';
 
 let credentials: { username: string; password: string } | null = null;
 
@@ -75,13 +82,11 @@ test.describe('AC-P0B-IAM-003: Profile 改密', () => {
     }
   });
 
-  // 设计缺陷（已登记，未修）：PRD 的「登录名」应是本地用户 username，但后端
-  // CurrentPrincipalView.subject 三处（toPrincipalView / currentPrincipal /
-  // PrincipalQueryApplicationService）一律以 principalId 填充，/profile 因此把
-  // 主体 ID 当登录名展示。夹具用户 e2e050-asset-owner 在页面上完全不可见。
-  // 修复需要后端改动，超出 TASK-P0BR-065 的 allowedPaths（forbiddenPaths 含 backend），
-  // 故以 fixme 固定住设计口径：修复落地后去掉 fixme 即成为回归断言。
-  test.fixme('登录名回显本地用户 username', async ({ page }) => {
+  // TASK-P0BR-067 已落地：契约 CurrentPrincipal 增可选 username（仅 USER 主体填充），
+  // 后端 CurrentPrincipalView/payload 透传登录名，前端「登录名」回显
+  // `principal.username ?? principal.subject`。本用例从 fixme 转为正式回归断言：
+  // 页面必须显示夹具用户 e2e050-asset-owner，而不是主体 ID。
+  test('登录名回显本地用户 username', async ({ page }) => {
     const info = page.locator('.ant-card').filter({ hasText: /账户信息|Account Information/ });
     await expect(
       info.locator('.ant-descriptions-row').filter({ hasText: /登录名|loginName/i })
@@ -121,5 +126,29 @@ test.describe('AC-P0B-IAM-003: Profile 改密', () => {
 
     await expect(page.getByText('密码至少 12 位')).toBeVisible();
     await expect(page.locator('.ant-message')).toHaveCount(0);
+  });
+});
+
+// AC-P0B-UI-002（TASK-P0BR-067）：/me 的 username 属主体自身信息，不受权限裁剪——
+// 仅持 notification:read 的最小权限主体登录 /profile 后仍应看到本人登录名；
+// 同时该主体直连需要更高 scope 的业务页面应被拒（越权口径不因新字段回归）。
+test.describe('AC-P0B-UI-002: 最小权限主体的登录名回显', () => {
+  test('仅 notification:read 主体仍回显 username 且业务越权页被拒', async ({ page }) => {
+    await login(page, E2E_NOTIFICATION_READER.username, E2E_NOTIFICATION_READER.password);
+    await page.goto('/profile');
+    await expect(page.getByRole('heading', { name: /个人中心|Profile/i })).toBeVisible();
+
+    const info = page.locator('.ant-card').filter({ hasText: /账户信息|Account Information/ });
+    await expect(
+      info.locator('.ant-descriptions-row').filter({ hasText: /登录名|loginName/i })
+        .locator('.ant-descriptions-item-content'),
+    ).toHaveText(E2E_NOTIFICATION_READER.username);
+
+    // 越权边界不回归：无 asset:read 的主体直连 /assets 时，RouteGuard 必须渲染
+    // 403「缺少访问权限」（与 error-paths.spec/admin-pages.spec 既有口径一致），
+    // 且资产列表表格不得渲染。
+    await page.goto('/assets');
+    await expect(page.getByText('缺少访问权限')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.ant-table')).toHaveCount(0);
   });
 });

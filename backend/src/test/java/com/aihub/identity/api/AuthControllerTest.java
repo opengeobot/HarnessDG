@@ -5,6 +5,7 @@
  */
 package com.aihub.identity.api;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -107,7 +108,7 @@ class AuthControllerTest {
 
     private TokenPairResult tokenPair() {
         CurrentPrincipalView principal = new CurrentPrincipalView("prn_1", "usr_1", PrincipalType.USER,
-                "prn_1", "Alice", null, List.of(), List.of("user:read"), "zh-CN", false);
+                "prn_1", "alice", "Alice", null, List.of(), List.of("user:read"), "zh-CN", false);
         return new TokenPairResult("access.jwt.value", "refresh.jwt.value", 900L, 604800L, principal);
     }
 
@@ -158,7 +159,23 @@ class AuthControllerTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("user:read"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.principalId").value("prn_1"))
-                .andExpect(jsonPath("$.data.principalType").value("USER"));
+                .andExpect(jsonPath("$.data.principalType").value("USER"))
+                .andExpect(jsonPath("$.data.username").value("alice"));
+    }
+
+    @Test
+    void meReturnsNullUsernameForAgentPrincipal() throws Exception {
+        // TASK-P0BR-067：AGENT 主体 username 恒为 null（契约字段仅 USER 主体填充）。
+        CurrentPrincipalView agent = new CurrentPrincipalView("prn_agt_1", null, PrincipalType.AGENT,
+                "prn_agt_1", null, "Demo Agent", null, List.of(), List.of("asset:read"), "zh-CN", false);
+        given(authService.currentPrincipal(any(), any())).willReturn(agent);
+
+        mockMvc.perform(get("/api/v1/me")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Set.of("asset:read"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.principalType").value("AGENT"))
+                .andExpect(jsonPath("$.data.subject").value("prn_agt_1"))
+                .andExpect(jsonPath("$.data.username").value(nullValue()));
     }
 
     @Test

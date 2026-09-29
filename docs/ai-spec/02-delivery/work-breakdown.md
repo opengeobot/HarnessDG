@@ -80,7 +80,8 @@ GOV（决策与基线）
 | `TASK-P0BR-064` | 修复发布链路的未注册权限码 asset:write 与 Handler 内 Instant 绑定（审计/告警静默丢行） | AC-P0B-AUTH-004、AC-P0B-AUD-001 | GOV-002、P0BR-063 |
 | `TASK-P0BR-065` | 审查页数据流真实化（删除捏造队列）、前端幽灵权限码 asset:write 纠偏、/review 导航入口、幽灵端点清理、占位文案 i18n（差距层 0） | AC-P0B-UI-002/003/005/006 | GOV-002、P0BR-050、P0BR-064 |
 | `TASK-P0BR-066` | 管理端权限口径与状态刷新缺陷整改（D-01/D-05/D-07/D-08/D-09/D-10，065 §11 复核产物；D-02 已移交 `TASK-P0BR-067`） | AC-P0B-UI-003/006 | P0BR-065 |
-| `TASK-P0BR-067` | 契约先行：OpenAPI `CurrentPrincipal` 增可选 `username` + 后端视图/payload 落地，使 `/profile` 展示登录名（066 移除的 D-02）；同时收敛 contracts 的 redocly breaking-change diff 工具链缺陷；完成后解除 `frontend/e2e/profile.spec.ts` 中由 `5ccbf47` 引入的 `test.fixme` | AC-P0B-UI-002/003、TERM-001 | P0BR-066、P0BR-001 |
+| `TASK-P0BR-067` | 契约先行：OpenAPI `CurrentPrincipal` 增可选 `username` + 后端视图/payload 落地，使 `/profile` 展示登录名（066 移除的 D-02）；同时收敛 contracts 的 redocly breaking-change diff 工具链缺陷；完成后解除 `frontend/e2e/profile.spec.ts` 中由 `5ccbf47` 引入的 `test.fixme`。**实施状态（2026-09-29）**：契约字段 + 后端三处构造点/序列化 + 前端回退渲染 + AGENT null 契约测试已落地，`profile.spec.ts` fixme 已解除并新增 AC-P0B-UI-002 最小权限主体用例；E4 全量 e2e 99 passed / 0 skipped、`mvnw verify` 757/0/0/10、Vitest 218/218 全绿（见 `EVD-P0BR-067-001`）。遗留：CI redocly diff 子命令既存缺陷（以 oasdiff 替代取证）、AGENT /me 项的 E3 口径差异（卡 §4 与 EvidencePlan 不一致，按 E2 取证）、page-catalog 口径登记、`review.accepted` 均移交验证权威——本卡为 IMPLEMENTED_UNVERIFIED，未提交、未自批 | AC-P0B-UI-002/003、TERM-001 | P0BR-066、P0BR-001 |
+| `TASK-P0BR-068` | 图片预览渲染闭环（迭代计划 §4.2 G2）：新增预览工件服务端代理流式端点 `GET /assets/{assetId}/previews/artifact`（`asset:read` 权限先行、渲染白名单 png/jpeg/webp/gif、`maxRenderBytes` 上限、404 防枚举），前端 `PreviewPanel` 以 blob + ObjectURL 渲染，替代不存在的 presigned 引用；不使用预签名 URL（REQ-DST-DETAIL-001 L111）。**状态（2026-09-29）**：DRAFT 未授权，实施前提为 `TASK-P0BR-067` 改动由验证权威提交为干净 Commit | AC-DST-DETAIL-001/003 | P0BR-067、REQ-DST-DETAIL-001（DEC-008） |
 
 ### 4.2 身份与授权纵向旅程
 

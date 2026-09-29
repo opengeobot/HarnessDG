@@ -92,6 +92,38 @@ Flyway 迁移（最新 V43）重新取证。**旧文档大量条目已在 Wave S
 ### Wave ζ — 验收收口（与开发并行推进）
 10. G10：编排 `-CheckCompletion` 人工验收清单；向用户申请 P5003 恢复演练窗口；EVD notProven 回写。
 
+## 4.1 复核增补（2026-09-28，HEAD `aa0a8a7`）
+
+- **G3 已闭合**：`0620940` 接线讨论订阅（DiscussionPanel）；独立 `/subscriptions` 资源仍属后续增强。
+- **G7 已闭合**：`publishVersion` 死代码与 `access.tokensComingSoon` 孤儿键已清除（全仓检索零命中）；
+  `useDocumentTitle` 改用 `t('app.title')`；`client.ts` 网络错误文案仅存于注释。
+- **G6 已闭合**：详情页版本切换器已联动 URL（`?version=`）与版本化 Query Key，
+  gitTag/sourceCommit/manifestDigest 渲染齐备（`AssetDetailPage` L538-565 + `AssetDetailPage.version.test.tsx`）。
+- **G1/G2/G4/G5 仍开放**：Files Tree 仍 `selectable={false}`；`PreviewPanel` 无 image 渲染分支；
+  全仓无 favorite 建模；预览无 split 维度。均需契约/迁移先行 → Task Card 授权。
+
+## 4.2 复核增补（2026-09-29，HEAD `e9aa2a0` + 067 未提交改动）
+
+065~067 三张整改卡闭环后的再次实证复核（点击式功能测试见 `test-report-2026-09-29.md`）：
+
+- **G1 仍开放**：`AssetDetailPage.tsx` L452 Files Tree 仍 `selectable={false}`；契约无单文件内容端点。
+  涉及新增内容代理端点 + `asset:download` 口径决策，建议单独成卡（Wave β）。
+- **G2 仍开放，且原技术路径需修正**：`PreviewJobHandler` L121-125 对 image 仅写
+  `note="render via presigned endpoint"`，注释声称的 presigned 渲染端点在代码与契约中均不存在
+  （断链复证）。**迭代计划 §4 第 4 条「复用 DownloadController 票据模式签发 presigned URL」与
+  `REQ-DST-DETAIL-001` L111「预签名查询串不进入页面数据」直接冲突**；且 `<img src>` 原生标签
+  不携带 Authorization 头，浏览器直接加载 presigned URL 亦受该约束限制。正确路径改为
+  **服务端代理流式渲染**：新增 `GET /assets/{assetId}/previews/artifact`（权限过滤 + image 白名单
+  + 对象存在性校验 + 流式回传），前端经既有 axios 拦截器（自动注入内存 JWT）以 blob 取图，
+  `URL.createObjectURL` 渲染。已按此口径起草 `TASK-P0BR-068`（DRAFT，待批准）。
+- **G4 仍开放**：全仓（backend/frontend/migrations）favorite/bookmark 零命中，确认需前向迁移。
+  **设计口径缺口**：REQ-DST-DETAIL-001 页面组成 1-6 项与 page-catalog 均无「收藏」条目；
+  按门禁须先补 REQ/PAGE 增补并经人类评审（Wave γ 开工前置），不得直接建卡实施。
+- **G5 前提闭合、仍开放**：REQ-DST-DETAIL-001 页面组成第 4 项明确 Preview 含「Split」，
+  L106 要求 Split 绑定精确 Version——§4 第 8 条「先核对是否属 REQ-DST-DETAIL-001 范围」的
+  答案确认为**是**。当前 `asset_preview` 投影与预览生成链均无 split 维度，需投影扩展
+  （契约 + 迁移 + Job + 前端选择器），建议 G5 与 G1/G2 分开独立成卡。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
