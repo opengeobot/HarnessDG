@@ -162,6 +162,42 @@ async function request<T>(config: AxiosRequestConfig): Promise<T> {
   }
 }
 
+/** 二进制 GET 结果：字节 Blob + 响应 Content-Type（TASK-P0BR-068 预览渲染） */
+export interface BlobResult {
+  blob: Blob;
+  mediaType: string | null;
+}
+
+/**
+ * 二进制 GET（TASK-P0BR-068）：复用同一 axios 实例，JWT 注入 / 401 刷新重试 /
+ * Accept-Language / ApiError 规范化全部继承；成功响应为裸字节流，不做 ApiResponse 解包。
+ * responseType:'blob' 时后端 JSON 错误体同样被包成 Blob，先回转 JSON 再走统一规范化。
+ */
+async function requestBlob(config: AxiosRequestConfig): Promise<BlobResult> {
+  try {
+    const response = await instance.request<Blob>({ ...config, method: 'GET', responseType: 'blob' });
+    const contentType = response.headers['content-type'];
+    return { blob: response.data, mediaType: typeof contentType === 'string' ? contentType : null };
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data;
+      if (data instanceof Blob) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(await data.text());
+        } catch {
+          parsed = undefined;
+        }
+        if (parsed && typeof parsed === 'object') {
+          error.response = { ...error.response!, data: parsed } as typeof error.response;
+        }
+      }
+      throw toApiError(error);
+    }
+    throw error;
+  }
+}
+
 /** 统一 API Client，仅暴露语义化方法，屏蔽底层 HTTP 细节 */
 export const apiClient = {
   get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
@@ -178,6 +214,9 @@ export const apiClient = {
   },
   delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     return request<T>({ ...config, method: 'DELETE', url });
+  },
+  getBlob(url: string, config?: AxiosRequestConfig): Promise<BlobResult> {
+    return requestBlob({ ...config, url });
   },
 };
 

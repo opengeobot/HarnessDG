@@ -8,11 +8,15 @@ package com.aihub.integration.minio.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.transfer.domain.StoragePort;
+import io.minio.GetObjectArgs;
+import io.minio.GetObjectResponse;
 import io.minio.MinioClient;
+import io.minio.StatObjectArgs;
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
@@ -32,6 +36,7 @@ import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignReque
 class MinioStorageAdapterTest {
 
     @Mock private MinioClient minioClient;
+    @Mock private MinioClient dvcCacheMinioClient;
     @Mock private S3Client s3Client;
     @Mock private S3Presigner s3Presigner;
 
@@ -39,7 +44,7 @@ class MinioStorageAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new MinioStorageAdapter(minioClient, s3Client, s3Presigner);
+        adapter = new MinioStorageAdapter(minioClient, dvcCacheMinioClient, s3Client, s3Presigner);
     }
 
     @Test
@@ -72,5 +77,40 @@ class MinioStorageAdapterTest {
                 List.of(new StoragePort.PartInfo(1, "\"etag1\"")));
 
         verify(s3Client).completeMultipartUpload(any(software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest.class));
+    }
+
+    @Test
+    void objectExistsForDvcCacheUsesScopedClient() throws Exception {
+        assertThat(adapter.objectExists("dvc-cache", "4b/783c07a09e2e8a21a69009d3be7b9b")).isTrue();
+
+        verify(dvcCacheMinioClient).statObject(any(StatObjectArgs.class));
+        verify(minioClient, never()).statObject(any(StatObjectArgs.class));
+    }
+
+    @Test
+    void objectExistsForStagingUsesPrimaryClient() throws Exception {
+        assertThat(adapter.objectExists("asset-staging", "staging/key")).isTrue();
+
+        verify(minioClient).statObject(any(StatObjectArgs.class));
+        verify(dvcCacheMinioClient, never()).statObject(any(StatObjectArgs.class));
+    }
+
+    @Test
+    void readObjectForDvcCacheUsesScopedClient() throws Exception {
+        when(dvcCacheMinioClient.getObject(any(GetObjectArgs.class)))
+                .thenReturn(mock(GetObjectResponse.class));
+
+        assertThat(adapter.readObject("dvc-cache", "4b/abc")).isNotNull();
+
+        verify(dvcCacheMinioClient).getObject(any(GetObjectArgs.class));
+        verify(minioClient, never()).getObject(any(GetObjectArgs.class));
+    }
+
+    @Test
+    void objectExistsFailureIsNotSilent() throws Exception {
+        when(minioClient.statObject(any(StatObjectArgs.class)))
+                .thenThrow(new RuntimeException("Access Denied"));
+
+        assertThat(adapter.objectExists("asset-staging", "missing")).isFalse();
     }
 }

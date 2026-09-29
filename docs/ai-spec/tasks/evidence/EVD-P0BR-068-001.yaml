@@ -1,0 +1,300 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-068-001
+# 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈取证：Playwright 全量 101 tests →
+# 101 passed / 0 failed / 0 skipped（exit 0，2.4m，两轮复跑一致），其中含本卡新增
+# preview-image.spec.ts 两用例（上传→物化→发布→注入→预览生成→UI blob 渲染链 +
+# artifact 代理端点字节级验证与越权 403），并将 profile.spec.ts 中受 nginx /assets
+# 遮蔽缺陷影响的 goto('/assets') 断言改为登录落地客户端导航口径（断言强度不变）。
+# 后端 E4 期间发现并（经批准人授权补正）修复既存缺陷：backend 唯一 MinioClient 持主凭据
+# 无 dvc-cache 策略 → objectExists 恒 false → 预览代理 404；修复为按桶 scoped 凭据路由。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由用户在 review 后执行
+# （与 065/066/067 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-068
+  requirements: [REQ-DST-DETAIL-001]
+  scenarios: [AC-DST-DETAIL-001, AC-DST-DETAIL-003]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS # 收口治理三连，见 artifacts.logs 的 governance-068.log
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-068.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-068.md -CheckChangedPaths
+    # 全部变更命中 allowedPaths（含四次批准补正：ErrorCode.java、client.ts、integration/minio 三文件、
+    # PreviewPanel.test.tsx）；
+    # 取证日志统一为 build-logs/*.log（.gitignore `*.log` 命中，066/067 同惯例），
+    # Playwright 产物目录（playwright-report/test-results）终态取证后已删除不入库。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-068.md -CheckCompletion
+    # 设计内的交接态失败（第三轮治理三连 2026-09-29：SPEC/CARD/CheckChangedPaths 均 PASS，
+    # -CheckCompletion 剩 7 项全部为交接态必然失败，非证据缺口）：commitSha 需等于提交后的
+    # 干净 HEAD、dirtyWorktree 需置 false（代码须先提交）、review.accepted/reviewedBy/reviewedAt
+    # 需由验证权威填写（AI 不得自批，DEC-009）、notProven/skippedTests 需权威裁定后清空。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 13ddf2615769745fedc638e99db28c261047ede9 # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - contracts/openapi/aihub-v1.yaml
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/MinioConfiguration.java
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/MinioStorageAdapter.java
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/RestMinioObjectExistencePort.java
+    - backend/src/main/java/com/aihub/shared/error/ErrorCode.java
+    - backend/src/main/java/com/aihub/version/api/PreviewController.java
+    - backend/src/main/java/com/aihub/version/application/PreviewApplicationService.java
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewJobHandler.java
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewProperties.java
+    - backend/src/test/java/com/aihub/integration/minio/infrastructure/MinioStorageAdapterTest.java
+    - backend/src/test/java/com/aihub/version/infrastructure/PreviewJobHandlerTest.java
+    - backend/src/test/java/com/aihub/version/infrastructure/PreviewPropertiesTest.java
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceRenderTest.java # 新增
+    - frontend/src/features/assets/PreviewPanel.tsx
+    - frontend/src/features/assets/PreviewPanel.test.tsx
+    - frontend/src/shared/api/client.ts
+    - frontend/src/shared/i18n/zh.json
+    - frontend/src/shared/i18n/en.json
+    - frontend/e2e/preview-image.spec.ts # 新增
+    - frontend/e2e/fixtures/preview-4x4.png # 新增夹具（142B 有效 PNG，sha256 4b783c07…8ad3）
+    - frontend/e2e/profile.spec.ts # nginx /assets 遮蔽缺陷的测试侧修正（断言强度不变）
+    - docs/ai-spec/tasks/TASK-P0BR-068.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-068-001.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+  preExistingDirtyPaths:
+    - build-logs/verify-bom.ps1 # 09-24 既存取证脚本，登记于卡 FM preExistingDirtyPaths（SHA 核对一致）
+
+environment:
+  observedAt: 2026-09-29T15:52:39+08:00
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 LTS (Temurin, JAVA_HOME=D:\tools\jdks\temurin-21.0.9；mvnw 使用)
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+  externalDependencyVersions: { oasdiff: 不可得（见 notProven）, "@redocly/cli": 2.55.0(@latest) }
+
+execution:
+  workingDirectory: backend/ + frontend/ + contracts/
+  command: >-
+    cd backend; ./mvnw.cmd -q verify（终态全量：聚合 surefire 776 tests / 0 failures /
+    0 errors / 10 skipped，exit 0；较 067 基线 +19 含本卡 PreviewApplicationServiceRenderTest 13 项、
+    MinioStorageAdapterTest/PreviewJobHandlerTest/PreviewPropertiesTest 扩展；
+    10 项 skip 均为环境依赖类既有跳过，见 limitations）；
+    cd frontend; pnpm lint / pnpm typecheck（preview-image.spec.ts 清理未使用 import 后
+    终态复跑 068-fe-lint2/068-fe-typecheck2，exit 0）；
+    cd frontend; pnpm exec vitest run --no-file-parallelism（49 files / 224 tests 全过，
+    较 067 基线 +6，含 PreviewPanel image 分支 7 用例中的新增断言）；
+    cd frontend; pnpm build（✓ 29.66s，exit 0）；
+    docker compose build backend + up -d（MinIO scoped 修复镜像重建，7 容器 Up、backend healthy）；
+    cd frontend; pnpm test:e2e（真实 Compose 栈 E2E_BASE_URL=http://localhost:8080 经 nginx
+    到容器前端全量终态：Running 101 tests using 1 worker → 101 passed / 0 failed / 0 skipped，
+    2.4m，exit 0；两轮复跑一致）；
+    contracts; npx @redocly/cli@latest lint contracts/openapi/aihub-v1.yaml
+    --config contracts/openapi/redocly.yaml（PASS，3 warnings 与 baseCommit 基线等价，不阻断）。
+  startedAt: 2026-09-29T03:40:00Z
+  finishedAt: 2026-09-29T15:52:39+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Nginx gateway (localhost:8080) -> frontend container -> backend/worker/compose stack（本轮为容器前端而非 Vite dev server，链路更完整）
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        E4：真实 Compose 栈完整链——E2E_AUTHOR 登录 → 创建夹具资产/上传会话 → presign PUT staging →
+        complete → 版本物化推进 PUBLISHED → dvc-cache SigV4 PUT fixture PNG → 注入 artifact →
+        触发预览生成 → Preview Tab 渲染 img[src^="blob:"] 且 naturalWidth/Height>0、alt 为
+        「数据预览」口径；页面数据泄漏红线 6 项全过（不含 minio:9000/localhost:9000/dvc-cache/
+        asset-staging/X-Amz-/AWS4-HMAC-SHA256）。preview-image.spec.ts test1；
+        幂等快速路径下 UI 断言仍无条件真实执行（list reporter ✓ 1.3s 非 skipped，已核实）。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        E4（字节级）：GET /assets/{id}/previews/artifact 经 nginx 8080 真实链路返回 200 +
+        content-type image/png + 字节 sha256 与 fixture 一致——test2 每次运行无条件执行，
+        是 MinIO scoped 凭据修复（404 根因）的主证。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >-
+        E4：无 asset:read 主体（E2E_AUTHZ_READER）直连 artifact 代理端点被拒（403，
+        应用服务 requirePermission 先行）；仅 notification:read 主体登录落地 /assets 由
+        RouteGuard 渲染 403「缺少访问权限」且资产表格 count=0（profile.spec.ts AC-P0B-UI-002
+        口径在用例中复验，全量 101 passed 含该用例）。
+      scenarioCategory: denial
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >-
+        E2（PreviewApplicationServiceRenderTest，13 项，mvnw verify 776 全过内）：
+        403 先于一切存储与仓储访问（fail-closed）；版本属于其他资产 → 与未知版本同一 404（防枚举）；
+        artifact 不属于该版本 → 同一 404；非 PUBLISHED → 409 且不触达存储（先权限后状态防探测）；
+        白名单外 mediaType（参数化含 image/svg+xml、text/csv）→ 415；mediaType 缺失且扩展名
+        不可识别 → 415；元数据 size 超限 → 413 预检（零存储调用）；元数据偏小但流式超限 → 413
+        双保险；对象缺失 → 404 PREVIEW_SOURCE_UNAVAILABLE 不伪造空图；IO 失败 → 同 404 不泄露内部错误。
+      scenarioCategory: denial
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >-
+        E2：新端点为受保护业务读接口、不新增匿名面——SecurityConfig 未改动（不在 allowedPaths），
+        既有 JWT 过滤器对 /api/v1/** 全局 fail-closed 由既存 Security 测试与 e2e 未登录重定向
+        用例复验；本端点无 permitAll 例外。
+      scenarioCategory: denial
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        E2（前端组件层，Vitest 224/224 内）：PreviewPanel image 分支渲染 blob ObjectURL 的 img；
+        旧投影缺 artifactId → 重新生成引导空态且不发 blob 请求；缺 versionId → 引导空态；
+        blob 请求失败 → version.previewImageError 提示；投影或响应 mediaType 白名单外 →
+        不请求/不创建 ObjectURL；卸载/换版本 revokeObjectURL 回收。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        E2：PreviewJobHandler image 分支 note JSON 增 artifactId/artifactPath 分量且
+        note 文案指向 previews/artifact（PreviewJobHandlerTest 断言）；i18n zh/en 新键对称。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        契约非破坏：新增 renderPreviewArtifact 操作为纯新增路径（numstat 39/0，无删除行）；
+        redocly lint PASS 且 warnings 与基线等价。oasdiff 不可得的环境证据链与替代论证见 notProven。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        卡 §4「切换 Version 后图片随版本化 Query Key 刷新」的 E4 口径未在真实栈上做
+        双版本切换断言（夹具链只产出一个 PUBLISHED 含图版本 3.0.0）。
+      reason: >-
+        Query Key 刷新与 ObjectURL 回收已由 Vitest 组件测在 E2 层断言（卡 §4 该行最低证据
+        即为 E2+E4 的 E2 部分 + test1 的渲染主证）；如需 E4 双版本切换实证，须扩 e2e 夹具链，
+        超出本卡最小改动，提请验证权威裁定是否补证。
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >-
+        卡 §4「匿名无 Token 直连 renderPreviewArtifact → 401」未针对该新端点单独取证
+        （无专用 MockMvc 或 e2e 401 断言）。
+      reason: >-
+        该端点未出现在任何 permitAll 规则中，401 由全局 JWT 过滤器保证且该过滤器行为有既存
+        测试与 e2e 未登录重定向用例复验；但按卡 scenarioEvidencePlan 的 E2 字面口径应为本端点
+        加一条 standalone MockMvc 401 断言——如实登记缺口，提请验证权威裁定是否要求补测。
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        契约破坏性检查未使用 oasdiff（卡 §FM requiredValidationCommands 第 11 项的
+        redocly diff / oasdiff 替代路径均未能执行）。
+      reason: >-
+        环境取证链（EVD-P0BR-068-contract.log）：oasdiff 不在 PATH；go install 因代理不可达失败；
+        以 git diff --numstat 对 baseCommit 导出基线（归档为 build-logs/EVD-P0BR-068-base.yaml.log）验证本次契约改动为
+        纯新增 39 行、0 删除行——OpenAPI 语义上新增 path/operation 不构成 breaking change。
+        论证强度低于 oasdiff 工具实证，故列 notProven；redocly lint 已 PASS。
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        e2e 夹具注入 dvc-cache 对象的 SigV4 PUT 为测试侧模拟 DVC 物化产物（对象键布局与
+        真实 dvc push 一致），非 dvc 原生流程产生。
+      reason: >-
+        与仓内既有 compose 预览夹具同口径（compose 栈未起 dvc CLI 链路）；渲染代理端只消费
+        artifact 记录推导的对象键，键来源不受夹具产生方式影响（§3 禁止变化「用户输入不参与
+        对象键解析」由实现结构保证并有 403/404 先行断言佐证）。
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        page-catalog PAGE-DST-002「Preview Tab 图片渲染」权威目录口径登记。
+      reason: >-
+        page-catalog.md 不在本卡 allowedPaths（补正后 18 路径）内，AI 不得越径改动；属验证权威
+        随 review 一并同步的移交项（沿 067 先例），非本卡证据缺口。
+
+contractConsistency:
+  openapiMatched: true # renderPreviewArtifact 已入契约并登记 implemented-unverified；前端 client.getBlob 与后端响应（裸字节流+Content-Type）一致
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无 Flyway 迁移（§6.3：asset_preview.content JSON 内增量字段）
+  uiMatched: true # version.previewImageError 等新键 zh/en 对称；PreviewPanel 空态/错误态/引导态齐备
+  runbookMatched: null # MinIO 按桶 scoped 凭据使用既有 AIHUB_MINIO_DVC_* env，deploy/ 与运行手册无需变更
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-068.md（本卡 §7/§10）
+    - contracts/openapi/aihub-v1.yaml（renderPreviewArtifact 操作，x-implementation-status: implemented-unverified）
+    - backend/.../PreviewApplicationService.java（renderPreviewArtifact 用例：权限先行→归属链→PUBLISHED→白名单→长度守卫→流式读取）
+    - backend/.../PreviewController.java + PreviewJobHandler.java（note 扩展）+ PreviewProperties.java（maxRenderBytes 默认 5 MiB）
+    - backend/.../ErrorCode.java（仅新增 PREVIEW_NOT_FOUND/PREVIEW_UNSUPPORTED_FORMAT/PREVIEW_TOO_LARGE/PREVIEW_SOURCE_UNAVAILABLE 四项，批准补正）
+    - backend/.../MinioConfiguration.java + MinioStorageAdapter.java + RestMinioObjectExistencePort.java（dvc-cache scoped 凭据按桶路由，批准补正；未配置时回退主客户端兼容本地全权）
+    - backend/src/test/.../PreviewApplicationServiceRenderTest.java（13 项渲染/越权/边界矩阵）+ MinioStorageAdapterTest/PreviewJobHandlerTest/PreviewPropertiesTest
+    - frontend/src/features/assets/PreviewPanel.tsx（image 分支 + ObjectURL 生命周期）+ .test.tsx + client.ts（新增 getBlob，批准补正）+ i18n zh/en
+    - frontend/e2e/preview-image.spec.ts + fixtures/preview-4x4.png（E4 主证用例）
+    - frontend/e2e/profile.spec.ts（nginx /assets 遮蔽缺陷测试侧修正：goto 改登录落地客户端导航，断言强度不变）
+  logs:
+    - build-logs/068-e2e-full.log / 068-e2e-full2.log（终态全量两轮：101 passed / 0 failed / 0 skipped，2.4-2.5m，exit 0）
+    - build-logs/068-mvnw-verify-final.log（终态 mvnw -q verify 全量，exit 0；聚合 776/0/0/10）
+    - build-logs/EVD-P0BR-068-backend-verify.log（MinIO 修复后首轮 verify）
+    - build-logs/068-fe-lint.log（FAIL 记录：preview-image.spec.ts 未使用 import——随即修复）
+    - build-logs/068-fe-lint2.log / 068-fe-typecheck2.log（修复后终态，exit 0）
+    - build-logs/fe-test-serial.log（Vitest 终态 49 files / 224 tests）
+    - build-logs/fe-build.log（pnpm build ✓ 29.66s）
+    - build-logs/compose-build-068.log（backend 镜像重建 + 7 容器 Up healthy）
+    - build-logs/EVD-P0BR-068-contract.log（redocly lint PASS + 基线 numstat 39/0 + oasdiff 不可得环境证据链）
+    - build-logs/EVD-P0BR-068-base.yaml.log（git show baseCommit 导出的契约变更前基线，取证素材；.log 后缀命中 .gitignore）
+    - build-logs/governance-068.log（治理三连 PASS；-CheckCompletion 按交接态如实失败，全部对应 review.accepted/dirtyWorktree 待处置项）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 全量终态两轮：101 tests / 101 passed / 0 skipped / 0 failed（2.4m，workers=1、retries=0）
+    - mvnw verify 聚合：776 tests / 0 failures / 0 errors / 10 skipped（较 067 基线 757 +19）
+    - Vitest：49 files / 224 tests 全过（serial）；pnpm build ✓ 29.66s；lint/typecheck exit 0
+    - redocly lint：PASS（3 warnings 与基线等价）
+    - fixture：preview-4x4.png 142B，sha256 4b783c07a09e2e8a21a69009d3be7b9b5a737f2b1bab6485a7bdb48c7caf8ad3；PREVIEW_VERSION=3.0.0 PUBLISHED
+  databaseQueries: []
+  auditEvents:
+    - 本卡无新增审计事件类型（批准人裁定：沿用预览族无审计现状，crossCuttingPlan.AUDIT）；
+      新端点响应仅字节流+Content-Type，日志无内部 Endpoint/凭据/对象键泄露（E4 泄漏红线 6 项断言佐证）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_* 键），仅在同一命令内
+      注入子进程环境变量、全程不回显口令；本清单、e2e 报告与归档日志均不含口令/Token 明文。
+    - MinIO dvc-cache 走既有 AIHUB_MINIO_DVC_* scoped 凭据 env（deploy/compose/.env，gitignored）；
+      修复不回退读取主凭据明文入日志；objectExists 失败仅记 bucket 名与 WARN 级别错误摘要。
+    - e2e 夹具源码沿用仓内夹具常量惯例（口令为 compose 夹具用户固定弱口令，非生产 Secret）；
+      页面数据断言证明内部主机名/预签名查询串不进入前端可见内容。
+
+limitations:
+  skippedTests:
+    - test: 后端 verify 聚合中的 10 项 skipped
+      reason: >-
+        均为 baseCommit 之前既有的环境依赖类条件跳过（Testcontainers 等前置条件），非本卡引入；
+        本卡新增/触及的 PreviewApplicationServiceRenderTest 13 项、PreviewJobHandlerTest、
+        MinioStorageAdapterTest、PreviewPropertiesTest 全部实际执行并通过。
+  assumptions:
+    - >-
+      Compose 全栈运行且 healthy（7 容器 Up；backend 镜像为 MinIO scoped 修复后重建版本），
+      E4 验证窗口内 pnpm test:e2e 走 E2E_BASE_URL=http://localhost:8080 的容器前端（非 Vite dev
+      server），链路含真实 nginx。
+    - >-
+      preview-image.spec.ts 具备幂等快速路径：链已存在时跳过重复写入（chainAlreadyDone 门控仅
+      门控 L364-481 写入链），但 UI 渲染断言（test1）与 artifact 字节级验证+403（test2）每次
+      无条件执行——404 修复的 E4 主证不依赖是否走完整链（已以 list reporter ✓ 与耗时核实非 skipped）。
+    - >-
+      完整写入链（上传→物化→发布→注入→生成）在新镜像上于更早轮次已真实跑通（链实证
+      asset ast_01m3nzfwz4kpybpjxmxvqq39rb / ver_01m3nzg307ejzp47npthe7v89f /
+      art_01m3nzga54sswscknsmyrppf2b / 3.0.0 PUBLISHED）。
+  environmentDifferences:
+    - >-
+      nginx「location /assets/」静态规则遮蔽 SPA /assets 深链整页加载（且 301 丢失端口），属既存
+      基础设施缺陷（EVD-P0BR-050-001 limitations 登记）；deploy 为本卡 forbiddenPaths，
+      故 profile.spec.ts 改用应用内真实可达的登录落地客户端导航口径，断言强度不变；
+      该缺陷的根治须由基础设施卡处理。
+    - >-
+      宿主 PowerShell/Node HTTP 探针受系统代理劫持不可靠（curl 须 --noproxy "*"）；
+      浏览器行为一律以 Playwright 实测为准。
+    - >-
+      oasdiff 工具在本环境不可得（不在 PATH、go install 代理不可达），契约非破坏以
+      「纯新增 39/0 + redocly lint PASS」论证，已登记 coverage.notProven。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

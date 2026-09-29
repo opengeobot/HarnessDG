@@ -12,12 +12,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * <p>Worker 进程级内存/CPU 隔离由容器 cgroup 或 JVM 堆限制承担；本配置约束单次预览内容解析上限。
  *
- * @param maxRows  最大预览行数
- * @param maxCols  最大预览列数
- * @param maxBytes 预览内容最大字节数
+ * @param maxRows        最大预览行数
+ * @param maxCols        最大预览列数
+ * @param maxBytes       预览内容最大字节数
+ * @param maxRenderBytes 图片预览代理渲染最大字节数（TASK-P0BR-068，默认 5 MiB）
  */
 @ConfigurationProperties(prefix = "aihub.preview")
-public record PreviewProperties(int maxRows, int maxCols, long maxBytes) {
+public record PreviewProperties(int maxRows, int maxCols, long maxBytes, long maxRenderBytes) {
 
     public PreviewProperties {
         if (maxRows <= 0) {
@@ -28,6 +29,9 @@ public record PreviewProperties(int maxRows, int maxCols, long maxBytes) {
         }
         if (maxBytes <= 0) {
             maxBytes = 1024L * 1024;
+        }
+        if (maxRenderBytes <= 0) {
+            maxRenderBytes = 5L * 1024 * 1024;
         }
     }
 }

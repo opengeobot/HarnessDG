@@ -89,8 +89,9 @@ public class PreviewJobHandler implements JobHandler {
         String contentEncoding = payload.path("contentEncoding").asText(null);
 
         // content 为空时从对象存储按 versionId 自动取数（REQ-DST-DETAIL-001 预览绑定 Version）
+        FetchedSource src = null;
         if ((content == null || content.isBlank()) && versionId != null) {
-            FetchedSource src = fetchFromStorage(versionId);
+            src = fetchFromStorage(versionId);
             if (src != null) {
                 content = src.content();
                 contentType = src.contentType();
@@ -119,10 +120,16 @@ public class PreviewJobHandler implements JobHandler {
         } else if (isParquet(contentType)) {
             previewJson = parseParquet(content, contentEncoding);
         } else if (contentType != null && contentType.startsWith("image/")) {
-            // 图片不内联二进制；前端经独立预签名端点渲染
-            previewJson = objectMapper.writeValueAsString(Map.of(
-                    "mediaType", contentType, "truncated", false,
-                    "note", "image preview reference; render via presigned endpoint"));
+            // 图片不内联二进制；前端经服务端代理端点 renderPreviewArtifact 渲染（TASK-P0BR-068）
+            Map<String, Object> imageNote = new LinkedHashMap<>();
+            imageNote.put("mediaType", contentType);
+            imageNote.put("truncated", false);
+            if (src != null && src.artifactId() != null) {
+                imageNote.put("artifactId", src.artifactId());
+                imageNote.put("artifactPath", src.artifactPath());
+            }
+            imageNote.put("note", "image preview reference; render via GET /assets/{assetId}/previews/artifact");
+            previewJson = objectMapper.writeValueAsString(imageNote);
         } else if (contentType != null
                 && (contentType.startsWith("text/") || "application/json".equals(contentType))) {
             int maxChars = previewProperties.maxRows() * 100;
@@ -167,7 +174,7 @@ public class PreviewJobHandler implements JobHandler {
         }
         String mediaType = target.mediaType() != null ? target.mediaType() : inferContentType(target.path());
         if (mediaType != null && mediaType.startsWith("image/")) {
-            return new FetchedSource("", mediaType, null);
+            return new FetchedSource("", mediaType, null, target.artifactId(), target.path());
         }
         String objectKey = dvcObjectKey(target.dvcHash(), target.path());
         if (!storagePort.objectExists(DVC_CACHE_BUCKET, objectKey)) {
@@ -179,9 +186,11 @@ public class PreviewJobHandler implements JobHandler {
         try (InputStream in = storagePort.readObject(DVC_CACHE_BUCKET, objectKey)) {
             byte[] bytes = readLimited(in, previewProperties.maxBytes());
             if (isParquet(mediaType)) {
-                return new FetchedSource(Base64.getEncoder().encodeToString(bytes), mediaType, "base64");
+                return new FetchedSource(Base64.getEncoder().encodeToString(bytes), mediaType, "base64",
+                        target.artifactId(), target.path());
             }
-            return new FetchedSource(new String(bytes, StandardCharsets.UTF_8), mediaType, null);
+            return new FetchedSource(new String(bytes, StandardCharsets.UTF_8), mediaType, null,
+                    target.artifactId(), target.path());
         } catch (IOException ex) {
             recordPreviewFailure("source_read_failed");
             throw new UnsupportedOperationException("PREVIEW_SOURCE_UNAVAILABLE: " + ex.getMessage(), ex);
@@ -231,7 +240,13 @@ public class PreviewJobHandler implements JobHandler {
         return null;
     }
 
-    private static String dvcObjectKey(String dvcHash, String path) {
+    /**
+     * DVC 对象键算法（dvc-cache 内按 hash 前 2 位分桶）。
+     *
+     * <p>TASK-P0BR-068：预览代理用例（PreviewApplicationService）与本 Worker 共用唯一实现，
+     * 禁止复制漂移；hash 缺失时回退 artifact path（历史数据兼容）。
+     */
+    public static String dvcObjectKey(String dvcHash, String path) {
         if (dvcHash != null && dvcHash.length() >= 2) {
             return dvcHash.substring(0, 2) + "/" + dvcHash.substring(2);
         }
@@ -260,7 +275,8 @@ public class PreviewJobHandler implements JobHandler {
         return exact;
     }
 
-    private record FetchedSource(String content, String contentType, String contentEncoding) {
+    private record FetchedSource(String content, String contentType, String contentEncoding,
+                                 String artifactId, String artifactPath) {
     }
 
     private String parseParquet(String content, String contentEncoding) throws Exception {

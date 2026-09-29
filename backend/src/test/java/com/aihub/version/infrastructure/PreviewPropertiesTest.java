@@ -16,48 +16,60 @@ class PreviewPropertiesTest {
     @Test
     @DisplayName("合法参数构造不改变值")
     void validParametersRemainUnchanged() {
-        var props = new PreviewProperties(200, 30, 2048L);
+        var props = new PreviewProperties(200, 30, 2048L, 4096L);
         assertEquals(200, props.maxRows());
         assertEquals(30, props.maxCols());
         assertEquals(2048L, props.maxBytes());
+        assertEquals(4096L, props.maxRenderBytes());
     }
 
     @Test
     @DisplayName("maxRows <= 0 时默认为 100")
     void maxRowsDefaultsTo100WhenNonPositive() {
-        var props = new PreviewProperties(0, 10, 512L);
+        var props = new PreviewProperties(0, 10, 512L, 0L);
         assertEquals(100, props.maxRows());
 
-        var propsNegative = new PreviewProperties(-5, 10, 512L);
+        var propsNegative = new PreviewProperties(-5, 10, 512L, 0L);
         assertEquals(100, propsNegative.maxRows());
     }
 
     @Test
     @DisplayName("maxCols <= 0 时默认为 50")
     void maxColsDefaultsTo50WhenNonPositive() {
-        var props = new PreviewProperties(10, 0, 512L);
+        var props = new PreviewProperties(10, 0, 512L, 0L);
         assertEquals(50, props.maxCols());
 
-        var propsNegative = new PreviewProperties(10, -1, 512L);
+        var propsNegative = new PreviewProperties(10, -1, 512L, 0L);
         assertEquals(50, propsNegative.maxCols());
     }
 
     @Test
     @DisplayName("maxBytes <= 0 时默认为 1MB")
     void maxBytesDefaultsTo1MBWhenNonPositive() {
-        var props = new PreviewProperties(10, 10, 0L);
+        var props = new PreviewProperties(10, 10, 0L, 0L);
         assertEquals(1024L * 1024, props.maxBytes());
 
-        var propsNegative = new PreviewProperties(10, 10, -100L);
+        var propsNegative = new PreviewProperties(10, 10, -100L, 0L);
         assertEquals(1024L * 1024, propsNegative.maxBytes());
+    }
+
+    @Test
+    @DisplayName("maxRenderBytes <= 0 时默认为 5MB（TASK-P0BR-068）")
+    void maxRenderBytesDefaultsTo5MBWhenNonPositive() {
+        var props = new PreviewProperties(10, 10, 512L, 0L);
+        assertEquals(5L * 1024 * 1024, props.maxRenderBytes());
+
+        var propsNegative = new PreviewProperties(10, 10, 512L, -1L);
+        assertEquals(5L * 1024 * 1024, propsNegative.maxRenderBytes());
     }
 
     @Test
     @DisplayName("全负值参数全部走默认值")
     void allNegativeParametersUseDefaults() {
-        var props = new PreviewProperties(-1, -1, -1L);
+        var props = new PreviewProperties(-1, -1, -1L, -1L);
         assertEquals(100, props.maxRows());
         assertEquals(50, props.maxCols());
         assertEquals(1024L * 1024, props.maxBytes());
+        assertEquals(5L * 1024 * 1024, props.maxRenderBytes());
     }
 }

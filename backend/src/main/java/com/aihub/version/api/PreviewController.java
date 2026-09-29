@@ -11,6 +11,8 @@ import com.aihub.shared.identity.PrincipalContext;
 import com.aihub.shared.identity.PrincipalContextHolder;
 import com.aihub.version.application.PreviewApplicationService;
 import java.util.Map;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -70,4 +72,26 @@ public class PreviewController {
 
     /** 触发预览生成请求。 */
     public record GeneratePreviewRequest(String versionId, String content, String contentType) {}
+
+    /**
+     * 服务端代理渲染图片预览工件（TASK-P0BR-068）。
+     *
+     * <p>纯适配器：校验与取数全部委托应用服务；返回白名单内 mediaType 的字节流，
+     * 不包裹 ApiResponse（二进制内容）。
+     *
+     * @param assetId    资产 ID
+     * @param versionId  版本 ID（必填）
+     * @param artifactId 工件 ID（必填）
+     * @return 图片字节流
+     */
+    @GetMapping("/artifact")
+    public ResponseEntity<byte[]> renderPreviewArtifact(@PathVariable String assetId,
+                                                        @RequestParam String versionId,
+                                                        @RequestParam String artifactId) {
+        PreviewApplicationService.PreviewRenderView rendered =
+                previewApplicationService.renderPreviewArtifact(assetId, versionId, artifactId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(rendered.mediaType()))
+                .body(rendered.content());
+    }
 }

@@ -201,6 +201,18 @@ public enum ErrorCode {
     /** DVC 对象缺失。 */
     DVC_OBJECT_MISSING(HttpStatus.NOT_FOUND, "error.dvc.objectMissing", false, AlertLevel.WARN),
 
+    /** 预览投影不存在（TASK-P0BR-068 新增；与 ASSET_NOT_FOUND 同 404 防枚举语义族）。 */
+    PREVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "error.preview.notFound", false, AlertLevel.NONE),
+
+    /** 预览媒体类型不在渲染白名单内。 */
+    PREVIEW_UNSUPPORTED_FORMAT(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "error.preview.unsupportedFormat", false, AlertLevel.NONE),
+
+    /** 预览渲染超出 maxRenderBytes 上限。 */
+    PREVIEW_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "error.preview.tooLarge", false, AlertLevel.NONE),
+
+    /** 预览源对象不可用（对象存储中缺失，与 DVC_OBJECT_MISSING 同族语义）。 */
+    PREVIEW_SOURCE_UNAVAILABLE(HttpStatus.NOT_FOUND, "error.preview.sourceUnavailable", false, AlertLevel.WARN),
+
     /** Gitea 依赖不可用。 */
     GITEA_DEPENDENCY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "error.dependency.gitea", true, AlertLevel.CRITICAL),
 

@@ -492,6 +492,8 @@
     "previewColumnTruncated": "Some columns were hidden (limit: 50)",
     "previewSchema": "Schema columns",
     "previewRowGroups": "Row Groups: {{count}}",
+    "previewImageError": "Failed to load image preview",
+    "previewImageStale": "Image preview reference is outdated; regenerate the preview",
     "validationReport": "Validation Report",
     "policyVersion": "Policy Version",
     "findings": "Findings",

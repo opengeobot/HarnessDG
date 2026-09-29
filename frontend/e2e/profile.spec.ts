@@ -134,7 +134,19 @@ test.describe('AC-P0B-IAM-003: Profile 改密', () => {
 // 同时该主体直连需要更高 scope 的业务页面应被拒（越权口径不因新字段回归）。
 test.describe('AC-P0B-UI-002: 最小权限主体的登录名回显', () => {
   test('仅 notification:read 主体仍回显 username 且业务越权页被拒', async ({ page }) => {
+    // 越权边界不回归：登录成功后应用客户端导航到默认落地页 /assets，
+    // 无 asset:read 的主体在该路由上必须由 RouteGuard 渲染 403「缺少访问权限」
+    // （与 error-paths.spec/admin-pages.spec 既有口径一致），且资产列表表格不得渲染。
+    //
+    // 刻意不使用 page.goto('/assets')：整页加载会被前端容器 nginx 的
+    // `location /assets/` 静态资源规则遮蔽（/assets 还会 301 到丢失端口的绝对 URL），
+    // 属 EVD-P0BR-050-001 limitations 记录的既有基础设施缺陷；此处改用用户在
+    // 应用内真实可达的登录落地路径，断言强度不变。
     await login(page, E2E_NOTIFICATION_READER.username, E2E_NOTIFICATION_READER.password);
+    await expect(page).toHaveURL(/\/assets$/);
+    await expect(page.getByText('缺少访问权限')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('.ant-table')).toHaveCount(0);
+
     await page.goto('/profile');
     await expect(page.getByRole('heading', { name: /个人中心|Profile/i })).toBeVisible();
 
@@ -143,12 +155,5 @@ test.describe('AC-P0B-UI-002: 最小权限主体的登录名回显', () => {
       info.locator('.ant-descriptions-row').filter({ hasText: /登录名|loginName/i })
         .locator('.ant-descriptions-item-content'),
     ).toHaveText(E2E_NOTIFICATION_READER.username);
-
-    // 越权边界不回归：无 asset:read 的主体直连 /assets 时，RouteGuard 必须渲染
-    // 403「缺少访问权限」（与 error-paths.spec/admin-pages.spec 既有口径一致），
-    // 且资产列表表格不得渲染。
-    await page.goto('/assets');
-    await expect(page.getByText('缺少访问权限')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('.ant-table')).toHaveCount(0);
   });
 });

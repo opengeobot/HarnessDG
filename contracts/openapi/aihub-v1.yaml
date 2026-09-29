@@ -3250,6 +3250,45 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/previews/artifact:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: renderPreviewArtifact
+      summary: 服务端代理渲染图片预览工件
+      description: |
+        按 versionId + artifactId 精确绑定，从对象存储（dvc-cache，对象键由 DVC hash 派生，用户输入不参与）
+        流式代理渲染图片字节。替代不可行的浏览器直连方案：预签名查询串不进入页面数据（REQ-DST-DETAIL-001），
+        且 <img> 原生请求无法携带 Authorization 头，前端经本端点取 Blob 后以 ObjectURL 渲染。
+        渲染白名单固定为 image/png、image/jpeg、image/webp、image/gif（服务端常量，SVG 因内嵌脚本风险排除）；
+        超过 maxRenderBytes 上限返回 413。artifact 的 mediaType 与工件路径来源于预览投影 note JSON
+        （约定结构 { mediaType, artifactId, artifactPath, note }）。
+        权限检查先于任何存储访问；未知/跨绑定/不可见的 assetId、versionId、artifactId 一律同一 404 语义防枚举。
+      tags: [assets]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED, PREVIEW_NOT_FOUND, PREVIEW_UNSUPPORTED_FORMAT, PREVIEW_TOO_LARGE, PREVIEW_SOURCE_UNAVAILABLE]
+      x-required-permissions: [asset:read]
+      parameters:
+        - { name: versionId, in: query, required: true, schema: { type: string } }
+        - { name: artifactId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 图片字节流（Content-Type 为白名单内 mediaType）
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+            image/gif:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '415': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/dvc/config:
     parameters:
       - { name: assetId, in: path, required: true, schema: { type: string } }

@@ -49,7 +49,8 @@ class PreviewJobHandlerTest {
 
     private PreviewJobHandler handler;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final PreviewProperties previewProperties = new PreviewProperties(100, 50, 1024L * 1024);
+    private final PreviewProperties previewProperties =
+            new PreviewProperties(100, 50, 1024L * 1024, 5L * 1024 * 1024);
 
     @BeforeEach
     void setUp() {
@@ -198,6 +199,20 @@ class PreviewJobHandlerTest {
         verify(storagePort, never()).readObject(anyString(), anyString());
         verify(jdbcTemplate).update(anyString(), anyString(), anyString(), anyString(),
                 anyString(), anyString(), any());
+
+        // TASK-P0BR-068：note JSON 必须携带渲染端点所需的 artifactId/artifactPath 与安全引用
+        // INSERT 共 7 参（sql + 6 varargs）；按位捕获第 5 个 vararg（content 列），不会误匹配 DELETE 调用
+        ArgumentCaptor<Object> jsonCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(jdbcTemplate).update(anyString(), any(), any(), any(), any(), jsonCaptor.capture(), any());
+        String previewJson = (String) jsonCaptor.getValue();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> note = objectMapper.readValue(previewJson, Map.class);
+        assertThat(note).containsEntry("mediaType", "image/png")
+                .containsEntry("truncated", false)
+                .containsEntry("artifactId", "art_img")
+                .containsEntry("artifactPath", "samples/preview.png");
+        assertThat((String) note.get("note")).contains("previews/artifact");
+        assertThat(previewJson).doesNotContain("data:image").doesNotContain("dvcHash");
     }
 
     @Test

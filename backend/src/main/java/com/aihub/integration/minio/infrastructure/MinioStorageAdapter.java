@@ -1,6 +1,6 @@
 /*
- * 功能: MinIO 存储适配器，实现真实 S3 Multipart Upload 与对象读写。
- * 时间: 2026-07-10
+ * 功能: MinIO 存储适配器，实现真实 S3 Multipart Upload 与对象读写（按桶路由凭据）。
+ * 时间: 2026-09-29
  * 作者: AxeXie
  */
 package com.aihub.integration.minio.infrastructure;
@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.AbortMultipartUploadRequest;
@@ -50,20 +51,33 @@ public class MinioStorageAdapter implements StoragePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(MinioStorageAdapter.class);
 
+    /** DVC 缓存桶：凭据隔离归 DVC scoped 账号，主账号无该桶权限。 */
+    static final String DVC_CACHE_BUCKET = "dvc-cache";
+
     private final MinioClient minioClient;
+    private final MinioClient dvcCacheMinioClient;
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
 
-    public MinioStorageAdapter(MinioClient minioClient, S3Client s3Client, S3Presigner s3Presigner) {
+    public MinioStorageAdapter(MinioClient minioClient,
+                               @Qualifier("dvcCacheMinioClient") MinioClient dvcCacheMinioClient,
+                               S3Client s3Client,
+                               S3Presigner s3Presigner) {
         this.minioClient = minioClient;
+        this.dvcCacheMinioClient = dvcCacheMinioClient;
         this.s3Client = s3Client;
         this.s3Presigner = s3Presigner;
+    }
+
+    /** 按桶选择客户端：dvc-cache 走 DVC scoped 凭据，其余走主凭据。 */
+    private MinioClient clientFor(String bucketName) {
+        return DVC_CACHE_BUCKET.equals(bucketName) ? dvcCacheMinioClient : minioClient;
     }
 
     @Override
     public boolean bucketExists(String bucketName) {
         try {
-            return minioClient.bucketExists(
+            return clientFor(bucketName).bucketExists(
                     BucketExistsArgs.builder().bucket(bucketName).build());
         } catch (Exception ex) {
             LOG.error("bucketExists failed bucket={}", bucketName, ex);
@@ -169,7 +183,7 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public URL presignDownload(String bucketName, String objectKey, Duration expiry) {
         try {
-            String url = minioClient.getPresignedObjectUrl(
+            String url = clientFor(bucketName).getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(bucketName)
@@ -186,7 +200,7 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public URL presignUpload(String bucketName, String objectKey, String contentType, Duration expiry) {
         try {
-            String url = minioClient.getPresignedObjectUrl(
+            String url = clientFor(bucketName).getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.PUT)
                             .bucket(bucketName)
@@ -203,7 +217,7 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public void deleteObject(String bucketName, String objectKey) {
         try {
-            minioClient.removeObject(
+            clientFor(bucketName).removeObject(
                     RemoveObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectKey)
@@ -217,7 +231,7 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public InputStream readObject(String bucketName, String objectKey) {
         try {
-            return minioClient.getObject(
+            return clientFor(bucketName).getObject(
                     GetObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectKey)
@@ -250,10 +264,13 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public boolean objectExists(String bucketName, String objectKey) {
         try {
-            minioClient.statObject(
+            clientFor(bucketName).statObject(
                     StatObjectArgs.builder().bucket(bucketName).object(objectKey).build());
             return true;
         } catch (Exception ex) {
+            // 可诊断性：存在性判定失败（权限/网络等）不得静默——此前 Access Denied 被吞导致
+            // 预览代理 404 无法归因（TASK-P0BR-068 §3 BUCKET_CREDENTIALS）。
+            LOG.warn("objectExists failed bucket={} key={}: {}", bucketName, objectKey, ex.getMessage());
             return false;
         }
     }

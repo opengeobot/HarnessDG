@@ -1,6 +1,6 @@
 /*
- * 功能: 基于 MinIO SDK 的对象存在性查询适配器。
- * 时间: 2026-07-10
+ * 功能: 基于 MinIO SDK 的对象存在性查询适配器（按桶路由凭据：dvc-cache 走 DVC scoped 客户端）。
+ * 时间: 2026-09-29
  * 作者: AxeXie
  */
 package com.aihub.integration.minio.infrastructure;
@@ -10,6 +10,7 @@ import io.minio.StatObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,16 +21,23 @@ public class RestMinioObjectExistencePort implements MinioObjectExistencePort {
 
     private static final Logger LOG = LoggerFactory.getLogger(RestMinioObjectExistencePort.class);
 
-    private final MinioClient minioClient;
+    /** DVC 缓存桶：凭据隔离归 DVC scoped 账号，主账号无该桶权限。 */
+    private static final String DVC_CACHE_BUCKET = "dvc-cache";
 
-    public RestMinioObjectExistencePort(MinioClient minioClient) {
+    private final MinioClient minioClient;
+    private final MinioClient dvcCacheMinioClient;
+
+    public RestMinioObjectExistencePort(MinioClient minioClient,
+                                        @Qualifier("dvcCacheMinioClient") MinioClient dvcCacheMinioClient) {
         this.minioClient = minioClient;
+        this.dvcCacheMinioClient = dvcCacheMinioClient;
     }
 
     @Override
     public boolean objectExists(String bucket, String objectKey) {
+        MinioClient client = DVC_CACHE_BUCKET.equals(bucket) ? dvcCacheMinioClient : minioClient;
         try {
-            minioClient.statObject(StatObjectArgs.builder()
+            client.statObject(StatObjectArgs.builder()
                     .bucket(bucket)
                     .object(objectKey)
                     .build());

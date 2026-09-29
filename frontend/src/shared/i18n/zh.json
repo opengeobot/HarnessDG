@@ -492,6 +492,8 @@
     "previewColumnTruncated": "部分列已隐藏（限制：50 列）",
     "previewSchema": "Schema 列",
     "previewRowGroups": "Row Groups: {{count}}",
+    "previewImageError": "图片预览加载失败",
+    "previewImageStale": "图片预览引用已过期，请重新生成预览",
     "validationReport": "校验报告",
     "policyVersion": "策略版本",
     "findings": "校验结果",
