@@ -4668,8 +4668,12 @@ components:
         projectId:
           type: string
           description: 所属项目 ID（为空表示不变更）
-        displayName: { type: string }
-        description: { type: string }
+        displayName:
+          type: string
+          description: 展示名（为空表示不变更；变更即触发重命名并原子保留旧坐标 Alias）
+        description:
+          type: string
+          description: 描述（为空表示不变更）
         visibility: { $ref: '#/components/schemas/Visibility' }
         owners:
           type: array

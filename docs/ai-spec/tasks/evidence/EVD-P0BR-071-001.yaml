@@ -1,0 +1,273 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-071-001
+# 本卡 requiredEvidenceLevel 为 E4。backend 缺陷 A（PATCH 部分字段更新无条件覆盖
+# displayName/description 等五字段）与缺陷 B（NULL displayName 后非空回传触发
+# rename→insertAlias 唯一键冲突 → PG 事务中止 25P02 → 500）已按卡 §4 契约先行修复；
+# 修复前机理已在真实 Compose 栈复现留证（probe-071-slice1），修复后坏夹具
+# ast_01m3qzgjehtr7fc54xncvz2ymv 经真实 API PATCH 恢复成功（200，rv 6→7，
+# 未提交字段全部保留——probe-071-m7-restore）。真实 Compose 栈 Playwright 全量终态
+# 111 passed / 0 failed / 0 skipped（exit 0，3.3m = 069 基线 110 + 本卡新增切片⑨b）。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由批准人处置后执行
+# （与 065/066/067/068 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-071
+  requirements: [REQ-AST-005, REQ-COM-001, REQ-UI-001]
+  scenarios: [AC-P1-AST-001, AC-P1-AST-009]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 实施初（卡置 READY 后）与收口时各复跑一次，均 PASS（governance-071.log）
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-071.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-071.md -CheckChangedPaths
+    # 全部变更命中 allowedPaths（9 个在界内修改文件 + 本 EVD）；
+    # build-logs/verify-bom.ps1 系 09-24 既存取证脚本，按 066–069 先例登记于卡 FM
+    # preExistingDirtyPaths（SHA b5003338…9b3d 核对一致）；
+    # 取证工件统一为 build-logs/*.log（.gitignore `*.log` 命中；071-base.yaml 已改名
+    # 071-base.yaml.log，两份 run-071-*.ps1 执行副本删除、内容留档于同名 .ps1.log）；
+    # Playwright 产物目录（frontend/test-results、playwright-report）终态取证后已删除不入库。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-071.md -CheckCompletion
+    # 设计内的失败（2026-09-30 实测 7 项，governance-071-rerun.log）：
+    # commitSha 需等于提交后 HEAD 且 dirtyWorktree=false（代码须先提交，AI 不得自提交）；
+    # review.accepted/reviewedBy/reviewedAt 需由验证权威填写（AI 不得自批，DEC-009）；
+    # notProven 与 skippedTests 为本清单如实登记的未证面（failsafe 123 条件跳过等），
+    # 按「环境跳过不算通过」原则保留而非删除。
+    # changedPathValidation 已复跑 PASS（verify-bom.ps1 登记 preExistingDirtyPaths 后）。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 5731e80fbfa071dae2ee2136405dd89a21acd77c # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/asset/domain/Asset.java
+    - backend/src/main/java/com/aihub/asset/infrastructure/MyBatisAssetRepository.java
+    - backend/src/test/java/com/aihub/asset/domain/AssetTest.java
+    - backend/src/test/java/com/aihub/asset/application/AssetApplicationServiceTest.java
+    - contracts/openapi/aihub-v1.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-071.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-071-001.yaml
+    - docs/architecture/modelscope-page-gap-analysis-2026-09-21.md
+    - frontend/e2e/settings-form.spec.ts
+
+environment:
+  observedAt: 2026-09-30T03:25:00Z
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  java: openjdk 21.0.9 LTS (Temurin；mvnw 构建日志 Detected Java version 21.0.9；主机默认 java 为 17，不影响 mvnw 工具链)
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+  externalDependencyVersions: { oasdiff: tufin/oasdiff:latest(镜像 sha256:0286f138545a), "@redocly/cli": latest(npx) }
+
+execution:
+  workingDirectory: backend/ + frontend/ + contracts/
+  command: >-
+    切片①（修复前取证）：真实 Compose 栈对 ast_01m3qzgjehtr7fc54xncvz2ymv 复现
+    REPRO-A（PATCH 只发 description → 200 且 displayName 被写 NULL）与 REPRO-B
+    （PATCH 非空 displayName → 500，traceId 9b26c5e3c1a247e7a49a9e7638443a20，
+    25P02 事务中止链），留档 probe-071-slice1.md.log；
+    契约：UpdateAssetRequest.displayName/description 补「（为空表示不变更）」描述
+    （071-contract-diff.log）；npx @redocly/cli lint contracts/openapi/aihub-v1.yaml
+    --config contracts/openapi/redocly.yaml（PASS，3 warnings 均既存、与本卡改动无关）；
+    docker run tufin/oasdiff breaking build-logs/071-base.yaml(=git show HEAD 导出基线)
+    contracts/openapi/aihub-v1.yaml（「No breaking changes to report」，exit 0）；
+    cd backend; ./mvnw.cmd verify（全量 BUILD SUCCESS：surefire 777 tests / 0 failures /
+    0 errors / 6 skipped；定向 AssetTest 10、AssetApplicationServiceTest 25、
+    AssetControllerTest 9 全绿；failsafe IT 123 项因 testcontainers 条件整体跳过，见 limitations）；
+    容器重建：docker compose build backend（exit 0）→ up -d backend（Recreated）→
+    actuator/health UP（8s）；
+    切片⑥（坏夹具恢复）：E2E_AUTHOR 真实登录 PATCH {displayName 恢复,
+    description='071-m7-restored', expectedVersion=6} → HTTP 200，rv 6→7，
+    未提交 visibility 保持 INTERNAL（probe-071-m7-restore.md.log）；
+    cd frontend; pnpm exec playwright test settings-form（定向终态 5 passed，12.8s）；
+    cd frontend; pnpm lint / pnpm typecheck / pnpm build（均 exit 0）；
+    cd frontend; pnpm test:e2e（真实 Compose 栈全量终态：111 passed / 0 failed /
+    0 skipped，3.3m，exit 0）。
+  startedAt: 2026-09-30T02:30:00Z
+  finishedAt: 2026-09-30T03:25:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Vite dev server (localhost:5173) -> Nginx gateway (localhost:8080) -> backend/compose stack（修复后镜像）
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-001
+      assertion: >-
+        E4（缺陷 A 回归防线）：settings-form.spec.ts 新增切片⑨b——对夹具纯 API 差异式
+        PATCH 只发 {description, expectedVersion} → 200 且远端复核 description 生效、
+        displayName 保留基线值、visibility 未被覆盖（INTERNAL）；全量 111 passed 含该用例。
+        E2：AssetTest.updateMetadataSkipsNullFields / updateMetadataBlankOrganizationNormalizesToNull、
+        AssetApplicationServiceTest.updateAssetWithoutDisplayNameKeepsItAndSkipsAlias。
+      scenarioCategory: normal
+    - scenarioId: AC-P1-AST-001
+      assertion: >-
+        E4（坏夹具活栈实证）：ast_01m3qzgjehtr7fc54xncvz2ymv（缺陷 A 存续期被清 NULL 的
+        真实受损行）经修复后 API PATCH 恢复 displayName → 200，rv 6→7；同请求未提交
+        visibility 而服务端保持 INTERNAL——一次操作同时复证 null-skip 语义在真实
+        PG/Compose 栈生效（probe-071-m7-restore.md.log；修复前同型请求为
+        500/25P02，见 probe-071-slice1.md.log REPRO-B）。
+      scenarioCategory: normal
+    - scenarioId: AC-P1-AST-001
+      assertion: >-
+        契约↔实现一致：UpdateAssetRequest.displayName/description 补「（为空表示不变更）」
+        描述后，redocly lint PASS（3 warnings 均既存）+ oasdiff breaking
+        「No breaking changes to report」（纯描述补全、无 schema 破坏）；
+        实现（Asset.updateMetadata null-skip）与契约文本、REQ-AST-005 重命名规则、
+        AssetApplicationService.renameRequested 判定三者口径经本卡对齐并测试复证。
+      scenarioCategory: normal
+    - scenarioId: AC-P1-AST-009
+      assertion: >-
+        E4（缺陷 B）：settings-form.spec.ts 切片⑨收紧——清空展示名提交 → 精确 400 +
+        code=COMMON_INVALID_ARGUMENT + toast「displayName must not be blank」
+        （修复前口径为 ≥400 且实测 500）；且对 NULL 名资产 PATCH 非空 displayName
+        由 500/25P02 变为 200（坏夹具恢复即该路径的活栈实证：rename 分支
+        insertAlias 遇 ux_asset_alias_coordinate 冲突不再中止事务）。
+      scenarioCategory: failure
+    - scenarioId: AC-P1-AST-009
+      assertion: >-
+        E2：AssetTest.renameWithBlankDisplayNameRejectsAsInvalidArgument（空名抛
+        PlatformException(COMMON_INVALID_ARGUMENT)，替换裸 IllegalArgumentException→兜底 500）；
+        AssetApplicationServiceTest.updateAssetWithBlankDisplayNameFailsValidation +
+        updateAssetRenamePreservesAliasAndEnqueuesCardSyncJob（rename 别名 + CardSyncJob
+        单事务编排不回归）；MyBatisAssetRepository.insertAlias 改
+        INSERT … ON CONFLICT (old_namespace, old_name) DO NOTHING（数据库语义幂等，
+        E4 实测别名路径无事务中止）。
+      scenarioCategory: boundary
+    - scenarioId: AC-P1-AST-009
+      assertion: >-
+        全量回归：真实 Compose 栈 Playwright 111 passed / 0 failed / 0 skipped
+        （= 069 基线 110 + 本卡新增⑨b，exit 0）；mvnw verify 全量 BUILD SUCCESS
+        （surefire 777/0/0/6）；AssetControllerTest 9 全绿——updateAsset 审计摘要、
+        并发 409（updateAssetRejectsRowVersionConflict）与权限口径均无回归
+        （卡 crossCutting AUDIT/STATE 核对）。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P1-AST-009
+      assertion: >-
+        卡 §4.4「集成级：对真实 PG 复现旧数据后 PATCH 非空名 → 200 且别名落表」的
+        Testcontainers/真实库自动化断言未取得——本仓 failsafe IT 阶段 123 项在验证
+        窗口因 docker/testcontainers 条件整体跳过。
+      reason: >-
+        卡 §4.4 对该项预留了替代路径「否则以 e2e + 坏夹具恢复实证」：坏夹具恢复
+        （NULL→非空 PATCH 200 + 后续读取正常）与切片⑨收紧即为该替代证据；
+        别名行的 DB 直读复核不在 e2e 断言面内，如实登记，不视为全量复证。
+    - scenarioId: AC-P1-AST-001
+      assertion: >-
+        backend/src/main/java/com/aihub/asset/api/UpdateAssetRequest.java 的 javadoc
+        未同步「为空表示不变更」语义——该文件不在本卡 allowedPaths（11 路径）。
+      reason: >-
+        AI 不得越径改动（DEC-009 门禁）；契约 OpenAPI 文本为本卡权威面且已补全，
+        Java record 注释同步移交验证权威随 review 处置或另立小卡。
+    - scenarioId: AC-P1-AST-001
+      assertion: >-
+        卡 §4.6「契约 PATCH 端点 x-implementation-status 若因本卡验证得以从
+        implemented-unverified 上调，据实修改」——未上调，端点保持
+        implemented-unverified（aihub-v1.yaml L1792）。
+      reason: >-
+        据实口径：本卡 E4 证据为自证链，尚未获验证权威 review.accepted；
+        契约头（L5-6）声明项目整体 IMPLEMENTED_UNVERIFIED、端点级据实标注，
+        项目内先例（067/068 已提交并通过 E4 的端点）均维持 implemented-unverified
+        待验收。上调动作属验收结论而非实施结论，移交验证权威随 review 处置（不预判）。
+
+contractConsistency:
+  openapiMatched: true # UpdateAssetRequest.displayName/description 描述补全与 Asset.updateMetadata null-skip 实现一致；redocly lint + oasdiff breaking 取证
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无 Flyway 迁移（缺陷为应用层覆盖语义与 SQL 幂等写法，schema 不变）
+  uiMatched: true # settings-form.spec.ts 注释与断言口径同步为修复后真实行为；前端无改动（必填校验缺失另卡，卡 §7）
+  runbookMatched: null # 本卡无需变更运行手册（deploy/ 属 forbiddenPaths 且未触达）
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-071.md（本卡 §6/§8）
+    - contracts/openapi/aihub-v1.yaml（UpdateAssetRequest.displayName/description 语义描述）
+    - backend/.../Asset.java（updateMetadata 五字段 null-skip + rename 空名 PlatformException→400）
+    - backend/.../MyBatisAssetRepository.java（insertAlias → ON CONFLICT (old_namespace, old_name) DO NOTHING）
+    - backend/src/test/.../AssetTest.java（+3：updateMetadataSkipsNullFields / updateMetadataBlankOrganizationNormalizesToNull / renameWithBlankDisplayNameRejectsAsInvalidArgument）
+    - backend/src/test/.../AssetApplicationServiceTest.java（+2：updateAssetWithoutDisplayNameKeepsItAndSkipsAlias / updateAssetWithBlankDisplayNameFailsValidation）
+    - frontend/e2e/settings-form.spec.ts（切片⑨收紧 400 + 新增切片⑨b 缺陷 A 回归防线 + 文件头/夹具注释口径同步）
+    - docs/architecture/modelscope-page-gap-analysis-2026-09-21.md §7（闭环指针）
+    - docs/ai-spec/02-delivery/work-breakdown.md（071 行 + 069 行尾指针）
+  logs:
+    - build-logs/probe-071-slice1.md.log（修复前 REPRO-A/B 机理留证：NULL 清空 + 500/25P02，traceId 9b26c5e3c1a247e7a49a9e7638443a20）
+    - build-logs/probe-071-m7-restore.md.log（修复后坏夹具经 API 恢复：200，rv 6→7，未提交字段保留）
+    - build-logs/071-contract-diff.log（契约描述补全 diff）
+    - build-logs/071-redocly-lint.log（lint PASS，3 warnings 既存）
+    - build-logs/071-oasdiff2.log（tufin/oasdiff breaking「No breaking changes to report」，exit 0；071-oasdiff.log 为 npx 包装器不可执行的失败记录，如实保留）
+    - build-logs/071-base.yaml.log（git show HEAD:contracts/openapi/aihub-v1.yaml 导出的变更前基线；oasdiff 取证时名为 071-base.yaml，后按 *.log 留档惯例改名）
+    - build-logs/071-mvnw-verify.log（全量 verify：surefire 777/0/0/6 + BUILD SUCCESS；failsafe 123 条件跳过）
+    - build-logs/run-071-settings-e2e.log（定向终态 5 passed，12.8s）
+    - build-logs/run-071-fulle2e.log（全量终态 111 passed / 0 failed / 0 skipped，3.3m，exit 0）
+    - build-logs/071-fe-lint.log / 071-fe-typecheck.log / 071-fe-build.log（均 exit 0；lint 2 处 react-refresh warnings 为既存）
+    - build-logs/governance-071.log（治理三连 + -CheckCompletion 交接态复跑结果）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 全量终态：111 tests / 111 passed / 0 skipped / 0 failed（3.3m，workers=1、retries=0）
+    - mvnw verify：surefire 777 tests / 0 failures / 0 errors / 6 skipped + BUILD SUCCESS（failsafe 见 limitations）
+    - 定向单测：AssetTest 10 / AssetApplicationServiceTest 25 / AssetControllerTest 9 全绿
+    - pnpm build ✓ 3257 modules / 23.12s；lint/typecheck exit 0
+    - redocly lint PASS（3 warnings 不阻断）；oasdiff breaking：no breaking changes（exit 0）
+  databaseQueries: []
+  auditEvents:
+    - 本卡无新增审计事件类型；updateAsset 审计摘要（前后受控字段）写入口径不变（卡 crossCutting AUDIT），AssetControllerTest 审计断言无回归
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_* 键），仅在 run-071-*.ps1 脚本内注入子进程环境变量、全程不回显口令；本清单、e2e 报告与归档日志均不含口令/Token 明文。
+    - E2E_AUTHOR 夹具账号口令为 support.ts 仓内既有常量（非 Secret），本卡未新增任何硬编码凭据。
+    - 探针与恢复留档（probe-071-*.log）仅含资产坐标、rv、displayName/描述文本与 traceId，无凭据/Token/presign URL。
+    - build-logs/ 整目录不入库（.gitignore `*.log` 惯例）；Playwright 产物目录终态取证后已删除。
+
+limitations:
+  skippedTests:
+    - test: failsafe 阶段 IT 123 项整体 Skipped
+      reason: >-
+        Testcontainers/Docker 条件在验证窗口不满足（本机 Docker Desktop 可用但
+        IT 镜像/网络前置条件未就绪，属 baseCommit 前既有的条件跳过面），非本卡引入；
+        本卡全部 scenario 证据均出自实际执行的 777 项单测切片与 E4 真实 Compose 栈，
+        不以该 123 项 skip 为任何 PASS 依据（AGENTS.md：因环境跳过的集成测试不算通过）。
+    - test: surefire 6 项 skipped
+      reason: >-
+        均为既存环境依赖类条件跳过（非 asset 域、非本卡触及）；本卡新增 5 用例
+        全部实际执行并通过。
+  assumptions:
+    - Compose 全栈运行且 healthy；后端容器为「docker compose build backend + up -d backend」重建后的含修复镜像（health UP after 8s），e2e 与坏夹具恢复均打到该实例。
+    - Playwright 走主机 Vite dev server 5173 而非 nginx 8080 容器前端（nginx location /assets/ 静态规则遮蔽 SPA 深链，既存基础设施缺陷，见 EVD-P0BR-050-001 limitations）；API 流量经真实 nginx 8080 转发至修复后后端。
+    - 本地非 CI：retries=0；终态一次性 111 passed。
+  environmentDifferences:
+    - >-
+      requiredValidationCommands 第 10 项的 npx @redocly/cli diff --fail-on-breaking
+      为 067/068 已申报的上游既存缺陷（redocly 上游移除 diff 子命令；本卡实测
+      npx oasdiff 包装器亦不含可执行件，见 071-oasdiff.log 失败留档），
+      按卡 FM 注记以 docker run tufin/oasdiff breaking 替代取证（071-oasdiff2.log，
+      exit 0「No breaking changes to report」），沿 067 先例。
+    - >-
+      坏夹具 ast_01m3qzgjehtr7fc54xncvz2ymv 的 organizationId 仍为 NULL——缺陷 A
+      存续期（069 窗口）被静默清空的历史遗留；本卡恢复口径为经 API PATCH 补
+      displayName/description（提交面不含 organizationId 即不变更，null-skip 语义），
+      如须归正 organizationId 需管理员另行 PATCH，属数据治理动作、不属本卡修复面。
+    - >-
+      前端 AssetSettingsPage 必填校验缺失（切片⑨「清空展示名仍发请求」的产品体验缺口）
+      按卡 §7 不在本卡，由批准人裁定另立前端小卡；e2e 断言已按修复后真实后端行为收紧。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

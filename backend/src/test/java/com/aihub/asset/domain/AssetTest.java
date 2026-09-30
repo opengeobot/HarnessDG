@@ -8,6 +8,8 @@ package com.aihub.asset.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.aihub.shared.error.ErrorCode;
+import com.aihub.shared.error.ValidationException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -94,6 +96,45 @@ class AssetTest {
         assertThat(asset.organizationId()).isEqualTo("org_01");
         assertThat(asset.projectId()).isEqualTo("prj_01");
         assertThat(asset.tagIds()).containsExactly("tag_001", "tag_002");
+    }
+
+    // TASK-P0BR-071 缺陷 A：PATCH 语义——null 字段表示不变更，不得覆盖既有值
+    @Test
+    void updateMetadataSkipsNullFields() {
+        Asset asset = newModel();
+        asset.updateMetadata(null, null, null, "仅改描述", null,
+                null, null, null, null, null, null, null, "usr_02");
+
+        assertThat(asset.displayName()).isEqualTo("领域问答模型");
+        assertThat(asset.description()).isEqualTo("仅改描述");
+        assertThat(asset.license()).isEqualTo("Apache-2.0");
+        assertThat(asset.visibility()).isEqualTo(Visibility.INTERNAL);
+        assertThat(asset.ownerTeamId()).isEqualTo("tm_01");
+    }
+
+    @Test
+    void updateMetadataBlankOrganizationNormalizesToNull() {
+        Asset asset = new Asset.Builder()
+                .assetId("ast_05").type(AssetType.MODEL).namespace("nlp").name("org-model")
+                .organizationId("org_01").visibility(Visibility.INTERNAL).status(AssetStatus.ACTIVE)
+                .createdBy("usr_01").updatedBy("usr_01")
+                .build();
+        asset.updateMetadata("  ", null, null, null, null,
+                null, null, null, null, null, null, null, "usr_02");
+
+        assertThat(asset.organizationId()).isNull();
+    }
+
+    // TASK-P0BR-071 缺陷 B 伴生：空展示名 400 语义（此前裸 IllegalArgumentException 落兜底 500）
+    @Test
+    void renameWithBlankDisplayNameRejectsAsInvalidArgument() {
+        Asset asset = newModel();
+        assertThatThrownBy(() -> asset.rename("nlp", "   ", "usr_02"))
+                .isInstanceOf(ValidationException.class)
+                .extracting(e -> ((ValidationException) e).errorCode())
+                .isEqualTo(ErrorCode.COMMON_INVALID_ARGUMENT);
+        assertThatThrownBy(() -> asset.rename("nlp", null, "usr_02"))
+                .isInstanceOf(ValidationException.class);
     }
 
     @Test

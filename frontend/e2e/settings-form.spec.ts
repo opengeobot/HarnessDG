@@ -6,26 +6,27 @@
  *
  * 诚实边界（与卡 §5 切片 9 口径的偏差，详见 EVD-P0BR-069-001）：
  *   卡面假设「展示名称必填校验拦截、无请求发出」。实测取证：AssetSettingsPage 元数据
- *   Form 无 rules（本卡 §4 明确禁改该页面），清空展示名称提交会真实发出 PATCH，
- *   后端对空 displayName 返回 500 INTERNAL_ERROR（探针确证，事务回滚）。
+ *   Form 无 rules（本卡 §4 明确禁改该页面），清空展示名称提交会真实发出 PATCH 并被服务端拒绝。
  *   本 spec 因此如实断言当前真实行为：请求发出且失败、错误提示出现、远端值未被成功覆盖。
  *   ——不得用 skip/放宽断言掩盖该产品缺陷，缺陷修复须另立卡。
  *
- *   取证的两项后端契约违背（详见 EVD，均须另立 backend 卡修复，本卡 forbiddenPaths 不含 backend）：
- *     [缺陷 A] PATCH /assets/{id} 部分更新会静默清空未提交字段——Asset.updateMetadata 对
- *              displayName/organizationId/projectId/license 无条件赋值（null 也覆盖），
- *              与 UpdateAssetRequest javadoc 及 PAD「为空表示不变更」矛盾。
- *     [缺陷 B] 对 displayName 为 NULL 的资产再 PATCH 一个非空 displayName，会走 rename→
- *              insertAlias；若旧坐标别名行已存在则触发 ux_asset_alias_coordinate 唯一键冲突，
- *              PostgreSQL「current transaction is aborted」→ 500，资产无法经 PATCH 修复。
- *   为在不触碰上述缺陷的前提下让「真实 UI 点击旅程」稳定可重跑，本 spec 夹具一律发送
- *   完整治理字段元组（避免只传部分字段触发 [缺陷 A] 把 displayName/organizationId 清成 NULL，
- *   进而因 [缺陷 B] 使夹具彻底不可归正）——这是夹具卫生，不放宽任何被测断言。
+ *   069 取证的两项后端契约违背已由 TASK-P0BR-071 修复（见 EVD-P0BR-071-001）：
+ *     [缺陷 A] PATCH /assets/{id} 部分更新曾静默清空未提交字段（updateMetadata 无条件赋值）
+ *              ——修复后为 null-skip 的 PATCH 语义，「为空/未提供表示不变更」与契约一致。
+ *     [缺陷 B] displayName 为 NULL 的资产再 PATCH 非空 displayName，rename→insertAlias 曾触发
+ *              ux_asset_alias_coordinate 唯一键冲突 → PG 25P02 → 500——修复后 insertAlias
+ *              使用 ON CONFLICT DO NOTHING 幂等吸收，且 rename 空名改抛
+ *              ValidationException（COMMON_INVALID_ARGUMENT → 400）。
+ *   据此切片⑨的断言按修复后真实行为**收紧**：HTTP 精确 400 + 提示文案为后端校验原文。
+ *   前端必填校验缺失仍是独立产品缺口（另卡）：本切片继续验证「请求发出且被服务端拒绝」，
+ *   若未来补上前端拦截，waitForResponse 会超时如实红，提醒同步更新断言。
+ *   夹具仍保留完整治理字段元组提交（修复后已非必需，但等值回传无害，维持最小变更）。
  *
  * 夹具独立性：目录检索（AssetSearchDao）过滤 provisioning_status='COMPLETED' 且按组织访问域
  *   下推可见性；新建资产须等异步建仓完成才可经目录检索导航。ensure 轮询建仓并在每次测试前
  *   把 displayName/描述/可见性/organizationId 归正到基线，保证切片可独立重跑。
- *   夹具坐标为专用新坐标（历史 ast_01m3qzgjehtr7fc54xncvz2ymv 因 [缺陷 A/B] 已损坏不可复用）。
+ *   夹具坐标为专用新坐标（历史 ast_01m3qzgjehtr7fc54xncvz2ymv 曾因 [缺陷 A/B] 损坏，
+ *   071 修复后经 API 归正，但保留为探针取证样本，本 spec 不复用）。
  */
 import { test, expect, request, type APIRequestContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -49,8 +50,8 @@ const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 
 /**
  * 独立 DATASET 夹具坐标（E2E_AUTHOR 自有资产）。
- * v2 坐标：v1（e2e069-settings-form-target）因后端 [缺陷 A/B]（见文件头）已被
- * 部分更新清空 displayName 且 rename 别名冲突导致无法归正，弃用换新坐标。
+ * v2 坐标：v1（e2e069-settings-form-target）曾在后端 [缺陷 A/B]（071 已修复）存续期间
+ * 被部分更新清空 displayName 且 rename 别名冲突无法归正，弃用换新坐标并保持坐标稳定。
  */
 const SETTINGS_ASSET = {
   namespace: 'nlp',
@@ -173,10 +174,10 @@ async function lookupAssetId(api: APIRequestContext, authorToken: string): Promi
 }
 
 /**
- * 基线归正：目录检索导航按 displayName + 组织访问域定位资产，上一切片（尤其 UI 保存
- * 只发三字段，触发后端 [缺陷 A]）可能已把 organizationId 清成 NULL，必须先归正。
- * PATCH 恒携带完整治理字段元组——差异式 PATCH（只传变更字段）正是 [缺陷 A] 的触发器，
- * 会把未提交字段静默清空；displayName 等值回传不会进入 rename 分支（无别名副作用）。
+ * 基线归正：目录检索导航按 displayName + 组织访问域定位资产，上一切片可能改动了
+ * displayName/描述/可见性，必须先归正。PATCH 恒携带完整治理字段元组：071 修复后
+ * 未提供字段即为不变更（null-skip PATCH 语义），等值回传亦无害；终态复核保留为
+ * [缺陷 A] 的回归哨兵（若部分更新语义再次回退为覆盖清空，此处会如实红）。
  */
 async function normalizeBaseline(
   api: APIRequestContext,
@@ -209,7 +210,7 @@ async function normalizeBaseline(
   expect(detail.displayName, '归正后 displayName 必须等于基线，否则目录检索导航必然失败').toBe(
     SETTINGS_ASSET.displayName,
   );
-  expect(detail.organizationId, '归正后 organizationId 必须回写（[缺陷 A] 回归哨兵）').toBe(organizationId);
+  expect(detail.organizationId, '归正后 organizationId 必须回写（PATCH 语义回归哨兵）').toBe(organizationId);
   expect(detail.status, '夹具资产应为 ACTIVE（生命周期切片不得复用本资产）').toBe('ACTIVE');
   return detail;
 }
@@ -344,8 +345,8 @@ test.describe('资产 Settings 表单编辑（TASK-P0BR-069 切片 8/9/10）', (
     ).toBeVisible();
   });
 
-  /* ---- 切片 9：空展示名称——如实断言当前真实失败态（见文件头诚实边界） ---- */
-  test('⑨ 清空展示名称提交：请求真实发出且被服务端拒绝、远端值未被成功覆盖', async ({ page }) => {
+  /* ---- 切片 9：空展示名称——071 修复后精确断言 400 校验语义（口径收紧） ---- */
+  test('⑨ 清空展示名称提交：请求真实发出且被服务端 400 拒绝、远端值未被成功覆盖', async ({ page }) => {
     test.setTimeout(120_000);
     const assetId = fixtures!.settingsAssetId;
 
@@ -353,18 +354,22 @@ test.describe('资产 Settings 表单编辑（TASK-P0BR-069 切片 8/9/10）', (
     await openAssetDetailViaCatalog(page, SETTINGS_ASSET.displayName);
     await openAssetSettingsViaNav(page);
 
-    // 当前实现（本卡禁改）：元数据 Form 无 rules，清空展示名称后提交会真实发出 PATCH。
-    // 若未来补上前端必填校验（另立卡），此 waitForResponse 会超时如实红——提醒同步更新本断言。
+    // 当前实现（前端必填校验缺失，另卡跟进）：元数据 Form 无 rules，清空展示名称后提交仍真实发出 PATCH。
+    // 若未来补上前端必填校验，此 waitForResponse 会超时如实红——提醒同步更新本断言。
     await page.getByLabel(/展示名称|Display Name/).fill('');
     const [resp] = await Promise.all([
       patchResponse(page, assetId),
       metadataForm(page).getByRole('button', { name: /保\s*存|Save/ }).click(),
     ]);
-    expect(resp.status(), `空展示名称应被服务端拒绝（探针实测 500），实际 HTTP ${resp.status()}`).toBeGreaterThanOrEqual(400);
+    const raw = await resp.text();
+    // 071 缺陷 B 伴生修复：空 displayName 由裸 IllegalArgumentException（兜底 500）
+    // 改为 ValidationException → COMMON_INVALID_ARGUMENT → 精确 400
+    expect(resp.status(), `空展示名称应被服务端 400 拒绝，实际：${raw.slice(0, 300)}`).toBe(400);
+    expect(JSON.parse(raw) as { code?: string }).toMatchObject({ code: 'COMMON_INVALID_ARGUMENT' });
 
-    // 错误提示出现（message.error 透传后端 body.message，探针实测为 "Internal server error"）
+    // 错误提示出现（message.error 透传后端 body.message，即校验原文）
     await expect(
-      page.locator('.ant-message').getByText(/Internal server error|操作失败|Operation failed/).first(),
+      page.locator('.ant-message').getByText(/displayName must not be blank/).first(),
     ).toBeVisible();
 
     // 服务端复核：事务回滚，远端 displayName 仍为基线，绝不允许被清空
@@ -373,6 +378,36 @@ test.describe('资产 Settings 表单编辑（TASK-P0BR-069 切片 8/9/10）', (
       const token = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
       const detail = await getAssetDetail(api, token, assetId);
       expect(detail.displayName, '失败提交不得覆盖远端展示名称').toBe(SETTINGS_ASSET.displayName);
+    } finally {
+      await api.dispose();
+    }
+  });
+
+  /* ---- 切片 9b：差异式 PATCH 只发 description——071 缺陷 A 回归防线（卡 §4.4） ---- */
+  test('⑨b 仅发 description 的 PATCH：200 且远端 displayName/visibility 均保留', async () => {
+    test.setTimeout(60_000);
+    const assetId = fixtures!.settingsAssetId;
+    const onlyDescription = `071-9b-only-description-${Date.now()}`;
+
+    const api = await request.newContext();
+    try {
+      const token = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
+      const fresh = await getAssetDetail(api, token, assetId);
+      const resp = await api.patch(`${API_BASE}/assets/${assetId}`, {
+        headers: bearer(token),
+        data: { description: onlyDescription, expectedVersion: fresh.rowVersion ?? 0 },
+        failOnStatusCode: false,
+      });
+      const raw = await resp.text();
+      expect(resp.status(), `差异式 PATCH（只发 description）应 200，实际：${raw.slice(0, 300)}`).toBe(200);
+
+      // 缺陷 A 修复核心断言：未提交字段一律不变更
+      const detail = await getAssetDetail(api, token, assetId);
+      expect(detail.description, '提交的新描述应生效').toBe(onlyDescription);
+      expect(detail.displayName, '未提交 displayName 不得被清空（缺陷 A 回归防线）').toBe(
+        SETTINGS_ASSET.displayName,
+      );
+      expect(detail.visibility, '未提交 visibility 不得被覆盖').toBe('INTERNAL');
     } finally {
       await api.dispose();
     }
@@ -395,8 +430,8 @@ test.describe('资产 Settings 表单编辑（TASK-P0BR-069 切片 8/9/10）', (
     try {
       const token = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
       const fresh = await getAssetDetail(api, token, assetId);
-      // 完整元组 bump：只传 description 会触发后端 [缺陷 A] 清空 displayName，
-      // 反噬本切片「冲突提交不得覆盖展示名称」断言（409 乐观锁先于 rename，等值回传安全）。
+      // 完整元组 bump（071 修复后差异式 PATCH 已安全，保留等值回传仅为最小变更）；
+      // 409 乐观锁先于 rename，等值 displayName 回传安全。
       const bump = await api.patch(`${API_BASE}/assets/${assetId}`, {
         headers: bearer(token),
         data: {

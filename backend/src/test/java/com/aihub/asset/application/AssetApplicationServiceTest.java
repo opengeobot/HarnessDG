@@ -401,6 +401,38 @@ class AssetApplicationServiceTest {
         assertThat(asset.displayName()).isEqualTo("新展示名");
     }
 
+    // TASK-P0BR-071 缺陷 A：仅改描述的 PATCH 不得触发重命名/Alias 写入，且既有展示名保持不变
+    @Test
+    void updateAssetWithoutDisplayNameKeepsItAndSkipsAlias() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+        doNothing().when(assetRepository).update(any(Asset.class));
+
+        UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, null, "仅新描述",
+                null, null, null, null, null, null, "usr_02");
+        AssetView view = service.updateAsset("ast_stored", command);
+
+        assertThat(view.displayName()).isEqualTo("领域问答模型");
+        assertThat(asset.description()).isEqualTo("仅新描述");
+        verify(assetRepository, never()).insertAlias(any(), any(), any());
+        verify(jobApplicationService, never()).enqueue(eq("ASSET_CARD_SYNC"), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    // TASK-P0BR-071 缺陷 B 伴生：清空展示名（空串视为重命名请求）应 400 而非 500
+    @Test
+    void updateAssetWithBlankDisplayNameFailsValidation() {
+        Asset asset = storedModel();
+        when(assetRepository.findByAssetId("ast_stored")).thenReturn(Optional.of(asset));
+
+        UpdateAssetCommand command = new UpdateAssetCommand(0L, null, null, "   ", null,
+                null, null, null, null, null, null, "usr_02");
+
+        assertThatThrownBy(() -> service.updateAsset("ast_stored", command))
+                .isInstanceOf(ValidationException.class);
+        verify(assetRepository, never()).update(any(Asset.class));
+    }
+
     @Test
     void updateAssetRejectsRowVersionConflict() {
         Asset asset = storedModel();

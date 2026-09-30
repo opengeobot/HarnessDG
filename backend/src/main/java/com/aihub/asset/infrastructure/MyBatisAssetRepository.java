@@ -416,16 +416,16 @@ public class MyBatisAssetRepository implements AssetRepository {
 
     @Override
     public void insertAlias(String assetId, String oldNamespace, String oldName) {
-        try {
-            jdbcTemplate.update(
-                    "INSERT INTO asset_alias (asset_id, old_namespace, old_name) VALUES (:assetId, :ns, :name)",
-                    new MapSqlParameterSource()
-                            .addValue("assetId", assetId)
-                            .addValue("ns", oldNamespace)
-                            .addValue("name", oldName));
-        } catch (DuplicateKeyException ignored) {
-            // 幂等：同一旧坐标已记录则跳过
-        }
+        // 幂等：ON CONFLICT DO NOTHING 在语句级吸收重复旧坐标；
+        // 不可用 try-catch DuplicateKeyException——PG 下唯一键冲突会使事务进入 aborted（25P02），
+        // 同一 @Transactional 内后续 SQL 连锁失败（TASK-P0BR-071 缺陷 B）
+        jdbcTemplate.update(
+                "INSERT INTO asset_alias (asset_id, old_namespace, old_name) VALUES (:assetId, :ns, :name) "
+                        + "ON CONFLICT (old_namespace, old_name) DO NOTHING",
+                new MapSqlParameterSource()
+                        .addValue("assetId", assetId)
+                        .addValue("ns", oldNamespace)
+                        .addValue("name", oldName));
     }
 
     @Override

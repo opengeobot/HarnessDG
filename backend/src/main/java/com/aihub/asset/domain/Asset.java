@@ -5,6 +5,7 @@
  */
 package com.aihub.asset.domain;
 
+import com.aihub.shared.error.ValidationException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -179,10 +180,19 @@ public final class Asset {
                                ModelProfile modelProfile,
                                DatasetProfile datasetProfile,
                                String updatedBy) {
-        this.organizationId = normalizeNullable(organizationId);
-        this.projectId = normalizeNullable(projectId);
-        this.displayName = displayName;
-        this.description = description;
+        // PATCH 语义：未提供（null）的字段表示不变更，与 UpdateAssetRequest 契约口径一致
+        if (organizationId != null) {
+            this.organizationId = normalizeNullable(organizationId);
+        }
+        if (projectId != null) {
+            this.projectId = normalizeNullable(projectId);
+        }
+        if (displayName != null) {
+            this.displayName = displayName;
+        }
+        if (description != null) {
+            this.description = description;
+        }
         if (visibility != null) {
             this.visibility = visibility;
         }
@@ -195,7 +205,9 @@ public final class Asset {
         if (tagIds != null) {
             this.tagIds = normalizeList(tagIds);
         }
-        this.license = license;
+        if (license != null) {
+            this.license = license;
+        }
         if (ownerTeamId != null) {
             this.ownerTeamId = ownerTeamId;
         }
@@ -232,7 +244,7 @@ public final class Asset {
         requireSlug(newNamespace, "namespace");
         // displayName 是自由文本，不做 slug 校验
         if (newDisplayName == null || newDisplayName.isBlank()) {
-            throw new IllegalArgumentException("displayName must not be blank");
+            throw new ValidationException("displayName must not be blank");
         }
         if (newNamespace.equals(this.namespace) && newDisplayName.equals(this.displayName)) {
             return;
