@@ -121,15 +121,17 @@
   乐观锁 409 冲突提示且远端值不被覆盖。
 - **新发现（须另立卡，本卡 forbiddenPaths 未修）**：
   ① [backend 缺陷 A] `Asset.updateMetadata`（Asset.java L182-198）对 displayName/
-  description/organizationId/projectId/license **无条件覆盖（null 也写）**，与契约及前端
-  「为空表示不变更」口径矛盾——清空即丢失；
+  description/organizationId/projectId/license **无条件覆盖（null 也写）**；契约仅对
+  organizationId/projectId 声明「为空表示不变更」，displayName/description 变更语义留白
+  （071 起草取证修正早前口径）——部分字段 PATCH 即静默清空未提交字段；
   ② [backend 缺陷 B] displayName 被清 NULL 后任何非空回传触发 rename→insertAlias，与
   `ux_asset_alias_coordinate (namespace,name)` 唯一键冲突 → PG 事务中止 → **500**（应为
   语义化 4xx）；证据 `build-logs/probe-069-patch*.json.log` + traceId
   `15d7037034af44bcab25e810a262ecff`；
   ③ 前端 `AssetSettingsPage` 无必填校验 rules：清空展示名仍发请求（卡 §5 切片⑨「无请求
   发出」为卡面与实现的事实偏差，e2e 已按真实行为固化为诚实断言，未放宽）。
+  → 缺陷 A/B 已由批准人授权起草 `TASK-P0BR-071`（DRAFT，2026-09-30，待批准实施）。
 - **其余覆盖矩阵结论不变**：#7 逐文件内容浏览（体验增强 G1）、#8 Schema/Split 维度、
   #9 订阅中心视图与收藏建模仍为剩余缺口。
 
-**结论修正**：§4 层 0 全部完成；层 1 的 #4/#5 大部分完成（缺排序白名单/卡片视图/按版本 Files 聚合深化）；层 2 的 #7 文件树、#9 订阅中心视图、收藏建模、#8 Split 维度为当前主要剩余缺口，均需新卡立项（涉及契约/迁移，超出 P0-B 门禁内的整改范畴）。**2026-09-30 增补**：点击级测试面剩余缺口（上传中心、Settings 表单）已由 TASK-P0BR-069 闭合（110 e2e 全过）；新立 backend 缺陷 A/B 卡（updateMetadata 覆盖语义 + rename 别名唯一键 500）与 TASK-P0BR-070（presign 公开端点）为当前已知待办。
+**结论修正**：§4 层 0 全部完成；层 1 的 #4/#5 大部分完成（缺排序白名单/卡片视图/按版本 Files 聚合深化）；层 2 的 #7 文件树、#9 订阅中心视图、收藏建模、#8 Split 维度为当前主要剩余缺口，均需新卡立项（涉及契约/迁移，超出 P0-B 门禁内的整改范畴）。**2026-09-30 增补**：点击级测试面剩余缺口（上传中心、Settings 表单）已由 TASK-P0BR-069 闭合（110 e2e 全过）；新立 backend 缺陷 A/B 卡（updateMetadata 覆盖语义 + rename 别名唯一键 500，已起草为 `TASK-P0BR-071` DRAFT）与 TASK-P0BR-070（presign 公开端点）为当前已知待办。
