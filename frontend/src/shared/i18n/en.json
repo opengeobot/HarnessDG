@@ -260,6 +260,7 @@
       "namespaceRequired": "Please enter namespace",
       "namespacePattern": "Only lowercase letters, digits, and hyphens",
       "nameRequired": "Please enter name",
+      "displayNameRequired": "Please enter display name",
       "displayNameLabel": "Display Name",
       "visibility": "Visibility",
       "private": "Private",

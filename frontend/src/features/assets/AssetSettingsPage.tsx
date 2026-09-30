@@ -216,7 +216,11 @@ export function AssetSettingsPage() {
             }}
             onFinish={(values) => updateMutation.mutate(values)}
           >
-            <Form.Item label={t('assets.create.displayNameLabel')} name="displayName">
+            <Form.Item
+              label={t('assets.create.displayNameLabel')}
+              name="displayName"
+              rules={[{ required: true, whitespace: true, message: t('assets.create.displayNameRequired') }]}
+            >
               <Input />
             </Form.Item>
             <Form.Item label={t('common.description')} name="description">

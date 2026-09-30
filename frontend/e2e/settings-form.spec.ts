@@ -4,11 +4,11 @@
  * 时间: 2026-09-30
  * 作者: AxeXie
  *
- * 诚实边界（与卡 §5 切片 9 口径的偏差，详见 EVD-P0BR-069-001）：
- *   卡面假设「展示名称必填校验拦截、无请求发出」。实测取证：AssetSettingsPage 元数据
- *   Form 无 rules（本卡 §4 明确禁改该页面），清空展示名称提交会真实发出 PATCH 并被服务端拒绝。
- *   本 spec 因此如实断言当前真实行为：请求发出且失败、错误提示出现、远端值未被成功覆盖。
- *   ——不得用 skip/放宽断言掩盖该产品缺陷，缺陷修复须另立卡。
+ * 诚实边界（口径演进，详见 EVD-P0BR-069-001 / EVD-P0BR-071-001 / EVD-P0BR-072-001）：
+ *   069 卡面假设「展示名称必填校验拦截、无请求发出」当时与实现不符（前端无 rules），
+ *   故 069/071 期间如实断言「请求发出且被服务端拒绝、远端值未被成功覆盖」，
+ *   不 skip、不放宽。该前端缺口已由 TASK-P0BR-072 补齐（rules required+whitespace +
+ *   i18n 键），切片⑨按新真实行为**收紧**为「无 PATCH 请求发出 + 字段级校验错误可见」。
  *
  *   069 取证的两项后端契约违背已由 TASK-P0BR-071 修复（见 EVD-P0BR-071-001）：
  *     [缺陷 A] PATCH /assets/{id} 部分更新曾静默清空未提交字段（updateMetadata 无条件赋值）
@@ -17,9 +17,8 @@
  *              ux_asset_alias_coordinate 唯一键冲突 → PG 25P02 → 500——修复后 insertAlias
  *              使用 ON CONFLICT DO NOTHING 幂等吸收，且 rename 空名改抛
  *              ValidationException（COMMON_INVALID_ARGUMENT → 400）。
- *   据此切片⑨的断言按修复后真实行为**收紧**：HTTP 精确 400 + 提示文案为后端校验原文。
- *   前端必填校验缺失仍是独立产品缺口（另卡）：本切片继续验证「请求发出且被服务端拒绝」，
- *   若未来补上前端拦截，waitForResponse 会超时如实红，提醒同步更新断言。
+ *   后端 400 防线保持不下线（前后端双防线，072 卡 §7）：071 收紧的「精确 400 +
+ *   后端校验原文 toast」口径仍由 API 级用例守护，UI 级切片⑨改验前端拦截。
  *   夹具仍保留完整治理字段元组提交（修复后已非必需，但等值回传无害，维持最小变更）。
  *
  * 夹具独立性：目录检索（AssetSearchDao）过滤 provisioning_status='COMPLETED' 且按组织访问域
@@ -345,8 +344,8 @@ test.describe('资产 Settings 表单编辑（TASK-P0BR-069 切片 8/9/10）', (
     ).toBeVisible();
   });
 
-  /* ---- 切片 9：空展示名称——071 修复后精确断言 400 校验语义（口径收紧） ---- */
-  test('⑨ 清空展示名称提交：请求真实发出且被服务端 400 拒绝、远端值未被成功覆盖', async ({ page }) => {
+  /* ---- 切片 9：空展示名称——072 前端必填拦截后精确断言「无请求发出」（口径再次收紧） ---- */
+  test('⑨ 清空展示名称提交：前端必填校验拦截、无 PATCH 请求发出、远端值保留', async ({ page }) => {
     test.setTimeout(120_000);
     const assetId = fixtures!.settingsAssetId;
 
@@ -354,30 +353,60 @@ test.describe('资产 Settings 表单编辑（TASK-P0BR-069 切片 8/9/10）', (
     await openAssetDetailViaCatalog(page, SETTINGS_ASSET.displayName);
     await openAssetSettingsViaNav(page);
 
-    // 当前实现（前端必填校验缺失，另卡跟进）：元数据 Form 无 rules，清空展示名称后提交仍真实发出 PATCH。
-    // 若未来补上前端必填校验，此 waitForResponse 会超时如实红——提醒同步更新本断言。
-    await page.getByLabel(/展示名称|Display Name/).fill('');
-    const [resp] = await Promise.all([
-      patchResponse(page, assetId),
-      metadataForm(page).getByRole('button', { name: /保\s*存|Save/ }).click(),
-    ]);
-    const raw = await resp.text();
-    // 071 缺陷 B 伴生修复：空 displayName 由裸 IllegalArgumentException（兜底 500）
-    // 改为 ValidationException → COMMON_INVALID_ARGUMENT → 精确 400
-    expect(resp.status(), `空展示名称应被服务端 400 拒绝，实际：${raw.slice(0, 300)}`).toBe(400);
-    expect(JSON.parse(raw) as { code?: string }).toMatchObject({ code: 'COMMON_INVALID_ARGUMENT' });
+    // TASK-P0BR-072：元数据 Form 的 displayName 已有 rules（required + whitespace），
+    // 清空后提交被前端拦截，请求不再发出。以「监听器零命中」断言无 PATCH 外呼。
+    const patchCalls: string[] = [];
+    page.on('request', (r) => {
+      if (r.method() === 'PATCH' && r.url().endsWith(`/assets/${assetId}`)) {
+        patchCalls.push(r.url());
+      }
+    });
 
-    // 错误提示出现（message.error 透传后端 body.message，即校验原文）
+    await page.getByLabel(/展示名称|Display Name/).fill('');
+    await metadataForm(page).getByRole('button', { name: /保\s*存|Save/ }).click();
+
+    // 字段级校验错误可见（i18n 文案，而非后端原文 toast）
     await expect(
-      page.locator('.ant-message').getByText(/displayName must not be blank/).first(),
+      metadataForm(page).locator('.ant-form-item-explain-error').filter({ hasText: /请输入展示名称|Please enter display name/ }),
     ).toBeVisible();
 
-    // 服务端复核：事务回滚，远端 displayName 仍为基线，绝不允许被清空
+    // 等待一个足够窗口后断言零 PATCH 请求（若前端拦截失效回归，patchCalls 将命中且本断言如实红）
+    await page.waitForTimeout(1_500);
+    expect(patchCalls, '前端必填校验失效：PATCH 请求不应发出').toHaveLength(0);
+
+    // 服务端复核：远端 displayName 仍为基线
     const api = await request.newContext();
     try {
       const token = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
       const detail = await getAssetDetail(api, token, assetId);
-      expect(detail.displayName, '失败提交不得覆盖远端展示名称').toBe(SETTINGS_ASSET.displayName);
+      expect(detail.displayName, '拦截提交不得影响远端展示名称').toBe(SETTINGS_ASSET.displayName);
+    } finally {
+      await api.dispose();
+    }
+  });
+
+  /* ---- 切片 9c：后端 400 防线不下线（071 口径 API 级保留，072 双防线要求） ---- */
+  test('⑨c API 直发空 displayName：后端仍精确 400 COMMON_INVALID_ARGUMENT', async () => {
+    test.setTimeout(60_000);
+    const assetId = fixtures!.settingsAssetId;
+
+    const api = await request.newContext();
+    try {
+      const token = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
+      const before = await getAssetDetail(api, token, assetId);
+      // 绕过前端直接 PATCH 空展示名：071 的 rename 空名 400 化必须继续生效
+      const resp = await api.patch(`${API_BASE}/assets/${assetId}`, {
+        headers: bearer(token),
+        data: { displayName: '   ', expectedVersion: before.rowVersion },
+        failOnStatusCode: false,
+      });
+      expect(resp.status(), '空/全空白 displayName 应被后端 400 拒绝').toBe(400);
+      expect(JSON.parse(await resp.text()) as { code?: string }).toMatchObject({
+        code: 'COMMON_INVALID_ARGUMENT',
+      });
+      const after = await getAssetDetail(api, token, assetId);
+      expect(after.displayName, '400 拒绝后远端展示名称不变').toBe(before.displayName);
+      expect(after.rowVersion, '400 拒绝不得推进 rowVersion').toBe(before.rowVersion);
     } finally {
       await api.dispose();
     }

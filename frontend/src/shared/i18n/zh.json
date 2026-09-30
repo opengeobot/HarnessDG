@@ -260,6 +260,7 @@
       "namespaceRequired": "请输入命名空间",
       "namespacePattern": "仅小写字母、数字与连字符",
       "nameRequired": "请输入名称",
+      "displayNameRequired": "请输入展示名称",
       "displayNameLabel": "展示名称",
       "visibility": "可见性",
       "private": "私有",

@@ -1,0 +1,200 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-072-001
+# 本卡 requiredEvidenceLevel 为 E4。前端 AssetSettingsPage 元数据 Form 的 displayName
+# 必填校验（required + whitespace）已按卡 §4 落地：清空/全空白展示名提交被表单层拦截，
+# 字段级错误文案走 i18n（assets.create.displayNameRequired zh/en），不再发出 PATCH。
+# e2e 切片⑨按新真实行为收紧（无 PATCH 请求发出 + .ant-form-item-explain-error 可见 +
+# 远端值保留），并新增 API 级切片⑨c 守护后端 400 双防线（071 口径不下线）。
+# 真实 Compose 栈 Playwright 全量终态 112 passed / 0 failed / 0 skipped
+# （exit 0，3.0m = 071 基线 111 + 本卡新增⑨c；071 期间切片⑨为 1 用例，本卡仍 1 用例，
+# 总数按实测登记）。source.commitSha 指向 baseCommit：本卡代码变更尚未提交，
+# 提交由批准人处置后执行（与 065/066/067/068/071 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-072
+  requirements: [REQ-UI-001, REQ-COM-001]
+  scenarios: [AC-P0B-UI-003, AC-P0B-UI-006]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 起草修复轮、READY 批准轮与收口轮各复跑一次，均 PASS（governance-072-*.log；148 documents / 732 stable IDs）
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-072.md
+    # DRAFT 阶段设计内失败 3 项（status/approvedBy/approvedAt 需人工批准回写，
+    # README L5-12 + DEC-009）；批准回写后 PASS（governance-072-ready.log）
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-072.md -CheckChangedPaths
+    # 全部变更命中 allowedPaths（5 个前端文件 + work-breakdown + gap-analysis + 本卡 + 本 EVD）；
+    # build-logs/verify-bom.ps1 系 09-24 既存取证脚本，沿 066-071 先例登记于卡 FM
+    # preExistingDirtyPaths（SHA b5003338…9b3d 核对一致）；
+    # 取证工件统一为 build-logs/*.log（.gitignore `*.log` 命中）；
+    # Playwright 产物目录（frontend/test-results、playwright-report）终态取证后删除不入库。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-072.md -CheckCompletion
+    # 设计内失败：commitSha 需等于提交后 HEAD 且 dirtyWorktree=false（代码须先提交，AI 不得自提交）；
+    # review.accepted/reviewedBy/reviewedAt 需由验证权威填写（DEC-009）。
+    # 据实登记为 EXPECTED_FAIL，与 071 交接态同口径。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: e77d0d2199b9a9d9512b6cc7346905872caa9e5f # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-072.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-072-001.yaml
+    - docs/architecture/modelscope-page-gap-analysis-2026-09-21.md
+    - frontend/e2e/settings-form.spec.ts
+    - frontend/src/features/assets/AssetSettingsPage.tsx
+    - frontend/src/features/assets/AssetSettingsPage.test.tsx
+    - frontend/src/shared/i18n/en.json
+    - frontend/src/shared/i18n/zh.json
+
+environment:
+  observedAt: 2026-09-30T04:30:00Z
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+
+execution:
+  workingDirectory: frontend/ + deploy/compose/
+  command: >-
+    cd frontend; pnpm lint / pnpm typecheck（均 exit 0；lint 2 处 react-refresh
+    warnings 为既存）；
+    pnpm vitest run AssetSettingsPage（定向 7 passed = 既有 5 + 本卡新增 2）；
+    pnpm test 全量首跑（并行默认）16 failed 均为 5000ms 超时且散布 12 个与本卡无关
+    文件（import 累计 5460s，判定为并行资源争用环境性失败，留档 072-vitest-full.log）；
+    pnpm vitest run --no-file-parallelism 串行复跑：49 files / 228 tests 全绿
+    （exit 0，含本卡 2 新用例）；
+    docker compose build frontend + up -d frontend（含新前端静态件镜像重建）；
+    cd frontend; pnpm exec playwright test e2e/settings-form.spec.ts
+    （定向终态 6 passed，12.2s：⑧/⑧b/⑨新口径/⑨c/⑨b/⑩）；
+    pnpm build（exit 0，3257 modules / 22.20s）；
+    cd frontend; pnpm test:e2e（真实 Compose 栈全量终态：112 passed / 0 failed /
+    0 skipped，3.0m，exit 0）。
+  startedAt: 2026-09-30T03:41:43Z
+  finishedAt: 2026-09-30T04:35:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Vite dev server (localhost:5173) -> Nginx gateway (localhost:8080) -> backend/compose stack（沿 071 口径：nginx location /assets/ 既存缺陷见 EVD-P0BR-050-001 limitations；compose frontend 镜像同步重建以满足卡 FM）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4（错误态前移）：settings-form.spec.ts 切片⑨收紧——清空展示名称 → 保存 →
+        字段级 .ant-form-item-explain-error 显示 i18n 文案「请输入展示名称」+
+        page.on('request') 监听器实证 PATCH 请求 0 次发出 + 远端 displayName 保留；
+        加载/空/成功态既有切片⑧/⑨b/⑩保持通过（全量 112 passed）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4（双防线不下线，071 卡 §7 继承）：新增 API 级切片⑨c——request context 直发
+        PATCH {displayName: '   '} → 精确 400 + code=COMMON_INVALID_ARGUMENT +
+        远端 displayName 不变 + rowVersion 不推进；前端拦截未替代后端校验。
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E2（组件测试）：AssetSettingsPage.test.tsx 新增 2 用例——清空提交与仅空白提交
+        均被 rules 拦截、mockUpdateAsset 未被调用、错误文案可见；定向 7 passed；
+        全量串行 49 files / 228 tests 全绿（首跑 16 失败为并行环境性超时，
+        全为无关文件 5000ms timeout，串行复跑消除，非本卡回归）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4（浏览器自动化）：Playwright 全量 112 passed / 0 failed / 0 skipped
+        （= 071 基线 111 + 本卡新增⑨c；卡 §5 切片表「111 基线不回归」按实测
+        +1 据实登记）；settings-form.spec.ts 头部「诚实边界」注释同步为 072 收口口径。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        CreateAssetForm.tsx L170 displayName 仍无 rules——创建端点契约允许空值
+        （后端回落 name），与 Settings rename 语义不同。
+      reason: >-
+        卡 §7 明确不在本卡范围；若创建页需前端拦截属额外产品裁定，另卡处置。
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、
+        commitSha=baseCommit），review.accepted=false。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。
+  crossCuttingChecks:
+    - AUTHN/AUTHZ|未触达认证与权限判定（isEditable 门保持现状；e2e 复用 support.ts 既有登录口径）
+    - ERRORS|未新增 ErrorCode；rules message 走 i18n 键而非后端原文透传（REQ-COM-001）
+    - AUDIT|前端拦截后无效 PATCH 不再发出、不产生失败审计；合法 PATCH 审计面由后端既有逻辑保障（全量 e2e ⑩ 409 审计路径无回归）
+    - TAXONOMY_I18N|assets.create.displayNameRequired 一键 zh/en 双语同位序新增；⑧b 双语切片通过
+    - SECRETS|无 Token/凭据落盘；.env 凭据仅注入子进程环境变量、不回显
+
+contractConsistency:
+  openapiMatched: null # 本卡不改契约（UpdateAssetRequest 语义已在 071 补齐）
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无数据库变更
+  uiMatched: true # 前端 rules/i18n 与 e2e 断言口径、卡 §3 取证三者一致
+  runbookMatched: null # 本卡无需变更运行手册
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-072.md（本卡 §6/§8）
+    - frontend/src/features/assets/AssetSettingsPage.tsx（L219 displayName Form.Item + rules required/whitespace）
+    - frontend/src/shared/i18n/zh.json / en.json（assets.create.displayNameRequired 新键）
+    - frontend/src/features/assets/AssetSettingsPage.test.tsx（+2 拦截用例）
+    - frontend/e2e/settings-form.spec.ts（切片⑨收紧为无 PATCH 请求 + 新增⑨c API 级 400 双防线 + 头部诚实边界注释同步）
+    - docs/architecture/modelscope-page-gap-analysis-2026-09-21.md §7（缺口③闭环指针）
+    - docs/ai-spec/02-delivery/work-breakdown.md（072 行实施完成待验收态）
+  logs:
+    - build-logs/governance-072-draft.log（DRAFT 轮：E2/E4 格式与 work-breakdown 注册两处修复前留档）
+    - build-logs/governance-072-ready.log（批准回写后 validate-spec + validate-task-card 双 PASS）
+    - build-logs/072-vitest-targeted.log（定向 7 passed）
+    - build-logs/072-vitest-full.log（全量并行首跑：16 failed 全为 5000ms 资源超时、散布 12 个无关文件——环境性失败如实留档）
+    - build-logs/072-vitest-full-serial.log（串行复跑：49 files / 228 tests 全绿，exit 0）
+    - build-logs/072-lint.log / 072-typecheck.log / 072-build.log（均 exit 0；lint 2 warnings 既存）
+    - build-logs/072-e2e-settings-form.log（定向终态 6 passed，12.2s；首跑 6 skipped 为终端未注入 E2E 凭据的 skip 守卫生效，注入后复跑全过）
+    - build-logs/072-e2e-full.log（全量终态 112 passed / 0 failed / 0 skipped，3.0m，exit 0）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 全量终态：112 tests / 112 passed / 0 skipped / 0 failed（3.0m，workers=1、retries=0）
+    - Vitest 串行全量：49 files / 228 tests passed（1103s；并行首跑 16 失败为环境性超时，见 logs 注记）
+    - 定向单测：AssetSettingsPage.test.tsx 7 passed（既有 5 + 新增 2）
+    - pnpm build ✓ 3257 modules / 22.20s；lint/typecheck exit 0
+  databaseQueries: []
+  auditEvents:
+    - 本卡无新增审计事件类型；非法 PATCH 被前端拦截后不再进入 updateAsset 审计路径（预期行为）；合法路径审计由全量 e2e 回归覆盖
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_* 键），仅在会话内注入子进程环境变量、全程不回显口令；本清单、e2e 报告与归档日志均不含口令/Token 明文。
+    - E2E_AUTHOR 夹具账号口令为 support.ts 仓内既有常量（非 Secret），本卡未新增任何硬编码凭据。
+    - build-logs/ 整目录不入库（.gitignore `*.log` 惯例）。
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - Compose 全栈运行且 healthy；后端容器为 071 修复后镜像（本卡未改后端）；Playwright 走主机 Vite dev server 5173（既存基础设施口径），API 流量经真实 nginx 8080；compose frontend 镜像已按卡 FM 重建。
+    - 本地非 CI：retries=0；终态一次性 112 passed。
+    - Vitest 并行首跑与 e2e/构建同窗口争用资源导致 5000ms 超时假失败；串行复跑全绿为准（AGENTS.md「因环境跳过/失败不算通过」双向适用——此处以真实通过的串行全量 + e2e 全量为证据面）。
+  environmentDifferences:
+    - >-
+      卡 §5 切片 4「111 基线不回归」按实测登记为 112（= 111 + 新增⑨c）；
+      卡 §6 门禁「零 skip」在 E2E 凭据注入后成立（首跑 6 skipped 为守卫生效、非用例 skip 标记）。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

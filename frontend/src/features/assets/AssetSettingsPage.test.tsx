@@ -2,7 +2,7 @@
  * AssetSettingsPage 组件测试——元数据编辑、生命周期操作。
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { AssetSettingsPage } from './AssetSettingsPage';
 import { renderWithProviders } from '@/test/test-utils';
 import type { AssetView } from './types';
@@ -81,5 +81,34 @@ describe('AssetSettingsPage', () => {
     expect(await screen.findByText('编辑元数据')).toBeInTheDocument();
     expect(screen.getByText('编辑类型档案')).toBeInTheDocument();
     expect(screen.getAllByText(/保\s*存/).length).toBe(2);
+  });
+
+  it('TASK-P0BR-072：清空展示名称提交被前端必填校验拦截，updateAsset 不被调用', async () => {
+    renderWithProviders(<AssetSettingsPage />);
+    await screen.findByText('ast_001');
+
+    const input = await screen.findByDisplayValue('Model Alpha');
+    fireEvent.change(input, { target: { value: '' } });
+    // 元数据表单的保存按钮（页面上第一个「保存」）
+    fireEvent.click(screen.getAllByRole('button', { name: /保\s*存/ })[0]);
+
+    expect(await screen.findByText('请输入展示名称')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockUpdateAsset).not.toHaveBeenCalled();
+    });
+  });
+
+  it('TASK-P0BR-072：仅空白的展示名称同样被 whitespace 校验拦截', async () => {
+    renderWithProviders(<AssetSettingsPage />);
+    await screen.findByText('ast_001');
+
+    const input = await screen.findByDisplayValue('Model Alpha');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.click(screen.getAllByRole('button', { name: /保\s*存/ })[0]);
+
+    expect(await screen.findByText('请输入展示名称')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockUpdateAsset).not.toHaveBeenCalled();
+    });
   });
 });
