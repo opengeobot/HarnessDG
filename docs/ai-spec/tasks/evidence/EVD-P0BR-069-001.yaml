@@ -1,0 +1,288 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-069-001
+# 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈取证：Playwright 全量 110 tests →
+# 110 passed / 0 failed / 0 skipped（exit 0，3.2m），= 068 基线 101 + 本卡新增
+# upload-flow.spec.ts 5 用例 + settings-form.spec.ts 4 用例，零 skip 零 failed。
+# 入口链路口径：本轮未设 E2E_BASE_URL，playwright.config.ts baseURL 回退
+# http://localhost:5173（宿主 Vite dev server）+ 真实 Compose 后端栈（7 容器 Up、
+# backend/postgres/gitea/minio healthy）——与 066/067 同口径；068 轮次走的是
+# nginx 8080 容器前端。两口径的 API/数据库/对象存储后端一致，前端 bundle 分别为
+# dev server 与容器构建产物。
+# 实施期间命中卡 §8 停止条件两次并经批准人裁定：①complete 载荷缺 files 的前端缺陷
+# （批准补正纳入 UploadPage.tsx/.test.tsx 最小修复）；②Settings e2e 暴露 backend 双
+# 缺陷 A/B（见 coverage.notProven 与 artifacts.reports）——backend 为 forbiddenPaths，
+# 本卡仅取证登记，修复须另立卡。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由用户在 review 后执行
+# （与 065/066/067/068 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-069
+  requirements: [REQ-UPL-001, REQ-UPL-002, REQ-UI-001]
+  scenarios: [AC-P0B-UI-003, AC-P0B-UI-005, AC-P0B-UI-006]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS # 148 documents / 730 stable IDs，见 artifacts.logs 的 069-governance-spec-2.log
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-069.md
+    result: PASS # 3 requirements / 3 scenarios / 8 allowed paths
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-069.md -CheckChangedPaths
+    # 首跑 FAIL 28 项，根因三类并全部处置：①build-logs 下 21 个取证 .ps1/.json 不被
+    # .gitignore（仅 `*.log` 命中）——全部重命名为 *.log 归档（066/067/068 惯例）；
+    # ②frontend/test-results Playwright 产物——终态删除；③5 个 core.autocrlf=true
+    # 换行符假改动（git diff 为空）——checkout 还原。既存 build-logs/verify-bom.ps1 经
+    # 卡 FM preExistingDirtyPaths 登记豁免（SHA b5003338…9b3d 与 068 卡登记核对一致）。
+    # 复跑 PASS：全部变更命中 allowedPaths（含批准补正的 UploadPage.tsx/.test.tsx）。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-069.md -CheckCompletion
+    # 设计内的交接态失败（收口治理三连 2026-09-30：SPEC/CARD/CheckChangedPaths 均 PASS，
+    # -CheckCompletion 失败项全部为交接态必然项：commitSha 需等于提交后的干净 HEAD、
+    # dirtyWorktree 需置 false（代码须先提交）、review.accepted/reviewedBy/reviewedAt
+    # 需由验证权威填写（AI 不得自批，DEC-009）、notProven 需权威裁定后清空）。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 8fb8c322635698c430486b4f7eb3dbe0b882a3ab # == baseCommit（TASK-P0BR-068 提交）；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - frontend/src/features/upload/UploadPage.tsx # 批准补正：complete 载荷携带 files（§1 取证缺陷）
+    - frontend/src/features/upload/UploadPage.test.tsx # 批准补正：+2 Vitest 用例（files 元数据 / 无文件诚实阻断）
+    - frontend/e2e/upload-flow.spec.ts # 新增（E4 主证 5 用例）
+    - frontend/e2e/settings-form.spec.ts # 新增（E4 主证 4 用例）
+    - docs/ai-spec/tasks/TASK-P0BR-069.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-069-001.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/architecture/modelscope-page-gap-analysis-2026-09-21.md
+  preExistingDirtyPaths:
+    - build-logs/verify-bom.ps1 # 09-24 既存取证脚本，登记于卡 FM preExistingDirtyPaths（SHA 核对一致）
+
+environment:
+  observedAt: 2026-09-30T10:18:07+08:00
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+  externalDependencyVersions: {} # 本卡零契约/零后端改动，无需 redocly/oasdiff/mvnw
+
+execution:
+  workingDirectory: frontend/
+  command: >-
+    powershell -File build-logs\run-069-fulle2e.ps1（从 gitignored deploy/compose/.env 解析
+    AIHUB_BOOTSTRAP_ADMIN_USERNAME/PASSWORD 注入 E2E_ADMIN_* 后于 frontend 目录执行
+    pnpm exec playwright test --reporter=line；未设 E2E_BASE_URL → baseURL 回退
+    http://localhost:5173 Vite dev server + 真实 Compose 后端）：
+    Running 110 tests using 1 worker → 110 passed / 0 failed / 0 skipped（3.2m，exit 0）；
+    cd frontend; pnpm lint（0 errors，2 个既存 react-refresh warnings 均非本卡文件）；
+    pnpm typecheck（exit 0）；pnpm build（✓ 28.47s）；
+    pnpm exec vitest run --no-file-parallelism（49 files / 226 tests 全过，
+    较 068 基线 224 +2 = UploadPage.test.tsx 新增两用例）。
+  startedAt: 2026-09-30T09:20:00+08:00
+  finishedAt: 2026-09-30T10:18:07+08:00
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Vite dev server (localhost:5173) -> backend/worker/compose stack（E2E_BASE_URL 未设的 config 回退口径，与 066/067 一致；068 为 nginx 8080 容器前端）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4 切片①：author 登录后无参数深链 /upload 渲染引导空态（Empty + 资产目录链接），
+        无裸报错（upload-flow.spec.ts test①）。
+      scenarioCategory: empty
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4 切片②③④：深链 /upload?assetId&versionId 选 fixture 文件 → 真实 POST
+        upload-sessions 成功，Session 卡显示服务端 sessionId/totalBytes/fileCount，
+        Parts 明细渲染；点击开始上传后每 Part 进度→completed、ETag 回写、
+        Complete 按钮仅全 Parts 完成后出现（门控）；PUT 桩 500/断连时失败 Part 标
+        failed + Retry Part 渲染、重试仅重传失败 Part（test②）。
+        浏览器 PUT 为 page.route 桩（presign 主机 minio:9000 宿主机不可达，§3.1），
+        桩响应形态与真实 MinIO 一致（200 + ETag 头 / ErrorResponse），仅替代浏览器
+        不可达的最后一段网络；服务端会话/Parts 状态全程真实。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4 切片⑤：docker exec 容器内真实 PUT 全 Parts（字节真实入存 MinIO）后携带
+        sessionId 刷新页面——Parts 状态与 ETag 来自服务端 GET session（非 LocalStorage，
+        页面零本地进度存储被断言复验），sessionRestored 提示渲染；且本地无文件时 UI
+        诚实阻断续传 complete（upload.selectFilesToResume 错误态，不伪造 sha256）
+        （test⑤ + UploadPage.test.tsx Vitest 用例）。
+      scenarioCategory: recovery
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4 切片⑥：UI 点击 Complete 走真实 complete 端点且服务端 MinIO ETag 核对通过，
+        会话转 PROCESSING 并返回 materializeJobId（物化 Job 创建经 session 查询证实）
+        ——非桩交差（test⑥；本切片曾被 §1 前端缺陷「complete 缺 files 必 400」阻塞，
+        经批准补正 UploadPage 携带浏览器端 Web Crypto 真实 sha256 后打通）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4 切片⑦：UI 取消 → 真实 cancel 端点，UI 回创建会话空态，服务端会话终态
+        CANCELLED 经 API 复核（test⑦）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4 切片⑧：Settings 页 Loading→表单渲染、编辑描述保存真实 PATCH 成功、
+        成功提示、重载回显新值（settings-form.spec.ts test⑧）；上传页空态/错误态/
+        恢复态断言并入切片①④⑤取证面。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-005
+      assertion: >-
+        E4 切片⑧b：zh-CN 与 en-US 双语下 Settings 表单标签、按钮与字段文案按 i18n
+        正确渲染且可切换回退（test⑧b；键名取自现值、零新增键，与卡 §2 口径一致）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        E4 切片⑩：先经 API 修改资产使 updatedAt 落后，UI 保存 → 真实 409 乐观锁冲突，
+        页面显示冲突错误、远端值未被覆盖（test⑩；夹具坐标 v2 恒发完整元组避免触发
+        backend 缺陷 B 的 rename 路径，冲突断言本身为真实 409）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E2（Vitest 226/226 内）：UploadPage.test.tsx 新增两用例——complete 载荷携带
+        files 真实元数据（path/sha256/size/mediaType，对齐契约 L3486）；恢复会话后
+        本地无文件时诚实阻断 complete 不发请求。既有上传交互用例零回归。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        全量零回归：110 = 基线 101 + 5 + 4，0 failed / 0 skipped / exit 0；
+        卡 §7「skip 视为 notProven」口径满足（upload-flow/settings-form 的 test.skip
+        前置守卫为凭据/docker 可用性护栏，本轮全部前置满足、14 用例真实执行）。
+      scenarioCategory: normal
+  notProven:
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        卡 §5 切片⑨「Settings 必填清空提交 → 前端校验错误态渲染，无请求发出」按卡面
+        字面口径未成立：实测 AssetSettingsPage 无必填 rules，清空 displayName 提交时
+        请求真实发出，由后端 rename 校验拒绝。
+      reason: >-
+        这是卡面预期与实现的事实偏差，而非证据缺口：前端必填校验缺失属产品缺口（修复
+        须另立卡，本卡 forbiddenPaths 外无 AssetSettingsPage 改动授权）。test⑨ 未放宽
+        断言，按真实行为固化为「请求发出且被服务端拒绝、远端值未被成功覆盖」的诚实口径
+        （拒绝形态受 backend 缺陷 B 影响，见下条）。
+    - scenarioId: AC-P0B-UI-003
+      assertion: >-
+        [backend 缺陷 A/B]（§8 停止条件命中，本卡仅取证登记，未修复——backend 为
+        forbiddenPaths，修复须另立卡）：清空 displayName 的 PATCH 实测返回 500 而非
+        语义化 4xx。缺陷 A：Asset.updateMetadata（Asset.java L182-198）对
+        displayName/description/organizationId/projectId/license 无条件覆盖（null 也写），
+        与契约/前端「为空表示不变更」口径矛盾；缺陷 B：displayName 被清 NULL 后，
+        任何非空回传触发 rename→insertAlias（Asset.java L234，经
+        AssetApplicationService.java L189-194 / MyBatisAssetRepository.java L420-427）
+        与 ux_asset_alias_coordinate (namespace,name) 坐标别名唯一键冲突 → PG
+        "current transaction is aborted" → 500。
+      reason: >-
+        证据：build-logs/probe-069-patch.json.log（首次 500 + traceId
+        15d7037034af44bcab25e810a262ecff 后端堆栈）、probe-069-patch2.json.log
+        （复现确认）；settings-form.spec.ts test⑨ 断言「非 2xx 且远端值未被成功覆盖」
+        为该缺陷的浏览器级实证入口。处置：提请验证权威另立 backend 卡（updateMetadata
+        契约对齐 + rename 别名唯一键路径 + 错误映射 4xx 化）；库内坏夹具
+        ast_01m3qzgjehtr7fc54xncvz2ymv（display_name 被置 NULL）建议随该卡一并清理。
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        REQ-UPL-002 L172「presign URL 使用公开 MinIO Endpoint」——浏览器对 presign URL
+        直连真实 PUT 在本 compose 部署形态不可达（minio:9000 未对宿主发布 +
+        AIHUB_MINIO_PUBLIC_ENDPOINT/EXTERNAL_ENDPOINT env 名不匹配致 externalEndpoint 为空）。
+      reason: >-
+        属实现/配置缺陷，批准人已裁定另立 TASK-P0BR-070（契约优先：backend presign
+        端点 + deploy env 接线），登记于 work-breakdown 预留行；本卡以「page.route 桩
+        替代浏览器段 + 容器内真实 PUT + 服务端 ETag 核对」闭环字节入存，未为此放宽
+        任何断言（卡 §3.3 诚实边界）。
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        page-catalog PAGE-UPL-002 行为口径同步。
+      reason: >-
+        评估结论：PAGE-UPL-002 既有完成条件与本卡交付不冲突、无需改动（page-catalog
+        在 allowedPaths 内但按「如口径需同步」条件性纳入）；如验证权威认为需登记
+        「e2e 已覆盖」状态词，属 review 随附文档同步项。
+
+contractConsistency:
+  openapiMatched: true # 零契约改动；complete 载荷 files 必填为契约 L3486 既有口径，本卡是前端向契约对齐
+  eventSchemaMatched: null # 不触达事件契约
+  migrationMatched: null # 无 Flyway 迁移
+  uiMatched: true # upload.selectFilesToResume 等断言键 zh/en 均已存在（L452），零新增 i18n 键
+  runbookMatched: null # 不改部署与运行手册；presign 公开端点接线移交 070
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-069.md（本卡 §6/§10）
+    - frontend/e2e/upload-flow.spec.ts（切片①-⑦，5 用例；page.route PUT 桩 + 容器内真实 PUT + 真实 complete/cancel）
+    - frontend/e2e/settings-form.spec.ts（切片⑧-⑩，4 用例；文件头注释登记切片⑨卡面偏差与缺陷 A/B 事实）
+    - frontend/src/features/upload/UploadPage.tsx（批准补正：computeFileMetadata 以 Web Crypto SHA-256 计算真实哈希——含 jsdom 跨 realm ArrayBuffer 需显式 Uint8Array 包装的对策；complete 载荷增 files；本地无文件诚实阻断；catch 分支 failedPart 局部变量修正）
+    - frontend/src/features/upload/UploadPage.test.tsx（+2 用例）
+    - backend 缺陷 A/B 代码定位（未改动，仅登记）：Asset.java L182-198/L234、AssetApplicationService.java L189-194、MyBatisAssetRepository.java L420-427
+  logs:
+    - build-logs/run-069-fulle2e.log（终态全量主证：Running 110 tests → 110 passed / 0 failed / 0 skipped，3.2m，exit 0）
+    - build-logs/run-069-fulle2e.ps1.log（全量取证脚本，凭据自 gitignored .env 注入不回显）
+    - build-logs/e2e-upload-flow-run1/2/3.log（upload-flow 定向轮次）
+    - build-logs/run-069-settings-e2e.log（settings-form 定向轮次）
+    - build-logs/069-fe-lint.log / 069-fe-typecheck.log / 069-fe-build.log（✓ 28.47s）/ 069-fe-vitest.log（49 files / 226 tests）
+    - build-logs/probe-069-patch.json.log / probe-069-patch2.json.log（backend 缺陷 A/B 取证：500 响应 + traceId 15d7037034af44bcab25e810a262ecff）
+    - build-logs/probe-069-*.ps1.log（缺陷取证探针脚本归档）
+    - build-logs/069-governance.log（三连首跑：SPEC/CARD PASS、CheckChangedPaths FAIL 28 项原始记录）
+    - build-logs/069-governance-spec-2.log / 069-governance-card-2.log / 069-governance-checkpaths-2.log（清理后复跑全 PASS）
+    - build-logs/069-e2e-verify.log（第三轮复核取证：基线 101 passed 记录）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 全量终态：110 tests / 110 passed / 0 skipped / 0 failed（3.2m，workers=1、retries=0）
+    - Vitest：49 files / 226 tests 全过（serial，较 068 基线 +2）；pnpm build ✓ 28.47s；lint 0 errors（2 既存 warnings 非本卡文件）；typecheck exit 0
+  databaseQueries: []
+  auditEvents:
+    - 本卡零后端改动，无新增审计事件类型；e2e 走真实 complete/cancel/PATCH 端点的审计写入由
+      后端既有实现承担（本卡不断言审计面，沿用 066 全量口径）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_* 键），仅在取证
+      脚本内注入子进程环境变量、全程不回显口令；本清单、spec 源码与归档日志均不含口令/Token 明文。
+    - page.route 桩与断言消息不落盘 presign 完整查询串（X-Amz-* 签名参数）与对象存储凭据；
+      容器内真实 PUT 的 curl 于 minio 容器内执行，凭据不出容器。
+    - probe-069-*.json.log 探针输出仅含业务字段与错误摘要，无 Token 明文（401/403 路径断言以
+      状态码为准）。
+
+limitations:
+  skippedTests: [] # 全量 110 passed / 0 skipped——§7「skip 视为 notProven」口径满足
+  assumptions:
+    - >-
+      Compose 全栈运行且 healthy（7 容器 Up；backend 镜像为 068 MinIO scoped 修复后版本，
+      本卡未重建镜像），宿主 Vite dev server 于 5173 运行且代理/直连后端 API 与容器前端
+      口径一致（同源于 frontend 源码，dev server 未改动构建链）。
+    - >-
+      upload-flow.spec.ts 具备夹具幂等：会话坐标每次运行新建（assetId/versionId 深链参数
+      来自 API 预置），刷新对账与 Complete 断言每次无条件执行真实服务端核对。
+  environmentDifferences:
+    - >-
+      本轮 e2e 入口为 Vite dev server 5173（playwright.config.ts 在 E2E_BASE_URL 未设时的
+      回退），与 068 轮次的 nginx 8080 容器前端不同、与 066/067 相同；后端栈两口径一致。
+      nginx「location /assets/」遮蔽缺陷（既存基础设施问题）不影响本轮 5173 入口，
+      settings/upload spec 均以客户端导航进入，未触达该缺陷面。
+    - >-
+      宿主 PowerShell/Node HTTP 探针受系统代理劫持不可靠（curl 须 --noproxy "*"），
+      浏览器行为一律以 Playwright 实测为准；内联 powershell -Command 的 $ 转义在
+      RunCommand 层被吞，取证脚本一律落盘 .ps1 以 -File 执行。
+    - >-
+      core.autocrlf=true 使工作区出现空 diff 假改动（本轮 5 个文件），人工 status 判读
+      需以 git diff 非空为准；validator 以 -c core.autocrlf=false 计算 diff 不受影响。
+    - >-
+      库内坏夹具 ast_01m3qzgjehtr7fc54xncvz2ymv（display_name 被缺陷 A 置 NULL）为本卡
+      取证过程产物；settings-form.spec.ts 已改用新夹具坐标 v2 规避，坏行清理建议并入
+      backend 缺陷 A/B 后续卡。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

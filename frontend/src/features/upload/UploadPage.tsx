@@ -68,6 +68,30 @@ interface PresignResponse {
   url: string;
 }
 
+/**
+ * 为 complete 载荷计算真实文件元数据（对齐 OpenAPI complete.files：path/sha256/size/mediaType）。
+ * sha256 由浏览器 Web Crypto 对本地选定文件计算，服务端物化 Worker 以此校验 bundle 内容。
+ */
+async function computeFileMetadata(list: File[]) {
+  return Promise.all(
+    list.map(async (f) => {
+      // Uint8Array 显式包装：jsdom 的 File.arrayBuffer() 返回跨 realm ArrayBuffer，
+      // 会被 Node WebCrypto 的 BufferSource 校验拒绝；Uint8Array 在浏览器与测试环境一致可用。
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const digest = await crypto.subtle.digest('SHA-256', bytes);
+      const sha256 = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      return {
+        path: f.name,
+        sha256,
+        size: f.size,
+        mediaType: f.type || 'application/octet-stream',
+      };
+    }),
+  );
+}
+
 function uploadPartWithProgress(
   url: string,
   body: Blob,
@@ -231,10 +255,14 @@ export function UploadPage() {
 
     const indices = onlyPart != null ? [onlyPart - 1] : parts.map((_, i) => i);
 
+    // catch 分支不能读闭包 parts（点击时刻的旧快照，uploading 标记看不到），
+    // 用局部变量记录当前正在上传的分片号，失败时诚实标记该分片。
+    let currentPart: number | null = null;
     try {
       for (const i of indices) {
         if (paused) break;
         if (parts[i].status === 'completed') continue;
+        currentPart = i + 1;
 
         setParts((prev) =>
           prev.map((p) =>
@@ -253,7 +281,7 @@ export function UploadPage() {
 
       message.success(t('upload.allPartsComplete'));
     } catch (e: unknown) {
-      const failedPart = parts.find((p) => p.status === 'uploading')?.partNumber ?? onlyPart;
+      const failedPart = currentPart ?? onlyPart;
       if (failedPart != null) {
         setParts((prev) =>
           prev.map((p) => (p.partNumber === failedPart ? { ...p, status: 'failed' } : p)),
@@ -273,11 +301,18 @@ export function UploadPage() {
       setError(t('upload.missingEtags'));
       return;
     }
+    // 契约要求 complete 携带非空 files（真实 sha256 元数据）；刷新恢复后本地无文件时
+    // 不得伪造 sha256（物化 Worker 按 sha256 校验 bundle），诚实阻断并提示重新选择文件。
+    if (files.length === 0) {
+      setError(t('upload.selectFilesToResume'));
+      return;
+    }
     try {
       await apiClient.post(`/upload-sessions/${session.sessionId}/complete`, {
         parts: parts
           .filter((p) => p.status === 'completed')
           .map((p) => ({ partNumber: p.partNumber, etag: p.etag })),
+        files: await computeFileMetadata(files),
       });
       message.success(t('upload.uploadCompleted'));
       setSession((prev) => (prev ? { ...prev, status: 'COMPLETED' } : null));

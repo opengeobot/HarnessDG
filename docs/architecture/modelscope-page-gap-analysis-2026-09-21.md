@@ -70,3 +70,66 @@
 - 骨架与底座（认证、授权、治理、任务、审计、版本/发布链路）已经真实可用并有 E4 证据；
 - 与魔搭范式的差距集中在**发现（facet/排序/首页）、获取（文件树/下载/克隆/上传）、空间（组织主页）**三组体验面；
 - 最刺眼的是三类「表面已实现」缺陷（假上传、捏造审批队列、裸样式页）——它们比缺失的新页面更先侵蚀可信度，建议按层 0 优先处置。
+
+## 6. 第三轮复核（2026-09-29，基于工作区 HEAD=13ddf26 + TASK-P0BR-068 未提交改动）
+
+> 方法：逐文件核对 §2/§3 各缺口在当前代码的实况 + compose 真实栈全量 e2e 功能测试
+> （101/101 passed，2.4m，E2E_BASE_URL=http://localhost:8080 容器前端链路；
+> 注意：凭据未注入时全部显式 skip——skip≠通过，必须注入 E2E_ADMIN_* 后跑，日志
+> build-logs/069-e2e-verify.log）。
+
+**层 0 缺陷：全部闭环（有代码证据）**
+
+| 原编号 | 复核实况 |
+| --- | --- |
+| D1 假上传 | 已改真实流程：`UploadPage.tsx` L71-93 `uploadPartWithProgress` 用 XHR 真实 PUT presign URL、回读 ETag 头、`xhr.upload.onprogress` 真实进度 + 403 重签名重试（L203-206）；无 setTimeout/`etag:'mock'` 残留 |
+| D2 ReviewPage 捏造实体 | 已改真实数据源：L125-130 映射 `publish_request` 真实字段；e2e `review-workflow.spec.ts`「真实资产深链后不捏造发布请求行」实证 |
+| D3 三页 Tailwind 裸样式 | 已 antd 化：`VersionPage/ReviewPage/UploadPage` 通篇无 Tailwind className 残留（grep 零命中）；UploadPage 头部注记「Wave Z Ant Design 迁移」 |
+| D4 不可发现路由 | `/review` 已入 navigation.ts L25（asset:manage 门控）；`/assets/:id/settings` 经详情页 Settings Tab 内链接可达（AssetDetailPage L496）；e2e admin-pages/discoverability 实证入口可达与越权隐藏 |
+| D5 已封装未接线 | 大部分已接线：`getAssetFacets`→AssetsPage L116（facet 侧栏+URL 状态 L109）；`createDraftVersion`/`getDvcConfig`→AssetDetailPage L240-251；`lockThread/unlockThread`→DiscussionPanel L303-419（e2e discussion.spec「锁定→LOCKED→解锁→OPEN」实证）。剩余：`publishVersion` 直发入口未见（走 /review 审批链，符合设计） |
+| D6 占位文案 | 「即将上线」零命中；AccessPage 已按 scope 门控（e2e admin-pages「无 token:create 看不到入口直连 403」+「仅持 token:create 可打开并取回 PAT 列表」实证） |
+
+**§2 范式对照项实况更新**
+
+| # | 复核实况 |
+| --- | --- |
+| 2 | 列表页大幅升级：多维 facet（frameworks/tasks/formats/modalities + taskCodes/modalityCodes/formatCodes/languageCodes 多选）+ 筛选入 URL + keyword；仍缺：排序白名单、卡片视图 |
+| 3 | 详情页已 Tab 化（overview/versions/files/preview/discussions/lineage/access/settings 八 Tab，AssetDetailPage L79）；cloneUrl + `git clone` 命令已渲染（L410-414） |
+| 6 | 预览已挂详情页 preview Tab；图片渲染闭环 = TASK-P0BR-068（E2E preview-image.spec 实证 blob 渲染+字节一致+越权 403+泄漏红线）；仍缺 Schema/Split 维度（G5 独立成卡未做） |
+| 12 | 订阅实况修正：`asset_subscription` 表已被**讨论订阅**真实使用（JdbcDiscussionSubscriptionRepository + `/discussions/subscription` REST + DiscussionPanel UI）；缺口收窄为「个人中心统一订阅管理视图」与收藏建模（V28+ 迁移仍未做） |
+| 4 | **定性修正（2026-09-29，本轮设计口径复核）**：REQ-DST-DETAIL-001 L94 对 Files Tab 的权威口径 =「选定 Version 的 **Artifact 树**、路径、大小、媒体类型和 SHA-256」+ 目标接口 `/versions/{version}/artifacts`（L118）——当前 AssetDetailPage `buildArtifactTree`（L81-122，版本化 queryKey L183-186）**已满足 REQ 口径**。「逐文件内容浏览」（代理 Gitea tree/blob 的 `/versions/{v}/files` 端点）是魔搭范式**体验增强**（G1），不是 REQ 缺口，立项优先级相应下调；真正的 Preview REQ 缺口是 L95 要求的 **Schema/Split/基础统计** 维度（见 #6，唯一 Preview 类 REQ 缺口） |
+
+**点击级功能测试覆盖矩阵（101 e2e 用例，20 个 spec）**：认证/Token 生命周期、权限菜单与多主体目录隔离、管理端 12 类页面点击可达+Loading/Empty/Error、发布审批流、讨论（建线程/评论/锁定解锁）、血缘双向、i18n 五场景、Profile 改密+登录名、数据集体验（facet 过滤/画像卡/版本切换/讨论 Tab）、MCP 接入页、PAT 边界、图片预览闭环。**缺口**：上传中心真实 PUT 流尚无 e2e（preview-image.spec 用 API 链注入 fixture，UI 分片进度交互未点击级实证）、Settings Tab 表单编辑仅 Vitest 级。**→ 该两项缺口已于 2026-09-30 由 TASK-P0BR-069 闭合，见下方第四轮复核。**
+
+## 7. 第四轮复核（2026-09-30，TASK-P0BR-069 收口；HEAD=8fb8c32 + 069 未提交改动）
+
+> 方法：新增 `frontend/e2e/upload-flow.spec.ts`（切片①-⑦，5 用例）与
+> `settings-form.spec.ts`（切片⑧-⑩，4 用例），真实 Compose 栈全量 Playwright
+> **110 passed / 0 failed / 0 skipped**（exit 0，= 101 基线 + 9；入口为
+> `E2E_BASE_URL` 未设时的 Vite dev 5173 回退 + 真实后端，与 066/067 同口径），
+> Vitest 226/226。证据：`EVD-P0BR-069-001.yaml`。
+
+- **上传中心（原缺口 ①）已闭合至浏览器点击级**：深链引导空态、真实 Upload Session 创建、
+  分片进度/失败标记与 Retry 局部重传、容器内真实 PUT 全 Parts + 带 sessionId 刷新的
+  **服务端对账**（REQ-UPL-002 L174「不盲信 LocalStorage」实证）、UI 点击 Complete 走真实
+  端点且服务端 MinIO ETag 核对通过（PROCESSING + materializeJobId）、取消回空态。
+  浏览器 PUT 段为 page.route 桩（presign host `minio:9000` 对宿主必不可达 =
+  REQ-UPL-002 L172 实现/配置缺陷，移交 `TASK-P0BR-070`），字节入存与服务端核对均真实。
+  过程中暴露并（经批准补正）修复前端缺陷：`UploadPage.completeUpload` 只发 `parts`
+  不发契约 L3486 必填的 `files` → UI 点击 Complete 必 400。
+- **Settings 表单（原缺口 ②）已闭合**：描述编辑保存真实 PATCH + 重载回显、zh/en 双语切换、
+  乐观锁 409 冲突提示且远端值不被覆盖。
+- **新发现（须另立卡，本卡 forbiddenPaths 未修）**：
+  ① [backend 缺陷 A] `Asset.updateMetadata`（Asset.java L182-198）对 displayName/
+  description/organizationId/projectId/license **无条件覆盖（null 也写）**，与契约及前端
+  「为空表示不变更」口径矛盾——清空即丢失；
+  ② [backend 缺陷 B] displayName 被清 NULL 后任何非空回传触发 rename→insertAlias，与
+  `ux_asset_alias_coordinate (namespace,name)` 唯一键冲突 → PG 事务中止 → **500**（应为
+  语义化 4xx）；证据 `build-logs/probe-069-patch*.json.log` + traceId
+  `15d7037034af44bcab25e810a262ecff`；
+  ③ 前端 `AssetSettingsPage` 无必填校验 rules：清空展示名仍发请求（卡 §5 切片⑨「无请求
+  发出」为卡面与实现的事实偏差，e2e 已按真实行为固化为诚实断言，未放宽）。
+- **其余覆盖矩阵结论不变**：#7 逐文件内容浏览（体验增强 G1）、#8 Schema/Split 维度、
+  #9 订阅中心视图与收藏建模仍为剩余缺口。
+
+**结论修正**：§4 层 0 全部完成；层 1 的 #4/#5 大部分完成（缺排序白名单/卡片视图/按版本 Files 聚合深化）；层 2 的 #7 文件树、#9 订阅中心视图、收藏建模、#8 Split 维度为当前主要剩余缺口，均需新卡立项（涉及契约/迁移，超出 P0-B 门禁内的整改范畴）。**2026-09-30 增补**：点击级测试面剩余缺口（上传中心、Settings 表单）已由 TASK-P0BR-069 闭合（110 e2e 全过）；新立 backend 缺陷 A/B 卡（updateMetadata 覆盖语义 + rename 别名唯一键 500）与 TASK-P0BR-070（presign 公开端点）为当前已知待办。
