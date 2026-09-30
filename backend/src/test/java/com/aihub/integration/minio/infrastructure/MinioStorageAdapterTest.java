@@ -1,6 +1,6 @@
 /*
- * 功能: MinioStorageAdapter 单元测试（StoragePort 契约）。
- * 时间: 2026-07-10
+ * 功能: MinioStorageAdapter 单元测试（StoragePort 契约；ops/presign 客户端分桶路由）。
+ * 时间: 2026-09-30
  * 作者: AxeXie
  */
 package com.aihub.integration.minio.infrastructure;
@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aihub.transfer.domain.StoragePort;
+import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
 import io.minio.MinioClient;
@@ -23,6 +24,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -37,6 +39,8 @@ class MinioStorageAdapterTest {
 
     @Mock private MinioClient minioClient;
     @Mock private MinioClient dvcCacheMinioClient;
+    @Mock private MinioClient presignMinioClient;
+    @Mock private MinioClient presignDvcCacheMinioClient;
     @Mock private S3Client s3Client;
     @Mock private S3Presigner s3Presigner;
 
@@ -44,7 +48,8 @@ class MinioStorageAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new MinioStorageAdapter(minioClient, dvcCacheMinioClient, s3Client, s3Presigner);
+        adapter = new MinioStorageAdapter(minioClient, dvcCacheMinioClient,
+                presignMinioClient, presignDvcCacheMinioClient, s3Client, s3Presigner);
     }
 
     @Test
@@ -112,5 +117,65 @@ class MinioStorageAdapterTest {
                 .thenThrow(new RuntimeException("Access Denied"));
 
         assertThat(adapter.objectExists("asset-staging", "missing")).isFalse();
+    }
+
+    @Test
+    void presignDownloadForStagingUsesPublicEndpointClient() throws Exception {
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class)))
+                .thenReturn("http://localhost:9000/asset-staging/key?X-Amz-Signature=x");
+
+        URL url = adapter.presignDownload("asset-staging", "key", Duration.ofMinutes(15));
+
+        assertThat(url.getHost()).isEqualTo("localhost");
+        verify(presignMinioClient).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
+        verify(minioClient, never()).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
+    }
+
+    @Test
+    void presignDownloadForDvcCacheKeepsScopedCredentials() throws Exception {
+        when(presignDvcCacheMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class)))
+                .thenReturn("http://localhost:9000/dvc-cache/key?X-Amz-Signature=x");
+
+        URL url = adapter.presignDownload("dvc-cache", "4b/abc", Duration.ofMinutes(15));
+
+        assertThat(url).isNotNull();
+        // 凭据隔离（TASK-P0BR-068 口径）：dvc-cache 的签名同样不得走主凭据客户端
+        verify(presignDvcCacheMinioClient).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
+        verify(presignMinioClient, never()).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
+    }
+
+    @Test
+    void presignUploadUsesPublicEndpointClient() throws Exception {
+        when(presignMinioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class)))
+                .thenReturn("http://localhost:9000/asset-staging/key?X-Amz-Signature=x");
+
+        URL url = adapter.presignUpload("asset-staging", "key", "application/octet-stream",
+                Duration.ofMinutes(15));
+
+        assertThat(url.getPort()).isEqualTo(9000);
+        verify(presignMinioClient).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
+        verify(minioClient, never()).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
+    }
+
+    @Test
+    void opsReadPathStaysOnInternalEndpointClient() throws Exception {
+        // presign 切换不得影响 ops 路径：staging 的 stat 仍走主内网客户端
+        assertThat(adapter.objectExists("asset-staging", "staging/key")).isTrue();
+
+        verify(minioClient).statObject(any(StatObjectArgs.class));
+        verify(presignMinioClient, never()).statObject(any(StatObjectArgs.class));
+    }
+
+    @Test
+    void presignPartUploadExpiryIsPassedThrough() {
+        PresignedUploadPartRequest presigned = mock(PresignedUploadPartRequest.class);
+        when(s3Presigner.presignUploadPart(any(UploadPartPresignRequest.class))).thenReturn(presigned);
+
+        adapter.presignPartUpload("asset-staging", "key", "upload-abc", 1, Duration.ofMinutes(15));
+
+        ArgumentCaptor<UploadPartPresignRequest> captor =
+                ArgumentCaptor.forClass(UploadPartPresignRequest.class);
+        verify(s3Presigner).presignUploadPart(captor.capture());
+        assertThat(captor.getValue().signatureDuration()).isEqualTo(Duration.ofMinutes(15));
     }
 }

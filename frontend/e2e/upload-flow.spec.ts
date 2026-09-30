@@ -6,18 +6,15 @@
  * 时间: 2026-09-29
  * 作者: AxeXie
  *
- * 桩的诚实边界（务必与卡 §3 一并阅读）：
- *   compose 栈中后端 presign 的 endpointOverride 取 minio.endpoint=http://minio:9000，
- *   该主机名在宿主机浏览器不可达；而 MinioProperties.externalEndpoint 只被
- *   DvcConfigurationService 消费、presign 路径不使用，且 compose 注入的是
- *   AIHUB_MINIO_PUBLIC_ENDPOINT、application.yml 读的是 AIHUB_MINIO_EXTERNAL_ENDPOINT
- *   （变量名不匹配 ⇒ 实际为空）。因此浏览器直达 presign URL 的真实 PUT 必然失败，
- *   该缺口属 REQ-UPL-002 实现/配置缺陷，移交 TASK-P0BR-070 契约优先修复。
- *   本 spec 用 page.route 桩替代「浏览器不可达的最后一段网络」：桩响应形态与
- *   真实 S3 网关一致（200 + 带引号 ETag 头 + CORS 头 / 500 + XML 错误体），
- *   且回写的 ETag 不是任意值，而是容器内 curl 对同一 uploadId/partNumber 真实
- *   PUT 后 MinIO 返回的 ETag。故服务端 completeMultipartUpload 的 ETag 对账是
- *   真实的——若字节未真实入存，UI「完成上传」必然失败，桩无法掩盖。
+ * 真实 PUT 边界（TASK-P0BR-070 收口，务必与卡 §3 一并阅读）：
+ *   069 时期后端 presign 一律签内网名 http://minio:9000，宿主机浏览器不可达，
+ *   本 spec 只能以 page.route 桩替代最后一段网络。070 已修复该缺陷链：presign
+ *   改以公开端点（AIHUB_MINIO_PUBLIC_ENDPOINT → http://localhost:9000）签名，
+ *   compose 将 MinIO API 9000 端口映射到宿主机回环并配置真实 CORS
+ *   （Expose ETag），因此浏览器对 presign URL 的 PUT 全链路真实，本 spec 不再
+ *   含任何响应桩；失败注入仅用 route.abort() 在网络层模拟（与真实存储网络中断
+ *   同形态），成功路径的 PUT 一律 fallback 放行直达 MinIO。Part ETag 从浏览器
+ *   真实 PUT 响应头捕获，供跨切片与服务端 complete 对账互证。
  */
 import { test, expect, request, type APIRequestContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -118,7 +115,11 @@ function dockerCompose(args: string[], stdin?: string): string {
   }
 }
 
-/** presign URL 的 host 在宿主机不可达，必须在 minio 容器内发起真实 PUT；返回真实 ETag。 */
+/**
+ * 服务端对账场景的独立校验通道：070 后 presign URL 为宿主机回环公开端点
+ * （http://localhost:9000），MinIO 在容器内监听 0.0.0.0:9000，故在 minio 容器内
+ * 对同一 URL 真实 PUT 依然可达；返回 MinIO 真实 ETag，与浏览器 PUT 双通道互证。
+ */
 function putPartViaContainer(presignUrl: string, localPath: string): string {
   dockerCompose(['cp', localPath, 'minio:/tmp/e2e069_put.bin']);
   const raw = dockerCompose([
@@ -150,66 +151,63 @@ async function stageRealParts(
     );
     const presignData = dataOf(await readJson(presignResp)) as { url?: string } | null;
     expect(presignData?.url, `Part ${partNumber} presign 失败 HTTP ${presignResp.status()}`).toBeTruthy();
+    expectBrowserReachablePresign(presignData!.url!);
     etags.set(partNumber, putPartViaContainer(presignData!.url!, filePath));
   }
   return etags;
 }
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'PUT, GET, HEAD',
-  'Access-Control-Allow-Headers': '*',
-  // ETag 不是 CORS safelisted 响应头：不显式 expose 则跨源 XHR getResponseHeader('ETag') 为 null
-  'Access-Control-Expose-Headers': 'ETag',
-};
+/** 浏览器 PUT 是否指向宿主机回环公开端点（070 收口红线：不再是内网名 minio:9000）。 */
+function isPublicStagingPut(url: string): boolean {
+  const u = new URL(url);
+  return u.hostname === 'localhost' && u.port === '9000' && u.pathname.startsWith('/asset-staging/');
+}
 
 /**
- * 浏览器 PUT 桩：替代不可达的最后一段网络，响应形态与真实 S3 网关一致。
- * failCounts 按 Part 计次消耗——UploadPage.presignAndUploadPart 内置一次自动重试，
- * 故置 2 才会让该 Part 真正进入 failed（首轮 + 自动重试各失败一次）。
+ * presign 契约断言（AC-P2-UPL-002 E4）：浏览器可达的公开端点 + SigV4 参数齐备 +
+ * TTL ≤ 15 分钟（X-Amz-Date 与 X-Amz-Expires 差值口径）。
+ * 只断言 host:port 与参数值，URL 中凭据类参数一律不外泄到断言消息。
  */
-async function installStagingPutStub(
+function expectBrowserReachablePresign(url: string): void {
+  const u = new URL(url);
+  expect(u.protocol, 'presign 应为 http(s) URL').toBe('http:');
+  expect(`${u.hostname}:${u.port}`, 'presign 应签在宿主机回环公开端点').toBe('localhost:9000');
+  const partParam = u.searchParams.get('partNumber');
+  expect(partParam, 'presign URL 应携带 partNumber 查询参数').toBeTruthy();
+  const expires = Number(u.searchParams.get('X-Amz-Expires') ?? '0');
+  expect(expires, 'presign 应携带 X-Amz-Expires').toBeGreaterThan(0);
+  expect(expires, 'REQ-UPL-002 安全节：Presigned TTL 默认 15 分钟或更短').toBeLessThanOrEqual(900);
+}
+
+/**
+ * 网络层失败注入：仅对指定 Part 的前 N 次 PUT 做 route.abort()——与真实存储网络
+ * 中断同形态，成功路径零桩（PUT 一律 route.fallback() 放行直达 MinIO）。
+ * UploadPage.presignAndUploadPart 内置一次自动重试，故置 2 才会让该 Part 真正
+ * 进入 failed（首轮 + 自动重试各失败一次）。
+ * （HTTP 500 + XML 错误体的应用层故障形态由既有 Vitest/服务端测试覆盖，本 spec
+ * 不再模拟——卡 §4 步骤 7 如实登记的边界。）
+ */
+async function installNetworkFailure(
   page: Page,
-  etags: Map<number, string>,
   failCounts: Map<number, number>,
   calls: number[],
 ): Promise<void> {
-  await page.route(
-    (url) => url.hostname === 'minio' && url.pathname.startsWith('/asset-staging/'),
-    async (route) => {
-      const req = route.request();
-      // 跨源 PUT 必发预检；真实公开端点同样需要 CORS，否则浏览器直传根本不成立
-      if (req.method() === 'OPTIONS') {
-        await route.fulfill({ status: 204, headers: CORS_HEADERS });
-        return;
-      }
-      if (req.method() !== 'PUT') {
-        await route.fallback();
-        return;
-      }
-      const partParam = new URL(req.url()).searchParams.get('partNumber');
-      expect(partParam, 'presign URL 应携带 partNumber 查询参数').toBeTruthy();
-      const partNumber = Number(partParam);
-      calls.push(partNumber);
-
-      const remaining = failCounts.get(partNumber) ?? 0;
-      if (remaining > 0) {
-        failCounts.set(partNumber, remaining - 1);
-        await route.fulfill({
-          status: 500,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/xml' },
-          body:
-            '<?xml version="1.0" encoding="UTF-8"?><Error><Code>InternalError</Code>' +
-            '<Message>We encountered an internal error, please try again.</Message></Error>',
-        });
-        return;
-      }
-
-      const etag = etags.get(partNumber);
-      expect(etag, `桩缺少 Part ${partNumber} 的服务端 ETag，无法同值回写`).toBeTruthy();
-      await route.fulfill({ status: 200, headers: { ...CORS_HEADERS, ETag: `"${etag}"` } });
-    },
-  );
+  await page.route((url) => isPublicStagingPut(url.toString()), async (route) => {
+    const req = route.request();
+    if (req.method() !== 'PUT') {
+      await route.fallback();
+      return;
+    }
+    const partNumber = Number(new URL(req.url()).searchParams.get('partNumber'));
+    calls.push(partNumber);
+    const remaining = failCounts.get(partNumber) ?? 0;
+    if (remaining > 0) {
+      failCounts.set(partNumber, remaining - 1);
+      await route.abort('failed');
+      return;
+    }
+    await route.fallback();
+  });
 }
 
 const startUploadButton = (page: Page) => page.getByRole('button', { name: /开始上传|Start Upload/ });
@@ -271,7 +269,7 @@ async function ensureUploadAsset(
 let credentials: { username: string; password: string } | null = null;
 let dockerAvailable = false;
 let fixtures: E2eFixtures & { uploadAssetId: string; versionId: string } | null = null;
-/** 容器真实 PUT 后收集的服务端 ETag：桩同值回写，使 complete 对账真实成立。 */
+/** 容器预置通道真实 PUT 收集的服务端 ETag：与浏览器真实 PUT 响应头互证双通道同值。 */
 const realEtags = new Map<number, string>();
 
 /*
@@ -429,7 +427,8 @@ test.describe('上传中心全旅程（TASK-P0BR-069 UI-006）', () => {
     await expect(page.getByText(sessionId, { exact: true })).toBeVisible();
     await expect(partDetailsCard(page, 0, 2)).toBeVisible();
 
-    // 容器真实 PUT 逐 Part 入存，收集服务端 ETag 供桩同值回写
+    // 容器真实 PUT 逐 Part 入存（服务端对账场景的 API 侧预置通道），收集 ETag
+    // 与浏览器真实 PUT 的响应头互证双通道同值（同 uploadId/partNumber 同字节 ⇒ 同 ETag）
     const api = await request.newContext();
     const authorToken = await loginApi(api, E2E_AUTHOR.username, E2E_AUTHOR.password);
     const sliceDir = mkdtempSync(join(tmpdir(), 'e2e069-upload-'));
@@ -442,15 +441,28 @@ test.describe('上传中心全旅程（TASK-P0BR-069 UI-006）', () => {
     for (const [k, v] of await stageRealParts(api, authorToken, sessionId, perPartFile)) {
       realEtags.set(k, v);
     }
-    // 两个分片字节不同 ⇒ 服务端 ETag 必不同（防桩退化）
+    // 两个分片字节不同 ⇒ 服务端 ETag 必不同（防预置通道退化）
     expect(realEtags.get(1)).toBeTruthy();
     expect(realEtags.get(2)).toBeTruthy();
     expect(realEtags.get(1)).not.toBe(realEtags.get(2));
     saveJourneyState(sessionId, realEtags);
 
-    // 桩：Part 2 连续失败 2 次（首轮 + 内置自动重试各一次），之后转成功
+    // 网络层失败注入：Part 2 的前 2 次 PUT abort（首轮 + 内置自动重试各一次），之后放行真实 PUT
     const calls: number[] = [];
-    await installStagingPutStub(page, realEtags, new Map([[2, 2]]), calls);
+    await installNetworkFailure(page, new Map([[2, 2]]), calls);
+    // 浏览器真实 PUT 的响应观测（测试侧读取响应头，不受浏览器 CORS 限制）
+    const putResponses: { partNumber: number; status: number; etag: string }[] = [];
+    page.on('response', (resp) => {
+      if (resp.status() < 200) return; // 忽略 1xx（如 100-continue）中间响应
+      if (resp.request().method() === 'PUT' && isPublicStagingPut(resp.url())) {
+        const raw = resp.headers()['etag'] ?? '';
+        putResponses.push({
+          partNumber: Number(new URL(resp.url()).searchParams.get('partNumber')),
+          status: resp.status(),
+          etag: raw.replace(/"/g, '').toLowerCase(),
+        });
+      }
+    });
 
     await startUploadButton(page).click();
     // Part 1 completed、Part 2 failed
@@ -462,17 +474,33 @@ test.describe('上传中心全旅程（TASK-P0BR-069 UI-006）', () => {
       calls.filter((n) => n === 2).length,
       'Part 2 应经历 presignAndUploadPart 内置自动重试',
     ).toBeGreaterThanOrEqual(2);
+    // Part 1 的真实 PUT 直达宿主机回环公开端点：200 + MinIO 真实 ETag 与预置通道同值
+    const part1Real = putResponses.find((r) => r.partNumber === 1);
+    expect(part1Real, 'Part 1 应发生浏览器真实 PUT').toBeTruthy();
+    expect(part1Real!.status, `Part 1 真实 PUT 应返回 2xx（实际 ${part1Real!.status}）`).toBe(200);
+    expect(
+      part1Real!.etag,
+      'Part 1 浏览器真实 PUT 的 ETag 应与容器预置通道同值（同 uploadId 同字节）',
+    ).toBe(realEtags.get(1));
+    // 失败注入的 abort 属网络层故障：不产生 HTTP 响应
+    expect(putResponses.some((r) => r.partNumber === 2 && r.status >= 200)).toBe(false);
     // 失败分片出现行内「重试」；未全部分片完成时「完成上传」门控不得放开
     await expect(page.getByRole('button', { name: /^重\s*试$/ })).toBeVisible();
     await expect(completeUploadButton(page)).toHaveCount(0);
     await expect(partDetailsCard(page, 1, 2)).toBeVisible();
 
-    // 手动重试 Part 2：桩转成功 → 2/2 → allPartsComplete → Complete 门控放开
+    // 手动重试 Part 2：网络放行 → 真实 PUT 成功 → 2/2 → allPartsComplete → Complete 门控放开
     await page.getByRole('button', { name: /重试 Part 2/ }).click();
     await expect(page.getByText(/所有分片上传完成/)).toBeVisible({ timeout: 90_000 });
     await expect(partTag(page, 'completed')).toHaveCount(2);
     await expect(partDetailsCard(page, 2, 2)).toBeVisible();
     await expect(completeUploadButton(page)).toBeVisible();
+    const part2Real = putResponses.find((r) => r.partNumber === 2 && r.status === 200);
+    expect(part2Real, 'Part 2 手动重试应发生浏览器真实 PUT 并 200').toBeTruthy();
+    expect(
+      part2Real!.etag,
+      'Part 2 浏览器真实 PUT 的 ETag 应与容器预置通道同值（同 uploadId 同字节）',
+    ).toBe(realEtags.get(2));
 
     await expectNoStorageLeaks(page);
     await api.dispose();
@@ -515,8 +543,20 @@ test.describe('上传中心全旅程（TASK-P0BR-069 UI-006）', () => {
     expect(realEtags.get(1) && realEtags.get(2), '前置切片未收集服务端 ETag').toBeTruthy();
     await expectServerSessionOpen(journey.sessionId);
 
-    // 桩：无失败计划，同值回写服务端 ETag
-    await installStagingPutStub(page, realEtags, new Map(), []);
+    // 零桩：本切片不发生任何网络拦截，浏览器 PUT 全链路直达宿主机回环 MinIO；
+    // 仅观测真实响应头 ETag，与服务端预置通道 ETag 互证。
+    const resumedPuts: { partNumber: number; status: number; etag: string }[] = [];
+    page.on('response', (resp) => {
+      if (resp.status() < 200) return;
+      if (resp.request().method() === 'PUT' && isPublicStagingPut(resp.url())) {
+        const raw = resp.headers()['etag'] ?? '';
+        resumedPuts.push({
+          partNumber: Number(new URL(resp.url()).searchParams.get('partNumber')),
+          status: resp.status(),
+          etag: raw.replace(/"/g, '').toLowerCase(),
+        });
+      }
+    });
 
     await login(page, E2E_AUTHOR.username, E2E_AUTHOR.password);
     await page.goto(
@@ -532,6 +572,16 @@ test.describe('上传中心全旅程（TASK-P0BR-069 UI-006）', () => {
     });
     await startUploadButton(page).click();
     await expect(partDetailsCard(page, 2, 2)).toBeVisible({ timeout: 90_000 });
+    // 两个 Part 的浏览器真实 PUT 均须 200，且 ETag 与预置通道同值（同 uploadId 同字节）
+    for (const partNumber of [1, 2]) {
+      const put = resumedPuts.find((r) => r.partNumber === partNumber);
+      expect(put, `Part ${partNumber} 应发生浏览器真实 PUT`).toBeTruthy();
+      expect(put!.status, `Part ${partNumber} 真实 PUT 应返回 200`).toBe(200);
+      expect(
+        put!.etag,
+        `Part ${partNumber} 浏览器真实 PUT 的 ETag 应与容器预置通道同值`,
+      ).toBe(realEtags.get(partNumber));
+    }
 
     // UI Complete：真实 POST complete——服务端以 parts ETag 向 MinIO 对账，字节未真实入存必失败
     const [completeResp] = await Promise.all([

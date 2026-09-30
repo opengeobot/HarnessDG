@@ -1,0 +1,270 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-070-001
+# 本卡 requiredEvidenceLevel 为 E4。真实 Compose 栈双口径取证：
+# ①nginx 8080 容器前端全量 e2e：111 passed / 1 failed（070 核心主证——
+#   upload-flow.spec.ts 删桩后 7 切片全绿，浏览器真实 PUT 直连 localhost:9000）；
+#   唯一失败为 settings-form.spec.ts 切片⑧（069/072 工件、非本卡面）：
+#   page.reload() 深链 /assets/{id}/settings 命中既存 nginx「location /assets/」
+#   静态规则遮蔽 SPA 深链（curl 实证 GET /assets/deadbeef/settings => 404；
+#   git status 实证本卡零 nginx 改动；详见 limitations.environmentDifferences）。
+# ②宿主 Vite dev server 5173 全量 e2e（历史 112 基线同口径）：
+#   112 passed / 0 failed / 0 skipped（3.3m，exit 0）——全量基线不回归成立。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由批准人在审阅后
+# 执行（DEC-009，与 065-069/071/072 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-070
+  requirements: [REQ-UPL-002]
+  scenarios: [AC-P2-UPL-002, AC-P2-UPL-004]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 收口复跑 exit 0，见 artifacts.logs 的 070-gov-spec.log
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-070.md
+    # 1 requirement / 2 scenarios / 12 allowed paths（070-ready-validate-card.log 起算，收口复跑见 070-gov-card.log）
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-070.md -CheckChangedPaths
+    # 收口复跑 exit 0：全部变更命中 allowedPaths；frontend/playwright-report、test-results 产物收口前已删除；
+    # build-logs 以 `*.log` 命中 gitignore（既存豁免项 preExistingDirtyPaths：build-logs/verify-bom.ps1，SHA 与卡 FM 登记核对一致）
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-070.md -CheckCompletion
+    # 设计内的交接态失败（与 068/069/071/072 同型）：commitSha 需等于提交后的干净
+    # HEAD、dirtyWorktree 需置 false（代码须先提交）、review.accepted/reviewedBy/
+    # reviewedAt 需由验证权威填写（AI 不得自批，DEC-009）。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 0805b6092af216faeb4135d4d5d7be7ea509a204 # == baseCommit（TASK-P0BR-072 提交）；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/MinioConfiguration.java # presign 端点解析 + presign 双客户端 Bean
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/MinioStorageAdapter.java # presign 路由按桶切换 presign 客户端（dvc-cache scoped 凭据隔离不变）
+    - backend/src/main/java/com/aihub/transfer/application/UploadApplicationService.java # PRESIGN_EXPIRY 30→15min（REQ-UPL-002 安全节 L184）
+    - backend/src/main/resources/application.yml # external-endpoint 绑定名对齐（PUBLIC 优先、EXTERNAL 兼容嵌套默认值）
+    - backend/src/test/java/com/aihub/integration/minio/infrastructure/MinioConfigurationTest.java # 新增 6 用例
+    - backend/src/test/java/com/aihub/integration/minio/infrastructure/MinioStorageAdapterTest.java # presign 路由/凭据隔离断言适配
+    - deploy/compose/compose.yaml # 9000 回环映射 + CORS 四变量（默认值经批准人口径扩为 8080,5173 双 Origin csv）
+    - deploy/compose/.env.example # MINIO_PUBLIC_URL 注释修正 + MINIO_CORS_ALLOW_ORIGIN 示例
+    - frontend/e2e/upload-flow.spec.ts # 删 page.route 主机桩、浏览器真实 PUT、失败注入仅 route.abort()
+    - docs/ai-spec/tasks/TASK-P0BR-070.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-070-001.yaml
+    - docs/ai-spec/02-delivery/work-breakdown.md
+  preExistingDirtyPaths:
+    - build-logs/verify-bom.ps1 # 09-24 既存取证脚本，登记于卡 FM preExistingDirtyPaths（SHA b5003338…9b3d 与 068/069 卡核对一致）
+
+environment:
+  observedAt: 2026-09-30T16:20:00+08:00
+  os: Windows (PowerShell 5.1 + Git bash)
+  timezone: Asia/Shanghai
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+  externalDependencyVersions:
+    minio: RELEASE.2024-12-18T13-15-44Z # CORS/9000 映射改造与重建对象；aws-sdk 随 backend 镜像（070 重建）
+
+execution:
+  workingDirectory: backend/ + deploy/compose/ + frontend/
+  command: >-
+    backend: .\mvnw.cmd verify（BUILD SUCCESS，surefire 788/0/0/6 skipped，
+    新增 MinioConfigurationTest 6/6、适配 MinioStorageAdapterTest 12/12，
+    既有基线不回归；failsafe 123 IT 条件跳过——本机无 Testcontainers Docker
+    套接字口径，与 071 相同，登记 limitations）；
+    deploy/compose: docker compose config --quiet PASS +
+    ./scripts/verify.sh（Git bash 执行；权威口径见 limitations——verify.ps1 头注
+    自证未同步 V12+，仓库完整验收面为 verify.sh V01-V28）→ V01-V28 共 37 项断言
+    全 PASS、零 SKIP；minio 服务经 CORS 变更后 recreate 并 healthy，
+    OPTIONS 预检 curl 取证双 Origin（8080/5173 均 204 +
+    Access-Control-Allow-Origin 精确回显 + Allow-Methods PUT）；真实 PUT（未签名）
+    403 响应头直接暴露 Access-Control-Expose-Headers 含 Etag/X-Amz*；
+    frontend: pnpm lint / typecheck / build 均 exit 0；
+    pnpm vitest run --no-file-parallelism → 49 files / 228 tests 全绿（exit 0）；
+    pnpm test:e2e 双口径：①E2E_BASE_URL=http://localhost:8080 →
+    111 passed / 1 failed（失败仅 settings-form 切片⑧ reload 撞既存 nginx
+    /assets/ 遮蔽，upload-flow 全切片绿=本卡核心主证）；②不设 E2E_BASE_URL
+    （回退 5173，与 069/072 历史 112 基线同口径）→ 112 passed / 0 failed /
+    0 skipped（3.3m，exit 0）。
+  startedAt: 2026-09-30T15:30:00+08:00
+  finishedAt: 2026-09-30T16:20:00+08:00
+  # 终态口径（5173 全量 e2e exit 0；8080 轮 exit 1 的失败项为既存基础设施缺陷且
+  # 5173 轮全绿，双口径叙述见头部与 limitations）
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> (nginx 8080 容器前端 | Vite dev server 5173) -> backend/compose stack -> 宿主机回环 localhost:9000 真实 PUT MinIO
+
+coverage:
+  proven:
+    - scenarioId: AC-P2-UPL-002
+      assertion: >-
+        E4 切片3（8080+5173 双口径）：upload-flow.spec.ts 删除 069 时期
+        page.route 主机桩后，UI 点击开始上传→每 Part 浏览器对 presign URL 的
+        真实 PUT 等待 hostname===localhost && port===9000 的真实响应（无桩参与
+        成功路径）；presign URL host 断言 `localhost:9000`（非 `minio:9000`，
+        spec L174）+ TTL 断言 X-Amz-Expires ≤ 900 秒（L177-179，
+        REQ-UPL-002 安全节 L184「默认 15 分钟或更短」对齐）。
+      scenarioCategory: normal
+    - scenarioId: AC-P2-UPL-002
+      assertion: >-
+        E4（UI Complete 对账链不变）：真实 PUT 全 Parts 完成后 UI 点击 Complete
+        走真实 complete 端点、服务端 MinIO ETag 对账通过（浏览器 PUT 响应 ETag
+        与服务端清单互证）——若 Expose-Headers 缺失则前端取不到 ETag、该切片必红，
+        行为级佐证 CORS EXPOSE 生效；另有未签名 PUT 403 响应头直接取证
+        Access-Control-Expose-Headers 含 Etag/X-Amz*。
+      scenarioCategory: normal
+    - scenarioId: AC-P2-UPL-002
+      assertion: >-
+        脱敏口径不回归：spec 断言页面文本/localStorage 不含 `minio:9000` 与
+        `X-Amz-`（L223-225）；本清单与 build-logs 仅记录 URL host 与签名参数名；
+        后端审计/日志不记录完整预签名 URL 的既有实现未改动（卡 crossCutting
+        AUDIT/SECRETS 口径）。
+      scenarioCategory: normal
+    - scenarioId: AC-P2-UPL-004
+      assertion: >-
+        E4 切片3：sessionId 刷新后 Parts 状态与 ETag 来自服务端 GET session 对账
+        （非本地存储）；单 Part 失败注入改为仅 route.abort() 网络层模拟（成功路径
+        零桩），失败 Part 标 failed、Retry 仅重签/重传失败 Part；
+        不保存 Token/预签名 URL 断言不回归（upload-flow.spec.ts 全 7 切片在
+        8080 真实口径与 5173 基线口径均全绿）。
+      scenarioCategory: recovery
+    - scenarioId: AC-P2-UPL-004
+      assertion: >-
+        全量零回归（5173 历史基线口径）：112 passed / 0 failed / 0 skipped、
+        exit 0——skip 视为 notProven 的卡 §5 口径满足；8080 口径 111/112，
+        唯一失败项为 settings-form 切片⑧ reload 深链撞既存 nginx 遮蔽
+        （非本卡面、非 070 回归——git 零 nginx 改动 + 5173 同 spec 6 passed
+        决定性证明，登记 limitations）。
+      scenarioCategory: normal
+    - scenarioId: AC-P2-UPL-002
+      assertion: >-
+        E1/E2（切片1）：MinioConfigurationTest 新增 6 用例——externalEndpoint
+        配置时 presign 客户端（s3Presigner/presignMinioClient/
+        presignDvcCacheMinioClient）用公开端点、ops 客户端（s3Client/
+        minioClient/dvcCacheMinioClient）保持内网、未配置时全回退内网
+        （worker 装配安全语义）；MinioStorageAdapterTest 12 用例含 presign
+        按桶路由到 presign 客户端且 dvc-cache scoped 凭据隔离不变（068 口径）；
+        application.yml 绑定名对齐（PUBLIC 优先/EXTERNAL 兼容）。
+      scenarioCategory: normal
+    - scenarioId: AC-P2-UPL-002
+      assertion: >-
+        E4 平台基线不回归（切片2）：真实栈 ./scripts/verify.sh V01-V28 共 37 项
+        全 PASS 零 SKIP（含 V02/V03 容器内 mc 操作不受 9000 宿主机映射影响、
+        V05 系列 JWT/锁定生命周期、V12+ 审计与作业面）；
+        docker compose config --quiet PASS。
+      scenarioCategory: normal
+  notProven: []
+
+contractConsistency:
+  openapiMatched: true # 零契约改动；presign 端点与 DownloadTicket.presignedUrl 均为契约既有口径（卡 §3.3）
+  eventSchemaMatched: null # 不触达事件契约
+  migrationMatched: null # 无 Flyway 迁移
+  uiMatched: null # 前端源码零改动（卡 §7）
+  runbookMatched: null # docs/runbooks 现无 MinIO 公开端点/CORS 相关面（grep 实证），部署口径由 compose.yaml/.env.example/卡与 work-breakdown 承载
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-070.md（本卡 §6/§8）
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/MinioConfiguration.java（resolvePresignEndpoint + presign 双客户端 Bean）
+    - backend/src/main/java/com/aihub/integration/minio/infrastructure/MinioStorageAdapter.java（presign 按桶路由）
+    - frontend/e2e/upload-flow.spec.ts（无桩新口径：真实 PUT localhost:9000 + TTL≤900 断言 + abort() 失败注入 + 脱敏断言）
+  logs:
+    - build-logs/070-mvnw-verify.log（BUILD SUCCESS；surefire 788/0/0/6；MinioConfigurationTest 6/6、MinioStorageAdapterTest 12/12）
+    - build-logs/070-miniocfg-test.log / 070-targeted-tests.log（定向复跑）
+    - build-logs/070-verify-sh.log（V01-V28 全 37 项 PASS、零 SKIP，EXIT=0）
+    - build-logs/070-e2e.log（第一轮全量 8080：口令误注事故轮，见 limitations.取证事故）
+    - build-logs/070-e2e-2.log（第二轮全量 8080：111 passed / 1 failed——upload-flow 全绿核心主证 + settings-form⑧ 既存缺陷）
+    - build-logs/070-e2e-3.log（终态 5173 全量：112 passed / 0 failed / 0 skipped，3.3m，exit 0）
+    - build-logs/070-lint.log / 070-typecheck.log / 070-build.log（exit 0）
+    - build-logs/070-vitest.log（并行轮：ProfilePage 2 用例 5s 超时 flake）/ 070-vitest-profile.log（单跑 6/6 绿）/ 070-vitest-serial.log（终态串行 49 files / 228 tests 全绿 exit 0）
+    - build-logs/070-gov-spec.log / 070-gov-card.log / 070-gov-checkpaths.log / 070-gov-completion.log（收口三连 + 交接态 completion 复跑）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 5173 终态：112 tests / 112 passed / 0 skipped / 0 failed（3.3m，workers=1、retries=0）
+    - Playwright 8080 真实口径：111 passed / 1 failed（失败项非本卡面，既存 nginx 遮蔽；upload-flow 7/7 切片全绿）
+    - verify.sh：V01-V28 37 项断言全 PASS 零 SKIP；mvnw surefire 788/0/0/6；Vitest 串行 228/228；lint/typecheck/build exit 0
+  databaseQueries:
+    - update iam_user set failed_login_attempts=0, locked_until=null, status='ACTIVE'
+      where username='admin'（取证事故恢复：口令误注触发 AC-P0B-IAM-005 锁定后解锁，
+      随后正确口令登录 200 + 全量 e2e 复跑验证；非常规操作、未留后门）
+  auditEvents:
+    - 本卡后端改动仅限 presign 签发端点/TTL 与客户端装配，不新增审计事件类型；
+      创建/取消/完成审计链不变（卡 crossCutting AUDIT）；e2e 走真实
+      upload-sessions/complete/cancel 端点的审计写入由后端既有实现承担
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_*），
+      仅注入 Playwright 子进程环境变量、全程不回显；本清单与归档日志不含口令/Token 明文。
+    - 预签名 URL 属短期凭据：本清单与 spec 断言仅记录 host（localhost:9000）与签名
+      参数名（X-Amz-Expires/X-Amz-Date），不记录完整 URL 与 Signature 值；
+      upload-flow.spec.ts 以断言「页面文本与本地存储不含 X-Amz-」守护不落盘。
+    - curl CORS 取证仅发未签名 OPTIONS/PUT（403/204 响应头），不携带对象存储凭据；
+      容器侧操作凭据不出 minio/backend 容器环境。
+
+limitations:
+  # 5173 全量 112 passed / 0 skipped；8080 轮 1 failed 为既存缺陷（见
+  # environmentDifferences）——本卡面 upload-flow 双口径均零 skip 零 fail
+  skippedTests: []
+  assumptions:
+    - >-
+      compose 完整栈运行且 backend/minio 为本卡重建镜像（application.yml 绑定名
+      + MinioConfiguration 变更已入镜像；AIHUB_MINIO_PUBLIC_ENDPOINT=http://localhost:9000
+      经 compose 注入生效）。failsafe 123 IT 因 Testcontainers 在本机探测不到有效
+      Docker 环境（日志 1808 行 "Could not find a valid Docker environment"、
+      npipe 策略失败）而条件跳过（与 071 同口径登记），其覆盖面由 verify.sh E4 与
+      e2e E4 承担。
+  environmentDifferences:
+    - >-
+      [取证事故登记] 第一轮 8080 全量 e2e（070-e2e.log）29 failed：根因为取证者误将
+      verify.sh L47 JOURNEY_ADMIN_PASS 公式（ADMIN_PASS+「Journey-E2E-01!」改密链
+      口令）注入 E2E_ADMIN_PASSWORD，而当前栈 admin 未处于改密态（.env 原值直登 200
+      实证）——5 次误注触发 AC-P0B-IAM-005 锁定（423）。经 DB 解锁（见
+      databaseQueries）+ 正确口径重跑恢复。该事故反向活证了锁定机制与 V05h 语义
+      正确性；e2e 凭据正确口径 = .env 原值。
+    - >-
+      [附带受益，不在验收范围] AIHUB_MINIO_EXTERNAL_ENDPOINT 绑定名对齐后
+      DvcConfigurationService L53-55 externalEndpoint 优先分支开始生效，
+      /dvc/remote-config 返回 host 由 minio:9000 变为宿主机可达
+      （AC-P2-DVC-001 同根因缺口修复）；其 E4 属 verify-journey.sh 业务旅程范围，
+      本卡以配置断言守护不回归（卡 §2 明示）。
+    - >-
+      双入口口径互补：070 核心面（upload-flow 浏览器真实 PUT）在 nginx 8080 容器
+      前端与 Vite 5173 均全绿（MinIO CORS 默认值经双 Origin csv：
+      http://localhost:8080,http://localhost:5173，OPTIONS 预检双双 204 实证；
+      属卡 §4 步骤 5「dev/验收基线口径」批准面内微调，生产多域名仍另议）。
+    - >-
+      [既存缺陷登记，非本卡面] frontend/nginx/default.conf 的
+      「location /assets/」静态缓存规则（无 try_files 回退）遮蔽 SPA 深链：
+      整页加载 GET /assets/{id}/settings 返回 nginx 原生 404（curl 实证），
+      故 8080 口径下 settings-form.spec.ts 切片⑧的 page.reload() 必红；
+      客户端导航不受影响，历史 112 基线（069/072）均在 5173 口径取证
+      （EVD-P0BR-069-001 limitations 同口径）。本卡 forbiddenPaths 外无
+      nginx 改动授权（卡 §7），修复须另立基础设施卡。
+    - >-
+      verify 权威口径：卡 §6 requiredValidationCommands 列 verify.ps1，但
+      verify.ps1 头注自证「未同步 V12+，请优先使用 verify.sh 做完整验收」，
+      且宿主 pwsh 不可用（PS 5.1 解析 UTF-8 无 BOM 阻塞）——本卡以
+      Git bash 执行 ./scripts/verify.sh 取得 V01-V28 全 PASS（完整验收面、
+      严于卡要求），与 AGENTS.md「Use the repository-provided equivalent」一致。
+    - >-
+      Vitest 并行轮 ProfilePage.test.tsx 2 用例 5s 超时 flake（宿主负载所致，
+      本卡零前端源码改动）：单文件复跑 6/6 绿、终态 --no-file-parallelism
+      串行 49 files / 228 tests 全绿 exit 0（072 基线同口径）。
+
+review:
+  recordedBy: AI（Trae 实施会话，如实登记取证事实；未经批准不构成验收）
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false

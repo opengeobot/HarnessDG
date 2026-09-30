@@ -1,6 +1,6 @@
 /*
- * 功能: MinIO 存储适配器，实现真实 S3 Multipart Upload 与对象读写（按桶路由凭据）。
- * 时间: 2026-09-29
+ * 功能: MinIO 存储适配器，实现真实 S3 Multipart Upload 与对象读写（ops 按桶路由凭据；presign 走公开端点客户端）。
+ * 时间: 2026-09-30
  * 作者: AxeXie
  */
 package com.aihub.integration.minio.infrastructure;
@@ -56,22 +56,35 @@ public class MinioStorageAdapter implements StoragePort {
 
     private final MinioClient minioClient;
     private final MinioClient dvcCacheMinioClient;
+    private final MinioClient presignMinioClient;
+    private final MinioClient presignDvcCacheMinioClient;
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
 
     public MinioStorageAdapter(MinioClient minioClient,
                                @Qualifier("dvcCacheMinioClient") MinioClient dvcCacheMinioClient,
+                               @Qualifier("presignMinioClient") MinioClient presignMinioClient,
+                               @Qualifier("presignDvcCacheMinioClient") MinioClient presignDvcCacheMinioClient,
                                S3Client s3Client,
                                S3Presigner s3Presigner) {
         this.minioClient = minioClient;
         this.dvcCacheMinioClient = dvcCacheMinioClient;
+        this.presignMinioClient = presignMinioClient;
+        this.presignDvcCacheMinioClient = presignDvcCacheMinioClient;
         this.s3Client = s3Client;
         this.s3Presigner = s3Presigner;
     }
 
-    /** 按桶选择客户端：dvc-cache 走 DVC scoped 凭据，其余走主凭据。 */
+    /** 按桶选择 ops 客户端：dvc-cache 走 DVC scoped 凭据，其余走主凭据。 */
     private MinioClient clientFor(String bucketName) {
         return DVC_CACHE_BUCKET.equals(bucketName) ? dvcCacheMinioClient : minioClient;
+    }
+
+    /** 按桶选择 presign 客户端：公开端点签名 + 与 ops 一致的主/scoped 凭据分桶。 */
+    private MinioClient presignClientFor(String bucketName) {
+        return DVC_CACHE_BUCKET.equals(bucketName)
+                ? presignDvcCacheMinioClient
+                : presignMinioClient;
     }
 
     @Override
@@ -183,7 +196,7 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public URL presignDownload(String bucketName, String objectKey, Duration expiry) {
         try {
-            String url = clientFor(bucketName).getPresignedObjectUrl(
+            String url = presignClientFor(bucketName).getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(bucketName)
@@ -200,7 +213,7 @@ public class MinioStorageAdapter implements StoragePort {
     @Override
     public URL presignUpload(String bucketName, String objectKey, String contentType, Duration expiry) {
         try {
-            String url = clientFor(bucketName).getPresignedObjectUrl(
+            String url = presignClientFor(bucketName).getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.PUT)
                             .bucket(bucketName)

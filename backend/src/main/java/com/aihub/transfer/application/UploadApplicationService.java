@@ -50,7 +50,8 @@ public class UploadApplicationService {
 
     private static final Logger LOG = LoggerFactory.getLogger(UploadApplicationService.class);
     private static final Duration DEFAULT_SESSION_TTL = Duration.ofHours(2);
-    private static final Duration PRESIGN_EXPIRY = Duration.ofMinutes(30);
+    /** Part 预签名有效期：REQ-UPL-002 安全节「默认 15 分钟或更短」（TASK-P0BR-070 由 30 对齐至 15）。 */
+    private static final Duration PRESIGN_EXPIRY = Duration.ofMinutes(15);
     private static final String STAGING_BUCKET = "asset-staging";
     private static final String SESSION_BUNDLE_PATH = "_session_bundle";
 
