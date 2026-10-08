@@ -1,0 +1,227 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-073-001
+# 本卡 requiredEvidenceLevel 为 E4。frontend 容器 nginx `location /assets/` 遮蔽
+# 六条 `/assets/:assetId...` SPA 深链整页加载的既存基础设施缺陷已按方案 B 修复：
+# vite `build.assetsDir: 'static'` 与 nginx `location /static/`（7d immutable 原样
+# 保留）同卡同变更，构建产物与业务路由彻底分名；frontend/src 路由字符串零改动。
+# 四处 e2e 绕行注释（support.ts/dataset.spec/profile.spec/asset.spec）清零改真实
+# goto/reload；新增 spa-deep-link.spec.ts 六条深链整页加载用例；playwright 默认
+# baseURL 改 8080 权威口径后全量终态 118 passed / 0 failed / 0 skipped（exit 0，
+# 2.9m = 072 基线 112 + 本卡新增 6；070 遗留唯一失败 settings-form⑧ reload 转绿）。
+# source.commitSha 指向 baseCommit：本卡代码变更尚未提交，提交由批准人处置后执行
+# （与 065/066/067/068/071/072 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-073
+  requirements: [REQ-UI-001]
+  scenarios: [AC-P0B-UI-001, AC-P0B-UI-006]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 起草轮、READY 批准轮与收口轮各复跑一次，均 PASS（148 documents / 732 stable IDs）；
+    # 留档 build-logs/073-draft-validate-spec.log、073-ready-validate-spec.log、073-gov-spec.log
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-073.md
+    # DRAFT 阶段设计内失败（status/approvedBy/approvedAt 需人工批准回写，DEC-009）；
+    # 批准回写后 PASS（build-logs/073-ready-validate-card.log、073-gov-card.log）
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-073.md -CheckChangedPaths
+    # 全部变更命中 allowedPaths（11 项：vite.config/nginx/playwright.config/e2e 五文件 +
+    # work-breakdown + 本卡 + 本 EVD）；build-logs/verify-bom.ps1 系既存取证脚本，已登记于卡
+    # preExistingDirtyPaths（SHA b5003338…9b3d 核对一致）；取证工件统一 build-logs/*.log
+    # 不入库；Playwright 产物目录 frontend/test-results 终态取证后删除不入库。
+    # 收口轮实证 PASS（build-logs/073-gov-checkpaths.log）：期间 git status 曾出现三个 backend
+    # 文件 M（Asset.java/UploadApplicationService.java/application.yml），git diff HEAD 对真实
+    # 路径内容均为 0 行，判定为工具链 touch mtime 造成的 stat-dirty 假脏，checkout 刷新
+    # 索引后工作树干净；本卡全程未对 backend 做任何写操作。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-073.md -CheckCompletion
+    # 设计内失败：commitSha 需等于提交后 HEAD 且 dirtyWorktree=false（代码须先提交，AI 不得
+    # 自提交）；review.accepted/reviewedBy/reviewedAt 需由验证权威填写（DEC-009）。
+    # 据实登记为 EXPECTED_FAIL，与 071/072 交接态同口径（build-logs/073-gov-completion.log）。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 7e53aacf9c9eba11a7f2365c9507ff69b735feaa # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-073.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-073-001.yaml
+    - frontend/e2e/asset.spec.ts
+    - frontend/e2e/dataset.spec.ts
+    - frontend/e2e/profile.spec.ts
+    - frontend/e2e/spa-deep-link.spec.ts
+    - frontend/e2e/support.ts
+    - frontend/nginx/default.conf
+    - frontend/playwright.config.ts
+    - frontend/vite.config.ts
+
+environment:
+  observedAt: 2026-10-08T02:00:00Z
+  os: Windows (PowerShell 5.1)
+  timezone: Asia/Shanghai
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  dockerCompose: v2.40.3-desktop.1
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+
+execution:
+  workingDirectory: frontend/ + deploy/compose/
+  command: >-
+    步骤1/2 同一变更：vite.config.ts build.assetsDir='static' + nginx location
+    /assets/ → /static/（expires 7d 与 immutable 头原样保留）；
+    pnpm lint（exit 0，2 处 react-refresh warnings 为既存）、pnpm typecheck
+    （exit 0）、pnpm build（exit 0，✓ built in 26.22s；产物目录物证：
+    dist/static/ 存在、dist/assets/ 不存在）；
+    docker compose build frontend + up -d frontend（deploy/compose 目录，新产物
+    镜像重建，aihub-frontend-1 重新 Up）；
+    curl 双口径（build-logs/073-curl-dual.log）：/static/index-BwcVgUTL.js →
+    200 + Cache-Control "public, max-age=604800, immutable"；六条深链
+    /assets/{deadbeef,deadbeef/settings,deadbeef/lineage,deadbeef/access,
+    ds1/versions,ds1/versions/ver1} → 全部 200 text/html（SPA index.html）；
+    /dashboard → 200；旧路径 /assets/index-anything.js → 200 回退 SPA
+    （遮蔽 location 已不存在的期望行为，非缺陷）；
+    pnpm exec playwright test e2e/spa-deep-link.spec.ts（定向 6 passed）；
+    pnpm test:e2e 全量 8080 权威口径首跑 117 passed / 1 failed
+    （build-logs/073-e2e-run1.log：失败为 profile.spec 内联 click 后未等登录落地
+    即整页 goto，refresh Cookie 未落盘弹回 /login——收紧过程暴露的用例自身时序
+    缺陷，非产品回归），改用 login() helper 后定向 6 passed
+    （073-e2e-profile-retry.log）；全量复跑终态 118 passed / 0 failed / 0 skipped
+    （exit 0，2.9m，build-logs/073-e2e-full.log）。
+  startedAt: 2026-10-08T00:58:00Z
+  finishedAt: 2026-10-08T02:00:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Nginx 网关 (localhost:8080) -> frontend 容器（新 /static/ 产物镜像）-> backend/compose stack（本卡起 e2e 权威口径即 8080 真实栈；5173 仅为开发口径经 E2E_BASE_URL 覆盖。settings-form⑧ reload 自 070 起的首个 8080 全绿即修复实证）
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4：spa-deep-link.spec.ts 六条深链 page.goto 整页加载（登录后直达，真实
+        refresh-Cookie 会话恢复路径）——详情/资产设置/资产血缘/访问授权/版本列表/
+        版本详情均渲染目标页面真实 i18n 文案特征，断言「页面不存在」兜底
+        count=0 且目标文本 15s 内可见；8080 全量 118 passed 含本族 6 用例。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-001
+      assertion: >-
+        E4：四处绕行注释清零（git diff 删除行可证）改真实 goto/reload——support.ts
+        两处注释改写（helper 实现保留目录点击形态）、dataset.spec 用例②与
+        asset.spec 缺失资产用例改真实 page.goto（route-mock 仅拦截 API）、
+        profile.spec 改 login() + goto('/assets') 断言权限空态渲染；既有用例在真实
+        整页加载路径下全部通过 = 会话恢复（access Token 内存 + refresh Cookie 引导）
+        经浏览器实证。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E2（curl 双口径）：构建产物 JS 从 /static/ 前缀 200 + immutable 缓存头
+        （能力不回归）；六条 /assets/... 深链统一 200 text/html 回退 index.html
+        （遮蔽消除）；旧 /assets/index-*.js 亦 200 回退 SPA（分名后无静态遮蔽的
+        期望终态）。
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-UI-001
+      assertion: >-
+        E4（不放宽断言的收紧实证）：profile.spec 首跑失败暴露其内联登录未等待落地
+        的时序缺陷（refresh Cookie 未落盘即整页加载弹回 /login）；修复为 login()
+        helper（内含离开 /login 的等待）后定向 6 passed、全量复跑 0 failed——
+        真实路径首次被 e2e 强制校验，未删减任何既有断言。
+      scenarioCategory: failure
+  notProven:
+    - scenarioId: AC-P0B-UI-001
+      assertion: >-
+        support.ts openAssetDetailViaCatalog 本体仍以目录点击导航进入详情，
+        未改为 helper 级真实 page.goto。
+      reason: >-
+        卡 §4 步骤 3 的字面要求与「helper 被 7+ 处用例依赖、签名与行为保持稳定」
+        的工程约束权衡：本卡以 spa-deep-link.spec.ts 新用例族 + dataset/profile/asset
+        三处调用方真实化承担深链证据，helper 仅清除遮蔽叙述注释；调用方行为零变更
+        即「不放宽任何既有断言」的最小风险达成。已在卡 §8 登记偏差。
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、
+        commitSha=baseCommit），review.accepted=false。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。
+  crossCuttingChecks:
+    - AUTHN|深链整页加载真实走 refresh-Cookie 会话恢复（本卡首次被 e2e 覆盖）；认证链零改动
+    - AUTHZ|不改任何权限判定；routes.tsx（frontend/src 禁改面）六条 guarded 路由零变更；profile.spec 权限空态用例在真实路径下通过
+    - CONSISTENCY|vite assetsDir 与 nginx location 同卡同变更（改名不同步=全站白屏）；外层 deploy/compose nginx 纯反代天然兼容未改
+    - ERRORS|无新增 ErrorCode；nginx 原生 404 遮蔽缺陷消除
+    - AUDIT|纯前端静态服务与测试口径变更，不触达审计路径
+    - TAXONOMY_I18N|未新增/修改任何 i18n 键（断言复用 zh.json 既有文案）
+    - SECRETS|无 Token/凭据落盘；.env 凭据仅注入子进程环境变量、不回显
+
+contractConsistency:
+  openapiMatched: null # 本卡不改契约
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无数据库变更
+  uiMatched: true # 深链 URL 与 routes.tsx 六条路由逐一对齐；断言文案与 zh.json L74/238/301/337/467/468 一致
+  runbookMatched: null # 本卡无需变更运行手册（部署面：镜像重建即生效）
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-073.md（本卡 §6/§8）
+    - frontend/vite.config.ts（build.assetsDir: 'static'）
+    - frontend/nginx/default.conf（location /static/ + 7d immutable 保留）
+    - frontend/playwright.config.ts（默认 baseURL 8080 权威口径 + 头注）
+    - frontend/e2e/spa-deep-link.spec.ts（新增六条深链整页加载用例）
+    - frontend/e2e/support.ts / dataset.spec.ts / profile.spec.ts / asset.spec.ts（四处绕行注释清零改真实 goto/reload）
+    - docs/ai-spec/02-delivery/work-breakdown.md（073 行实施完成待验收态）
+  logs:
+    - build-logs/073-draft-validate-spec.log / 073-ready-validate-spec.log / 073-ready-validate-card.log（起草与批准轮 PASS）
+    - build-logs/073-lint.log / 073-typecheck.log / 073-build.log（均 exit 0；lint 2 warnings 既存）
+    - build-logs/073-curl-dual.log（/static/ 200+immutable；六条深链 200 text/html；/dashboard 200；旧路径 200 回退）
+    - build-logs/073-e2e-run1.log（全量首跑 117 passed / 1 failed：profile.spec refresh Cookie 时序缺陷留档）
+    - build-logs/073-e2e-profile-retry.log（修复后定向 6 passed）
+    - build-logs/073-e2e-full.log（全量终态 118 passed / 0 failed / 0 skipped，2.9m，exit 0）
+  screenshots: []
+  traces: []
+  metrics:
+    - Playwright 8080 权威口径全量终态：118 tests / 118 passed / 0 skipped / 0 failed（2.9m，workers=1、retries=0；= 072 基线 112 + 本卡新增 6）
+    - 深链遮蔽修复前（2026-09-30 curl 实证）：/assets/deadbeef/settings → 404；修复后：200 text/html
+    - pnpm build ✓ 26.22s；lint/typecheck exit 0
+  databaseQueries: []
+  auditEvents:
+    - 本卡无审计面变更
+
+secrets:
+  redactionChecked: true
+  findings:
+    - E2E bootstrap 凭据取自 gitignored deploy/compose/.env（AIHUB_BOOTSTRAP_ADMIN_* 键），仅在会话内注入子进程环境变量、全程不回显口令；本清单、e2e 报告与归档日志均不含口令/Token 明文。
+    - E2E_AUTHOR 夹具账号口令为 support.ts 仓内既有常量（非 Secret），本卡未新增任何硬编码凭据。
+    - build-logs/ 整目录不入库（.gitignore `*.log` 惯例）。
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - Compose 全栈运行且 healthy；后端容器为 071 修复后镜像（本卡未改后端）；frontend 镜像已按方案 B 重建（dist/static 产物入镜像）。
+    - 本地非 CI：retries=0；profile.spec 时序缺陷修复后一次性 118 passed。
+    - 收口轮 git status 曾出现三个 backend 文件 stat-dirty 假脏（工具链 touch mtime、diff 内容 0 行），checkout 刷新索引后消除；-CheckChangedPaths 以消除后工作树实证 PASS。
+  environmentDifferences:
+    - >-
+      仓内仍有五处历史「遮蔽」叙述文字未改（不在本卡三处绕行注释口径内）：
+      admin-states.spec L147、lineage.spec L116、error-paths.spec L11-12、
+      asset.spec L84（同因注释但非绕行行为）、ci.yml L306（显式 5173 口径）——
+      前四者不在 allowedPaths、ci.yml 属 forbiddenPaths，登记为后续文字勘误
+      follow-up，不构成功能缺陷。
+    - >-
+      curl 旧路径 /assets/index-*.js 返回 200 为修复后期望行为：遮蔽 location 已
+      不存在，任何 /assets/* 前缀统一回退 index.html 由 SPA 处理（旧产物引用不会
+      出现 404 雪崩，但也不会命中缓存——分名方案的既定取舍）。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

@@ -37,8 +37,10 @@ export async function login(page: Page, username: string, password: string) {
 /**
  * 经侧边导航进入资产目录。
  *
- * <p>同 {@link openAssetDetailViaCatalog}：不使用整页加载 `/assets`，因为前端容器 nginx 的
- * `location /assets/` 静态资源规则会遮蔽该 SPA 路径（`/assets` 还会 301 到丢失端口的绝对 URL）。
+ * <p>保留应用内导航形态：它覆盖的是「导航项按权限出现」这一真实用户路径。
+ * 历史上此处曾以「nginx {@code location /assets/} 遮蔽 SPA 深链」为由禁止整页加载，
+ * 该缺陷已由 TASK-P0BR-073 修复（构建产物改名 {@code /static/}），深链整页加载见
+ * spa-deep-link.spec.ts。
  */
 export async function openAssetsViaNav(page: Page) {
   await page.locator('.ant-menu-item').filter({ hasText: /资产目录|Asset Catalog/ }).click();
@@ -60,9 +62,11 @@ export async function openIntegrationsViaNav(page: Page) {
 /**
  * 从资产目录经真实点击进入资产详情页。
  *
- * <p>刻意不使用 {@code page.goto('/assets/...')} 做整页加载：前端容器 nginx 的
- * {@code location /assets/} 静态资源规则会遮蔽 SPA 深链（详见 EVD-P0BR-050-001 的
- * limitations）。本函数走用户在应用内真实可行的路径，不掩盖该既有基础设施缺陷。
+ * <p>历史背景：nginx {@code location /assets/} 静态规则曾遮蔽 SPA 深链整页加载
+ * （EVD-P0BR-050-001 limitations），本函数以应用内导航绕行。该缺陷已由
+ * TASK-P0BR-073 修复（构建产物改名 {@code /static/}），深链整页加载的真实证据
+ * 见 spa-deep-link.spec.ts；本函数保留目录点击路径——它覆盖「检索打到后端 +
+ * 列表链接进详情」这条独立的用户旅程。
  *
  * <p>目录页默认按创建时间倒序分页（limit=10）：验收栈累积的历史夹具资产会把目标资产
  * 挤出首屏，直接找链接必然间歇失败。先使用页内真实搜索框按显示名过滤，再点击结果——

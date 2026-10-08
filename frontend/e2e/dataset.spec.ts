@@ -94,9 +94,9 @@ test.describe('DATASET 资产体验（E2E 050 夹具）', () => {
   // 夹具值 format/modality 来自 E2E_DATASET 常量，断言卡片确实渲染这两个真实值。
   test('详情页「数据集画像」Card 渲染 format/modality 字段值', async ({ page }) => {
     await login(page, E2E_AUTHOR.username, E2E_AUTHOR.password);
-    // 客户端导航进入详情：page.goto('/assets/...') 整页加载会被前端容器 nginx 的
-    // `location /assets/` 静态规则遮蔽为 404（既有基础设施缺陷，见 EVD-P0BR-050-001）。
-    await openAssetDetailViaCatalog(page, E2E_DATASET.displayName);
+    // 深链整页加载（登录 → page.goto 直达详情）：nginx 遮蔽缺陷已由 TASK-P0BR-073
+    // 修复，整页加载同时证明 refresh-Cookie 会话恢复在资产域路由上真实工作。
+    await page.goto(`/assets/${fixtures.datasetAssetId}`);
 
     const profileCard = page
       .locator('.ant-card')

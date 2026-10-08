@@ -34,6 +34,10 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // 构建产物目录与 SPA 业务路由 `/assets/:assetId...` 分名（TASK-P0BR-073）：
+    // nginx 静态缓存 location 为 /static/，若沿用默认 assets 将遮蔽深链整页加载。
+    // 必须与 frontend/nginx/default.conf 的 location 同步变更，改名不同步 = 全站白屏。
+    assetsDir: 'static',
     sourcemap: false,
     // antd 为单一大依赖（约 970kB），已单独拆为 antd-vendor，无法进一步细分；
     // 主业务 chunk 已由 1.34MB 降至约 114kB，此处上调告警阈值以消除 antd 单包噪音。

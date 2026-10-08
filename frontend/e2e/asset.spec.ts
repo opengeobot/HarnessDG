@@ -3,8 +3,9 @@
  * 时间: 2026-09-28
  * 作者: AxeXie
  *
- * <p>全程应用内导航：前端容器 nginx 的 {@code location /assets/} 静态规则遮蔽 SPA 深链，
+ * <p>历史背景：前端容器 nginx 的 {@code location /assets/} 静态规则曾遮蔽 SPA 深链，
  * 整页加载 {@code /assets}、{@code /assets/{id}} 分别得到 301/403/404（见 EVD-P0BR-050-001）。
+ * 该缺陷已由 TASK-P0BR-073 修复（构建产物改名 /static/），深链整页加载见 spa-deep-link.spec.ts。
  * <p>生命周期旅程落在专用夹具资产与专用主体（E2E_LIFECYCLE_OWNER 具备 asset:deprecate）上，
  * 避免与 publish-flow.spec 的 PUBLISHED 版本冲突（归档对 publishedCount>0 返回 409）。
  */
@@ -25,9 +26,11 @@ import {
   openAssetSettingsViaNav,
   openAssetsViaNav,
   prepareFixtures,
+  type E2eFixtures,
 } from './support';
 
 let credentials: { username: string; password: string } | null = null;
+let fixtures: E2eFixtures;
 
 /** antd 对恰好两个汉字的按钮插入空格（「确 定」「创 建」「设 置」），故一律用宽松正则。 */
 const POPCONFIRM_OK = /确\s*定|OK|Yes/i;
@@ -39,7 +42,7 @@ test.beforeAll(async () => {
   }
   const api = await request.newContext();
   try {
-    await prepareFixtures(await adminToken(api), api);
+    fixtures = await prepareFixtures(await adminToken(api), api);
   } finally {
     await api.dispose();
   }
@@ -173,7 +176,8 @@ test.describe('P1 资产目录完整生命周期', () => {
     );
     expect(status).toBe(404);
 
-    // UI 判定：注入 404 后由真实详情页渲染空态（深链本身被 nginx 遮蔽，不能整页加载）
+    // UI 判定：真实深链整页加载（nginx 遮蔽已由 TASK-P0BR-073 修复），
+    // route-mock 仅拦截 API 注入 404，使页面渲染空态的路径确定可复现。
     await page.route('**/api/v1/assets/*', async (route) => {
       await route.fulfill({
         status: 404,
@@ -181,7 +185,7 @@ test.describe('P1 资产目录完整生命周期', () => {
         body: JSON.stringify({ code: 'ASSET_NOT_FOUND', message: 'asset not found', retryable: false }),
       });
     });
-    await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
+    await page.goto(`/assets/${fixtures.assetId}`);
     await expect(page.getByText(/资产不存在|not found|不存在/i).first()).toBeVisible({ timeout: 15_000 });
   });
 });
