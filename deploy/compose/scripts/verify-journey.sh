@@ -121,7 +121,7 @@ journey_skip() {
 journey_fail() {
   local id="$1"; local name="$2"; local reason="$3"
   printf '[PRD-%s] %s ... FAIL: %s\n' "${id}" "${name}" "${reason}"
-  FAILED=1
+  FAILED=$((FAILED + 1))
 }
 
 ensure_admin_jwt() {

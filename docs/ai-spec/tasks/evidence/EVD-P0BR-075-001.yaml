@@ -1,0 +1,277 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-075-001
+# 本卡 requiredEvidenceLevel 为 E4。verify.ps1 V05c-V05j 合并回归（test-report-2026-09-24
+# F-01 高缺陷）按卡 §3 唯一恢复源方案修复：git show bce7674:deploy/compose/scripts/verify.ps1
+# 的 L371-560「IAM 验收辅助」整段（9 个函数定义 + $script:IamProbePassword + 段落头注，共
+# 190 行）经 Node Buffer 字节级 splice 插入 HEAD L363/L364 之间，恢复段与 bce7674 逐字节
+# 一致；纯增 +191/-0、eol=lf、无 BOM（与 HEAD 基线一致，未引入新编码形态）。批准人未对
+# §3 裁定项 1（iamLastShapeProbe 僵尸守卫）另行裁定，按 §5 缺省条款逐字节原样恢复，缺口
+# 登记于 limitations。实跑双口径全绿：pwsh verify.ps1 20 步（V01-V11+V05b+V05c-V05j）全
+# 真实 PASS、步骤级 0 SKIP/0 FAIL、exit 0；WSL bash verify.sh 全量 V01-V28 全 PASS exit 0
+# ——ps1/sh 双口径一致，脚本头注「与 verify.sh V01-V11 等价」自述回归成立。
+# verify-case-mapping.md 零改动（哈希 81d8042d 与卡 preExistingDirtyPaths 登记一致）；
+# 产品代码、verify.sh、verify-journey.*、compose 配置零改动。
+# source.commitSha 指向 baseCommit：本卡变更尚未提交，提交由批准人处置后执行
+# （与 065-074 同一惯例，DEC-009 AI 不自提交）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-075
+  requirements: [REQ-IAM-001, REQ-IAM-002, REQ-IAM-003, REQ-IAM-004, REQ-IAM-005, REQ-IAM-006]
+  scenarios: [AC-P0B-IAM-001, AC-P0B-IAM-003, AC-P0B-IAM-004, AC-P0B-IAM-005, AC-P0B-IAM-006, AC-P0B-IAM-007, AC-P0B-IAM-008, AC-P0B-IAM-009, AC-P0B-IAM-011, AC-P0B-IAM-012]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 起草轮、READY 批准轮与收口轮各复跑一次，均 PASS（documents 148 / stable ID 735）
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-075.md
+    # DRAFT 阶段设计内失败（status/approvedBy/approvedAt 待人工批准回写，DEC-009）；
+    # 批准人 2026-10-08 审阅 DRAFT 全文后批准（approvedAt 2026-10-08T05:55:06Z），回写后 PASS
+    # （requirements 6 / acceptance scenarios 10 / allowed paths 5）
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-075.md -CheckChangedPaths
+    # 收口轮实证 PASS：全部变更命中 allowedPaths（5 项）+ preExistingDirtyPaths（10 项，
+    # 批准后勘正计数：初稿误记 9，实为移除 work-breakdown 后清单 10 条）。
+    # 按 Get-FileHash 逐路径核验：10 个卡登记脏路径哈希逐一吻合（verify-case-mapping
+    # 81d8042d 不变=零改动实锤），本卡变更仅 verify.ps1/work-breakdown/TASK-075/EVD-075
+    # 四个 allowedPaths 内文件。登记勘误：卡批准版 preExistingDirtyPaths 曾误列
+    # work-breakdown.md（53ed24f3 系本卡将修改的 allowedPaths 项，与清单「批准后不得变更」
+    # 语义冲突，首跑 -CheckChangedPaths 据此正确报错），已移除该条后复跑 PASS。
+    # 本 EVD 与卡 §4 勾验回写均为 allowedPaths 内路径，写后复跑确认零越界。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-075.md -CheckCompletion
+    # 设计内失败：commitSha 需等于提交后 HEAD 且 dirtyWorktree=false（代码须先提交，AI 不得
+    # 自提交）；review.accepted/reviewedBy/reviewedAt 需由验证权威填写（DEC-009）。
+    # 据实登记为 EXPECTED_FAIL，与 071/072/073/074 交接态同口径。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 70f78747fbba0c310457bc69cf5efaec8f30e250 # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - deploy/compose/scripts/verify.ps1
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-075.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-075-001.yaml
+    - .github/workflows/ci.yml
+    - deploy/compose/scripts/verify-journey.ps1
+    - docs/runbooks/verify-case-mapping.md
+    - docs/ai-spec/tasks/TASK-P0BR-074.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-074-001.yaml
+    - frontend/e2e/admin-states.spec.ts
+    - frontend/e2e/error-paths.spec.ts
+    - frontend/e2e/lineage.spec.ts
+    - frontend/e2e/review-workflow.spec.ts
+    - frontend/e2e/support.ts
+
+environment:
+  observedAt: 2026-10-08T06:03:26Z
+  os: Windows（PowerShell 7.6.6 门禁口径；系统 PowerShell 5.1；WSL Ubuntu-24.04 bash 可用）
+  timezone: Asia/Shanghai
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+
+execution:
+  workingDirectory: 仓库根 + deploy/compose/
+  command: >-
+    ①字节级恢复（卡 §4①，§5 缺省条款）：git cat-file -p bce7674:…verify.ps1 与 HEAD 版本
+    均以 Node Buffer 读入、按 \n 切分（规避 PS5.1 管道对 UTF-8 中文注释的转码风险）；
+    取 bce7674 L371-560 整段（切片 S.slice(370,560)，三重断言 段长=190、首行="# ===…"横幅、
+    末行="}"），插入 HEAD T.slice(0,363) 与 T.slice(363) 之间并补一空行，
+    fs.writeFileSync 无 BOM/LF 写出。写前基线核验：git status --porcelain 对 verify.ps1 为空
+    且 Node Buffer.compare(工作区,HEAD)===0（各 50404 字节），工作区与 HEAD 字节一致。
+    ②静态自检（卡 §4②）四项全过：A 恢复段与 bce7674 对应段逐字节一致；B 双版本
+    '^function' 集合相等（各 31 个，差集空）；C $script:IamProbePassword 定义恰 1 处
+    （工作区 L418）、总引用 10 处；D iamLastShapeProbe 引用 1 处（僵尸守卫随段原样恢复，
+    见 limitations）。结果 1056 行，git diff --numstat=+191/-0，纯增零删除，eol=lf 保持。
+    ③语法与栈前置：pwsh -File parse-check（PSParser::Tokenize [ref] 口径）PARSE OK；
+    docker compose ps 7 服务全 Up/4 healthy；docker compose config --quiet exit 0。
+    ④实跑（卡 §4③）：deploy/compose 目录内 pwsh -File verify.ps1（.env 按 cwd 读取、凭据
+    运行时注入不回显）→ V01-V11+V05b+V05c-V05j 共 20 步全 PASS、页脚「验收未发现失败项」、
+    exit 0（build-logs/verify-075-run1.log）；步骤级 0 SKIP、0 FAIL（skip=notProven 未触发，
+    E4 铁律达成），V05c-V05j 八步全部真实执行（对照 074 收口时该八步必炸
+    CommandNotFoundException 的留档 074-verify-regress.log）。
+    ⑤双口径对照（卡 §4④，WSL 可用路径）：bash verify.sh 全量复跑 → V01-V28 全 PASS、
+    exit 0（build-logs/verify-sh-075-compare.log；前 3 行为 WSL localhost  mirrored-mode
+    转发告警，非失败项）。verify.sh 为本卡 forbiddenPath 零改动，对照仅证 ps1 恢复后与
+    既存权威 .sh 口径一致。
+  startedAt: 2026-10-08T05:55:06Z
+  finishedAt: 2026-10-08T06:03:26Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: pwsh verify.ps1 与 WSL verify.sh 均经真实 Compose 全栈（8080 网关 + postgres + backend/worker + MinIO + Gitea，Invoke-Psql 只读回查数据库断言）实跑；产品代码零改动
+
+coverage:
+  proven:
+    - scenarioId: AC-P0B-IAM-001
+      assertion: >-
+        E4：V05c 段 Assert-BootstrapAdminUniqueness（bce7674 原断言零放宽恢复）真实 PASS——
+        引导管理员唯一性与 BCRYPT 摘要断言在运行态执行（074 收口时该步必炸 CommandNotFound）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-003
+      assertion: >-
+        E4：V05c 段 Assert-FirstLoginPasswordChange 真实 PASS：临时口令登录→403
+        PASSWORD_CHANGE_REQUIRED 改密门→改密→旧口令 401→新口令登录→forcePasswordChange=false
+        →USER_PASSWORD_CHANGED 审计存在，全链经 8080 真实执行。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-004
+      assertion: >-
+        E4：V05c 段 Assert-LoginAntiEnumeration 真实 PASS：不存在用户名与错误口令同
+        401/AUTH_INVALID_CREDENTIALS、Get-ComparableErrorShape 规范化后响应形状一致、
+        审计无口令明文（AUTH_LOGIN_FAILED 存在性子断言受既存 iamLastShapeProbe 僵尸守卫
+        限制，见 limitations 与 notProven）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-IAM-005
+      assertion: >-
+        E4：V05h 段真实 PASS：连续失败锁定、锁定期间登录拒绝、Reset-UserLockState 复位
+        不污染后续用例（Get-UserRowFacts 只读回查断言在位执行）。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-IAM-006
+      assertion: >-
+        E4：V05d 段 Assert-RefreshRotation 真实 PASS：登录/刷新双次
+        Assert-RefreshCookieAttributes（HttpOnly/SameSite=Strict/Path/Max-Age）、
+        双 token 轮换、旧 jti ROTATED、族内 ACTIVE 恰好 1；HEAD 既有 Invoke-Api 的
+        Set-Cookie 原文返回与恢复的 Get-RefreshFromSetCookie 消费接口匹配得证（卡取证④）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-007
+      assertion: >-
+        E4：V05g 段 Assert-RefreshReplayRevokesFamily 真实 PASS：重用已轮换 refresh →
+        401 AUTH_REFRESH_REPLAYED、整族吊销、族内新 refresh 亦失效。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-IAM-008
+      assertion: >-
+        E4：V05e 段 Assert-DisableRevokesSessions 真实 PASS（外层函数体本健在，恢复其调用的
+        New-IamProbeUser/Get-RefreshFromSetCookie 后即真实执行）：禁用主体后既有 access 与
+        refresh 实时失效。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-IAM-009
+      assertion: >-
+        E4：V05f 段真实 PASS：登出后会话材料失效、重用被拒（New-IamProbeUser 探针主体 +
+        幂等复位设计运行态成立，脚本可重复运行）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-011
+      assertion: >-
+        E4：V05i 段真实 PASS：并发刷新双独立连接真并发执行，仅一次成功、
+        Token Family 状态一致（compose.md L156-177 口径）。
+      scenarioCategory: concurrency
+    - scenarioId: AC-P0B-IAM-012
+      assertion: >-
+        E4：V05j 段真实 PASS：创建→改密→禁用→启用→删除全链 + 最后一个管理员保护复原
+        （compose-verify-iam12 专用主体）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-IAM-001
+      assertion: >-
+        E4（互补面）：双口径一致性——WSL bash verify.sh 全量 V01-V28 全 PASS exit 0，
+        与 pwsh verify.ps1 20 步全 PASS 在同一个真实 Compose 栈上同时为绿；
+        脚本头注「与 verify.sh V01-V11 等价」自述回归成立（verify.sh 零改动）。
+      scenarioCategory: recovery
+  notProven:
+    - scenarioId: AC-P0B-IAM-004
+      assertion: >-
+        AUTH_LOGIN_FAILED 审计事件「存在性」子断言未取证：bce7674 L557 僵尸守卫
+        $script:iamLastShapeProbe 恒 false（全文件 0 定义），该 throw 分支永不执行；
+        批准人未对 §3 裁定项 1 另行裁定，按 §5 缺省逐字节原样恢复，缺口如实登记。
+      reason: >-
+        加严断言（删除守卫前置使 [int]$failed -lt 1 → throw 无条件执行）超出本卡
+        「逐字节恢复、不改进断言逻辑（§3 裁定项除外）」授权面；处置为卡 §5 缺省 +
+        本条登记，另待批准人裁定或后续卡加严。同段其余防枚举断言（同码同形状、审计脱敏）
+        均真实执行并 PASS。
+    - scenarioId: AC-P0B-IAM-001
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、commitSha=baseCommit），
+        review.accepted=false。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。
+  crossCuttingChecks:
+    - AUTHN|恢复段全部走既有登录/刷新/登出链与平台 JWT，脚本内不解析 Token 语义（仅取 data.accessToken 与 Set-Cookie 原文）；产品认证链零改动
+    - AUTHZ|不改任何权限判定；New-IamProbeUser 沿用 bce7674 原 scopes（project:view）；V06/V07/V09/V10 默认拒绝断言继续真实 PASS
+    - DB_FILTER|N/A - 纯验证脚本恢复，未触达产品查询与权限下推 SQL
+    - STATE|未触状态机实现；断言仅观测既有 IAM 状态契约（ACTIVE/LOCKED、Token Family ACTIVE/ROTATED/REVOKED）
+    - IDEMPOTENCY|New-IamProbeUser/Reset-UserLockState 幂等设计原样恢复，verify.ps1 单次实跑全绿 + verify.sh 同栈复跑全绿间接可重复性佐证
+    - CONSISTENCY|verify-case-mapping.md 零改动（哈希 81d8042d 吻合卡登记）——§3 预设「ps1 V05 子集表述可能零改动」成立；ps1/sh 等价性由双口径实跑回归
+    - ERRORS|无新增 ErrorCode；断言以既有 AUTH_INVALID_CREDENTIALS/AUTH_REFRESH_REPLAYED/PASSWORD_CHANGE_REQUIRED/USER_ALREADY_EXISTS 契约为判据
+    - AUDIT|不触达审计写入路径；断言只读校验 audit_log（存在性与脱敏）
+    - NOTIFICATION/TAXONOMY_I18N/OBSERVABILITY|N/A - 无对应面变更
+    - CONFIG|compose *.yml、.env、.env.example、nginx 零改动；docker compose config --quiet exit 0 回归取证
+    - SECRETS|恢复段含 bce7674 既有的本地 Compose 验收栈探针口令字面量（历史上已入库的非生产占位口令，仅存在于本地默认栈）：原样恢复未新增扩散面；本 EVD、日志与卡文字一律不含口令明文；凭据运行时经 .env 注入不回显
+
+contractConsistency:
+  openapiMatched: null # 本卡不改契约
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无数据库变更
+  uiMatched: null # 本卡不改 frontend/src
+  runbookMatched: true # verify-case-mapping.md 实测零改动（哈希与卡 preExistingDirtyPaths 登记一致），无文档-行为漂移
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-075.md（本卡 §4 勾验终态）
+    - deploy/compose/scripts/verify.ps1（bce7674 L371-560 逐字节恢复，+191/-0，恢复后终态哈希 c4e9763a836400f9591da1d975905cbb15cc1e0659d67842baca33bcee7b1012）
+    - docs/ai-spec/02-delivery/work-breakdown.md（075 登记行批准与实施状态回写）
+  logs:
+    - build-logs/verify-075-run1.log（pwsh verify.ps1：20 步全 PASS、0 SKIP、0 FAIL、exit 0）
+    - build-logs/verify-sh-075-compare.log（WSL bash verify.sh：V01-V28 全 PASS、exit 0）
+    - build-logs/074-verify-regress.log（074 收口留档：恢复前 V05c-V05j 连锁 CommandNotFoundException FAIL 对照物证）
+  screenshots: []
+  traces: []
+  metrics:
+    - pwsh verify.ps1：V01-V11+V05b+V05c-V05j 共 20 步全 PASS / 0 SKIP / 0 FAIL / exit 0（074 收口口径：12 步 PASS + 八步结构性 FAIL）
+    - WSL verify.sh：V01-V28 全 PASS / exit 0（verify.sh 零改动的既存权威口径）
+    - 静态自检：恢复段与 bce7674 逐字节一致；双版本函数集合 31=31 差集空；IamProbePassword 定义 1 引用 10；git diff --numstat=+191/-0
+  databaseQueries: []
+  auditEvents:
+    - 本卡无审计面变更（断言只读校验 audit_log）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 恢复段内探针口令为 bce7674 既有字面量（历史已入库、仅本地默认栈非生产占位），本卡未新增任何凭据明文；EVD、卡、work-breakdown 与本日志归档均不含口令明文（口令在脚本内仅以 $script:IamProbePassword 变量引用形式消费）。
+    - build-logs/ 整目录 gitignored 不入库；实跑全程凭据经 .env 运行时注入、不回显。
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - Compose 全栈运行且 healthy（7 服务 Up、4 healthy 实测于实跑前）；栈为 073 收口（70f7874）后镜像；本卡全程未改任何产品代码。
+    - bce7674 为唯一恢复源（卡 §3）：其 IAM 辅助段即「ps1 与 verify.sh V01-V11 等价」口径的建立提交，恢复=回归既有权威，不引入新断言语义。
+  environmentDifferences:
+    - >-
+      iamLastShapeProbe 僵尸守卫（既存假通过缺口，恢复后仍留存）：bce7674 L557
+      `if ($script:iamLastShapeProbe -eq $true -and [int]$failed -lt 1)` 中该变量全文件
+      0 处定义、1 处引用，PowerShell 下恒 false，AUTH_LOGIN_FAILED 审计存在性断言永不执行。
+      批准人未对卡 §3 裁定项 1 另行裁定，按 §5 缺省条款逐字节原样恢复（未加严）；
+      加严方案（删除守卫前置使 throw 无条件执行，V05c 双失败登录运行态必然
+      AUTH_LOGIN_FAILED≥1）留批准人裁定或后续卡处置。
+    - >-
+      对 EVD-P0BR-074-001 limitations「四函数全仓无定义」登记的范围勘误：本卡按当前态
+      全量名单实测为 9 个函数定义 + 1 个脚本变量（Get-RefreshFromSetCookie/
+      Assert-RefreshCookieAttributes/Get-ComparableErrorShape/Get-UserRowFacts/
+      Reset-UserLockState/New-IamProbeUser/Assert-BootstrapAdminUniqueness/
+      Assert-FirstLoginPasswordChange/Assert-LoginAntiEnumeration +
+      $script:IamProbePassword），恢复段为 bce7674 L371-560 共 190 行。074 EVD 不在本卡
+      可改面（卡 §6），差异以本 EVD 与卡 stageGateEvidence⑤ 登记（074/075 卡与 EVD 均在
+      未提交脏态，批准人提交时可一并裁处）。
+    - >-
+      对 EVD-P0BR-074-001「verify.ps1/verify-journey.ps1 均 UTF-8 BOM」表述的勘误（仅对
+      verify.ps1 失准）：本卡字节实测 HEAD verify.ps1 无 BOM（首 3 字节 23 20 3d），
+      bce7674 版本有 BOM（EF BB BF）；splice 仅取中段且保留 HEAD 文件头，恢复后仍无 BOM
+      且 LF——与 HEAD 基线字节形态一致（纯增不引入 BOM）。§6 门禁口径 pwsh7 实跑
+      PARSE OK + exit 0 证明 BOM 差异不影响该脚本门禁执行；verify-journey.ps1 的 BOM 状态
+      本卡未触达、维持 074 登记。
+    - >-
+      WSL localhost 流量转发告警（mirrored mode 提示，verify-sh-075-compare.log 前 3 行）
+      不影响经宿主机 8080 端口的断言，全程无 FAIL。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

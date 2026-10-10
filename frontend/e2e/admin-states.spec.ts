@@ -144,7 +144,7 @@ test.describe('AC-P0B-UI-003: 版本列表页面状态', () => {
     const pattern = new RegExp(`/api/v1/assets/${fixtures.assetId}/versions`);
     await stubList(page, pattern, 'delay');
 
-    // 经应用内导航到达（容器 nginx 的 /assets/ 静态规则遮蔽 SPA 深链，详见 evidence limitations）。
+    // 经应用内导航到达（073 修复后 SPA 深链整页加载亦可用；导航路径覆盖真实用户动线）。
     await openAssetDetailViaCatalog(page, E2E_ASSET.displayName);
     await activateVersionsTab(page);
     await viewAllVersionsButton(page).click();

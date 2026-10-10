@@ -87,10 +87,11 @@ public class JobConfiguration {
                                ObjectProvider<MeterRegistry> meterRegistryProvider,
                                SensitiveDataMasker sensitiveDataMasker,
                                ObjectProvider<PlatformMetrics> platformMetricsProvider,
-                               @Value("${aihub.job.worker.lease-seconds:60}") long leaseSeconds) {
+                               @Value("${aihub.job.worker.lease-seconds:60}") long leaseSeconds,
+                               @Value("${aihub.job.worker.batch-size:5}") int batchSize) {
         return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
                 notificationPortProvider, auditPortProvider, transactionTemplate,
-                clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds,
+                clock, meterRegistryProvider, sensitiveDataMasker, leaseSeconds, batchSize,
                 platformMetricsProvider);
     }
 

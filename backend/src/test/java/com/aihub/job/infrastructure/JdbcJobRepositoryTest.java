@@ -9,8 +9,10 @@ package com.aihub.job.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.aihub.job.domain.Job;
 import com.aihub.job.domain.JobStatus;
@@ -50,6 +52,38 @@ class JdbcJobRepositoryTest {
                 .as("绑定参数数量须等于占位符数量")
                 .isEqualTo(placeholderCount);
         assertThat(columnCount).isEqualTo(16);
+    }
+
+    @Test
+    @DisplayName("hasActiveByTypeAndAssetId：SELECT EXISTS 按 type+asset_id+在途状态三态过滤")
+    void hasActiveByTypeAndAssetIdQueriesActiveStates() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        JdbcJobRepository repo = new JdbcJobRepository(jdbcTemplate);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Boolean.class), any(), any()))
+                .thenReturn(Boolean.TRUE);
+
+        assertThat(repo.hasActiveByTypeAndAssetId("REPOSITORY_PROVISION", "ast_1")).isTrue();
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForObject(sqlCaptor.capture(), eq(Boolean.class),
+                eq("REPOSITORY_PROVISION"), eq("ast_1"));
+        String sql = sqlCaptor.getValue();
+        assertThat(sql).contains("SELECT EXISTS");
+        assertThat(sql).contains("type = ?").contains("asset_id = ?");
+        // 在途 = PENDING/RETRY_WAIT/RUNNING；终态不得计入
+        assertThat(sql).contains("'PENDING'").contains("'RETRY_WAIT'").contains("'RUNNING'");
+        assertThat(sql).doesNotContain("SUCCEEDED").doesNotContain("DEAD").doesNotContain("CANCELLED");
+    }
+
+    @Test
+    @DisplayName("hasActiveByTypeAndAssetId：查询返回 null 时按无在途处理（fail-open 仅影响重复入队，不吞错）")
+    void hasActiveByTypeAndAssetIdTreatsNullAsFalse() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        JdbcJobRepository repo = new JdbcJobRepository(jdbcTemplate);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Boolean.class), any(), any()))
+                .thenReturn(null);
+
+        assertThat(repo.hasActiveByTypeAndAssetId("REPOSITORY_PROVISION", "ast_1")).isFalse();
     }
 
     private static int countColumns(String sql) {

@@ -11,8 +11,9 @@
 # 动作:
 #   search     搜索数据集
 #   inspect    查看资产详情
-#   pull       请求下载票据
+#   pull       下载版本内容到本地目录（含 SHA-256 校验），或请求下载票据
 #   create     创建数据集草稿
+#   version    创建草稿版本
 #   status     查看资产 provisioning 状态
 #   versions   列出资产版本
 #   push       创建上传会话并推送本地目录
@@ -20,10 +21,12 @@
 #   verify     校验本地文件与版本 manifest 摘要
 #
 # 环境变量:
-#   AIH_API_URL       API 基址（默认 http://localhost:8080）
-#   AIH_TOKEN         JWT 认证令牌（或从 ~/.aih/token 读取）
-#   AIH_OUTPUT        输出格式：json（默认）| table
-#   AIH_TIMEOUT       请求超时秒数（默认 30）
+#   AIH_API_URL           API 基址（默认 http://localhost:8080）
+#   AIH_TOKEN             JWT 认证令牌（或从 ~/.aih/token 读取）
+#   AIH_OUTPUT            输出格式：json（默认）| table
+#   AIH_TIMEOUT           请求超时秒数（默认 30）
+#   AIH_DOWNLOAD_TIMEOUT  内容下载超时秒数（默认 300）
+#   AIH_PASSWORD          login 口令（避免口令进入进程命令行）
 #
 # 退出码:
 #   0  成功
@@ -37,7 +40,7 @@
 # =============================================================================
 set -euo pipefail
 
-readonly VERSION="0.2.0"
+readonly VERSION="0.3.0"
 readonly EXIT_OK=0
 readonly EXIT_ERROR=1
 readonly EXIT_AUTH=2
@@ -50,6 +53,7 @@ readonly EXIT_SERVER=7
 # ---- 配置 ----
 API_URL="${AIH_API_URL:-http://localhost:8080}"
 TIMEOUT="${AIH_TIMEOUT:-30}"
+DOWNLOAD_TIMEOUT="${AIH_DOWNLOAD_TIMEOUT:-300}"
 OUTPUT="${AIH_OUTPUT:-json}"
 
 # ---- Token 获取 ----
@@ -81,13 +85,18 @@ aih v${VERSION} — AIHub CLI
 资源与动作:
   dataset search   [--query Q] [--cursor C] [--limit N]   搜索数据集
   dataset inspect  --id <assetId>                         查看资产详情
-  dataset pull     --version <versionId> [--artifact ID]  请求下载票据
-  dataset create   --name N --namespace NS [--desc D]     创建数据集草稿
+  dataset pull     --version <versionId> --dir <path>     下载版本内容（SHA-256 校验）
+                   [--artifact ID] [--include GLOB] [--exclude GLOB] [--resume]
+                   不带 --dir 时仅请求并打印下载票据
+  dataset create   --name N --namespace NS --owner-team TEAM_ID  创建数据集草稿
+                   [--desc D] [--visibility PRIVATE|INTERNAL|PUBLIC]
+  dataset version  --asset <assetId> --version V          创建草稿版本
   dataset status   --id <assetId>                         查看 provisioning 状态
   dataset versions --id <assetId> [--cursor C] [--limit N] 列出资产版本
   dataset push     --asset <assetId> --version <versionId> --dir <path>  推送本地目录
   dataset resume   --session <sessionId> [--asset <assetId>] --dir <path>  恢复上传
   dataset verify   --asset <assetId> --version <versionId> --dir <path>  校验本地文件
+  login            --username U (--password-stdin | \$AIH_PASSWORD)
 
 通用选项:
   --api-url URL    API 基址（默认 \$AIH_API_URL）
@@ -98,14 +107,54 @@ aih v${VERSION} — AIHub CLI
   --version        显示版本号
 
 环境变量:
-  AIH_API_URL      API 基址
-  AIH_TOKEN        JWT 认证令牌
-  AIH_OUTPUT       输出格式
-  AIH_TIMEOUT      请求超时
+  AIH_API_URL            API 基址
+  AIH_TOKEN              JWT 认证令牌
+  AIH_OUTPUT             输出格式
+  AIH_TIMEOUT            请求超时
+  AIH_DOWNLOAD_TIMEOUT   内容下载超时（默认 300）
+  AIH_PASSWORD           login 口令（推荐，配合 --password-stdin）
 
 退出码: 0=成功 1=错误 2=认证失败 3=未找到 4=冲突 5=校验失败 6=限流 7=服务端错误
 EOF
     exit "$EXIT_OK"
+}
+
+# ---- ApiResponse 信封兼容 ----
+# 后端成功响应统一为 {"data":<payload>,"requestId":…,"traceId":…,"timestamp":…}；
+# 下列助手同时兼容裸对象，字段提取一律经信封解包，避免根取字段静默失效。
+extract_field() {
+    local field="$1" default="${2:-}"
+    python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print('${default}')
+    sys.exit(0)
+if isinstance(d, dict):
+    inner = d.get('data')
+    if isinstance(inner, (dict, list)):
+        d = inner
+if isinstance(d, dict):
+    v = d.get('${field}')
+    print('' if v is None else v)
+else:
+    print('${default}')
+" 2>/dev/null || echo "$default"
+}
+
+# 幂等键：对产生副作用的 POST 转发 Idempotency-Key（RFC 4122 v4，36 字符）。
+# AIH_IDEMPOTENCY_KEY 显式指定时优先使用（同一意图重放场景）。
+new_idempotency_key() {
+    if [[ -n "${AIH_IDEMPOTENCY_KEY:-}" ]]; then
+        printf '%s' "$AIH_IDEMPOTENCY_KEY"
+    elif [[ -r /proc/sys/kernel/random/uuid ]]; then
+        cat /proc/sys/kernel/random/uuid
+    elif command -v uuidgen &>/dev/null; then
+        uuidgen | tr 'A-Z' 'a-z'
+    else
+        python3 -c "import uuid; print(uuid.uuid4())"
+    fi
 }
 
 # ---- HTTP 请求封装 ----
@@ -115,6 +164,7 @@ http_request() {
     local method="$1"
     local path="$2"
     local body="${3:-}"
+    local idempotency_key="${4:-}"
 
     # 确保所有 API 路径以 /api/v1 为前缀
     if [[ "$path" != /api/v1/* ]]; then
@@ -137,6 +187,10 @@ http_request() {
 
     if [[ -n "$TOKEN" ]]; then
         curl_args+=(-H "Authorization: Bearer ${TOKEN}")
+    fi
+
+    if [[ -n "$idempotency_key" ]]; then
+        curl_args+=(-H "Idempotency-Key: ${idempotency_key}")
     fi
 
     if [[ -n "$body" ]]; then
@@ -164,7 +218,10 @@ http_request() {
             die "$EXIT_NOT_FOUND" "Resource not found (HTTP $http_code)"
             ;;
         409)
-            die "$EXIT_CONFLICT" "Conflict (HTTP $http_code)"
+            # 附带响应体摘要：幂等冲突（同键不同请求指纹）需可从 stderr 判定
+            local detail
+            detail=$(printf '%s' "$body_resp" | tr -d '"'"'"'\n\r' | cut -c1-300)
+            die "$EXIT_CONFLICT" "Conflict (HTTP $http_code) ${detail}"
             ;;
         422)
             die "$EXIT_VALIDATION" "Validation error (HTTP $http_code)"
@@ -195,7 +252,7 @@ cmd_dataset_search() {
     done
 
     local params="type=DATASET&limit=${limit}"
-    [[ -n "$query" ]] && params+="&query=${query}"
+    [[ -n "$query" ]] && params+="&keyword=${query}"
     [[ -n "$cursor" ]] && params+="&cursor=${cursor}"
 
     http_request GET "/assets?${params}"
@@ -216,27 +273,156 @@ cmd_dataset_inspect() {
     http_request GET "/assets/${asset_id}"
 }
 
+pull_one_artifact() {
+    # pull_one_artifact <version_id> <artifact_id> <dir> <rel_path> <expected_sha256> <resume>
+    local version_id="$1" artifact_id="$2" dir="$3" rel="$4" expected="$5" resume="$6"
+
+    local target="${dir}/${rel}"
+    if [[ "$resume" -eq 1 && -f "$target" ]]; then
+        if [[ -z "$expected" || "$(sha256_file "$target")" == "$expected" ]]; then
+            return 0
+        fi
+        rm -f "$target"
+    fi
+
+    local ticket method url
+    ticket=$(http_request GET "/versions/${version_id}/download?artifactId=${artifact_id}")
+    method=$(printf '%s' "$ticket" | extract_field method "")
+    if [[ "$method" != "PRESIGNED_URL" ]]; then
+        die "$EXIT_ERROR" "Download ticket method '${method}' is not directly downloadable by this CLI"
+    fi
+    url=$(printf '%s' "$ticket" | extract_field presignedUrl "")
+    [[ -z "$url" ]] && die "$EXIT_ERROR" "Download ticket missing presignedUrl"
+
+    mkdir -p "$(dirname "$target")"
+    local part="${target}.part"
+
+    # 票据 URL 自带签名，仅经变量传递，不打印、不落日志
+    if ! curl --silent --show-error --max-time "$DOWNLOAD_TIMEOUT" --location \
+        --output "$part" "$url"; then
+        rm -f "$part"
+        die "$EXIT_SERVER" "Failed to download artifact ${artifact_id}"
+    fi
+
+    if [[ -n "$expected" ]]; then
+        local actual
+        actual=$(sha256_file "$part")
+        if [[ "$actual" != "$expected" ]]; then
+            rm -f "$part"
+            die "$EXIT_VALIDATION" "SHA-256 mismatch for ${rel}: expected=${expected} actual=${actual}"
+        fi
+    fi
+    mv -f "$part" "$target"
+}
+
+filter_artifacts() {
+    # filter_artifacts <include_glob> <exclude_glob> → 每行 "artifactId<TAB>path<TAB>sha256"
+    python3 -c "
+import sys, json, fnmatch
+raw = sys.stdin.read()
+d = json.loads(raw)
+if isinstance(d, dict):
+    inner = d.get('data')
+    if isinstance(inner, (dict, list)):
+        d = inner
+include, exclude = sys.argv[1], sys.argv[2]
+for a in d or []:
+    rel = a.get('path', '')
+    if not rel:
+        continue
+    if include and not fnmatch.fnmatch(rel, include):
+        continue
+    if exclude and fnmatch.fnmatch(rel, exclude):
+        continue
+    print('%s\t%s\t%s' % (a.get('artifactId', ''), rel, (a.get('sha256') or '').lower()))
+" "$1" "$2"
+}
+
 cmd_dataset_pull() {
-    local version_id="" artifact_id=""
+    local version_id="" artifact_id="" dir="" include="" exclude="" resume=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --version|-v)    version_id="$2"; shift 2 ;;
             --artifact|-a)   artifact_id="$2"; shift 2 ;;
+            --dir|-d)        dir="$2"; shift 2 ;;
+            --include)       include="$2"; shift 2 ;;
+            --exclude)       exclude="$2"; shift 2 ;;
+            --resume)        resume=1; shift ;;
             *)               shift ;;
         esac
     done
 
     [[ -z "$version_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --version"
 
-    local path="/versions/${version_id}/download"
-    [[ -n "$artifact_id" ]] && path+="?artifactId=${artifact_id}"
+    # 票据模式：不带 --dir 时仅签发并打印票据（保持既有行为）
+    if [[ -z "$dir" ]]; then
+        local path="/versions/${version_id}/download"
+        [[ -n "$artifact_id" ]] && path+="?artifactId=${artifact_id}"
+        http_request GET "$path"
+        return 0
+    fi
 
-    http_request GET "$path"
+    # 内容模式：逐工件取 PRESIGNED_URL 票据下载并做 SHA-256 校验
+    command -v python3 &>/dev/null || die "$EXIT_ERROR" "python3 is required for content download"
+    command -v sha256sum &>/dev/null || die "$EXIT_ERROR" "sha256sum is required for content download"
+    mkdir -p "$dir"
+
+    # 整版票据（GIT_DVC 形态）仅用于解析 assetId；内容下载逐工件走 PRESIGNED_URL 票据
+    local base_ticket asset_id
+    base_ticket=$(http_request GET "/versions/${version_id}/download")
+    asset_id=$(printf '%s' "$base_ticket" | extract_field assetId "")
+    [[ -z "$asset_id" ]] && die "$EXIT_ERROR" "Cannot resolve assetId from download ticket"
+
+    local artifacts_resp
+    artifacts_resp=$(http_request GET "/assets/${asset_id}/versions/${version_id}/artifacts")
+
+    if [[ -n "$artifact_id" ]]; then
+        local rel expected
+        rel=$(printf '%s' "$artifacts_resp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+if isinstance(d, dict):
+    inner = d.get('data')
+    if isinstance(inner, list):
+        d = inner
+for a in d or []:
+    if a.get('artifactId') == '${artifact_id}':
+        print(a.get('path', '')); break
+" 2>/dev/null)
+        expected=$(printf '%s' "$artifacts_resp" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+if isinstance(d, dict):
+    inner = d.get('data')
+    if isinstance(inner, list):
+        d = inner
+for a in d or []:
+    if a.get('artifactId') == '${artifact_id}':
+        print((a.get('sha256') or '').lower()); break
+" 2>/dev/null)
+        [[ -z "$rel" ]] && die "$EXIT_NOT_FOUND" "Artifact ${artifact_id} not found in version ${version_id}"
+        pull_one_artifact "$version_id" "$artifact_id" "$dir" "$rel" "$expected" "$resume"
+        printf '{"status":"ok","versionId":"%s","downloaded":1,"dir":"%s"}\n' "$version_id" "$dir"
+        return 0
+    fi
+
+    local rows count=0
+    rows=$(printf '%s' "$artifacts_resp" | filter_artifacts "$include" "$exclude")
+    while IFS=$'\t' read -r aid arel sha; do
+        [[ -z "$aid" ]] && continue
+        pull_one_artifact "$version_id" "$aid" "$dir" "$arel" "$sha" "$resume"
+        count=$((count + 1))
+    done <<< "$rows"
+
+    [[ $count -eq 0 ]] && die "$EXIT_NOT_FOUND" "No artifacts matched include='${include}' exclude='${exclude}'"
+    printf '{"status":"ok","versionId":"%s","assetId":"%s","downloaded":%d,"dir":"%s"}\n' \
+        "$version_id" "$asset_id" "$count" "$dir"
 }
 
 cmd_dataset_create() {
     local name="" namespace="" description="" organization_id="" project_id=""
+    local owner_team="" visibility="PRIVATE"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -245,20 +431,44 @@ cmd_dataset_create() {
             --description|-d)   description="$2"; shift 2 ;;
             --organization|-o)  organization_id="$2"; shift 2 ;;
             --project|-p)       project_id="$2"; shift 2 ;;
+            --owner-team)       owner_team="$2"; shift 2 ;;
+            --visibility)       visibility="$2"; shift 2 ;;
             *)                  shift ;;
         esac
     done
 
     [[ -z "$name" ]] && die "$EXIT_VALIDATION" "Missing required option: --name"
     [[ -z "$namespace" ]] && die "$EXIT_VALIDATION" "Missing required option: --namespace"
+    # DEC-011：资产必须归属 ACTIVE 团队；服务端强制，CLI 提前校验给出稳定退出码
+    [[ -z "$owner_team" ]] && die "$EXIT_VALIDATION" "Missing required option: --owner-team (DEC-011)"
+    case "$visibility" in PRIVATE|INTERNAL|PUBLIC) ;; *) die "$EXIT_VALIDATION" "Invalid --visibility: $visibility (PRIVATE|INTERNAL|PUBLIC)" ;; esac
 
-    local body="{\"name\":\"${name}\",\"namespace\":\"${namespace}\",\"type\":\"DATASET\""
+    local body="{\"name\":\"${name}\",\"namespace\":\"${namespace}\",\"type\":\"DATASET\",\"visibility\":\"${visibility}\",\"ownerTeamId\":\"${owner_team}\""
     [[ -n "$description" ]] && body+=",\"description\":\"${description}\""
     [[ -n "$organization_id" ]] && body+=",\"organizationId\":\"${organization_id}\""
     [[ -n "$project_id" ]] && body+=",\"projectId\":\"${project_id}\""
     body+="}"
 
-    http_request POST "/assets" "$body"
+    # 资产创建为有副作用的 POST：转发幂等键，重放不重复建资产（AC-DST-CLI-006）
+    http_request POST "/assets" "$body" "$(new_idempotency_key)"
+}
+
+cmd_dataset_version() {
+    local asset_id="" version=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --asset|-a)    asset_id="$2"; shift 2 ;;
+            --version|-v)  version="$2"; shift 2 ;;
+            *)             shift ;;
+        esac
+    done
+
+    [[ -z "$asset_id" ]] && die "$EXIT_VALIDATION" "Missing required option: --asset"
+    [[ -z "$version" ]] && die "$EXIT_VALIDATION" "Missing required option: --version"
+
+    http_request POST "/assets/${asset_id}/versions" \
+        "{\"version\":\"${version}\"}" "$(new_idempotency_key)"
 }
 
 cmd_dataset_status() {
@@ -276,11 +486,15 @@ cmd_dataset_status() {
     local resp
     resp=$(http_request GET "/assets/${asset_id}")
 
-    # 提取 provisioning_status 和基本信息
+    # 提取 provisioning_status 和基本信息（经 data 信封解包）
     if command -v python3 &>/dev/null; then
         echo "$resp" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
+if isinstance(d, dict):
+    inner = d.get('data')
+    if isinstance(inner, dict):
+        d = inner
 print(json.dumps({
     'assetId': d.get('assetId', ''),
     'name': d.get('name', ''),
@@ -341,7 +555,7 @@ poll_session_status() {
     while [[ $attempt -lt $max_attempts ]]; do
         local resp status
         resp=$(http_request GET "/upload-sessions/${session_id}")
-        status=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        status=$(echo "$resp" | extract_field status "")
         case "$status" in
             COMPLETED|FAILED|CANCELLED|EXPIRED)
                 echo "$resp"
@@ -430,7 +644,7 @@ for p in parts:
         if [[ "$skip" -ne 1 ]]; then
             local presign_resp url part_file headers
             presign_resp=$(http_request GET "/upload-sessions/${session_id}/parts/${part}/presign")
-            url=$(echo "$presign_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url', d.get('data',{}).get('url','')))" 2>/dev/null || echo "")
+            url=$(echo "$presign_resp" | extract_field url "")
             [[ -z "$url" ]] && { rm -f "$bundle_file"; die "$EXIT_ERROR" "Failed to obtain presigned URL for part ${part}"; }
 
             part_file=$(mktemp)
@@ -440,7 +654,8 @@ for p in parts:
             headers=$(curl -sS -T "$part_file" -D - -o /dev/null "$url") \
                 || { rm -f "$bundle_file" "$part_file"; die "$EXIT_ERROR" "Failed to upload part ${part}"; }
             rm -f "$part_file"
-            etag=$(echo "$headers" | awk 'tolower($0) ~ /^etag:/ {gsub(/"/, "", $2); print $2; exit}')
+            # HTTP 头以 CRLF 分行：必须剥离 \r，否则 etag 进入 JSON 体导致服务端解析 500
+            etag=$(echo "$headers" | awk 'tolower($0) ~ /^etag:/ {gsub(/\r/,"",$2); gsub(/"/, "", $2); print $2; exit}')
             [[ -z "$etag" ]] && { rm -f "$bundle_file"; die "$EXIT_ERROR" "Missing ETag for part ${part}"; }
         fi
 
@@ -478,8 +693,10 @@ print(json.dumps(files))
 PY
 )
 
+    # complete 为有副作用的 POST：转发幂等键，避免重放产生重复物化提交
     http_request POST "/upload-sessions/${session_id}/complete" \
-        "{\"parts\":${parts_json},\"files\":${files_json}}"
+        "{\"parts\":${parts_json},\"files\":${files_json}}" \
+        "$(new_idempotency_key)"
 }
 
 cmd_dataset_push() {
@@ -503,9 +720,11 @@ cmd_dataset_push() {
     file_count=$(count_files "$dir")
     [[ "$file_count" -eq 0 ]] && die "$EXIT_VALIDATION" "No files found in ${dir}"
 
+    # 上传会话创建为有副作用的 POST：转发幂等键（后端 UploadController 消费面见 EVD 登记）
     session_resp=$(http_request POST "/assets/${asset_id}/versions/${version_id}/upload-sessions" \
-        "{\"totalBytes\":${total_bytes},\"fileCount\":${file_count},\"ttlSeconds\":7200}")
-    session_id=$(echo "$session_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sessionId',''))" 2>/dev/null)
+        "{\"totalBytes\":${total_bytes},\"fileCount\":${file_count},\"ttlSeconds\":7200}" \
+        "$(new_idempotency_key)")
+    session_id=$(echo "$session_resp" | extract_field sessionId "")
     [[ -z "$session_id" ]] && die "$EXIT_ERROR" "Failed to extract sessionId"
 
     upload_parts "$session_id" "$dir" "$total_bytes"
@@ -532,7 +751,7 @@ cmd_dataset_resume() {
 
     local session_resp total_bytes
     session_resp=$(http_request GET "$path")
-    total_bytes=$(echo "$session_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalBytes',0))" 2>/dev/null)
+    total_bytes=$(echo "$session_resp" | extract_field totalBytes 0)
 
     upload_parts "$session_id" "$dir" "$total_bytes" "$session_resp"
     poll_session_status "$session_id"
@@ -556,7 +775,7 @@ cmd_dataset_verify() {
 
     local version_resp manifest_digest
     version_resp=$(http_request GET "/assets/${asset_id}/versions/${version_id}")
-    manifest_digest=$(echo "$version_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('manifestDigest') or '')" 2>/dev/null)
+    manifest_digest=$(echo "$version_resp" | extract_field manifestDigest "")
 
     local artifacts_resp
     artifacts_resp=$(http_request GET "/assets/${asset_id}/versions/${version_id}/artifacts")
@@ -566,6 +785,10 @@ cmd_dataset_verify() {
 import json, os, sys, hashlib
 
 artifacts = json.load(sys.stdin)
+if isinstance(artifacts, dict):
+    inner = artifacts.get("data")
+    if isinstance(inner, list):
+        artifacts = inner
 root = sys.argv[1]
 manifest_digest = sys.argv[2]
 errors = []
@@ -603,21 +826,35 @@ PY
 
 # ---- 登录 ----
 cmd_login() {
-    local username="" password=""
+    local username="" password="" from_stdin=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --username|-u)  username="$2"; shift 2 ;;
-            --password|-p)  password="$2"; shift 2 ;;
-            *)             shift ;;
+            --username|-u)       username="$2"; shift 2 ;;
+            --password|-p)       password="$2"
+                                 # 口令经命令行进入进程表（ps / auditd 可见），仅为兼容保留
+                                 printf '{"warn":"--password exposes the secret in the process list; prefer --password-stdin or AIH_PASSWORD"}\n' >&2
+                                 shift 2 ;;
+            --password-stdin)    from_stdin=1; shift ;;
+            *)                   shift ;;
         esac
     done
 
     [[ -z "$username" ]] && die "$EXIT_VALIDATION" "Missing required option: --username"
-    [[ -z "$password" ]] && die "$EXIT_VALIDATION" "Missing required option: --password"
 
-    local body="{\"username\":\"${username}\",\"password\":\"${password}\"}"
-    local resp
+    if [[ "$from_stdin" -eq 1 ]]; then
+        IFS= read -r password || true
+    elif [[ -z "$password" && -n "${AIH_PASSWORD:-}" ]]; then
+        password="$AIH_PASSWORD"
+    fi
+    [[ -z "$password" ]] && die "$EXIT_VALIDATION" "Missing password: use --password-stdin, AIH_PASSWORD, or --password"
+
+    # 口令仅经环境变量传入子进程，避免出现在命令行与 shell 历史
+    local body resp
+    body=$(AIH_LOGIN_USER="$username" AIH_LOGIN_PASS="$password" python3 -c "
+import json, os
+print(json.dumps({'username': os.environ['AIH_LOGIN_USER'], 'password': os.environ['AIH_LOGIN_PASS']}))
+")
     # 临时清除 TOKEN 以避免发送旧的 Authorization header
     TOKEN=""
     resp=$(http_request POST "/auth/login" "$body")
@@ -625,7 +862,7 @@ cmd_login() {
     # 提取 access token 并保存
     if command -v python3 &>/dev/null; then
         local access_token
-        access_token=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))" 2>/dev/null)
+        access_token=$(echo "$resp" | extract_field accessToken "")
         if [[ -n "$access_token" ]]; then
             mkdir -p "${HOME}/.aih"
             chmod 700 "${HOME}/.aih"
@@ -661,14 +898,19 @@ main() {
 
     local resource="${1:-}"
     local action="${2:-}"
-    shift 2 2>/dev/null || true
+    # 单词命令（如 login）的第二个 token 是选项而非 action，需保留给子命令解析
+    case "$action" in
+        -*|"") action=""; shift 1 2>/dev/null || true ;;
+        *)     shift 2 2>/dev/null || true ;;
+    esac
 
     case "${resource}/${action}" in
-        login)           cmd_login "$@" ;;
+        login|login/)  cmd_login "$@" ;;
         dataset/search)  cmd_dataset_search "$@" ;;
         dataset/inspect) cmd_dataset_inspect "$@" ;;
         dataset/pull)    cmd_dataset_pull "$@" ;;
         dataset/create)  cmd_dataset_create "$@" ;;
+        dataset/version) cmd_dataset_version "$@" ;;
         dataset/status)  cmd_dataset_status "$@" ;;
         dataset/versions) cmd_dataset_versions "$@" ;;
         dataset/push)    cmd_dataset_push "$@" ;;

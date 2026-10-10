@@ -72,4 +72,12 @@ public interface JobRepository {
 
     /** 统计某状态任务数（用于指标）。 */
     long countByStatus(String status);
+
+    /**
+     * 判断同一 {@code (type, assetId)} 是否已有在途任务（PENDING/RETRY_WAIT/RUNNING）。
+     *
+     * <p>用于对账等周期触发方在入队前去重，避免重复入队淹没任务队列
+     * （TASK-P0BR-076 / M3）。SUCCEEDED/DEAD/CANCELLED 的终态任务不算在途。
+     */
+    boolean hasActiveByTypeAndAssetId(String type, String assetId);
 }

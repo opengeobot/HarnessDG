@@ -196,4 +196,13 @@ public class JdbcJobRepository implements JobRepository {
                 "SELECT count(*) FROM job_task WHERE status = ?", Long.class, status);
         return count == null ? 0 : count;
     }
+
+    @Override
+    public boolean hasActiveByTypeAndAssetId(String type, String assetId) {
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM job_task "
+                        + "WHERE type = ? AND asset_id = ? AND status IN ('PENDING','RETRY_WAIT','RUNNING'))",
+                Boolean.class, type, assetId);
+        return Boolean.TRUE.equals(exists);
+    }
 }

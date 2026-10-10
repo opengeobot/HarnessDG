@@ -73,11 +73,11 @@ public class AssetRepositoryReconciler implements JobHandler {
         do {
             List<Map<String, Object>> batch = cursor == null
                     ? jdbcTemplate.queryForList(
-                    "SELECT asset_id, name, namespace, provisioning_status " +
+                    "SELECT asset_id, name, namespace, repo_full_name, provisioning_status " +
                             "FROM asset WHERE provisioning_status = 'COMPLETED' " +
                             "ORDER BY asset_id LIMIT ?", BATCH_SIZE)
                     : jdbcTemplate.queryForList(
-                    "SELECT asset_id, name, namespace, provisioning_status " +
+                    "SELECT asset_id, name, namespace, repo_full_name, provisioning_status " +
                             "FROM asset WHERE provisioning_status = 'COMPLETED' " +
                             "AND asset_id > ? ORDER BY asset_id LIMIT ?", cursor, BATCH_SIZE);
 
@@ -89,8 +89,9 @@ public class AssetRepositoryReconciler implements JobHandler {
                 String assetId = (String) row.get("asset_id");
                 String name = (String) row.get("name");
                 String namespace = (String) row.get("namespace");
+                String repoFullName = (String) row.get("repo_full_name");
 
-                ReconcileResult result = checkAssetRepository(assetId, name, namespace);
+                ReconcileResult result = checkAssetRepository(assetId, name, namespace, repoFullName);
                 if (result != ReconcileResult.CONSISTENT) {
                     discrepancies++;
                     recordDiscrepancy(assetId, result);
@@ -117,7 +118,7 @@ public class AssetRepositoryReconciler implements JobHandler {
     private static final java.util.regex.Pattern VALID_NAMESPACE =
             java.util.regex.Pattern.compile("^[a-z0-9][a-z0-9._/-]{0,127}$");
 
-    ReconcileResult checkAssetRepository(String assetId, String name, String namespace) {
+    ReconcileResult checkAssetRepository(String assetId, String name, String namespace, String repoFullName) {
         if (name == null || name.isEmpty()) {
             LOG.warn("asset {} has null/empty name", assetId);
             return ReconcileResult.MANUAL_REVIEW;
@@ -136,27 +137,52 @@ public class AssetRepositoryReconciler implements JobHandler {
             return ReconcileResult.MANUAL_REVIEW;
         }
 
-        String expectedFullName = namespace + "/" + name;
+        // 权威投影优先：repo_full_name 是建仓成功后落库的 Gitea 实际仓库全名，
+        // 与 namespace/name 的拼接结果并不总是一致（namespace 可含多级路径、仓库改名等）。
+        // 仅当投影缺失时才回退到 namespace + "/" + name 的推导口径。
+        String owner = namespace;
+        String repo = name;
+        boolean fromProjection = repoFullName != null && !repoFullName.isBlank();
+        if (fromProjection) {
+            GiteaRepoPath path;
+            try {
+                path = GiteaRepoPath.parse(repoFullName);
+            } catch (RuntimeException ex) {
+                LOG.warn("asset {} has invalid repo_full_name projection: '{}'", assetId, repoFullName);
+                return ReconcileResult.MANUAL_REVIEW;
+            }
+            owner = path.owner();
+            repo = path.repo();
+        }
+
+        String expectedFullName = owner + "/" + repo;
         if (expectedFullName.length() > 200) {
             LOG.warn("asset {} full_name exceeds 200 chars: '{}'", assetId, expectedFullName);
             return ReconcileResult.MANUAL_REVIEW;
         }
 
         GiteaRepositoryExistencePort gitea = giteaExistenceProvider.getIfAvailable();
-        if (gitea != null && !gitea.repositoryExists(namespace, name)) {
-            LOG.warn("asset {} gitea repository missing: {}", assetId, expectedFullName);
-            enqueueReprovisionJob(assetId);
+        if (gitea != null && !gitea.repositoryExists(owner, repo)) {
+            LOG.warn("asset {} gitea repository missing: {} (projection={})", assetId, expectedFullName, fromProjection);
+            enqueueReprovisionJob(assetId, expectedFullName);
             return ReconcileResult.MANUAL_REVIEW;
         }
 
         return ReconcileResult.CONSISTENT;
     }
 
-    private void enqueueReprovisionJob(String assetId) {
+    private void enqueueReprovisionJob(String assetId, String expectedFullName) {
         try {
+            // 入队前去重：同一资产已有在途建仓任务时不再重复入队。
+            // 否则对账每轮都会为同一资产追加任务，积压会饿死新建资产的探针任务。
+            if (jobRepository.hasActiveByTypeAndAssetId("REPOSITORY_PROVISION", assetId)) {
+                LOG.info("skip reprovision enqueue for assetId={} (active job already queued)", assetId);
+                return;
+            }
             String jobId = idGenerator.generate(IdPrefix.JOB);
             Instant now = Instant.now();
-            String payload = "{\"assetId\":\"" + assetId + "\",\"source\":\"reconcile\"}";
+            String payload = "{\"assetId\":\"" + assetId + "\",\"source\":\"reconcile\""
+                    + ",\"repositoryFullName\":\"" + jsonEscape(expectedFullName) + "\"}";
             Job job = new Job(null, jobId, "REPOSITORY_PROVISION", payload,
                     JobStatus.PENDING, 5, 0, now, null, null, null, "system",
                     assetId, null, now, now, 0);
@@ -165,6 +191,13 @@ public class AssetRepositoryReconciler implements JobHandler {
         } catch (Exception ex) {
             LOG.error("failed to enqueue reprovision job for assetId={}", assetId, ex);
         }
+    }
+
+    private static String jsonEscape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private void recordDiscrepancy(String assetId, ReconcileResult result) {

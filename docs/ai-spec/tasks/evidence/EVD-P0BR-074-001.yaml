@@ -1,0 +1,258 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-074-001
+# 本卡 requiredEvidenceLevel 为 E4。验证/CI 口径勘误三域全部实施并实跑取证：
+# ①verify-journey.ps1 V08 僵尸断言诚实化（合法 SemVer + DRAFT submit 409 断言 +
+#   fail-closed 回退 DRAFT/报告保留断言 + 消除四路 SKIP），改造后实跑
+#   PASS=4 SKIP=0 exit 0（run2 与 pwsh7 双物证，对照改造前 run1 假绿
+#   PASS=3 SKIP=1）；②ci.yml playwright-e2e 三层虚假消除（E2E_BASE_URL 5173→8080、
+#   新增步骤从 .env 解析注入 E2E_ADMIN_USERNAME/PASSWORD、移除 PR continue-on-error），
+#   以 CI 等价口径本机复放全量 e2e 118 passed / 0 failed / 0 skipped；
+#   ③八处失实注释勘误（review-workflow L4/L7/L20/L356 + admin-states L147 +
+#   lineage L116 + error-paths L11-12 + support L122-124）git diff 全为注释行、
+#   零断言变更，verify-case-mapping L131 与 work-breakdown 073 收口句同步。
+# 连带必要修复：ps1 Invoke-Api catch 改 PS5.1/PS7 双兼容（§6 门禁口径 pwsh 下
+#   HttpResponseException 使 401 试错路径炸出，属 §4① 同文件运行必需）。
+# 如实登记两项既存缺陷（均不在本卡可修面）：verify.ps1 V05c-V05j 合并回归
+#   （forbiddenPaths，另立 follow-up）与 Vitest 并行超时（串行口径 49/49 全绿为证）。
+# source.commitSha 指向 baseCommit：本卡变更尚未提交，提交由批准人处置后执行
+#   （与 065/066/067/068/071/072/073 同一惯例）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-074
+  requirements: [REQ-UI-001, REQ-VAL-001, REQ-IMM-001]
+  scenarios: [AC-P0B-UI-001, AC-P0B-UI-006, AC-P3-VAL-001]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 起草轮、READY 批准轮与收口轮各复跑一次，均 PASS
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-074.md
+    # DRAFT 阶段设计内失败（status/approvedBy/approvedAt 需人工批准回写，DEC-009）；
+    # 批准人 2026-10-08 裁定「脚本+CI 口径全修」并授权回写后 PASS
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-074.md -CheckChangedPaths
+    # 收口轮实证 PASS：全部变更命中 allowedPaths（11 项）。期间曾出现三条 untracked
+    # 越界项（build-logs/verify-bom.ps1、frontend/playwright-report/index.html、
+    # frontend/test-results/.last-run.json），经 git ls-files 取证均为运行产物/杂散
+    # 文件（073 EVD 注释曾误称 verify-bom.ps1 为既存登记项，实际 untracked 从未入库），
+    # 删除后重跑 PASS exit 0。本 EVD 与 work-breakdown/卡 §6 勾验回写均为 allowedPaths
+    # 内路径，写后复跑确认零越界。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-074.md -CheckCompletion
+    # 设计内失败：commitSha 需等于提交后 HEAD 且 dirtyWorktree=false（代码须先提交，
+    # AI 不得自提交）；review.accepted/reviewedBy/reviewedAt 需由验证权威填写（DEC-009）。
+    # 据实登记为 EXPECTED_FAIL，与 071/072/073 交接态同口径。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 70f78747fbba0c310457bc69cf5efaec8f30e250 # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - .github/workflows/ci.yml
+    - deploy/compose/scripts/verify-journey.ps1
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-074.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-074-001.yaml
+    - docs/runbooks/verify-case-mapping.md
+    - frontend/e2e/admin-states.spec.ts
+    - frontend/e2e/error-paths.spec.ts
+    - frontend/e2e/lineage.spec.ts
+    - frontend/e2e/review-workflow.spec.ts
+    - frontend/e2e/support.ts
+
+environment:
+  observedAt: 2026-10-08T03:10:00Z
+  os: Windows（PowerShell 7.6.6 经 winget 安装于 2026-10-08，pwsh 位于 WindowsApps 商店别名；系统自带 PowerShell 5.1；WSL bash 可用）
+  timezone: Asia/Shanghai
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  composeProfiles: []
+  composeServices: [aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-backend-1, aihub-worker-1, aihub-gitea-1, aihub-minio-1]
+
+execution:
+  workingDirectory: 仓库根 + frontend/ + deploy/compose/
+  command: >-
+    ①ps1 V08 诚实化（§4①）：合法 SemVer 创建 draft 版本、断言 DRAFT submit
+    publish-requests 返回 409、transition VALIDATING 后轮询断言 fail-closed 回退
+    DRAFT 且校验报告保留、任一步不达预期即 Journey-Fail（消除四路 SKIP 僵尸路径）；
+    连带修复 Invoke-Api catch 为 PS5.1/PS7 双兼容（PS7 下 Invoke-WebRequest 4xx 抛
+    HttpResponseException，原 catch [System.Net.WebException] 类型过滤器不匹配导致
+    Ensure-AdminJwt 的 401 试错路径炸出；ErrorDetails.Message 优先 + GetResponseStream
+    回退），改后按 BOM 惯例恢复 UTF-8 BOM（首 3 字节 EF BB BF 验证）。实跑双物证：
+    PS5.1 直跑（build-logs/074-journey-run2.log）与 pwsh 7 门禁口径
+    （build-logs/074-journey-pwsh.log，凭据经父会话注入 .env）均
+    「[PRD-V08] 校验失败回退 DRAFT + FAILED 报告保留 (AC-P3-VAL-001) ... PASS /
+    Summary: PASS=4 SKIP=0 FAIL=False / exit 0」；改造前假绿留档
+    build-logs/074-journey-run1.log（PASS=3 SKIP=1 exit 0）。
+    ②ci.yml：E2E_BASE_URL 5173→8080、新增步骤从 deploy/compose/.env 解析
+    AIHUB_BOOTSTRAP_ADMIN_* 注入 E2E_ADMIN_USERNAME/PASSWORD（echo >> $GITHUB_ENV）、
+    移除 playwright-e2e 作业 PR continue-on-error。CI 等价本机复放（frontend 目录，
+    注入同源凭据 + E2E_BASE_URL=8080）：pnpm test:e2e → 118 tests / 118 passed /
+    0 failed / 0 skipped（exit 0，2.9m，build-logs/074-e2e-replay.log）。
+    ③勘误：八处失实注释改写为真实口径（git diff 全为注释行、零断言/零测试逻辑变更），
+    verify-case-mapping L131 ps1 子集描述同步 V08 新语义，work-breakdown 补 073 收口句
+    （提交为 70f7874）与 074 登记行。
+    ④回归门禁：pnpm lint / typecheck / build 均 exit 0（build ✓ 31.54s，
+    build-logs/074-build.log）；Vitest 默认并行 16 files failed（既存资源竞争超时，
+    抽 3 代表文件定向串行全绿后全量 --no-file-parallelism 49 files / 1192.53s
+    全 passed exit 0，build-logs/074-vitest.log 留档失败态、074-vitest-serial.log
+    为证）；docker compose config --quiet exit 0；pwsh verify.ps1（deploy/compose
+    目录内、.env 按 cwd 读取）V01-V11+V05b 12 步全 PASS（§6 门禁「V01-V11 功能验收
+    回归」口径满足），整体 exit 1 系既存 V05c-V05j 合并回归（见 limitations）；
+    bash verify-journey.sh 经 WSL 实跑全量旅程 PASS=18 SKIP=0 FAIL=0 exit 0
+    （含 V08 正向三元组真实 upload chain + dual-principal approve，
+    build-logs/074-sh-help.log）——优于卡设「不可用则登记」路径，.sh/ps1 双口径
+    分工在运行态同时得证。
+  startedAt: 2026-10-08T00:30:00Z
+  finishedAt: 2026-10-08T03:10:00Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: Browser -> Nginx 网关 (localhost:8080) -> 真实 Compose 全栈（e2e CI 等价复放与 verify-journey.ps1/.sh、verify.ps1 旅程均经 8080 权威入口实跑；产品代码零改动）
+
+coverage:
+  proven:
+    - scenarioId: AC-P3-VAL-001
+      assertion: >-
+        E4：verify-journey.ps1 V08 真实断言 fail-closed 回退契约——合法 SemVer draft
+        版本 → DRAFT submit 409 → VALIDATING 后被 ValidationJobHandler fail-closed
+        校验打回 DRAFT 且 FAILED 报告保留；PS5.1 与 pwsh7 双次实跑 PASS=4 SKIP=0
+        exit 0（074-journey-run2/074-journey-pwsh.log），对照改造前同栈假绿
+        PASS=3 SKIP=1（074-journey-run1.log）——僵尸 SKIP 路径实锤消除。
+      scenarioCategory: failure
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4 + 静态：ci.yml 三层虚假消除的 diff 可证（8080 baseURL、凭据注入步骤、
+        无 continue-on-error）；以 CI 等价口径（同源凭据注入 + E2E_BASE_URL=8080）
+        本机真实 Compose 栈复放全量 e2e 118 passed / 0 failed / 0 skipped exit 0
+        （074-e2e-replay.log）——改造后作业口径下浏览器断言全部真实执行。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-001
+      assertion: >-
+        E4：复放的 118 用例含登录→会话恢复→受守卫页面真实到达全路径（8080 权威
+        入口）；四组 e2e 失实注释勘误后全量复放不回归，git diff 证明八处均注释行、
+        零断言变更（未放宽任何既有断言）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        E4（互补面）：verify-journey.sh 经 WSL 实跑 PASS=18 SKIP=0 FAIL=0 exit 0，
+        V08 正向三元组（真实上传链 + 双主体审批 + 三非空断言，tag=1.959.51）与
+        ps1 失败回退子集在运行态同时为绿——§4① 「正向由 .sh 独占、ps1 收敛回退
+        子集」的分工不再是纸面论证。
+      scenarioCategory: recovery
+  notProven:
+    - scenarioId: AC-P0B-UI-006
+      assertion: >-
+        ci.yml playwright-e2e 作业在 GitHub Actions 真实 runner 上的首轮绿色未取证：
+        本卡以「CI 等价口径本机复放」承担 E4 证据，workflow 变更需推送并在 Actions
+        上实际触发后才能实证凭据注入步骤与 8080 baseURL 在 CI 容器网络的最终行为。
+      reason: >-
+        本卡不提交不推送（DEC-009）；复放已覆盖作业的全部实质步骤（凭据注入、
+        baseURL、无 coe 强制、全量 0 skipped），残余为 CI 运行器环境差异风险
+        （如 GitHub runner 无 docker compose cp 权限等），登记为提交后首个 Actions
+        运行需人工复核项。
+    - scenarioId: AC-P0B-UI-001
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、
+        commitSha=baseCommit），review.accepted=false。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。
+  crossCuttingChecks:
+    - AUTHN|CI 复放经 E2E_ADMIN_USERNAME/PASSWORD 环境变量注入 bootstrap 凭据走既有登录链；verify-journey.ps1 凭据经 .env 同源注入父会话继承；产品认证链零改动
+    - AUTHZ|不改任何权限判定；V08 的 DRAFT submit 409 断言即既有授权门契约的真实观测；.sh 复跑中 V10/V13 越权断言继续 PASS
+    - STATE|未触状态机实现；ps1 V08 仅如实观测 DRAFT→VALIDATING→(fail-closed)→DRAFT 既有回退契约
+    - CONSISTENCY|ps1/.sh 分工写入 verify-case-mapping L131 并与脚本行为同步；work-breakdown 073 收口句 + 074 登记行消除文字-运行态漂移
+    - ERRORS|无新增 ErrorCode；脚本从 SKIP 假阳性改为按既有 400/409 契约给出真实 PASS/FAIL
+    - AUDIT|纯验证/CI/文档层变更，不触达审计写入路径
+    - TAXONOMY_I18N|未新增/修改任何 i18n 键（八处勘误均为代码注释文字）
+    - SECRETS|口令/Token 不写入 ci.yml 字面量、EVD、日志或提交内容；凭据运行时取自 gitignored .env；build-logs/*.log 不入库且经复核无凭据明文
+
+contractConsistency:
+  openapiMatched: null # 本卡不改契约
+  eventSchemaMatched: null # 本卡不触达事件契约
+  migrationMatched: null # 本卡无数据库变更
+  uiMatched: null # 本卡不改 frontend/src（e2e 注释勘误不触 UI 资源）
+  runbookMatched: true # verify-case-mapping L131 随本卡 ps1 V08 语义同步勘误；其余运行手册未触达
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-074.md（本卡 §6 勾验终态）
+    - deploy/compose/scripts/verify-journey.ps1（V08 诚实化 + Invoke-Api PS5.1/PS7 兼容，UTF-8 BOM 保留）
+    - .github/workflows/ci.yml（playwright-e2e：8080 + 凭据注入 + 去 coe）
+    - frontend/e2e/review-workflow.spec.ts / admin-states.spec.ts / lineage.spec.ts / error-paths.spec.ts / support.ts（八处失实注释勘误，全注释行）
+    - docs/runbooks/verify-case-mapping.md（L131 ps1 子集语义勘误）
+    - docs/ai-spec/02-delivery/work-breakdown.md（073 收口句 + 074 登记行与实施状态）
+  logs:
+    - build-logs/074-journey-run1.log（改造前假绿留档：PASS=3 SKIP=1 exit 0）
+    - build-logs/074-journey-run2.log（改造后 PS5.1 实跑：PASS=4 SKIP=0 exit 0）
+    - build-logs/074-journey-pwsh.log（§6 门禁口径 pwsh 7 实跑：PASS=4 SKIP=0 exit 0）
+    - build-logs/074-e2e-replay.log（CI 等价复放：118 passed / 0 skipped，exit 0）
+    - build-logs/074-sh-help.log（WSL bash verify-journey.sh：PASS=18 SKIP=0 FAIL=0，含 V08 正向三元组）
+    - build-logs/074-verify-regress.log（pwsh verify.ps1：V01-V11+V05b 12 步全 PASS + 既存 V05c-V05j 回归 FAIL 留档）
+    - build-logs/074-vitest.log（默认并行 16 files failed 留档）
+    - build-logs/074-vitest-single.log（3 代表文件定向串行全绿）
+    - build-logs/074-vitest-serial.log（全量串行 49/49 passed exit 0，1192.53s）
+    - build-logs/074-build.log（pnpm build exit 0，✓ 31.54s）
+  screenshots: []
+  traces: []
+  metrics:
+    - verify-journey.ps1：改造前 PASS=3/SKIP=1 → 改造后 PASS=4/SKIP=0（双引擎实跑一致）
+    - Playwright CI 等价复放：118 tests / 118 passed / 0 skipped / 0 failed（2.9m，workers=1、retries=0）
+    - verify-journey.sh（WSL 实跑）：PASS=18 / SKIP=0 / FAIL=0（含 V06 DVC 往返、V08 三元组、V13 MCP 越权拒绝）
+    - Vitest 串行全量：49 files / 全部 passed（1192.53s）；pnpm build ✓ 31.54s
+  databaseQueries: []
+  auditEvents:
+    - 本卡无审计面变更
+
+secrets:
+  redactionChecked: true
+  findings:
+    - ci.yml 注入步骤运行时解析 deploy/compose/.env 的 AIHUB_BOOTSTRAP_ADMIN_* 键，无口令字面量落入 workflow；本机复放凭据仅注入子进程环境变量、全程不回显。
+    - 本清单、e2e 报告与归档日志均不含口令/Token 明文；build-logs/ 整目录不入库（.gitignore `*.log` 惯例）。
+
+limitations:
+  skippedTests: []
+  assumptions:
+    - Compose 全栈运行且 healthy；栈为 073 收口（70f7874）后镜像；本卡全程未改任何产品代码，旅程/e2e 直接复用该栈。
+    - 本地非 CI：e2e 复放 retries=0 一次性 118 passed；GitHub Actions 真实 runner 首运行需人工复核（见 coverage.notProven）。
+  environmentDifferences:
+    - >-
+      verify.ps1 既存合并回归（非本卡引入、本卡不可修）：V05c-V05j 八步调用的
+      Assert-BootstrapAdminUniqueness / Assert-RefreshCookieAttributes /
+      New-IamProbeUser / Get-RefreshFromSetCookie 四函数全仓无定义。git 史取证：
+      bce7674 有 4 处定义（987 行）→ c633ebc 合并后定义丢失（13 处调用、0 定义）→
+      63b65d1「找回合并丢失的验收断言」仅恢复调用未恢复定义 → HEAD（70f7874）
+      803 行 0 定义，八步结构性必炸「术语不会被识别」。CI 不受影响（ci.yml 跑
+      verify.sh，其 bash 版 V05c-V05j 实现完整，且本卡 .sh 全量 18 PASS 实证同栈）。
+      verify.ps1 在本卡 forbiddenPaths 且 §7 明文不改，处置为另立修复卡；§6 门禁
+      「V01-V11 功能验收回归」口径已满足（12 步全 PASS），整体 exit 1 如实留档
+      （074-verify-regress.log），不缩门禁、不修脚本。
+    - >-
+      Vitest 默认并行在本机资源环境下 16 files failed（Duration 344s 而 import 累计
+      5838s，暴露文件级 worker 资源竞争超时；跨卡遗留清单既含「Vitest 并行超时」)；
+      本卡 diff 不含任何 frontend/src 或测试文件，抽 3 个失败代表文件定向串行全绿、
+      全量 --no-file-parallelism 49/49 passed exit 0——以串行口径为验收证据，并行
+      超时登记为环境既存问题。
+    - >-
+      §6 门禁口径为 pwsh（PS7）：verify.ps1/verify-journey.ps1 均 UTF-8 BOM，
+      PS5.1 对无 BOM 脚本会 ParserError 的环境差异不适用于本仓脚本；本会话经批准
+      以 winget 安装 PowerShell 7.6.6 补齐门禁执行条件。ps1 V08 因此在 5.1 与 7
+      双引擎均实跑通过（Invoke-Api catch 双兼容修复的直接收益）。
+    - >-
+      卡设「本机无 WSL 时 .sh 登记不可实测」路径未启用：本机 WSL bash 可用，
+      verify-journey.sh 全量实跑 PASS=18（074-sh-help.log）；WSL localhost 转发
+      告警（mirrored mode 提示）不影响经 8080 宿主机端口断言，全程无 FAIL。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

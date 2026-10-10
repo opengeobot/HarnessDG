@@ -1,11 +1,13 @@
 /*
  * 功能: TASK-P0BR-065 / AC-P0B-UI-003+UI-006 E2E 规格——发布审批入口的导航可见性、
  *       路由守卫、审查页诚实空态与后端独立授权。夹具主体与 050 系列分离
- *       （决策端点因闭环断链不可达，本卡未用到 asset:publish）。
+ *       （决策端点由 verify-journey.sh journey_v08 正向覆盖，本 spec 未用到 asset:publish）。
  *       断言为无条件式：入口缺失、守卫失效、渲染虚构行或后端放行时测试必须失败。
- *       已知限制：版本推进到 PENDING_REVIEW 的作业链在运行态断链
- *       （UPLOAD_MATERIALIZE/VERSION_VALIDATE 无入队方），正向审批闭环不可达；
- *       本 spec 断言可达面，闭环缺口如实记入 Evidence limitations（EVD-P0BR-065-001）。
+ *       口径勘误（TASK-P0BR-074，2026-10-08）：此前「UPLOAD_MATERIALIZE/VERSION_VALIDATE
+ *       无入队方、正向审批闭环不可达」的叙述已被反证——UploadApplicationService
+ *       入队 UPLOAD_MATERIALIZE、VersionApplicationService 入队 VERSION_VALIDATE，
+ *       正向闭环由 verify-journey.sh journey_v08（CI journey-e2e，main 强制）实证可达；
+ *       本 spec 断言面为 UI 可达面与 DRAFT 提交 409 契约。
  * 时间: 2026-09-22
  * 作者: AxeXie
  */
@@ -17,7 +19,7 @@ const API_BASE = process.env.E2E_API_BASE_URL ?? 'http://localhost:8080/api/v1';
 /**
  * 本卡夹具作者：具备审批入口所需 asset:manage 与资产/版本创建所需的
  * asset:create、asset:update（P1 权限细化后的独立强制点；
- * 决策端点因闭环断链不可达，未用到 asset:publish）。
+ * 决策端点由 verify-journey.sh journey_v08 正向覆盖，本 spec 未用到 asset:publish）。
  */
 const REVIEW_AUTHOR = {
   username: 'e2e065-review-author',
@@ -202,7 +204,7 @@ async function prepareReviewFixtures(admin: string, api: APIRequestContext): Pro
   }
   expect(assetId, `夹具资产 ${REVIEW_ASSET.name} 无法创建或查回`).toBeTruthy();
 
-  // 幂等确保存在一个 DRAFT 版本：真实 REST 能推进到的最高状态即 DRAFT（闭环断链见头注）。
+  // 幂等确保存在一个 DRAFT 版本：夹具不上传工件、未走校验链，故停留在 DRAFT。
   const versions = await api.get(`${API_BASE}/assets/${assetId}/versions?limit=50`, {
     headers: bearer(authorToken),
     failOnStatusCode: false,
@@ -352,8 +354,9 @@ test.describe('AC-P0B-UI-003: 后端独立授权与失败路径（UI 非安全�
   test('DRAFT 版本提交发布请求：后端拒绝且 UI 显示错误而非假成功（正向闭环断链证据）', async ({
     page,
   }) => {
-    // 后端侧：业务状态机要求 PENDING_REVIEW，而 PENDING_REVIEW 因
-    // UPLOAD_MATERIALIZE/VERSION_VALIDATE 作业无入队方而运行态不可达。
+    // 后端侧：业务状态机要求 PENDING_REVIEW 才能受理发布请求。夹具的
+    // DRAFT 版本未走校验链（作业入队方实存，正向闭环由 verify-journey.sh
+    // journey_v08 实证），故此刻处于 DRAFT 态。
     // 状态机违规已由后端契约化为 409 VERSION_STATE_NOT_ALLOWED
     // （PublishApplicationService 注释：此前裸 IllegalStateException 兜底 500 会误导客户端重试），
     // 断言按契约口径 409 + 错误码，属对齐整改而非放宽。
@@ -373,7 +376,7 @@ test.describe('AC-P0B-UI-003: 后端独立授权与失败路径（UI 非安全�
         headers: bearer(authorToken),
         failOnStatusCode: false,
       });
-      expect(res.status()).toBe(409); // 契约口径 VERSION_STATE_NOT_ALLOWED；闭环缺口仍记入 Evidence limitations
+      expect(res.status()).toBe(409); // 契约口径 VERSION_STATE_NOT_ALLOWED（DRAFT 态受理拒绝）
       const errBody = (await readJson(res)) as { code?: string } | null;
       expect(errBody?.code).toBe('VERSION_STATE_NOT_ALLOWED');
     } finally {

@@ -116,9 +116,18 @@ decisions: ['DEC-008', 'DEC-010']
 
 ## 7. 实施步骤
 
-- [ ] 实现 dataset 子命令；稳定退出码；Secret Store 认证；AC-DST-CLI-* 测试。
-- [ ] 编写/更新测试覆盖全部 AC
-- [ ] 更新 Evidence Manifest
+- [x] 实现 dataset 子命令；稳定退出码；Secret Store 认证；AC-DST-CLI-* 测试。
+  （2026-10-09 E4 收口：search/inspect/pull/create/version/push/status 在位；退出码
+  0/2/3/4/5/7 实测映射；token 经 AIH_TOKEN/~/.aih/token(0600)、口令仅 stdin/env。
+  E4 真实栈最终轮 pass=14 fail=0；AC-001/004/005/006 PASS，AC-002/003 BLOCKED——
+  服务端工件票据 presign 500（PUBLISHED+manifestDigest 绑定版本上稳定复现 rc=7），
+  CLI 侧无可修项，移交后端独立卡。）
+- [x] 编写/更新测试覆盖全部 AC
+  （离线冒烟 14/14 + E4 驱动实验覆盖全部 6 个 AC 的判据断言；backend/src/test
+  Java 面本轮未新增，理由见 EVD limitations。）
+- [x] 更新 Evidence Manifest
+  （EVD-P2009-001 全量刷新：status PARTIAL、逐 AC 证据、治理实跑结果含
+  baseCommit 漂移 758 项局限登记、后端附带发现移交清单。）
 
 ## 8. 验证命令
 

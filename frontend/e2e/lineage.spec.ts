@@ -113,7 +113,7 @@ test.describe('资产血缘页面', () => {
     await openLineagePage(page, E2E_ASSET.displayName, fixtures.assetId);
     await expectDerivedEdge(page, fixtures.assetId, fixtures.datasetAssetId);
 
-    // 子列 Link → dataset 资产详情（SPA 内路由跳转，不经 nginx /assets/ 静态规则）。
+    // 子列 Link → dataset 资产详情（SPA 内路由跳转）。
     await page.locator('.ant-table-row').getByRole('link', { name: fixtures.datasetAssetId }).click();
     await expect(page).toHaveURL(new RegExp(`/assets/${fixtures.datasetAssetId}$`));
     await expect(page.getByRole('heading', { name: E2E_DATASET.displayName })).toBeVisible();

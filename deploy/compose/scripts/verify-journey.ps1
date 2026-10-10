@@ -1,7 +1,10 @@
 # ============================================================================
 # 功能: PRD §13.2 行为旅程验收（PowerShell 轻量子集：V05/V08/V12/V14）。
 #       与 verify-journey.sh 结构对齐；全量旅程请用 Bash 脚本。
-# 时间: 2026-07-11
+#       V08 = 校验失败回退契约断言（AC-P3-VAL-001：无工件 draft 版本推进
+#       VALIDATING 后必被 fail-closed 校验打回 DRAFT 且报告保留）；
+#       正向发布三元组（上传链+双主体审批）由 verify-journey.sh journey_v08 独占。
+# 时间: 2026-07-11（2026-10-08 TASK-P0BR-074 重写 V08：消除僵尸断言与 SKIP 假绿）
 # 作者: AxeXie
 # ============================================================================
 $ErrorActionPreference = "Stop"
@@ -11,7 +14,7 @@ Set-Location $ComposeDir
 
 $BaseUrl = if ($env:AIHUB_BASE_URL) { $env:AIHUB_BASE_URL } else { "http://localhost:8080" }
 $RunId = Get-Date -Format "yyyyMMddHHmmss"
-$script:failed = $false
+$script:failed = 0
 $script:skipped = 0
 $script:passed = 0
 $script:accessToken = ""
@@ -41,12 +44,20 @@ function Invoke-Api {
         if ($Body) { $params.Body = $Body; $params.ContentType = "application/json" }
         $resp = Invoke-WebRequest @params
         return @{ Status = [int]$resp.StatusCode; Body = $resp.Content }
-    } catch [System.Net.WebException] {
+    } catch {
+        # 兼容 PS5.1（WebException/HttpWebResponse）与 PS7（HttpResponseException/HttpResponseMessage）：
+        # PS7 将 4xx 响应体放入 ErrorDetails.Message，PS5.1 需从响应流读取。
         $r = $_.Exception.Response
-        if ($r -ne $null) {
-            $code = [int]$r.StatusCode
-            $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
-            return @{ Status = $code; Body = $reader.ReadToEnd() }
+        if ($null -ne $r) {
+            try {
+                $code = [int]$r.StatusCode
+                $bodyText = $_.ErrorDetails.Message
+                if (-not $bodyText -and $r.GetResponseStream) {
+                    $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
+                    $bodyText = $reader.ReadToEnd()
+                }
+                return @{ Status = $code; Body = $bodyText }
+            } catch { }
         }
         return @{ Status = -1; Body = $_.Exception.Message }
     }
@@ -70,7 +81,7 @@ function Journey-Skip { param([string]$Id, [string]$Name, [string]$Reason)
 
 function Journey-Fail { param([string]$Id, [string]$Name, [string]$Reason)
     Write-Host "[PRD-$Id] $Name ... FAIL: $Reason" -ForegroundColor Red
-    $script:failed = $true
+    $script:failed++
 }
 
 function Ensure-AdminJwt {
@@ -159,36 +170,61 @@ if ($c1.Status -eq 500 -or $c2.Status -eq 500) {
     Journey-Fail "V14" "幂等重放" "id1=$id1 id2=$id2"
 }
 
-# V08: publish triplet (lightweight — skip if no asset)
-if (-not $assetId) {
-    Journey-Skip "V08" "版本发布 triplet" "no asset from V05"
-} else {
-    $ver = Invoke-Api -Method POST -Path "/api/v1/assets/$assetId/versions" -Headers $auth -Body '{"version":"1.0.0-ps"}'
-    $verId = Get-JsonField $ver.Body "versionId"
-    if (-not $verId) {
-        Journey-Skip "V08" "版本发布 triplet" "draft version unavailable"
-    } else {
-        Invoke-Api -Method POST -Path "/api/v1/assets/$assetId/versions/$verId/transition" -Headers $auth -Body '{"targetStatus":"VALIDATING"}' | Out-Null
-        Start-Sleep -Seconds 2
-        $pubReq = Invoke-Api -Method POST -Path "/api/v1/versions/$verId/publish-requests" -Headers $auth -Body '{}'
-        # Envelope: top-level requestId (req_) shadows data.requestId (pub_)
-        # under Get-JsonField leftmost match; unwrap data explicitly.
-        $reqId = ""
-        try { $reqId = ($pubReq.Body | ConvertFrom-Json).data.requestId } catch { $reqId = "" }
-        if ($reqId) {
-            Invoke-Api -Method POST -Path "/api/v1/publish-requests/$reqId/decisions" -Headers $auth -Body '{"decision":"APPROVE"}' | Out-Null
-            Start-Sleep -Seconds 3
-            $detail = Invoke-Api -Method GET -Path "/api/v1/assets/$assetId/versions/$verId" -Headers $auth
-            if ($detail.Body -match "gitTag" -and $detail.Body -match "sourceCommit" -and $detail.Body -match "manifestDigest") {
-                Journey-Pass "V08" "版本发布 triplet"
-            } else {
-                Journey-Skip "V08" "版本发布 triplet" "publish incomplete (manifest/worker)"
-            }
-        } else {
-            Journey-Skip "V08" "版本发布 triplet" "submit publish failed"
-        }
+# V08: 校验失败回退契约（AC-P3-VAL-001，TASK-P0BR-074 诚实化重写）。
+# 无工件 draft 版本推进 VALIDATING 后，ValidationJobHandler 必因
+# VAL-MNF-001/VAL-ART-001 fail-closed 打回 DRAFT 并保留 FAILED 报告；
+# DRAFT 态提交发布请求必 409（VERSION_STATE_NOT_ALLOWED）。
+# 正向发布三元组（上传链+双主体审批）由 verify-journey.sh journey_v08 独占。
+function Test-V08 {
+    if (-not $assetId) {
+        Journey-Fail "V08" "校验失败回退契约" "no asset from V05 (V05 must not leave assetId empty)"
+        return
     }
+    $ver = Invoke-Api -Method POST -Path "/api/v1/assets/$assetId/versions" -Headers $auth -Body '{"version":"1.0.0"}'
+    $verId = Get-JsonField $ver.Body "versionId"
+    if ($ver.Status -ne 201 -or -not $verId) {
+        Journey-Fail "V08" "校验失败回退契约" "draft create HTTP $($ver.Status)"
+        return
+    }
+    $draft = Invoke-Api -Method GET -Path "/api/v1/assets/$assetId/versions/$verId" -Headers $auth
+    if ((Get-JsonField $draft.Body "status") -ne "DRAFT") {
+        Journey-Fail "V08" "校验失败回退契约" "initial status not DRAFT"
+        return
+    }
+    $pubDraft = Invoke-Api -Method POST -Path "/api/v1/versions/$verId/publish-requests" -Headers $auth -Body '{}'
+    if ($pubDraft.Status -ne 409) {
+        Journey-Fail "V08" "校验失败回退契约" "DRAFT submit expected 409, got HTTP $($pubDraft.Status)"
+        return
+    }
+    $tr = Invoke-Api -Method POST -Path "/api/v1/assets/$assetId/versions/$verId/transition" -Headers $auth -Body '{"targetStatus":"VALIDATING"}'
+    if ($tr.Status -ne 200) {
+        Journey-Fail "V08" "校验失败回退契约" "transition VALIDATING HTTP $($tr.Status)"
+        return
+    }
+    # VERSION_VALIDATE 作业异步执行：轮询至多 90s 等待 fail-closed 回退 DRAFT
+    $backToDraft = $false
+    $unexpected = ""
+    for ($i = 0; $i -lt 45; $i++) {
+        Start-Sleep -Seconds 2
+        $cur = Invoke-Api -Method GET -Path "/api/v1/assets/$assetId/versions/$verId" -Headers $auth
+        $st = Get-JsonField $cur.Body "status"
+        if ($st -eq "DRAFT") { $backToDraft = $true; break }
+        if ($st -and $st -ne "VALIDATING") { $unexpected = $st; break }
+    }
+    if (-not $backToDraft) {
+        $why = if ($unexpected) { "unexpected status $unexpected (empty version must fail validation)" } else { "no rollback to DRAFT within 90s" }
+        Journey-Fail "V08" "校验失败回退契约" $why
+        return
+    }
+    $rep = Invoke-Api -Method GET -Path "/api/v1/assets/$assetId/versions/$verId/validation-report" -Headers $auth
+    $repStatus = Get-JsonField $rep.Body "status"
+    if ($rep.Status -ne 200 -or $repStatus -ne "FAILED") {
+        Journey-Fail "V08" "校验失败回退契约" "report HTTP $($rep.Status) status=$repStatus"
+        return
+    }
+    Journey-Pass "V08" "校验失败回退 DRAFT + FAILED 报告保留 (AC-P3-VAL-001)"
 }
+Test-V08
 
 Write-Host ""
 Write-Host "Summary: PASS=$($script:passed) SKIP=$($script:skipped) FAIL=$($script:failed)"

@@ -1,5 +1,12 @@
 schemaVersion: harnessdg.evidence/v1
 evidenceId: EVD-P2009-001
+# 本卡 requiredEvidenceLevel 为 E4。本轮（2026-10-09）在 WSL + Compose 真实栈上对
+# aih CLI 完成 E4 全量实验：AC-DST-CLI-001/004/005/006 取得 PASS 证据（最终轮
+# pass=14 fail=0），AC-DST-CLI-002/003 因服务端 transfer 面缺陷（工件下载票据
+# presign HTTP 500）在 PUBLISHED+manifestDigest 绑定版本上稳定复现 pull rc=7，
+# 如实登记 BLOCKED 并移交后端修复卡（不在本卡 allowedPaths 内，CLI 侧不可修）。
+# source.commitSha 指向 baseCommit：本卡变更尚未提交，提交由批准人处置后执行
+# （与 065-076 同一惯例，DEC-009 AI 不自提交）。
 status: PARTIAL
 
 task:
@@ -10,77 +17,260 @@ task:
 governance:
   specValidation:
     command: ./docs/ai-spec/tools/validate-spec.ps1
-    result: PASS
+    result: PASS # 收口轮实跑（documents 148 / stable ID 736）
   taskValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-009.md
-    result: null
+    result: FAILED
+    # 实跑唯一 issue：baseCommit does not match current HEAD
+    # （卡 baseCommit=26c3985c，现 HEAD=70f78747）。该卡系 P2 波次早期起草，
+    # HEAD 已随 P0-B 补救与 P1/P2 后续卡推进；重绑 baseCommit 属卡治理动作，
+    # 且本卡变更须先由批准人提交，AI 不擅自改 front-matter baseCommit/批准位。
+    # 除此结构性漂移外无设计/授权类缺陷（status READY、implementationAuthorized
+    # true、allowedPaths 覆盖本卡全部实际变更）。
   changedPathValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-009.md -CheckChangedPaths
-    result: null
+    result: FAILED
+    # 实跑 758 issue，全部为 "Changed path is outside allowedPaths"：检查基准是
+    # 卡 baseCommit(26c3985c)→工作树，其间 HEAD 前进所提交的 P0-B/P1/其它 P2 卡
+    # 变更 + 当前工作树上 074/075/076 未提交产物全部计入，属结构性局限而非本卡越界。
+    # 本卡实际触碰文件仅 3 项：scripts/aih/aih（命中 allowedPaths）、本 EVD
+    # （命中 allowedPaths）、TASK-P2-009.md §7 勾验（**不在 allowedPaths 列表内**——
+    # 卡自身的实施步骤勾选与状态回写属治理记录动作，循 065-076 同一惯例；本卡
+    # allowedPaths 未把卡文件列入，此处据实登记为口径外治理回写，供批准人复核，
+    # 不视为产品码/契约越界）。758 项输出中上述 3 个文件零命中（全为历史提交面）。
+    # 与 076 的差异：076 的 baseCommit 即近期 HEAD 且 allowedPaths 含卡文件与
+    # work-breakdown，可用 preExistingDirtyPaths 收敛；本卡无法在不重绑 baseCommit
+    # 且不扩 allowedPaths（两者均为治理动作，留批准人）的前提下收敛 758 项。
+    # 本卡未改动 work-breakdown.md（不在 allowedPaths，故不回写 P2 波次表行）。
   completionValidation:
     command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P2-009.md -CheckCompletion
-    result: null
+    result: NOT_RUN
+    # 不运行：前置 taskValidation 已因 baseCommit 漂移 FAILED，且 AC-002/003 未达
+    # E4 PASS（BLOCKED 移交后端），review.accepted=false（DEC-009）。运行必失败且
+    # 无信息量；据实登记而非凑跑。
 
 source:
   branch: ai
-  commitSha: 7dc22d44c19e823edab0b03ca88e22d1bc5382a4
-  dirtyWorktree: false
-  dirtyPaths: []
+  commitSha: 26c3985c5092d1c64def2c33e8db1e5d6ac4a256 # == 卡 baseCommit；本卡改动未提交，现 HEAD=70f78747
+  dirtyWorktree: true
+  dirtyPaths:
+    - scripts/aih/aih # 本卡主交付物（E4 迭代中修复 5 处 CLI 缺陷）
+    - docs/ai-spec/tasks/evidence/EVD-P2009-001.yaml
+    - docs/ai-spec/tasks/TASK-P2-009.md # §7 勾验
+    # 以下为本卡之前既有未提交项（074/075/076 产物与其遗留脏态，本卡未触碰）：
+    - .github/workflows/ci.yml
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/AssetRepositoryReconciler.java
+    - backend/src/main/java/com/aihub/job/domain/JobRepository.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JdbcJobRepository.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobConfiguration.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java
+    - backend/src/test/java/com/aihub/integration/gitea/infrastructure/AssetRepositoryReconcilerTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcJobRepositoryTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JobWorkerTest.java
+    - deploy/compose/scripts/verify-journey.ps1
+    - deploy/compose/scripts/verify-journey.sh
+    - deploy/compose/scripts/verify.ps1
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/architecture/iteration-plan-2026-09-24.md
+    - docs/runbooks/verify-case-mapping.md
+    - frontend/e2e/admin-states.spec.ts
+    - frontend/e2e/error-paths.spec.ts
+    - frontend/e2e/lineage.spec.ts
+    - frontend/e2e/review-workflow.spec.ts
+    - frontend/e2e/support.ts
+    - docs/ai-spec/tasks/TASK-P0BR-074.md
+    - docs/ai-spec/tasks/TASK-P0BR-075.md
+    - docs/ai-spec/tasks/TASK-P0BR-076.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-074-001.yaml
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-075-001.yaml
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-076-001.yaml
 
 environment:
-  observedAt: 2026-07-11T21:00:00+08:00
-  os: Ubuntu 24.04 LTS
+  observedAt: 2026-10-09T13:26:00+08:00
+  os: Windows 宿主 + WSL Ubuntu（bash CLI 运行时）；Docker Desktop Compose 全栈
   timezone: Asia/Shanghai
   java: "21"
-  node: "22"
-  pnpm: "9"
-  docker: "available"
+  docker: available # 7 容器：backend/worker/frontend/nginx/postgres/minio/gitea 全 Up healthy
   composeProfiles: []
   externalDependencyVersions: {}
 
 execution:
-  workingDirectory: /home/axe/workspace/HarnessDG
-  command: bash ./deploy/compose/scripts/verify-journey.sh
-  startedAt: 2026-07-11T20:02:30+08:00
-  finishedAt: 2026-07-11T20:02:34+08:00
+  workingDirectory: d:\workspace\opengeobot\HarnessDG（实验驱动脚本置于 %TEMP%，仓库外，即用即删）
+  command: >-
+    ①离线冒烟：bash -n 语法门 + aih 单元面（信封解包 extract_field、幂等键生成
+    uuid_v4、退出码映射、usage、--version 等）14/14 PASS（首轮 13/14 的
+    uuid_v4_shape FAIL 经核实为冒烟脚本自身正则引号缺陷，CLI 产出值合法，修正
+    断言后全绿——先证测试有错再改测试，未动产品码）。
+    ②E4 真实栈实验（最终轮 pass=14 fail=0，单次完整运行以规避 token 900s 时效）：
+    REST 登录取 accessToken 注入 AIH_TOKEN + CLI `login --password-stdin` 通道验证
+    → AC-006 幂等重放（同 AIH_IDEMPOTENCY_KEY+同 body 两击同 assetId；同键异体
+    409→rc=4 含 IDEMPOTENCY_KEY_CONFLICT 详情）→ `dataset version`（SemVer 1.0.N）
+    → AC-005 `dataset push`（7MB fixture 3 文件打 2-part multipart：Session 创建→
+    parts 上传→complete→轮询终态 COMPLETED，session=upl_01m4fhzxt…）→ 物化探针
+    （Session COMPLETED parts 2/2；artifacts 3 条完整 sha256/dvcFile/dvcHash 落库：
+    a.txt 14B / big.bin 7000000B / sub/b.txt 13B；整版票据 GIT_DVC + gitCloneUrl +
+    revision=4b566c36…）→ transition 推进 DRAFT→PUBLISHED（VALIDATING/PENDING_REVIEW
+    手工推进 409 already-advanced，证明校验 Job 已自动推进；PUBLISHED 200 且
+    manifestDigest=5c2a53d7… 绑定）→ AC-001 CLI search --output json 与 REST
+    keyword 查询同 Principal 对比（EQ 3 3，字段/授权一致）→ AC-004 无 token/无效
+    token/未知 asset 三面 rc=2/rc=3 且 stderr 无凭据泄漏、失败无半写残留 →
+    AC-002/003 pull（PUBLISHED 版本上工件票据 HTTP 500 → 稳定 rc=7；
+    --include 无匹配 rc=3 干净退出）。
+    ③E4 迭代中暴露并修复的 CLI 真实缺陷（详见 coverage.proven 附注）：main 分派
+    shift 吞选项、search 参数名 query→keyword、ETag CRLF 注入 JSON 体致 complete
+    500、create 缺 DEC-011 必填 --owner-team/--visibility、登录 stdin 通道断裂。
+  startedAt: 2026-10-09T13:25:50+08:00
+  finishedAt: 2026-10-09T13:26:10+08:00
   exitCode: 0
-  result: PASS
+  result: PARTIAL # AC-001/004/005/006 PASS；AC-002/003 BLOCKED（服务端 presign 500）
   evidenceLevel: E4
+  e4EntryPoint: 全部断言经真实 Compose 全栈（8080 网关 + postgres + backend/worker +
+    MinIO + Gitea）实跑；push 物化链与票据面经库内/接口只读回查取证
 
 coverage:
   proven:
-    - dataset pull uses GET /api/v1/versions/{versionId}/download
-    - scenarioId: PRD-V26
-      assertion: verify-journey.sh journey_v26_cli_search PASS — aih dataset search JSON output on live Compose
+    - scenarioId: AC-DST-CLI-001
+      assertion: >-
+        E4：同 Principal 下 `aih dataset search p2009-e4 --output json` 与 REST
+        GET /assets?type=DATASET&keyword=p2009-e4 结果条目数与字段一致（EQ 3 3）；
+        CLI 输出经信封解包后为稳定 JSON；stderr 无任何 token 片段。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-CLI-004
+      assertion: >-
+        E4：无效 token → rc=2（{"error":{"code":"2","message":"Authentication
+        failed (HTTP 401)"}}）；未知 asset → rc=3（HTTP 404）；pull 目标已存在
+        .part 校验失败/票据失败后无半写残留文件（find 断言 0 命中）；三处错误输出
+        均不含 accessToken/口令明文。
+      scenarioCategory: unauthorized
+    - scenarioId: AC-DST-CLI-005
+      assertion: >-
+        E4：`dataset create`（DEC-011 必填 ownerTeamId=unmapped_team/visibility
+        校验前置）→ `dataset version`（SemVer 语法前置校验：v 前缀被 CLI 提示、
+        服务端 ASSET_VERSION_SYNTAX_INVALID 实证）→ `dataset push` 7MB fixture
+        2-part multipart：Session 创建、逐 part PUT、complete、状态轮询至
+        COMPLETED（session=upl_01m4fhzxt58qx4bjbk9ehhksk5）；服务端回查
+        parts 2/2 COMPLETED、artifacts 3 条 sha256/dvcFile/dvcHash 完整落库、
+        整版 GIT_DVC 下载票据含 gitCloneUrl+revision——create/push 全程会话与
+        工作器状态可追踪。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-CLI-006
+      assertion: >-
+        E4：同 AIH_IDEMPOTENCY_KEY + 同 body 两次 create → 均 rc=0 且返回同一
+        assetId（ast_01m4fhzxgx7pk73pnc86dkq40q，重放语义）；同键异 body → HTTP
+        409 IDEMPOTENCY_KEY_CONFLICT → CLI rc=4 且 stderr 携带服务端错误详情
+        （冲突确定性）。幂等键由 CLI 自动生成 uuid v4 或经环境变量注入并转发
+        Idempotency-Key 头（冒烟面 14/14 佐证键生成形态）。
+      scenarioCategory: idempotency
+    - assertion: >-
+        E4 附带登录面：`aih login --password-stdin` rc=0 且 token 持久化
+        ~/.aih/token；口令仅经 stdin/env 传入、全程不入 argv、任何输出不含口令明文
+        （crossCutting SECRETS 断言通过）。
+      scenarioCategory: security
+    - assertion: >-
+        E4 迭代暴露并修复的 CLI 缺陷（本轮产品码变更，均在 allowedPaths
+        scripts/aih 内）：①main() 对单词命令（login）固定 shift 2 把 --username
+        当 action 吞掉→改条件化 shift；②search 查询参数名 query 与服务端 keyword
+        失配致过滤静默失效→改 keyword；③curl -D - 响应头 ETag 含尾部 \r 注入
+        complete JSON 体致服务端 Jackson CTRL-CHAR 13 500→awk gsub 剥 \r；
+        ④create 缺 DEC-011 必填 ownerTeamId/visibility 通道→补 --owner-team/
+        --visibility 并前置校验；⑤版本语法 v 前缀非法→usage/提示对齐服务端 SemVer 契约。
+      scenarioCategory: defect-fix
   notProven:
-    - AC-DST-CLI-001
-    - AC-DST-CLI-002
-    - AC-DST-CLI-003
-    - AC-DST-CLI-004
-    - AC-DST-CLI-005
-    - AC-DST-CLI-006
+    - scenarioId: AC-DST-CLI-002
+      assertion: >-
+        pull 精确版本到空目录 + verify SHA-256 匹配 rc=0 未达成：在 PUBLISHED 且
+        manifestDigest 已绑定的版本上，逐工件下载票据接口稳定 HTTP 500
+        （transfer 面 presign 签发缺陷，根因含 presign region 配置与 objectKey
+        布局问题，见 limitations 移交项），CLI 按契约映射 rc=7
+        （Server error），行为确定性但 E4 判据（落盘+校验和匹配）无法满足。
+        物化链上游已被探针证明健康（artifacts sha256/dvcHash 落库、整版 GIT_DVC
+        票据成功），阻断点收敛在服务端票据签发，非 CLI 侧、不在本卡 allowedPaths。
+      reason: >-
+        服务端缺陷移交独立修复卡（presign 500 / objectKey 布局 / UploadController
+        幂等消费）；CLI 面 pull 落盘/verify/resume 逻辑已在离线冒烟与失败路径
+        （无残留、rc 稳定）取得 E2 级佐证。
+    - scenarioId: AC-DST-CLI-003
+      assertion: >-
+        中断续传（include/exclude 避免全量重下）未达成：同样被工件票据 500 阻断；
+        已实证 include 无匹配 → rc=3 干净退出、失败后 .part/目标目录无残留。
+      reason: >-
+        同 AC-DST-CLI-002；续传状态机（.part 复用、include/exclude 过滤）代码在位
+        且离线冒烟通过，端到端待后端票据修复后复验。
     - scenarioId: PRD-V06
-      reason: verify-journey.sh journey_v06_dvc_roundtrip SKIP — DVC CLI unavailable / no provisioned repo
+      reason: >-
+        历史遗留（上一版 EVD 登记项）：verify-journey.sh journey_v06_dvc_roundtrip
+        当时 SKIP——本轮未复跑 verify-journey.sh（076 收口轮已复跑 18/18 PASS，
+        V06 DVC 往返在 076 证据面已转 PASS，此处按 076 EVD 口径销项）。
+
+crossCuttingChecks:
+  - AUTHN|CLI 仅经 AIH_TOKEN 环境变量 / ~/.aih/token（0600）读取 JWT，无硬编码；login 支持 --password-stdin/--password-env，口令不进 argv
+  - AUTHZ|CLI 全部复用 REST 授权（search 结果与 REST 同 Principal 一致 EQ 3 3；401/404/409 透传映射）
+  - DB_FILTER|N/A - CLI 是 REST adapter
+  - STATE|push/status 反映服务端 Session 与作业态（DRAFT→PUBLISHED 状态机由服务端把关，CLI 不本地改判）
+  - IDEMPOTENCY|create/version/push complete 均转发 Idempotency-Key（自动生成 uuid v4 或 AIH_IDEMPOTENCY_KEY 注入）；重放/冲突 E4 实证
+  - CONSISTENCY|AC-001 CLI 与 REST 同查询等价；物化结果经服务端回查一致
+  - ERRORS|稳定退出码实测：0 成功、2 认证、3 未找到、4 冲突/校验、5 校验和、7 服务端错误
+  - AUDIT|CLI 走同一 REST 入口，审计由服务端产生（本卡不新增审计面）
+  - NOTIFICATION|N/A - CLI 仅轮询
+  - TAXONOMY_I18N|JSON 输出为稳定码（status/visibility 等英文枚举）
+  - CONFIG|base URL 来自 AIH_BASE_URL/config，无硬编码密钥
+  - OBSERVABILITY|错误输出与日志不含 token/presigned URL（E4 断言面）
+  - SECRETS|本 EVD 无 token/口令明文；实验输出经无凭据断言
+
+contractConsistency:
+  openapiMatched: true # CLI 消费面（keyword 参数、信封结构、transition/票据端点）以现行 OpenAPI/控制器为准修正，未改契约
+  eventSchemaMatched: null
+  migrationMatched: true # 零迁移
+  uiMatched: null
+  runbookMatched: true # runbook 零改动
 
 artifacts:
-  reports: []
-  logs: []
+  reports:
+    - docs/ai-spec/tasks/TASK-P2-009.md（§7 勾验终态）
+    - scripts/aih/aih（CLI 终态：缺陷修复 + DEC-011 选项 + usage 同步）
+  logs:
+    - E4 最终轮全绿输出（pass=14 fail=0 asset=ast_01m4fhzxgx7pk73pnc86dkq40q version=ver_01m4fhzxqpdsc0wkhzdhfh5ywg，实验驱动脚本在 %TEMP% 即用即删、不入仓）
   screenshots: []
   traces: []
-  metrics: []
-  databaseQueries: []
+  metrics:
+    - 离线冒烟 14/14 PASS；E4 最终轮 14/14 PASS（含 2 note 级 BLOCKED 证据断言）
+    - push 7MB fixture：2 parts、3 artifacts 物化、SHA-256 全绑定
+  databaseQueries:
+    - 资产/版本/Session/artifacts 只读回查经 REST 详情与列表接口取证（psql 仅用于取 ACTIVE team fixture id=unmapped_team 与版本状态核对）
+  auditEvents:
+    - 本卡无审计面变更
 
 secrets:
   redactionChecked: true
-  findings: []
+  findings:
+    - 实验输出、本 EVD、CLI 代码均无口令/token/presigned URL 明文；login 成功不回显 token（仅状态 JSON）；错误面断言验证 stderr 无凭据。
+    - 临时探针/驱动脚本全部位于 %TEMP%，仓库工作树零残留（dirtyPaths 与本卡实际触碰一致）。
 
 limitations:
-  skippedTests: []
-  assumptions: []
-  environmentDifferences: []
+  skippedTests:
+    - backend/src/test/java/com/aihub/cli 下 CLI 契约测试本轮未新增/未运行：E4 实测优先，且 mvnw -o verify 属收口全量项，本卡 CLI 变更（bash）不参与 Java 编译面；如批准人要求 Java 面补证，随提交轮复跑。
+  assumptions:
+    - >-
+      AC-002/003 判据要求"落盘+SHA-256 匹配"，其阻断根因为服务端票据签发 500；
+      本卡 allowedPaths 不含 backend 主码，CLI 侧无可修项，按诚实性口径记
+      BLOCKED 而非降级判据或伪造 PASS。
+  environmentDifferences:
+    - >-
+      后端附带发现（移交独立卡，非本卡修复面）：①GET /api/v1/teams 与
+      GET /api/v1/principals 均 500 INTERNAL_ERROR（取 ownerTeamId 时实测）；
+      ②transfer 工件下载票据 presign 500（根因探针已定位 presign region 配置 +
+      objectKey 布局 + UploadController 幂等消费面）——AC-002/003 复验依赖其修复；
+      ③登录 token 时效 900s，长实验需单次完整运行。
+    - >-
+      CheckChangedPaths 758 项越界全部为 baseCommit(26c3985c)→HEAD(70f78747) 间
+      已提交历史 + 其它卡未提交产物，属卡结构性漂移（baseCommit 陈旧）；重绑
+      baseCommit 或提交后复跑留批准人处置（详见 governance.changedPathValidation）。
+    - >-
+      AC-005 的 push 输出为两行 JSON（complete 响应 + 轮询终态），实验提取口径
+      tail -1 取终态；CLI 逐行输出 JSON 为设计行为（便于人读+机读），未改。
 
 review:
-  recordedBy: AI
+  recordedBy: AxeXie
   reviewedBy: null
   reviewedAt: null
-  accepted: false
+  accepted: false # AI 不得自批（DEC-009）；须验证权威在代码提交为干净 Commit 后置 true

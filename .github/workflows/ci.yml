@@ -275,7 +275,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [compose-e2e]
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
     defaults:
       run:
         working-directory: deploy/compose
@@ -285,6 +284,14 @@ jobs:
         run: cp .env.example .env
       - name: Start stack and wait for health
         run: docker compose up -d --build --wait
+      - name: Export bootstrap credentials for E2E
+        run: |
+          # 从与栈同源的 .env 解析引导凭据注入后续步骤环境（值不落日志）
+          u=$(grep -E '^AIHUB_BOOTSTRAP_ADMIN_USERNAME=' .env | cut -d= -f2-)
+          p=$(grep -E '^AIHUB_BOOTSTRAP_ADMIN_PASSWORD=' .env | cut -d= -f2-)
+          [ -n "$u" ] && [ -n "$p" ] || { echo "bootstrap credentials missing in .env"; exit 1; }
+          echo "E2E_ADMIN_USERNAME=$u" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_PASSWORD=$p" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v4
         with:
           version: "10"
@@ -303,7 +310,7 @@ jobs:
       - name: Run Playwright E2E tests
         working-directory: frontend
         env:
-          E2E_BASE_URL: http://localhost:5173
+          E2E_BASE_URL: http://localhost:8080
         run: pnpm test:e2e
       - name: Upload Playwright report
         if: always()

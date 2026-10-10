@@ -120,9 +120,8 @@ export async function activateVersionsTab(page: Page) {
  * 从资产详情页进入「资产设置」独立路由页。
  *
  * <p>设置页是 {@code /assets/{assetId}/settings} 的独立路由（AssetSettingsPage 由
- * {@code useParams} 取 assetId，页内无返回导航），而整页加载 {@code /assets/**} 会被
- * 前端容器 nginx 的静态资源规则遮蔽；入口只能是详情页「设置」Tab 内的链接按钮，
- * 即用户真实路径。
+ * {@code useParams} 取 assetId，页内无返回导航）；073 修复后深链整页加载亦可达，
+ * 本入口保留详情页「设置」Tab 链接按钮——即用户真实操作路径。
  */
 export async function openAssetSettingsViaNav(page: Page) {
   const tab = page.getByRole('tab', { name: /^设\s*置$|^Settings$/ });

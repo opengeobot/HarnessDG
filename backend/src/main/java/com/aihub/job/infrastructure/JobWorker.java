@@ -34,7 +34,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 可靠任务 Worker。
  *
- * <p>每次 {@link #tick()} 领取一个待执行任务（FOR UPDATE SKIP LOCKED），调用幂等 Handler；
+ * <p>每次 {@link #tick()} 在批量上限（{@code batchSize}，受控配置）内有界地领取并执行任务
+ * （FOR UPDATE SKIP LOCKED，队列空即提前返回），调用幂等 Handler；
  * 成功置 SUCCEEDED；失败时按 {@link com.aihub.shared.error.ErrorCode#retryable()} 区分：可重试错误
  * 按指数退避+抖动置 RETRY_WAIT，不可重试错误或已达 max_attempts 置 DEAD 并触发 JOB_DEAD 通知。
  * 全链路透传 traceId/principalId/assetId。
@@ -70,6 +71,7 @@ public class JobWorker {
     private final Clock clock;
     private final SensitiveDataMasker masker;
     private final long leaseSeconds;
+    private final int batchSize;
     private final String workerId;
     private final Counter jobsClaimed;
     private final Counter jobsSucceeded;
@@ -88,6 +90,7 @@ public class JobWorker {
                      ObjectProvider<MeterRegistry> meterRegistryProvider,
                      SensitiveDataMasker masker,
                      long leaseSeconds,
+                     int batchSize,
                      ObjectProvider<PlatformMetrics> platformMetricsProvider) {
         this.jobRepository = jobRepository;
         this.jobAttemptRepository = jobAttemptRepository;
@@ -99,6 +102,7 @@ public class JobWorker {
         this.clock = clock;
         this.masker = masker;
         this.leaseSeconds = leaseSeconds;
+        this.batchSize = Math.max(1, batchSize);
         this.workerId = "worker-" + Integer.toHexString((int) ProcessHandle.current().pid());
         this.platformMetrics = platformMetricsProvider.getIfAvailable();
         MeterRegistry registry = meterRegistryProvider.getIfAvailable();
@@ -116,22 +120,33 @@ public class JobWorker {
     }
 
     /**
-     * 领取并执行一个任务。无任务时直接返回。本方法不向外抛出异常，保证调度周期不被取消。
+     * 有界批量领取并执行任务：每个调度周期至多处理 {@code batchSize} 个，队列空时提前返回。
+     * 无任务时直接返回。本方法不向外抛出异常，保证调度周期不被取消。
      */
     public void tick() {
         try {
-            executeOnce();
+            for (int i = 0; i < batchSize; i++) {
+                if (!executeOnce()) {
+                    return;
+                }
+            }
         } catch (Exception ex) {
             // 领取或落库失败（如数据库瞬时不可用）不得取消调度任务；下一 tick 自愈重试。
             LOG.error("job worker tick failed; scheduling continues", ex);
         }
     }
 
-    private void executeOnce() {
+    /**
+     * 领取并执行一个任务。
+     *
+     * @return {@code false} 表示当前无可领取任务（队列空），调用方应结束本批；
+     *         {@code true} 表示已处理一个任务（无论成败），可继续下一领取
+     */
+    private boolean executeOnce() {
         Instant now = clock.instant();
         Optional<JobClaim> claimed = jobRepository.claimNext(workerId, now, leaseSeconds);
         if (claimed.isEmpty()) {
-            return;
+            return false;
         }
         JobClaim claim = claimed.get();
         Job job = claim.job();
@@ -150,7 +165,7 @@ public class JobWorker {
         Optional<JobHandler> handler = handlerRegistry.resolve(job.type());
         if (handler.isEmpty()) {
             handleNoHandler(job, attemptNo, startedAt);
-            return;
+            return true;
         }
 
         try {
@@ -169,6 +184,7 @@ public class JobWorker {
         } catch (Exception ex) {
             handleFailure(job, attemptNo, startedAt, ex);
         }
+        return true;
     }
 
     /**

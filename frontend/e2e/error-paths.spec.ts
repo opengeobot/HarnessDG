@@ -8,8 +8,8 @@
  * /admin/users 声明 requiredScopes=['user:read']，RouteGuard 必然渲染 403 Result；
  * 同时用 directApiStatus 证明后端在 UI 之外独立拒绝同一主体（UI 不是安全边界）。
  * <p>夹具口令来自 prepareFixtures 的幂等归一，故登录前必须先准备夹具。
- * <p>深链仅用于 /admin/*、/profile 与未知路径（实测返回 200）；/assets/** 会被
- * 前端容器 nginx 的静态资源规则遮蔽，不在本 spec 使用。
+ * <p>073 修复后 /assets/** 深链整页加载已正常返回 SPA；本 spec 的深链
+ * 用例仍限于 /admin/*、/profile 与未知路径，/assets/** 覆盖见 spa-deep-link.spec.ts。
  */
 import { test, expect, request } from '@playwright/test';
 import {

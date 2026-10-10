@@ -128,7 +128,10 @@ docker compose up -d --wait   # 若栈未启动
 ./scripts/verify-journey.sh
 ```
 
-PowerShell 轻量子集（V05/V08/V12/V14）：`./scripts/verify-journey.ps1`
+PowerShell 轻量子集（V05/V12/V14 + V08 失败回退契约断言，AC-P3-VAL-001）：
+`./scripts/verify-journey.ps1`。V08 分工（TASK-P0BR-074 起）：正向发布三元组
+（真实上传链 + 双主体审批）由 `verify-journey.sh` journey_v08 独占；ps1 仅断言
+无工件 draft 版本推进 VALIDATING 后被 fail-closed 校验打回 DRAFT 且报告保留。
 
 **CI**：`.github/workflows/ci.yml` 作业 `journey-e2e`（`needs: compose-e2e`）。
 

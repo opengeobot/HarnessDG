@@ -1,0 +1,307 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-076-001
+# 本卡 requiredEvidenceLevel 为 E4。批准人 2026-10-09 批复「批准，按候选 A 实施」
+# （approvedAt 2026-10-09T03:16:35Z，回写发生于请示批复之后，非 AI 自批，DEC-009）；
+# 候选 B 未实施。实施 M1–M4 + M5 实机验证（证伪，登记 limitations）：
+# ① M2+M3：AssetRepositoryReconciler 扫描 SQL 增列 repo_full_name，existence 判定改按
+#   权威投影（GiteaRepoPath.parse 拆 owner/repo，非法投影→MANUAL_REVIEW 不查仓）、投影缺失
+#   回退 namespace/name；enqueueReprovisionJob 经 JobRepository.hasActiveByTypeAndAssetId
+#   （新增端口方法，JdbcJobRepository SELECT EXISTS 实现，在途=PENDING/RETRY_WAIT/RUNNING）
+#   先查后插，payload 增补 repositoryFullName。② M4：JobWorker.tick 有界批量循环
+#   （≤batchSize，默认 5，aihub.job.worker.batch-size），claimNext 端口与 SQL 零改动。
+#   ③ M1：verify-journey.sh FAILED 计数改自增、verify-journey.ps1 布尔旗标改整型计数，
+#   用例判据零改动。运行态主证：重建镜像后 REPOSITORY_PROVISION PENDING 自然出清至 0 且
+#   新镜像对账 ≥4 轮零新增入队（风暴闭环切断）；verify-journey.sh 18/18 PASS、FAIL=0
+#   真实计数（修复前同栈 13 PASS/4 FAIL/1 SKIP 且 Summary 谎报 FAIL=1）。
+# source.commitSha 指向 baseCommit：本卡变更尚未提交，提交由批准人处置后执行
+# （与 065-075 同一惯例，DEC-009 AI 不自提交）。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-076
+  requirements: [REQ-JOB-001, REQ-AST-008]
+  scenarios: [AC-P0B-JOB-001, AC-P0B-JOB-002, AC-P1-AST-012]
+
+governance:
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    # 起草轮、READY 批准轮与收口轮各复跑一次，均 PASS（documents 148 / stable ID 736）
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-076.md
+    # DRAFT 阶段设计内失败（status/approvedBy/approvedAt 待人工批准回写，DEC-009）；
+    # 批准人 2026-10-09 批复候选 A 后回写，收口轮 PASS（requirements 2 / scenarios 3 / allowed paths 16）
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-076.md -CheckChangedPaths
+    # 收口轮实跑：首跑 FAILED（2 项，同指 iteration-plan-2026-09-24.md：审批位 digest
+    # 4e446a… 与工作树现值 4c7c5f… 漂移）。归因：该 56 行增量系本卡起草同轮的差距分析
+    # 产物（§4.3 复核增补 + 任务清单表，内含「076 DRAFT 待批准」条目），先于审批位回写
+    # 落盘；076 实施对该 forbiddenPath 零改动。据实刷新卡 preExistingDirtyPaths digest 后
+    # 复跑 PASS：本卡实际变更 11 个代码/脚本文件 + work-breakdown + 本卡 + 本 EVD，
+    # 全部命中 allowedPaths（16 项）；其余脏路径为卡 preExistingDirtyPaths（13 条）登记的
+    # 073 收口后既有未提交项（074/075 产物与 074 之前的 e2e/ci 脏态），本卡未触碰。
+    # 注：RepositoryProvisionJobHandler / Asset / RepositoryProvisionJobHandlerTest 在
+    # allowedPaths 内但候选 A 下无需改动（零 diff，非越界）。
+    result: PASS
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-076.md -CheckCompletion
+    # 设计内失败：commitSha 需等于提交后 HEAD 且 dirtyWorktree=false（代码须先提交，AI 不得
+    # 自提交）；review.accepted/reviewedBy/reviewedAt 需由验证权威填写（DEC-009）。
+    # 据实登记为 EXPECTED_FAIL，与 071-075 交接态同口径。
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: 70f78747fbba0c310457bc69cf5efaec8f30e250 # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    - backend/src/main/java/com/aihub/integration/gitea/infrastructure/AssetRepositoryReconciler.java
+    - backend/src/main/java/com/aihub/job/domain/JobRepository.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JdbcJobRepository.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobWorker.java
+    - backend/src/main/java/com/aihub/job/infrastructure/JobConfiguration.java
+    - backend/src/test/java/com/aihub/integration/gitea/infrastructure/AssetRepositoryReconcilerTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JdbcJobRepositoryTest.java
+    - backend/src/test/java/com/aihub/job/infrastructure/JobWorkerTest.java
+    - deploy/compose/scripts/verify-journey.sh
+    - deploy/compose/scripts/verify-journey.ps1
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-076.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-076-001.yaml
+    - .github/workflows/ci.yml
+    - deploy/compose/scripts/verify.ps1
+    - docs/architecture/iteration-plan-2026-09-24.md
+    - docs/runbooks/verify-case-mapping.md
+    - frontend/e2e/admin-states.spec.ts
+    - frontend/e2e/error-paths.spec.ts
+    - frontend/e2e/lineage.spec.ts
+    - frontend/e2e/review-workflow.spec.ts
+    - frontend/e2e/support.ts
+    - docs/ai-spec/tasks/TASK-P0BR-074.md
+    - docs/ai-spec/tasks/TASK-P0BR-075.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-074-001.yaml
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-075-001.yaml
+
+environment:
+  observedAt: 2026-10-09T03:38:45Z
+  os: Windows（PowerShell 7.6.6；bash=Git Bash/WSL 可用；Docker Desktop 已启动）
+  timezone: Asia/Shanghai
+  docker: 29.1.2
+  composeServices: [aihub-backend-1, aihub-worker-1, aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-minio-1, aihub-gitea-1]
+  # 7 服务全 Up，postgres/minio/gitea/backend healthy；本卡改动经
+  # docker compose build backend worker + up -d 重建生效（worker 依赖 backend healthy 条件）
+
+execution:
+  workingDirectory: 仓库根 + backend/
+  command: >-
+    ①M5 实机验证（卡 §4 步骤 1）：静态面——全仓 Java Grep claimNextByDedupeKey /
+    requeueWithDedupe / payload->> 全部零命中，JdbcJobRepository 与卡⑤描述不符（所谓
+    MySQL 风格 SQL 并不存在，见勘误 limitations）；运行面——backend/worker 容器日志
+    Select-String 'dedupe' 零命中。结论：作业级 dedupe key 机制从未实现（M3 端口去重为
+    正确止血面），M5「修 SQL」对象不存在，按卡 §5 不扩大范围。
+    ②E4 根因实锤（卡④修正后的数据级取证）：库内实测 asset 表 125 个资产
+    repo_full_name <> namespace||'/'||name（namespace 列='journey' 等业务命名空间，
+    repo_full_name 实际 owner='aihub-svc'）；Gitea 容器文件系统 /data/git/repositories/
+    仅 aihub-svc 一个 owner 目录，与投影一致、与 namespace 列不一致——旧口径
+    repositoryExists(namespace,name) 必 404 误判，125 资产×每轮对账=风暴成立。
+    ③M2+M3 实施：Reconciler 两处扫描 SQL 增列 repo_full_name；checkAssetRepository 改 4 参
+    （权威投影优先，GiteaRepoPath.parse 非法→MANUAL_REVIEW 不查仓不入队；投影空→回退
+    namespace/name）；JobRepository 端口新增 hasActiveByTypeAndAssetId（在途三态），
+    JdbcJobRepository SELECT EXISTS 实现；enqueueReprovisionJob 先查后插（命中 LOG.info
+    跳过、差异仍记录），payload 增补 repositoryFullName（jsonEscape 转义）。
+    ④M4 实施：JobWorker 构造器增 int batchSize（leaseSeconds 后），Math.max(1,·) 兜底；
+    tick() 改有界 for 循环（executeOnce 返回 boolean，false=队列空提前结束本批）；
+    JobConfiguration 增 @Value("${aihub.job.worker.batch-size:5}")；claimNext SQL 零改动。
+    ⑤M1 实施：sh L124 FAILED=1 → FAILED=$((FAILED+1))；ps1 L17 布尔旗标 → 整型初始化、
+    L84 赋值 → 自增（L231 if 对 0/非 0 真假语义天然兼容，判据零改动）。
+    ⑥单测：AssetRepositoryReconcilerTest +3（在途去重命中不入队/投影优先于 namespace/
+    非法投影 MANUAL_REVIEW）、JdbcJobRepositoryTest +2（SQL 三态形态断言含 SELECT EXISTS
+    不含终态；null 视同无在途）、JobWorkerTest +3（批内领取至 batchSize 上限、队列空提前
+    返回、单作业失败不中断本批；既有 17 用例经 newWorker 默认 batchSize=1 保持单领取语义），
+    共 +8 用例。mvnw verify 全量：137 个测试类 800 用例 FAIL=0 ERR=0 SKIP=10。
+    ⑦compose build backend worker 成功（exit 0）→ up -d 重建双服务、backend healthy →
+    REPOSITORY_PROVISION 计数序列 PENDING 230（旧镜像风暴态）→132→118→0（旧 worker 消化
+    存量 + handler 见 COMPLETED skip 为 SUCCEEDED，SUCCEEDED 1262→1374→1492）；新镜像上线后
+    未执行任何清理 SQL——存量自然出清且对账 ASSET_REPO_RECONCILE 近 30 分钟 4 轮全 SUCCEEDED、
+    source=reconcile 新增入队 0（created_at>03:34Z 实测 count=0）：M2 投影修复使误报消失，
+    风暴反馈回路在运行态被切断。
+    ⑧旅程复跑（E4 主证）：bash verify-journey.sh → 18 用例 PASS=18 SKIP=0 FAIL=0、exit 0，
+    Summary 为真实计数（V06 日志 repo=aihub-svc/mdl-dvc-… 直接证明权威投影生效；修复前同栈
+    13 PASS/4 FAIL/1 SKIP 且谎报 FAIL=1）；pwsh verify-journey.ps1 → PASS=4 SKIP=0 FAIL=0、
+    exit 0（整型口径）。⑨回归：bash verify.sh 全量 V01-V28 全 PASS、页脚无失败项、exit 0
+    （脚本零改动，仅运行）；docker compose config --quiet exit 0；M1 冒烟按语言语义构造
+    双片段（真实 journey_fail/Journey-Fail 函数体逐字节同款 + Summary 同款判退出）注入 2 个
+    失败 → FAILED=2/failed=2 且判退出路径命中非零（副本即用即删，未留用例改动；首轮整脚本
+    注入因 WSL/GB 环境差异不可行，如实登记）。
+  startedAt: 2026-10-09T03:16:35Z
+  finishedAt: 2026-10-09T03:38:45Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: 全部断言经真实 Compose 全栈（8080 网关 + postgres + backend/worker（新镜像）
+    + MinIO + Gitea）实跑；库内 job_task/asset/webhook_inbox 只读回查与 Gitea 容器文件系统
+    取证均为运行态物证
+
+coverage:
+  proven:
+    - scenarioId: AC-P1-AST-012
+      assertion: >-
+        E4：existence 判定改按 repo_full_name 权威投影后，真实栈对账 ≥4 轮（30 分钟窗全
+        SUCCEEDED）零新增 reconcile 入队（实测 count=0）、webhook_inbox reconcile 差异条目
+        零新增（同窗 count=0，存量 1367 停止增长）；125 个投影≠namespace 的资产全部判
+        CONSISTENT（风暴根因数据级实锤 + 修复后运行态消失）； journey V05/V06/V07 探针
+        资产 provisioning COMPLETED 且 repo=aihub-svc/... 真实建仓往返通过。
+      scenarioCategory: normal
+    - scenarioId: AC-P1-AST-012
+      assertion: >-
+        E2（单测补面）：非法投影（无斜杠/多段）→ MANUAL_REVIEW 且不查仓不入队；投影缺失→
+        回退 namespace/name 既有口径；在途去重命中→不重复 insert 且差异记录保留——
+        AssetRepositoryReconcilerTest 3 新用例 + 既有 8 用例全绿。
+      scenarioCategory: boundary
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        E4：M4 批量领取（batchSize 默认 5）+ 风暴出清后，journey 探针 REPOSITORY_PROVISION
+        作业在既有 60s 轮询窗内 COMPLETED（V05/V06/V07/V08 四 FAIL 全部转 PASS，判据与窗
+        零放宽）；JdbcJobRepository claimNext SQL 零改动（FOR UPDATE SKIP LOCKED 单条语义
+        保持），双 Worker 租约唯一性由既有 JdbcJobRepositoryIT/JobLeaseReconcilerTest 面
+        不回归（mvnw verify 全绿）。
+      scenarioCategory: normal
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        E2：JobWorkerTest 新增 3 用例——恒有任务时单 tick 领取恰 batchSize(5) 个、队列空
+        提前返回（3 次领取 2 次处理）、批内首作业失败（RuntimeException→RETRY_WAIT）不阻断
+        后续作业同 tick 成功；既有 17 用例默认 batchSize=1 语义不变。
+      scenarioCategory: concurrency
+    - scenarioId: AC-P0B-JOB-002
+      assertion: >-
+        E4+E2：批量改造后 JobLeaseReconcilerTest 与租约/恢复面既有测试全绿（mvnw verify
+        800 用例 FAIL=0）；tick() 外层 catch 保留（异常不取消调度断言在位）；M5 证伪后
+        dedupe 合并用例不强行补建（卡 §5：证伪不扩大范围），失租恢复运行态由 journey 复跑
+        与 verify.sh V20（对账 Worker 注册）佐证。
+      scenarioCategory: recovery
+  notProven:
+    - scenarioId: AC-P1-AST-012
+      assertion: >-
+        「确认删除仓库→自动修复推进至 COMPLETED」真缺失修复面未取证：候选 A 明确不实施
+        状态回退（候选 B 未选），真缺失资产仍停留 COMPLETED+MANUAL_REVIEW（去重后每资产至多
+        1 个在途空转作业）。本轮数据中「缺失」全为误报，M2 后无任何入队，与该子面的差异
+        按卡 §3 候选 A 口径属**设计内不闭合**，留观察期后另卡处置。
+      reason: >-
+        批准人裁定候选 A（止血）；候选 B 永不隐式实施（卡 §5）。
+    - scenarioId: AC-P0B-JOB-002
+      assertion: >-
+        M5 dedupe key SQL 修正未实施：所谓失效 SQL 不存在于代码库（双重证伪）。
+      reason: >-
+        卡 §5「M5 证伪则不强行改，登记 limitations」；真实缺口=作业级 dedupe 机制缺失，
+        属 REQ-JOB-001 dedupe 面的独立缺口（另卡处置）。
+    - scenarioId: AC-P0B-JOB-001
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、commitSha=baseCommit），
+        review.accepted=false。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。
+  crossCuttingChecks:
+    - AUTHN|未触认证链；Reconciler/Worker 均为系统内作业，无新入口；Gitea 探针凭据零使用
+      （API 对照改走容器文件系统取证，未读取任何令牌）
+    - AUTHZ|未改权限判定；JobRepository 端口扩展为纯数据访问；人工 retry/cancel 面零触碰
+    - DB_FILTER|existence 判定读 repo_full_name 权威投影属「按真实状态过滤」修正，未放宽任何
+      查询条件；hasActiveByTypeAndAssetId 仅收窄入队（禁重复），不放宽读取
+    - STATE|候选 A 未改状态机；asset.provisioning_status 语义零触碰（MANUAL_REVIEW 仅为
+      ReconcileResult 返回值，非持久状态）
+    - IDEMPOTENCY|核心兑现：入队前查在途（SELECT EXISTS，跨实例一致，无内存态去重）；
+      claimNext/租约/FOR UPDATE 语义零改动；payload 增补 repositoryFullName 便于 handler
+      与审计消费真实落点
+    - CONSISTENCY|recordDiscrepancy 无限增长噪声随误报修复自然消退（实测 reconcile 差异新增
+      0/轮）；webhook_inbox/audit 既有留痕面零改动
+    - ERRORS|无新增 ErrorCode；非法投影路径复用 ValidationException 捕获→MANUAL_REVIEW
+      （不炸 handle 循环，fail-safe 口径与卡 M2 一致）
+    - AUDIT|既有 recordReconciliationDiscrepancy 保留；去重跳过路径 LOG.info 留痕
+    - NOTIFICATION/TAXONOMY_I18N|N/A - 无对应面变更
+    - OBSERVABILITY|job.processed claimed 计数语义不变（每 executeOnce 记一次）；未新建指标
+    - CONFIG|唯一新配置 aihub.job.worker.batch-size 默认 5 走 @Value 既有模式；compose
+      *.yml/.env 零改动（docker compose config --quiet exit 0 回归）
+    - SECRETS|全程无令牌/口令进入代码、日志、本 EVD；Gitea 对照放弃 API+token 路线改
+      文件系统取证
+
+contractConsistency:
+  openapiMatched: null # 本卡不改契约
+  eventSchemaMatched: null # 不触达事件契约
+  migrationMatched: true # 零迁移（卡 §3 禁建 V44 兑现：去重用 SELECT EXISTS 查询方案）
+  uiMatched: null # 不改 frontend
+  runbookMatched: true # verify-case-mapping.md 零改动（哈希与卡 preExistingDirtyPaths 一致）
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-076.md（本卡 §4 勾验终态）
+    - backend 产品代码 5 文件 + 测试 3 文件 + 验证脚本 2 文件（M1–M4 终态，均命中 allowedPaths）
+  logs:
+    - backend/target/surefire-reports/（mvnw verify：137 类 800 用例 FAIL=0 ERR=0 SKIP=10）
+    - build-logs/ 未新增归档；实跑物证以本 EVD 引计数字与容器只读回查 SQL 结果留痕
+  screenshots: []
+  traces: []
+  metrics:
+    - REPOSITORY_PROVISION PENDING 序列：230 → 132 → 118 → 0（SUCCEEDED 1262 → 1374 → 1492 同步增长）
+    - 新镜像对账 30 分钟 4 轮：reconcile 新增入队 0、reconcile 差异 inbox 新增 0
+    - verify-journey.sh：PASS=18 SKIP=0 FAIL=0 exit 0（修复前 13/1SKIP/4FAIL 且谎报 FAIL=1）
+    - verify-journey.ps1：PASS=4 SKIP=0 FAIL=0 exit 0
+    - verify.sh：V01-V28 全 PASS exit 0（脚本零改动）
+    - 根因物证：125 资产 repo_full_name≠namespace/name；/data/git/repositories/ 仅 aihub-svc
+  databaseQueries:
+    - SELECT status,count(*) FROM job_task WHERE type='REPOSITORY_PROVISION' GROUP BY status（风暴出清序列）
+    - SELECT count(*) FROM job_task WHERE type='ASSET_REPO_RECONCILE' AND created_at>now()-interval '30 minutes'（=4，全 SUCCEEDED）
+    - SELECT count(*) FROM job_task WHERE type='REPOSITORY_PROVISION' AND payload::text LIKE '%reconcile%' AND created_at>'2026-10-09 03:34:00+00'（=0，新镜像入队停止）
+    - SELECT count(*) FROM webhook_inbox WHERE delivery_id LIKE 'reconcile%'（存量 1367；修复后时窗新增 0）
+    - SELECT count(*) FROM asset WHERE repo_full_name IS DISTINCT FROM namespace||'/'||name（=125，风暴根因）
+  auditEvents:
+    - 本卡无审计面变更（对账差异/去重跳过沿用既有 audit/LOG 通道）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - 全程未使用 Gitea 管理员令牌（API 对照改容器文件系统取证）；EVD/日志/代码无凭据明文。
+    - M1 冒烟副本与驱动脚本均已删除，仓库无残留临时文件（git status 与本 EVD dirtyPaths 一致）。
+
+limitations:
+  skippedTests:
+    - >-
+      mvnw verify 中 10 个 SKIP：AssetSearchPerformanceTest(4)/DownloadTicketPerformanceTest(2)/
+      UploadTransferIT(4)——testcontainers 经 npipe 探测 Docker 返回 400（Windows 命名管道
+      环境的既有条件跳过，074/075 同栈口径一致），非本卡引入；对应运行态面由 Compose 全栈
+      E4 复跑（verify.sh V12/V13、journey V06 DVC 往返）覆盖，不以此冒充 IT 通过。
+  assumptions:
+    - >-
+      存量风暴以「旧镜像 handler 空转消费 + M2 停止新增」自然出清，未执行卡 §3 预留的一次性
+      运维 CANCELLED SQL：实施时序上镜像重建前 PENDING 已随旧 worker 消化递减（230→118），
+      重建后新增为 0，清理对象不复存在（SQL 留痕要求自然免除，实测序列在本 EVD metrics）。
+    - >-
+      库中 4 个 PENDING 探针资产为 2026-09-23 历史运行残留（created_at 实证），Reconciler
+      扫描范围仅 COMPLETED，与本卡无关。
+  environmentDifferences:
+    - >-
+      卡⑤取证失实勘误（诚实性登记）：stageGateEvidence⑤ 与 §3-M5 所述「JdbcJobRepository
+      的 claimNextByDedupeKey/requeueWithDedupe 使用 MySQL 风格 payload->>'$.dedupeKey'」
+      与代码库现状不符——三个符号全仓 Grep 零命中，运行日志零 dedupe 错误（双重证伪）。
+      起草轮误把设计文档/历史方案当作在码事实；真实缺口是作业级 dedupe key 机制从未实现，
+      属 REQ-JOB-001 的独立待建面（本卡以 M3 端口去重兑现止血义务，M5 按卡 §5 不实施）。
+    - >-
+      卡④取证口径修正（批准轮已部分勘正、本收口轮再精确化）：RestGiteaRepositoryExistencePort
+      未认证/404 一律 repositoryExists=false 属**吞错**（传输类异常仍抛 DependencyException，
+      该点卡内描述正确）；误报主因确为 namespace≠owner 路径错配（125 资产 + 仓库目录树物证）。
+      但该 port 两文件不在本卡 allowedPaths，其「任意异常判缺失」面未在本卡修复，残留风险
+      登记：Gitea 短暂不可用恢复窗口内存在把真实存在仓判缺失的可能——M3 去重已将后果有界化
+      （每资产至多 1 个在途空转作业，不再成风暴）；port 错误语义收紧（404 才判缺失）另卡处置。
+    - >-
+      M1 冒烟未采用整脚本注入复跑（Git Bash 与 WSL 对损坏副本的装载行为差异导致首轮不可行），
+      改为逐字节复制真实函数体 + Summary 同款判退出的最小编辑片段验证 FAILED=2→非零退出，
+      双语言均通过；「注入 2 个失败路径」的卡面语义（计数正确、不留改动）已满足。
+    - >-
+      旅程 SKIP 面变化说明：修复前 1 SKIP（V18 类基础设施缺失）本轮为 0 SKIP——探针作业及时
+      COMPLETED 使 V18 outbox_delivered 字段恢复取值；该改善为 M2–M4 连锁效果，非判据改动。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

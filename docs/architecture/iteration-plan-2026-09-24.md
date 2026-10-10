@@ -124,6 +124,62 @@ Flyway 迁移（最新 V43）重新取证。**旧文档大量条目已在 Wave S
   答案确认为**是**。当前 `asset_preview` 投影与预览生成链均无 split 维度，需投影扩展
   （契约 + 迁移 + Job + 前端选择器），建议 G5 与 G1/G2 分开独立成卡。
 
+## 4.3 复核增补（2026-10-09，HEAD `70f7874` + 074/075 未提交改动）
+
+按「以当前 worktree 为权威」逐项复取证（grep/glob 全仓实测 + 运行态核验），本轮修订如下：
+
+- **G1 仍开放（记录修正）**：迭代计划与 §4.2 引用的 `AssetBrowser.tsx` 在当前树中不存在；
+  实际锚点为 `AssetDetailPage.tsx` L452 Files Tree `selectable={false}`（复证命中）。
+  契约仍无单文件内容/blob 端点（全仓 `content|blob|tree` 端点检索仅命中 previews/artifact 说明文字）。
+  Wave β 契约先行口径不变；建议 `TASK-P0BR-077`（文件内容浏览，绑定 REQ-DST-DETAIL-001 第 3 项
+  「Files：选定 Version 的 Artifact 树、路径、大小、媒体类型和 SHA-256」）。
+- **G2 已闭合**：`TASK-P0BR-068` 已实施并由批准人提交（收口记录见 work-breakdown 068 行）——
+  `PreviewController`（`/api/v1/assets/{assetId}/previews` 服务端代理流式端点）+ 契约
+  `renderPreviewArtifact` + `PreviewJobHandler` image 引用 + `PreviewPanel` blob/ObjectURL 渲染 +
+  `preview-image.spec.ts` E2E 全在位。E4 人工验收（`review.accepted`）仍待验证权威，不改变
+  IMPLEMENTED_UNVERIFIED 定性。
+- **G3 讨论订阅已闭合、独立订阅资源仍开放**：`asset_subscription`（V15）仅讨论域；
+  通知侧 `NotificationRecipientResolver.resolveSubscribers` 已接讨论订阅。
+  个人中心订阅/退订属 Wave γ，且需先补 REQ/PAGE（同 G4 门禁）。
+- **G4 仍开放**：favorite/bookmark 全仓零命中复证；REQ-DST-DETAIL-001 页面组成与 page-catalog
+  均无「收藏」条目——开工前置 = 人类评审批准 REQ/PAGE 增补（Wave γ），不得直接建卡。
+- **G5 前提最终闭合、仍开放**：DEC-015（**ACCEPTED**，decidedBy User，2026-07-06）明确
+  PAGE-DST-001 需「Subset 下拉 + Split Tab 选择器（首版仅单 Subset）+ 统计卡片（行数/大小/文件数/列数）」；
+  page-catalog L61 已同步该要求。当前 backend `com.aihub.version` 与 frontend `src` 均无 split 维度
+  （仅 `String.split()` 噪音），PreviewJobHandler/asset_preview 投影未含 split。
+  **无需再等 REQ/PAGE 评审**——决策已存在，实施卡建议 `TASK-P0BR-078`（Wave δ，契约+迁移+Job+前端）。
+- **G6 已闭合（复证）**：`AssetDetailPage` 版本切换器 `?version=` URL 联动 + 版本化 Query Key +
+  gitTag/sourceCommit/manifestDigest 渲染在位（L133-181、L548-561），与 §4.1 结论一致。
+- **G7 已闭合（复证）**：`publishVersion` 全前端零命中；`features/version/api.ts` 导出 11 函数
+  均有消费方（无死代码残留）。
+- **G9 大幅修订——`aih` CLI 记录过时**：`scripts/aih/aih`（v0.2.0，bash 实现）已存在，
+  search/inspect/pull/create/push/status/versions/resume/verify 九动作与退出码表 0-7
+  对齐 REQ-DST-CLI-001；`verify-journey.sh` journey_v26 以该路径消费（栈运行时 PASS）。
+  剩余缺口为 E4 验收回写，非缺位。G9 真缺位收敛为：门户首页 #1、组织/用户主页 #9、
+  全局搜索 #10、文档中心 #11、创空间 #8（非目标声明）——仍属产品决策门。
+- **验收口径补充（verify-journey 双口径事实）**：`verify-journey.sh` 覆盖 **18 旅程**
+  （V05-V17、V19、V25-V28；074 实跑 PASS=18 SKIP=0 FAIL=0），为 PRD §13.2 行为旅程权威口径；
+  `verify-journey.ps1` 仅 V05/V08/V12/V14 轻量子集（Windows 烟测定位）。ps1 不得表述为
+  「与 .sh 结构对齐」的全量口径；journey.sh 未含 V18/V20-V24 由 verify.sh 编号域承接
+  （两脚本编号语义不同，verify-case-mapping.md 已有映射）。
+- **D1/D2 复核（implementation-status 缺陷清单）**：D1 资产创建鉴权——
+  `AssetApplicationService` L134 `requirePermission(Permissions.ASSET_CREATE)` **已闭合**；
+  D2 changeOwnPassword 越权——该端点已不存在，现为 `/me/password` 自助改密
+  （契约 L197 + AuthController `context.principalId()`）**已闭合**。两文档描述滞后。
+
+### 任务清单（10-09 复订，按依赖与门禁排序）
+
+| # | 事项 | 前置门禁 | 建议载体 |
+| --- | --- | --- | --- |
+| 1 | 074/075 提交与 `review.accepted`；067/068/069/071/072/073 遗留人工验收 | 验证权威（人类） | G10 既有 |
+| 2 | V26/V28 旅程验收回写（10-09 复订）：`verify-journey.sh` 全栈首跑实测 13 PASS/4 FAIL/1 SKIP（Run 20261009105006；V26 CLI 与 V28 本体 PASS，4 FAIL 均为探针作业被 reconcile 风暴饿死超时）——**CLI E4 补证走续用已授权 `TASK-P2-009`**（README/traceability 登记核对并入其收口）；**饿死/风暴/计数失真的基础设施修复另立 `TASK-P0BR-076`（DRAFT 待批准）**，其 18/18 复跑即本行 E4 刷新主证 | P2-009 已 READY；076 待批准人处置 | `TASK-P2-009` + `TASK-P0BR-076` |
+| 3 | G1 文件内容浏览：契约新增版本文件树+单文件内容代理端点（权限过滤+防枚举+大小上限+审计），前端 Files Tree onSelect+内容面板 | 契约先行 + Task Card | `TASK-P0BR-077` |
+| 4 | G5 Split/统计：preview 投影扩展 split 维度与基础统计（迁移 V44+、契约、Job、前端 Subset/Split 选择器） | DEC-015 已 ACCEPTED；迁移+契约 Task Card | `TASK-P0BR-078` |
+| 5 | G3/G4 订阅与收藏：先补 REQ/PAGE 增补（含收藏语义、退订幂等、通知联动），人类评审后开工 | REQ/PAGE 评审（人类） | Wave γ 新卡 |
+| 6 | G9 余项：文档中心/组织主页/门户首页/全局搜索逐项 REQ/PAGE/ADR 立项；#8 非目标声明 | 产品决策（人类） | Wave ε |
+| 7 | iamLastShapeProbe 僵尸守卫加严裁定 | 批准人裁定 | 075 移交 |
+| 8 | E5 P5003 破坏性恢复演练窗口 | 用户窗口 | G10 既有 |
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。

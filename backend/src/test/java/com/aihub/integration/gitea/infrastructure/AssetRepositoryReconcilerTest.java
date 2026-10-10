@@ -109,13 +109,59 @@ class AssetRepositoryReconcilerTest {
     }
 
     @Test
+    void handleWithActiveReprovisionJobSkipsEnqueue() {
+        // M3 去重：同一资产已有在途 REPOSITORY_PROVISION 时不得再次入队
+        List<Map<String, Object>> batch = List.of(row("ast_001", "my-model", "ai-lab"));
+        when(jdbcTemplate.queryForList(anyString(), anyInt())).thenReturn(batch, List.of());
+        when(giteaExistencePort.repositoryExists("ai-lab", "my-model")).thenReturn(false);
+        when(jobRepository.hasActiveByTypeAndAssetId("REPOSITORY_PROVISION", "ast_001")).thenReturn(true);
+
+        JobContext ctx = new JobContext("job-1", "ASSET_REPO_RECONCILE", null, 0, "usr_1", "trace-1", null);
+        reconciler.handle(ctx);
+
+        verify(jobRepository, never()).insert(any());
+        // 差异仍须如实记录
+        verify(jdbcTemplate, times(1)).update(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void handleUsesRepoFullNameProjectionOverNamespace() {
+        // M2 权威投影：repo_full_name 与 namespace/name 拼接不一致时，以投影拆分结果查 Gitea
+        Map<String, Object> projected = row("ast_001", "my-model", "ai-lab");
+        projected.put("repo_full_name", "org-real/my-model");
+        when(jdbcTemplate.queryForList(anyString(), anyInt())).thenReturn(List.of(projected), List.of());
+        when(giteaExistencePort.repositoryExists("org-real", "my-model")).thenReturn(true);
+
+        JobContext ctx = new JobContext("job-1", "ASSET_REPO_RECONCILE", null, 0, "usr_1", "trace-1", null);
+        reconciler.handle(ctx);
+
+        verify(giteaExistencePort).repositoryExists("org-real", "my-model");
+        verify(giteaExistencePort, never()).repositoryExists(eq("ai-lab"), anyString());
+        verify(jdbcTemplate, never()).update(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void handleWithInvalidProjectionTriggersManualReview() {
+        // 投影存在但不是合法 owner/repo：判人工复核，不猜测发起 Gitea 请求
+        Map<String, Object> bad = row("ast_001", "my-model", "ai-lab");
+        bad.put("repo_full_name", "not-a-valid-full-name");
+        when(jdbcTemplate.queryForList(anyString(), anyInt())).thenReturn(List.of(bad), List.of());
+
+        JobContext ctx = new JobContext("job-1", "ASSET_REPO_RECONCILE", null, 0, "usr_1", "trace-1", null);
+        reconciler.handle(ctx);
+
+        verify(giteaExistencePort, never()).repositoryExists(anyString(), anyString());
+        verify(jdbcTemplate, times(1)).update(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
     void checkAssetRepositorySkipsGiteaWhenPortUnavailable() {
         when(giteaExistenceProvider.getIfAvailable()).thenReturn(null);
 
         AssetRepositoryReconciler local = new AssetRepositoryReconciler(jdbcTemplate, platformMetrics,
                 giteaExistenceProvider, jobRepository, idGenerator);
 
-        assertThat(local.checkAssetRepository("ast_001", "valid-name", "ai-lab"))
+        assertThat(local.checkAssetRepository("ast_001", "valid-name", "ai-lab", null))
                 .isEqualTo(AssetRepositoryReconciler.ReconcileResult.CONSISTENT);
         verify(giteaExistencePort, never()).repositoryExists(anyString(), anyString());
     }
@@ -147,6 +193,8 @@ class AssetRepositoryReconcilerTest {
         m.put("asset_id", assetId);
         m.put("name", name);
         m.put("namespace", namespace);
+        // 与扫描 SQL 一致：默认无权威投影（回退 namespace/name 推导口径）
+        m.put("repo_full_name", null);
         m.put("provisioning_status", "COMPLETED");
         return m;
     }

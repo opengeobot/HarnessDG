@@ -54,6 +54,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 class JobWorkerTest {
 
     private static final long LEASE_SECONDS = 60L;
+    /** 既有状态机用例默认单领取（等价于修复前行为），批量语义由专门用例覆盖。 */
+    private static final int DEFAULT_BATCH_SIZE = 1;
 
     private JobRepository jobRepository;
     private JobAttemptRepository jobAttemptRepository;
@@ -88,12 +90,16 @@ class JobWorkerTest {
     }
 
     private JobWorker newWorker() {
+        return newWorker(DEFAULT_BATCH_SIZE);
+    }
+
+    private JobWorker newWorker(int batchSize) {
         // 事务模板以 mock 事务管理器构造：execute 同步运行回调，使单测能观察
         // 「迁移 + attempt + 审计」是否确实处于同一执行单元内。
         TransactionTemplate txTemplate = new TransactionTemplate(mock(PlatformTransactionManager.class));
         return new JobWorker(jobRepository, jobAttemptRepository, handlerRegistry, backoff,
                 notificationPortProvider, auditPortProvider, txTemplate, clock, meterRegistryProvider,
-                new SensitiveDataMasker(), LEASE_SECONDS, platformMetricsProvider);
+                new SensitiveDataMasker(), LEASE_SECONDS, batchSize, platformMetricsProvider);
     }
 
     @Test
@@ -108,6 +114,58 @@ class JobWorkerTest {
         when(jobRepository.claimNext(anyString(), any(), anyLong())).thenReturn(Optional.empty());
         newWorker().tick();
         verify(jobRepository).claimNext(anyString(), any(), eq(LEASE_SECONDS));
+    }
+
+    @Test
+    void shouldClaimUpToBatchSizeWithinOneTick() throws Exception {
+        // 队列始终有任务：一个 tick 至多领取 batchSize 个，验证批量上限而非无限循环
+        when(jobRepository.claimNext(anyString(), any(), anyLong()))
+                .thenAnswer(inv -> Optional.of(claimed(claimedJob("job_x", "sample.noop", 1, 3))));
+        JobHandler handler = mock(JobHandler.class);
+        when(handlerRegistry.resolve("sample.noop")).thenReturn(Optional.of(handler));
+
+        newWorker(5).tick();
+
+        verify(jobRepository, times(5)).claimNext(anyString(), any(), anyLong());
+        verify(handler, times(5)).handle(any(JobContext.class));
+    }
+
+    @Test
+    void shouldStopEarlyWhenQueueEmpties() throws Exception {
+        // 前两次有任务、第三次起队列空：应提前结束，不再领满 batchSize
+        when(jobRepository.claimNext(anyString(), any(), anyLong()))
+                .thenReturn(Optional.of(claimed(claimedJob("job_a", "sample.noop", 1, 3))))
+                .thenReturn(Optional.of(claimed(claimedJob("job_b", "sample.noop", 1, 3))))
+                .thenReturn(Optional.empty());
+        JobHandler handler = mock(JobHandler.class);
+        when(handlerRegistry.resolve("sample.noop")).thenReturn(Optional.of(handler));
+
+        newWorker(5).tick();
+
+        verify(jobRepository, times(3)).claimNext(anyString(), any(), anyLong());
+        verify(handler, times(2)).handle(any(JobContext.class));
+    }
+
+    @Test
+    void shouldContinueBatchWhenHandlerFails() throws Exception {
+        // 单个任务失败不得中断本批：后续任务仍应被领取处理
+        when(jobRepository.claimNext(anyString(), any(), anyLong()))
+                .thenReturn(Optional.of(claimed(claimedJob("job_f", "failing.type", 1, 3))))
+                .thenReturn(Optional.of(claimed(claimedJob("job_g", "sample.noop", 1, 3))))
+                .thenReturn(Optional.empty());
+        when(backoff.nextRunAt(anyInt(), any())).thenReturn(Instant.parse("2026-07-01T10:00:02Z"));
+        JobHandler failing = mock(JobHandler.class);
+        doThrow(new RuntimeException("boom")).when(failing).handle(any(JobContext.class));
+        JobHandler ok = mock(JobHandler.class);
+        when(handlerRegistry.resolve("failing.type")).thenReturn(Optional.of(failing));
+        when(handlerRegistry.resolve("sample.noop")).thenReturn(Optional.of(ok));
+
+        newWorker(5).tick();
+
+        verify(failing).handle(any(JobContext.class));
+        verify(ok).handle(any(JobContext.class));
+        verify(jobRepository).markRetryWait(eq("job_f"), any(), any());
+        verify(jobRepository).markSucceeded(eq("job_g"), any());
     }
 
     @Test
