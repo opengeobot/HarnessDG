@@ -73,7 +73,8 @@ class PreviewApplicationServiceRenderTest {
         when(platformMetricsProvider.getIfAvailable()).thenReturn(platformMetrics);
         service = new PreviewApplicationService(jobApplicationService, new ObjectMapper(),
                 previewQueryPort, authorizationService, versionRepository, storagePort,
-                new PreviewProperties(100, 50, 1024L * 1024, MAX_RENDER_BYTES),
+                new PreviewProperties(100, 50, 1024L * 1024, MAX_RENDER_BYTES, 1024L * 1024,
+                        null, 0, 0, 0L),
                 platformMetricsProvider);
     }
 

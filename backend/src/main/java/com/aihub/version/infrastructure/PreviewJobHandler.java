@@ -143,6 +143,15 @@ public class PreviewJobHandler implements JobHandler {
         }
 
         String previewId = idGenerator.generate(IdPrefix.PREVIEW);
+
+        // Split 维度统计（TASK-P0BR-078）：仅在 Worker 自行从对象存储取数、且数据源为 csv/jsonl 时按
+        // 版本工件全量归组统计；payload 直传 content 或 parquet 等超能力格式一律不产出统计（保持 null
+        // = 统计未知），禁止伪造零值（AC-DST-PRE-002）。
+        String splitStatsJson = null;
+        if (src != null && isTabular(contentType)) {
+            splitStatsJson = computeSplitStats(versionId);
+        }
+
         if (versionId != null) {
             jdbcTemplate.update("DELETE FROM asset_preview WHERE asset_id = ? AND version_id = ?", assetId, versionId);
         } else {
@@ -151,12 +160,286 @@ public class PreviewJobHandler implements JobHandler {
 
         // generated_at 必须转 Timestamp：JdbcTemplate 对 java.time.Instant 变参无法推断 SQL 类型，
         // 会在客户端绑定阶段抛 07006（表现为 BadSqlGrammarException，语句不会到达服务端）。
+        // split_stats 经 CAST(? AS jsonb) 绑定：JdbcTemplate 传 String 无法推断 JSONB 目标类型。
         jdbcTemplate.update("""
-                INSERT INTO asset_preview (preview_id, asset_id, version_id, content_type, content, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, previewId, assetId, versionId, "application/json", previewJson, Timestamp.from(Instant.now()));
+                INSERT INTO asset_preview (preview_id, asset_id, version_id, content_type, content, generated_at, split_stats)
+                VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb))
+                """, previewId, assetId, versionId, "application/json", previewJson,
+                Timestamp.from(Instant.now()), splitStatsJson);
 
-        LOG.info("preview generated previewId={} assetId={}", previewId, assetId);
+        LOG.info("preview generated previewId={} assetId={} splitStats={}",
+                previewId, assetId, splitStatsJson != null);
+    }
+
+    /** Split 归组兜底名：无白名单顶层目录时统一归入 default（单默认视图，选择器不渲染）。 */
+    static final String DEFAULT_SPLIT = "default";
+
+    /** 参与四元组统计的表格族；parquet/图片/纯文本不伪造行数（TASK-P0BR-078 禁止新增解析依赖）。 */
+    private static boolean isTabular(String mediaType) {
+        return "text/csv".equals(mediaType) || "application/x-ndjson".equals(mediaType)
+                || "application/jsonl".equals(mediaType);
+    }
+
+    /**
+     * 按 artifact {@code path} 顶层目录识别 Split。
+     *
+     * <p>规则（TASK-P0BR-078 CONFIG，服务端白名单见 {@link PreviewProperties#splitDirs()}）：
+     * 顶层目录命中白名单 → 该目录名；顶层为 {@code data} 根 → 取次级目录再匹配白名单（否则 default）；
+     * 其余 → default。大小写不敏感。
+     */
+    String resolveSplit(String path) {
+        if (path == null || path.isBlank()) {
+            return DEFAULT_SPLIT;
+        }
+        String normalized = path.replace('\\', '/');
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        String[] segments = normalized.split("/");
+        if (segments.length < 2) {
+            return DEFAULT_SPLIT;
+        }
+        List<String> whitelist = previewProperties.splitDirs();
+        String first = segments[0].toLowerCase();
+        if (whitelist.contains(first)) {
+            return first;
+        }
+        if ("data".equals(first)) {
+            String second = segments[1].toLowerCase();
+            if (whitelist.contains(second)) {
+                return second;
+            }
+        }
+        return DEFAULT_SPLIT;
+    }
+
+    /**
+     * 生成版本级 Split 统计投影 JSON。
+     *
+     * <p>确定性口径：工件按 path 字典序遍历；每 Split 文件数上限 {@code maxStatsFiles}、
+     * 累计字节上限 {@code maxStatsBytes}、单文件采样行数上限 {@code maxStatsRows}，
+     * 任一触顶则该 Split 与 totals 标记 {@code truncated=true}。版本内无 csv/jsonl 工件时返回
+     * {@code null}（统计未知），不产出空 splits 伪值。对象缺失按既有语义抛
+     * {@code PREVIEW_SOURCE_UNAVAILABLE}（不产出部分统计冒充完整）。
+     */
+    String computeSplitStats(String versionId) {
+        List<Artifact> artifacts = versionRepository.listArtifactsByVersion(versionId);
+        if (artifacts == null || artifacts.isEmpty()) {
+            return null;
+        }
+        List<Artifact> sorted = new ArrayList<>(artifacts);
+        sorted.sort(java.util.Comparator.comparing(a -> a.path() == null ? "" : a.path()));
+
+        Map<String, SplitAccumulator> bySplit = new java.util.TreeMap<>();
+        for (Artifact artifact : sorted) {
+            String mediaType = artifact.mediaType() != null
+                    ? artifact.mediaType() : inferContentType(artifact.path());
+            if (!isTabular(mediaType)) {
+                continue;
+            }
+            bySplit.computeIfAbsent(resolveSplit(artifact.path()), k -> new SplitAccumulator())
+                    .accept(artifact, mediaType);
+        }
+        if (bySplit.isEmpty()) {
+            return null;
+        }
+
+        List<Map<String, Object>> splits = new ArrayList<>();
+        long totalRows = 0;
+        long totalFiles = 0;
+        long totalBytes = 0;
+        boolean totalTruncated = false;
+        for (Map.Entry<String, SplitAccumulator> entry : bySplit.entrySet()) {
+            SplitAccumulator acc = entry.getValue();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", entry.getKey());
+            item.put("rowCount", acc.rowCount);
+            item.put("fileCount", acc.fileCount);
+            item.put("sizeBytes", acc.sizeBytes);
+            item.put("columns", acc.columns);
+            item.put("truncated", acc.truncated);
+            item.put("sampleRows", List.copyOf(acc.sampleRows));
+            splits.add(item);
+            totalRows += acc.rowCount;
+            totalFiles += acc.fileCount;
+            totalBytes += acc.sizeBytes;
+            totalTruncated |= acc.truncated;
+        }
+
+        Map<String, Object> totals = new LinkedHashMap<>();
+        totals.put("rowCount", totalRows);
+        totals.put("fileCount", totalFiles);
+        totals.put("sizeBytes", totalBytes);
+        totals.put("truncated", totalTruncated);
+
+        Map<String, Object> generatedFrom = new LinkedHashMap<>();
+        generatedFrom.put("versionId", versionId);
+        generatedFrom.put("sourceCommit", versionRepository.findByVersionId(versionId)
+                .map(v -> v.sourceCommit()).orElse(null));
+        generatedFrom.put("generatedAt", Instant.now().toString());
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("splits", splits);
+        stats.put("totals", totals);
+        stats.put("generatedFrom", generatedFrom);
+        try {
+            return objectMapper.writeValueAsString(stats);
+        } catch (Exception ex) {
+            LOG.warn("split stats serialization failed versionId={}", versionId, ex);
+            return null;
+        }
+    }
+
+    /** 单 Split 统计累加器（上限触顶即标记 truncated，超限文件不再读取）。 */
+    private final class SplitAccumulator {
+        private long rowCount;
+        private long fileCount;
+        private long sizeBytes;
+        private List<String> columns;
+        private boolean truncated;
+        /** 该 Split 的脱敏样例切片（TASK-P0BR-078 批准口径：切换 Split 展示对应样例）。 */
+        private final List<Object> sampleRows = new ArrayList<>();
+
+        void accept(Artifact artifact, String mediaType) {
+            if (fileCount >= previewProperties.maxStatsFiles()) {
+                truncated = true;
+                return;
+            }
+            long budget = previewProperties.maxStatsBytes() - sizeBytes;
+            if (budget <= 0) {
+                truncated = true;
+                return;
+            }
+            String objectKey = dvcObjectKey(artifact.dvcHash(), artifact.path());
+            if (!storagePort.objectExists(DVC_CACHE_BUCKET, objectKey)) {
+                LOG.warn("split stats source unavailable versionId objectKey={}", objectKey);
+                recordPreviewFailure("source_unavailable");
+                throw new UnsupportedOperationException(
+                        "PREVIEW_SOURCE_UNAVAILABLE: artifact object not found in dvc-cache for stats "
+                                + artifact.artifactId());
+            }
+            long cap = Math.min(budget, Integer.MAX_VALUE - 1L);
+            try (InputStream in = storagePort.readObject(DVC_CACHE_BUCKET, objectKey)) {
+                byte[] bytes = readLimited(in, cap);
+                sizeBytes += bytes.length;
+                fileCount++;
+                if (bytes.length >= cap) {
+                    truncated = true;
+                }
+                accumulateRows(new String(bytes, StandardCharsets.UTF_8), mediaType);
+            } catch (IOException ex) {
+                recordPreviewFailure("source_read_failed");
+                throw new UnsupportedOperationException("PREVIEW_SOURCE_UNAVAILABLE: " + ex.getMessage(), ex);
+            }
+        }
+
+        /** 行数/列数统计：解析异常按不可靠处理（不抛、不计入 columns），避免脏数据阻断预览产出。 */
+        private void accumulateRows(String text, String mediaType) {
+            try {
+                int sampleLimit = previewProperties.maxRows();
+                if ("text/csv".equals(mediaType)) {
+                    List<String[]> records = parseCsvRecords(text);
+                    if (records.isEmpty()) {
+                        return;
+                    }
+                    String[] headers = records.remove(0);
+                    if (columns == null) {
+                        columns = headerNames(headers);
+                    }
+                    // 脱敏样例切片：至多 maxRows 行，字段按表头对齐并 sanitize（与主样例同一脱敏路径）
+                    String[] displayHeaders = columns == null ? headers : columns.toArray(new String[0]);
+                    for (String[] values : records) {
+                        if (sampleRows.size() >= sampleLimit) {
+                            break;
+                        }
+                        Map<String, String> row = new LinkedHashMap<>();
+                        for (int i = 0; i < displayHeaders.length; i++) {
+                            String value = i < values.length ? sanitize(values[i]) : "";
+                            row.put(displayHeaders[i].trim(), value);
+                        }
+                        sampleRows.add(row);
+                    }
+                    int rows = records.size();
+                    int limit = previewProperties.maxStatsRows();
+                    if (rows > limit) {
+                        rows = limit;
+                        truncated = true;
+                    }
+                    rowCount += rows;
+                    return;
+                }
+                // jsonl / ndjson：首行键集合为列名，逐非空行计数
+                int rows = 0;
+                int limit = previewProperties.maxStatsRows();
+                try (BufferedReader reader = new BufferedReader(new StringReader(text))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.isBlank()) {
+                            continue;
+                        }
+                        if (rows == 0 && columns == null) {
+                            columns = jsonlKeys(line);
+                        }
+                        if (sampleRows.size() < sampleLimit) {
+                            sampleRows.add(sanitizeJsonlLine(line));
+                        }
+                        if (rows >= limit) {
+                            truncated = true;
+                            break;
+                        }
+                        rows++;
+                    }
+                }
+                rowCount += rows;
+            } catch (Exception ex) {
+                LOG.warn("split stats row counting degraded for one artifact: {}", ex.getMessage());
+            }
+        }
+
+        /** jsonl 单行脱敏样例：可解析为对象则原样结构化，否则退化为 sanitize 后的 _raw。 */
+        private Object sanitizeJsonlLine(String line) {
+            try {
+                JsonNode node = objectMapper.readTree(line);
+                if (node.isObject()) {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    node.fields().forEachRemaining(e -> {
+                        JsonNode v = e.getValue();
+                        row.put(e.getKey(), v.isTextual() ? sanitize(v.asText()) : v.asText());
+                    });
+                    return row;
+                }
+                return Map.of("_raw", sanitize(line));
+            } catch (Exception ex) {
+                return Map.of("_raw", sanitize(line));
+            }
+        }
+
+        private List<String> headerNames(String[] headers) {
+            int maxCols = previewProperties.maxCols();
+            List<String> names = new ArrayList<>();
+            for (int i = 0; i < headers.length && i < maxCols; i++) {
+                names.add(headers[i].trim());
+            }
+            return names;
+        }
+
+        private List<String> jsonlKeys(String line) {
+            try {
+                JsonNode node = objectMapper.readTree(line);
+                if (!node.isObject()) {
+                    return List.of();
+                }
+                List<String> keys = new ArrayList<>();
+                node.fieldNames().forEachRemaining(keys::add);
+                return keys.size() > previewProperties.maxCols()
+                        ? keys.subList(0, previewProperties.maxCols()) : keys;
+            } catch (Exception ex) {
+                return List.of();
+            }
+        }
     }
 
     /**

@@ -3008,6 +3008,46 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
+  /assets/{assetId}/versions/{versionId}/artifacts/{artifactId}/content:
+    parameters:
+      - { name: assetId, in: path, required: true, schema: { type: string } }
+      - { name: versionId, in: path, required: true, schema: { type: string } }
+      - { name: artifactId, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getArtifactContent
+      summary: 服务端代理读取文本工件内容
+      description: |
+        按 assetId + versionId + artifactId 精确绑定，从对象存储（dvc-cache，对象键由 DVC hash 派生，用户输入不参与）
+        流式代理读取文本工件内容。与 renderPreviewArtifact（图片渲染）同族代理：预签名查询串不进入页面数据，
+        浏览器经本端点取文本后在详情页文件树面板内渲染纯文本（不使用 HTML 注入）。
+        内容白名单固定为 text/plain、text/csv、text/markdown、application/json、application/x-ndjson（服务端常量）；
+        artifact 的 mediaType 来源于工件清单投影；超过 maxTextBytes 上限返回 413。
+        仅 PUBLISHED 版本可用（非 PUBLISHED 返回 409）；权限检查先于任何存储访问；
+        未知/跨绑定/不可见的 assetId、versionId、artifactId 一律同一 404 语义防枚举。
+      tags: [version]
+      x-implementation-status: implemented-unverified
+      x-error-codes: [ASSET_NOT_FOUND, VERSION_NOT_FOUND, VERSION_STATE_NOT_ALLOWED, AUTH_PERMISSION_DENIED, PREVIEW_NOT_FOUND, PREVIEW_UNSUPPORTED_FORMAT, PREVIEW_TOO_LARGE, PREVIEW_SOURCE_UNAVAILABLE]
+      x-required-permissions: [asset:read]
+      responses:
+        '200':
+          description: 文本内容（Content-Type 为白名单内 mediaType，UTF-8）
+          content:
+            text/plain:
+              schema: { type: string }
+            text/csv:
+              schema: { type: string }
+            text/markdown:
+              schema: { type: string }
+            application/json:
+              schema: { type: string }
+            application/x-ndjson:
+              schema: { type: string }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '415': { $ref: '#/components/responses/ErrorResponse' }
+
   /assets/{assetId}/versions/{versionId}/transition:
     parameters:
       - { name: assetId, in: path, required: true, schema: { type: string } }
@@ -5011,12 +5051,68 @@ components:
 
     PreviewView:
       type: object
-      description: 资产预览视图
+      description: |
+        资产预览视图。content 是脱敏样例投影（JSON 字符串，untrustedContent）。
+        splits/totals/generatedFrom 为 TASK-P0BR-078 新增的可选统计分量，来自 asset_preview.split_stats
+        服务端投影，结构与后端测试同源：
+        { "splits": [ { "name": "train", "rowCount": 1200, "fileCount": 3, "sizeBytes": 40960,
+                        "columns": ["id", "label"], "truncated": false,
+                        "sampleRows": [ { "id": "1", "label": "a" } ] } ],
+          "totals": { "rowCount": 1600, "fileCount": 4, "sizeBytes": 55296, "truncated": true },
+          "generatedFrom": { "versionId": "ver_x", "sourceCommit": "40hex", "generatedAt": "2026-10-10T06:00:00Z" } }
+        三者同时缺失（均为 null）表示「无 Split 维度 / 统计未知」——旧投影（V44 前生成）或数据源非
+        csv/jsonl；调用方必须呈现未知态而非零值（AC-DST-PRE-002）。rowCount 等统计在服务端确定性
+        上限内计算，达上限时 truncated=true。
       required: [previewId, contentType, content]
       properties:
         previewId: { type: string }
         contentType: { type: string }
         content: { type: string }
+        generatedAt: { type: [string, 'null'] }
+        splits:
+          type: [array, 'null']
+          description: Split 维度统计（按 artifact path 顶层目录白名单归组，其余归 default；无 Split 结构时为单元素 default 或 null）
+          items: { $ref: '#/components/schemas/PreviewSplitStat' }
+        totals: { $ref: '#/components/schemas/PreviewStatTotals' }
+        generatedFrom: { $ref: '#/components/schemas/PreviewStatsSource' }
+
+    PreviewSplitStat:
+      type: object
+      description: 单个 Split 的基础统计（服务端投影，前端不得自行拉全量重算）
+      required: [name]
+      properties:
+        name: { type: string, description: Split 名（数据派生值，不做 i18n 键：train/validation/val/test/dev/default） }
+        rowCount: { type: [integer, 'null'], description: 上限内采样行数（未统计时为 null，不得当 0 处理） }
+        fileCount: { type: [integer, 'null'] }
+        sizeBytes: { type: [integer, 'null'] }
+        columns:
+          type: [array, 'null']
+          description: 列名（取该 Split 首个受支持工件的表头；parquet 等超能力格式为 null）
+          items: { type: string }
+        truncated: { type: [boolean, 'null'], description: 行数或文件数达上限标记 }
+        sampleRows:
+          type: [array, 'null']
+          description: |
+            该 Split 的脱敏样例切片（TASK-P0BR-078 批准口径：切换 Split 展示对应样例）。
+            与服务端主样例同一 sanitize 脱敏路径，行数上限 maxRows；旧投影无该分量为 null——
+            消费方回退到 PreviewView.content 主样例渲染，不得伪造。untrustedContent：仅可作纯文本/表格展示。
+          items: { type: object, additionalProperties: true }
+
+    PreviewStatTotals:
+      type: object
+      description: 全版本合计统计（各 Split 之和；无统计时为 null）
+      properties:
+        rowCount: { type: [integer, 'null'] }
+        fileCount: { type: [integer, 'null'] }
+        sizeBytes: { type: [integer, 'null'] }
+        truncated: { type: [boolean, 'null'] }
+
+    PreviewStatsSource:
+      type: object
+      description: 统计来源注记（绑定精确 Version，REQ-DST-DETAIL-001）
+      properties:
+        versionId: { type: [string, 'null'] }
+        sourceCommit: { type: [string, 'null'] }
         generatedAt: { type: [string, 'null'] }
 
     # ── DVC schema ──

@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,10 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
  * 资产预览 REST 控制器。
  *
  * <p>返回已生成的预览内容（JSON 格式），前端渲染时需 DOMPurify 清洗。
+ * 路径前缀声明在方法级：文本内容代理（TASK-P0BR-077）挂载于版本工件路径族，
+ * 与预览路径族共存于同一纯适配器；既有三操作 URL 不变。
  */
 @RestController
-@RequestMapping("/api/v1/assets/{assetId}/previews")
 public class PreviewController {
+
+    private static final String PREVIEWS_BASE = "/api/v1/assets/{assetId}/previews";
 
     private final AuthorizationService authorizationService;
     private final PreviewApplicationService previewApplicationService;
@@ -46,7 +48,7 @@ public class PreviewController {
      * @param versionId 版本 ID（可空）
      * @return 预览视图
      */
-    @GetMapping
+    @GetMapping(PREVIEWS_BASE)
     public ApiResponse<PreviewApplicationService.PreviewView> getPreview(@PathVariable String assetId,
                                                             @RequestParam(required = false) String versionId) {
         return VersionApiContext.respond(previewApplicationService.getPreview(assetId, versionId));
@@ -55,7 +57,7 @@ public class PreviewController {
     /**
      * 触发预览生成 Job。
      */
-    @PostMapping("/generate")
+    @PostMapping(PREVIEWS_BASE + "/generate")
     public ApiResponse<Map<String, String>> triggerPreviewGeneration(@PathVariable String assetId,
                                                         @RequestBody GeneratePreviewRequest body) {
         authorizationService.requirePermission("asset:manage");
@@ -84,7 +86,7 @@ public class PreviewController {
      * @param artifactId 工件 ID（必填）
      * @return 图片字节流
      */
-    @GetMapping("/artifact")
+    @GetMapping(PREVIEWS_BASE + "/artifact")
     public ResponseEntity<byte[]> renderPreviewArtifact(@PathVariable String assetId,
                                                         @RequestParam String versionId,
                                                         @RequestParam String artifactId) {
@@ -93,5 +95,27 @@ public class PreviewController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(rendered.mediaType()))
                 .body(rendered.content());
+    }
+
+    /**
+     * 服务端代理读取文本工件内容（TASK-P0BR-077）。
+     *
+     * <p>纯适配器：校验与取数全部委托应用服务；返回白名单内 mediaType 的 UTF-8 字节流，
+     * 不包裹 ApiResponse（原始内容）。内容为不可信数据，调用方必须按纯文本呈现。
+     *
+     * @param assetId    资产 ID
+     * @param versionId  版本 ID
+     * @param artifactId 工件 ID
+     * @return 文本字节流
+     */
+    @GetMapping("/api/v1/assets/{assetId}/versions/{versionId}/artifacts/{artifactId}/content")
+    public ResponseEntity<byte[]> getArtifactContent(@PathVariable String assetId,
+                                                     @PathVariable String versionId,
+                                                     @PathVariable String artifactId) {
+        PreviewApplicationService.ArtifactContentView content =
+                previewApplicationService.getArtifactContent(assetId, versionId, artifactId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(content.mediaType()))
+                .body(content.content());
     }
 }

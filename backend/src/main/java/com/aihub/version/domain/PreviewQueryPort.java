@@ -12,8 +12,13 @@ import java.util.Optional;
  */
 public interface PreviewQueryPort {
 
-    /** 预览记录快照。 */
-    record PreviewRecord(String previewId, String contentType, String content, String generatedAt) {}
+    /**
+     * 预览记录快照。
+     *
+     * @param splitStatsJson Split/统计投影原始 JSON（可空——NULL/blank = 旧投影，统计未知；TASK-P0BR-078）
+     */
+    record PreviewRecord(String previewId, String contentType, String content, String generatedAt,
+                         String splitStatsJson) {}
 
     /**
      * 查询资产最新预览记录。

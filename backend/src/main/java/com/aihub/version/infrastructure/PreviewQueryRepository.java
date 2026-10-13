@@ -28,7 +28,8 @@ public class PreviewQueryRepository implements PreviewQueryPort {
         // the parameter type (could not determine data type of parameter),
         // so an explicit CAST is required.
         var rows = jdbcTemplate.queryForList(
-                "SELECT preview_id, content_type, content, generated_at FROM asset_preview "
+                "SELECT preview_id, content_type, content, generated_at, split_stats::text AS split_stats "
+                        + "FROM asset_preview "
                         + "WHERE asset_id = ? AND (CAST(? AS varchar) IS NULL OR version_id = ?) "
                         + "ORDER BY generated_at DESC LIMIT 1",
                 assetId, versionId, versionId);
@@ -40,6 +41,7 @@ public class PreviewQueryRepository implements PreviewQueryPort {
                 String.valueOf(row.get("preview_id")),
                 String.valueOf(row.get("content_type")),
                 String.valueOf(row.get("content")),
-                row.get("generated_at") != null ? row.get("generated_at").toString() : null));
+                row.get("generated_at") != null ? row.get("generated_at").toString() : null,
+                row.get("split_stats") != null ? String.valueOf(row.get("split_stats")) : null));
     }
 }

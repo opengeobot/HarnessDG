@@ -129,6 +129,11 @@ aihub:
     max-rows: ${AIHUB_PREVIEW_MAX_ROWS:100}
     max-cols: ${AIHUB_PREVIEW_MAX_COLS:50}
     max-bytes: ${AIHUB_PREVIEW_MAX_BYTES:1048576}
+    # Split 维度统计上限与目录白名单（TASK-P0BR-078；规则变更须经规格变更）
+    split-dirs: train,validation,val,test,dev
+    max-stats-rows: ${AIHUB_PREVIEW_MAX_STATS_ROWS:10000}
+    max-stats-files: ${AIHUB_PREVIEW_MAX_STATS_FILES:200}
+    max-stats-bytes: ${AIHUB_PREVIEW_MAX_STATS_BYTES:67108864}
   # 应用内告警定时检查间隔（毫秒）
   alert:
     check-interval: ${AIHUB_ALERT_CHECK_INTERVAL:300000}
