@@ -8,3 +8,6 @@ graphify-out/
 
 # 本地 IDE 调试笔记
 debug-websocket-proxy-error.md
+
+# 构建/验证日志产物（067 波次起，本地取证用，不入库）
+build-logs/
