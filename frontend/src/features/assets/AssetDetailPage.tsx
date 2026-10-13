@@ -14,6 +14,7 @@ import {
   Button,
   Card,
   Descriptions,
+  Divider,
   Empty,
   Flex,
   Input,
@@ -38,6 +39,7 @@ import {
   getAsset,
   restoreAsset,
 } from './api';
+import { ArtifactContentPanel } from './ArtifactContentPanel';
 import { DiscussionPanel } from './DiscussionPanel';
 import { DownloadStats } from './DownloadStats';
 import { PreviewPanel } from './PreviewPanel';
@@ -78,7 +80,10 @@ const PROVISIONING_STATUS_COLOR: Record<ProvisioningStatus, string> = {
 
 type TabKey = 'overview' | 'versions' | 'files' | 'preview' | 'discussions' | 'lineage' | 'access' | 'settings';
 
-/** 按 artifact path 构造目录树节点（path/size/mediaType/sha256）。 */
+/** 叶子节点 key 前缀：`art:{artifactId}` 可解析，选中时反查工件（TASK-P0BR-077）。 */
+const ARTIFACT_TREE_KEY_PREFIX = 'art:';
+
+/** 按 artifact path 构造目录树节点（path/size/mediaType/sha256）；叶子 key 携带 artifactId，目录不可选。 */
 function buildArtifactTree(artifacts: ArtifactView[]): DataNode[] {
   const root: Record<string, { children: Record<string, unknown>; artifact?: ArtifactView }> = {
     __root: { children: {} },
@@ -98,12 +103,13 @@ function buildArtifactTree(artifacts: ArtifactView[]): DataNode[] {
     const node = ensure(parts);
     node.artifact = art;
   }
-  const toNodes = (children: Record<string, unknown>): DataNode[] =>
+  const toNodes = (children: Record<string, unknown>, pathPrefix: string): DataNode[] =>
     Object.entries(children)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, childRaw]) => {
         const child = childRaw as { children: Record<string, unknown>; artifact?: ArtifactView };
-        const sub = toNodes(child.children);
+        const path = pathPrefix ? `${pathPrefix}/${name}` : name;
+        const sub = toNodes(child.children, path);
         const title = child.artifact ? (
           <Space size={8} wrap>
             <Typography.Text strong title={child.artifact.dvcFile ?? undefined}>{name}</Typography.Text>
@@ -119,9 +125,17 @@ function buildArtifactTree(artifacts: ArtifactView[]): DataNode[] {
         ) : (
           <Typography.Text>{name}/</Typography.Text>
         );
-        return { key: name + JSON.stringify(child.artifact ?? {}), title, children: sub.length ? sub : undefined, isLeaf: !!child.artifact };
+        return {
+          // 叶子 key 可解析回 artifactId；目录 key 用完整路径保证唯一且不可选
+          key: child.artifact ? `${ARTIFACT_TREE_KEY_PREFIX}${child.artifact.artifactId}` : `dir:${path}`,
+          title,
+          children: sub.length ? sub : undefined,
+          isLeaf: !!child.artifact,
+          // 目录仅作结构展示，不可选中；叶子交由 onSelect 驱动内容面板
+          selectable: !sub.length && !!child.artifact,
+        };
       });
-  return toNodes(root.__root.children);
+  return toNodes(root.__root.children, '');
 }
 
 export function AssetDetailPage() {
@@ -185,6 +199,14 @@ export function AssetDetailPage() {
     queryFn: () => listArtifacts(assetId!, effectiveVersionId!),
     enabled: !!assetId && !!effectiveVersionId && activeTab === 'files',
   });
+
+  // Files Tab 内容浏览（TASK-P0BR-077）：选中叶子 key → 反查 artifact → 内容面板
+  const [selectedArtifactKey, setSelectedArtifactKey] = useState<string | null>(null);
+  const selectedArtifact = useMemo(() => {
+    if (!selectedArtifactKey?.startsWith(ARTIFACT_TREE_KEY_PREFIX)) return undefined;
+    const artifactId = selectedArtifactKey.slice(ARTIFACT_TREE_KEY_PREFIX.length);
+    return artifactsQuery.data?.find((a) => a.artifactId === artifactId);
+  }, [selectedArtifactKey, artifactsQuery.data]);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
@@ -445,12 +467,30 @@ export function AssetDetailPage() {
       ) : artifactsQuery.isError || !artifactsQuery.data || artifactsQuery.data.length === 0 ? (
         <Empty description={t('assets.detail.noArtifacts')} />
       ) : (
-        <Tree
-          treeData={buildArtifactTree(artifactsQuery.data)}
-          defaultExpandAll
-          showLine
-          selectable={false}
-        />
+        <>
+          <Tree
+            treeData={buildArtifactTree(artifactsQuery.data)}
+            defaultExpandAll
+            showLine
+            selectedKeys={selectedArtifactKey ? [selectedArtifactKey] : []}
+            onSelect={(keys) => setSelectedArtifactKey(keys.length ? String(keys[0]) : null)}
+          />
+          <Divider style={{ margin: '12px 0' }} />
+          {/* key 绑定版本 + 工件：切换版本或工件时整块重挂载，内容面板状态彻底释放 */}
+          {selectedArtifact && effectiveVersionId ? (
+            <ArtifactContentPanel
+              key={`${effectiveVersionId}:${selectedArtifact.artifactId}`}
+              assetId={assetId!}
+              versionId={effectiveVersionId}
+              artifact={selectedArtifact}
+            />
+          ) : (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={t('assets.filesContentHint')}
+            />
+          )}
+        </>
       )}
     </Card>
   );

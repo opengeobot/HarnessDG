@@ -1,0 +1,3 @@
+HarnessDG E2E 077 version-2 fixture
+marker: e2e077-v2-marker
+此文件仅存在于 4.1.0 版本，用于证明版本切换后内容面板随 Query Key 重置

@@ -1,0 +1,5 @@
+HarnessDG E2E 077 artifact content fixture
+marker: e2e077-txt-marker
+第三行：中文与 emoji 🚀 必须以纯文本原样呈现
+<script>alert('e2e077-xss-probe')</script>
+最后一行：以上 script 标签只是文本节点，绝不允许被 HTML 语义渲染
