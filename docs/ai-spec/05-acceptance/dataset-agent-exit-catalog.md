@@ -36,6 +36,18 @@
 | `AC-DST-DISC-004` | NORMAL | 作者修订/撤回，Moderator 隐藏/恢复/锁定 | Revision 保留；页面显示 Tombstone；权限、通知和审计正确 | E4 |
 | `AC-DST-DISC-005` | FAILURE | 评论包含脚本、危险 HTML、外链诱导或 Prompt Injection | 安全渲染并标记不可信；不执行内容、不改变 Agent/Tool Policy | E4/E5 |
 
+## 3b. 收藏与订阅（草案，待人类评审；对应 `REQ-DST-FAV-001` / `REQ-DST-SUB-001`）
+
+| 场景 ID | Kind | Given / When | 必须观察到 | 证据 |
+| --- | --- | --- | --- | --- |
+| `AC-DST-FAV-001` | NORMAL | 有权用户在详情页/列表收藏资产并打开 `/favorites` | PUT 幂等 204；列表只含本人收藏且仍有权的资产；取消后移除；审计 `ASSET_FAVORITE_ADDED/REMOVED` | E4 |
+| `AC-DST-FAV-002` | UNAUTHORIZED | 无 `asset:read` 主体收藏或对已失去读取权的收藏发起列表读取 | 写入按防枚举拒绝；列表静默过滤不报错、不泄露名称；收藏不扩大可见性 | E4 |
+| `AC-DST-FAV-003` | CONCURRENCY | 同一 `asset_id+principal_id` 并发重复 PUT / DELETE 不存在的收藏 | 唯一键兜底无重复记录；均幂等成功；无多余审计事件 | E3/E4 |
+| `AC-DST-FAV-004` | FAILURE | 资产物理回收后查询其收藏记录与列表 | 回收任务级联删除该资产全部收藏；列表无残留、无错误 | E4 |
+| `AC-DST-SUB-001` | NORMAL | 用户经独立资源端点订阅资产，随后该资产发布新版本 | PUT/DELETE/GET 状态一致；讨论域别名端点同状态；订阅者收到 `VERSION_PUBLISHED` 通知；审计 `ASSET_SUBSCRIBED/UNSUBSCRIBED` | E4 |
+| `AC-DST-SUB-002` | UNAUTHORIZED | 权限撤销后读取 `/subscriptions` 或触发发布 fan-out | 列表静默过滤；通知投递在收件人解析处按实时授权拒绝；订阅记录不被用作扩权 | E4 |
+| `AC-DST-SUB-003` | CONCURRENCY | 重复 PUT 订阅与并发退订（对未订阅 DELETE） | 全部幂等；`ux_subscription` 无重复；退订后不再收到后续版本通知 | E3/E4 |
+
 ## 4. 安全预览
 
 | 场景 ID | Kind | Given / When | 必须观察到 | 证据 |

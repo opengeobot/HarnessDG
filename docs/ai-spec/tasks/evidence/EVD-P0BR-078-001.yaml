@@ -1,0 +1,272 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-078-001
+# 本卡 requiredEvidenceLevel 为 E4。批准人 2026-10-10 批复「批准两卡，按序实施（推荐）」
+# 与「扩展投影产出 per-Split 脱敏样例（推荐）」（回写发生于请示批复之后，非 AI 自批，DEC-009）。
+# 实施内容：V44 扩 asset_preview 可空 JSONB split_stats；PreviewJobHandler 按顶层目录白名单
+# （train/validation/val/test/dev，application.yml aihub.preview.split-dirs 显式键）识别 Split，
+# 在确定性上限（max-stats-rows/files/bytes）内产出 { splits:[{name,rowCount,fileCount,sizeBytes,
+# columns,truncated,sampleRows}], totals, generatedFrom } 投影，per-Split sampleRows 与主样例同
+# 走既有 sanitize/canary 路径；getPreview 响应增量可选分量（契约纯新增）；前端 PreviewPanel Split
+# 选择器 + 统计四元组卡片，旧投影（split_stats NULL）→「统计未知 + 重新生成引导」空态不伪造零值。
+# source.commitSha 指向 baseCommit：本卡改动尚未提交，提交由批准人处置后执行（AI 不自提交，DEC-009）。
+# 注：本卡与 TASK-P0BR-077 同工作树未提交（两卡同轮批准、共享 PreviewController/Service/
+# Properties/契约/i18n/AssetDetailPage 与前端预览实现面），dirtyPaths 为两卡合计工作树清单。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-078
+  requirements: [REQ-DST-DETAIL-001]
+  scenarios: [AC-DST-PRE-001, AC-DST-PRE-002]
+
+governance:
+  # 注意：各 result 行必须保持独立干净行、块内注释最小化——validate-task-card.ps1 L709-710 的
+  # governance 正则在 dotall 下按 4 空格行数指数级回溯，注释过多会使 -CheckCompletion 挂起。
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-078.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-078.md -CheckChangedPaths
+    result: FAIL
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-078.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: a0227961e085a6feae627bff7fcc276937b63b6b # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    # —— 本卡（078）产品/契约/前端实现面 ——
+    - backend/src/main/resources/db/migration/V44__preview_split_stats.sql
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewJobHandler.java
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewProperties.java
+    - backend/src/main/java/com/aihub/version/application/PreviewApplicationService.java
+    - backend/src/main/java/com/aihub/version/api/PreviewController.java
+    - backend/src/main/java/com/aihub/version/domain/PreviewQueryPort.java # allowedPaths 外（见 governance ①）
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewQueryRepository.java # allowedPaths 外
+    - backend/src/main/resources/application.yml # allowedPaths 外
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceStatsTest.java
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceRenderTest.java
+    - backend/src/test/java/com/aihub/version/infrastructure/PreviewJobHandlerTest.java
+    - backend/src/test/java/com/aihub/version/infrastructure/PreviewPropertiesTest.java
+    - contracts/openapi/aihub-v1.yaml # 两卡合计 97 增 1 删（getPreview splits 分量 + getArtifactContent）
+    - frontend/src/features/assets/PreviewPanel.tsx
+    - frontend/src/features/assets/PreviewPanel.test.tsx
+    - frontend/src/features/assets/AssetDetailPage.tsx # 两卡共享（Split 选择 + Tree 可选中）
+    - frontend/src/shared/i18n/en.json # 两卡共享，各 +15
+    - frontend/src/shared/i18n/zh.json
+    - frontend/e2e/preview-splits.spec.ts
+    - frontend/e2e/fixtures/v2-sample.txt
+    # —— 兄弟卡（077）产物（同工作树，非本卡义务，登记以示完整）——
+    - frontend/src/features/assets/ArtifactContentPanel.tsx
+    - frontend/src/features/assets/ArtifactContentPanel.test.tsx
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceContentTest.java
+    - frontend/e2e/artifact-content.spec.ts
+    - frontend/e2e/fixtures/content-sample.csv
+    - frontend/e2e/fixtures/content-sample.txt
+    - docs/ai-spec/tasks/TASK-P0BR-077.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-077-001.yaml
+    # —— 治理/文档 ——
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-078.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-078-001.yaml
+    - docs/architecture/iteration-plan-2026-09-24.md
+    # —— 非产品脏目录（取证/构建产物，未 .gitignore）——
+    - build-logs/EVD-P0BR-077-base.yaml
+    - build-logs/mvnw-verify-077.txt
+    - build-logs/mvnw-verify-078.txt
+    - build-logs/vitest-078.txt
+    - frontend/playwright-report/index.html
+    - frontend/test-results/.last-run.json
+
+environment:
+  observedAt: 2026-10-10T09:28:12Z
+  os: Windows（PowerShell；Docker Desktop 已启动；容器 backend = openjdk 21.0.5 LTS）
+  timezone: Asia/Shanghai
+  java: 容器内 JDK 21.0.5（宿主机 mvnw 走工程 toolchain 编译 Java 21）
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  composeServices: [aihub-backend-1, aihub-worker-1, aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-minio-1, aihub-gitea-1]
+  # 7 服务全 Up：backend/postgres/minio/gitea healthy，frontend/nginx/worker running；
+  # 本卡前端改动经 docker compose up -d --build frontend 重建生效（frontend 镜像自带 nginx runtime，
+  # COPY dist → /usr/share/nginx/html；外层 nginx 网关 8080 仅反代，无需重建），连带 backend recreate→healthy
+
+execution:
+  workingDirectory: 仓库根 + backend/ + frontend/ + deploy/compose/
+  command: >-
+    ①V44 迁移：ALTER TABLE asset_preview ADD COLUMN IF NOT EXISTS split_stats JSONB（含表/列 COMMENT，
+    注释写明结构含 per-Split sampleRows、NULL=旧投影语义）。②后端 Split 识别与统计：PreviewJobHandler
+    遍历版本工件按顶层目录白名单（split-dirs，大小写不敏感）归组 Split，对 csv/jsonl/ndjson（isTabular）
+    在 max-stats-rows/files/bytes 确定性上限内累计 rowCount/fileCount/sizeBytes/columns/truncated，
+    每 Split 累积脱敏样例 sampleRows（与主样例同 sanitize 路径，canary 不弱化）；totals 汇总、generatedFrom
+    记 versionId/sourceCommit/generatedAt；非表格目录/解析失败→该 Split 统计记 unknown 不伪造零值。
+    ③读取组装：PreviewQueryPort.PreviewRecord 增 splitStatsJson 分量、PreviewQueryRepository SELECT 增
+    split_stats::text、getPreview 反序列化后按 AC-DST-PRE-002「不可解析→降级 unknown」渲染（WARN 留痕），
+    响应体新增可选 splits/totals 分量（契约纯增量）。④契约：getPreview 响应 schema 增量分量 +
+    redocly lint 实跑 exit 0（3 warnings，均为既有 no-unused-components/no-illogical-composition-keywords，
+    非本卡破坏）；git diff --numstat 全契约 97 增 1 删（两卡合计，getPreview 分量属纯新增分量）。
+    ⑤后端主证 mvnw -q verify：surefire 汇总 835 用例 FAIL=0 ERR=0 SKIP=10（10 SKIP=testcontainers
+    Windows npipe 既有条件跳过，非本卡引入）；含 PreviewJobHandlerTest 13、PreviewPropertiesTest 10、
+    PreviewApplicationServiceStatsTest 5、RenderTest 14、ContentSecurityTest（截断 3 + 控制字符 13 +
+    PII/Secret canary 2）全绿；日志含 split_stats unparseable→degrade unknown WARN（边界用例物证）。
+    ⑥前端：PreviewPanel Split 选择器（多 Split 默认选中首个、切换统计与样例同步；单 default 不渲染选择器仅出统计卡；
+    缺 sampleRows 回退主样例；旧投影无统计→「未知」空态引导）；Vitest 定向 PreviewPanel.test 14 tests、
+    ArtifactContentPanel.test 7 tests 全绿。⑦前端四连：pnpm lint exit 0、pnpm typecheck exit 0、
+    pnpm build exit 0（✓ built in 39.74s）；pnpm test 全量按本机口径 --maxWorkers=2 实跑
+    `vitest run --maxWorkers=2` → **50 files / 239 tests passed, exit 0**（Duration 860s）。
+    ⑧Compose E4 前端重建：docker compose up -d --build frontend exit 0（backend recreate→healthy）。
+    ⑨E2E 主证（真实 Compose 栈 8080，凭据注入同 066/067/068 口径）：preview-splits.spec.ts **4/4 passed**
+    （① 多目录上传→物化→发布→dvc-cache 注入链；② PREVIEW_GENERATE 投影 per-Split 四元组 + 脱敏样例切片
+    与 fixture 精确一致；③ UI Split 选择器默认首个→切换统计与样例同步→无未知误报→泄漏红线；④ previews
+    查询权限 403/401）；与 077 artifact-content.spec.ts 合跑 **8/8 passed (19.2s)** 无回归。
+    ⑩DB 物证（psql 只读）：split_stats 列存在（jsonb nullable=YES）；e2e078 投影行
+    totals {rowCount:7,fileCount:3,sizeBytes:166,truncated:false}、n_splits=2 与 e2e 断言一致。
+  startedAt: 2026-10-10T08:10:00Z
+  finishedAt: 2026-10-10T09:28:12Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: >-
+    全部 E4 断言经真实 Compose 全栈（8080 网关 + postgres + backend/worker（新镜像）+ MinIO + Gitea）实跑；
+    前端产物经 --build frontend 重建后由 frontend 容器 nginx 提供；库内 asset_preview 只读回查为运行态物证。
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-PRE-001
+      assertion: >-
+        E4：真实栈上传含多 Split 目录结构 CSV 并发布→PREVIEW_GENERATE 投影 per-Split 四元组 + 脱敏样例切片
+        与 fixture 精确一致；UI Split 选择器默认选中首个、切换后统计与样例同步更新、无未知误报、无 PII/Secret
+        泄漏（红线断言通过）。preview-splits.spec.ts 用例①②③全绿；psql 投影行 n_splits=2/totals 与断言吻合。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-PRE-001
+      assertion: >-
+        E2：Job 幂等由既有 PreviewJobHandler 单行读写（preview_id 主键）保证，重新 generate 覆盖 split_stats
+        不产生重复投影行——PreviewJobHandlerTest 13 用例（含覆盖更新）+ RenderTest 14 全绿。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-PRE-002
+      assertion: >-
+        E2：达行/文件/字节上限按确定性截断并显式标记 truncated，统计注明采样口径——PreviewPropertiesTest 10 +
+        PreviewApplicationServiceStatsTest 5 用例断言上限与 truncated 分量；ContentSecurityTest 截断 3 用例。
+      scenarioCategory: boundary
+    - scenarioId: AC-DST-PRE-002
+      assertion: >-
+        E2+E4：无 Split 目录结构→归入 default 单值；前端单 default 不渲染选择器仅出统计卡；旧投影
+        split_stats NULL→「统计未知 + 重新生成引导」空态、既有样例渲染不回归——Vitest PreviewPanel.test
+        「单 default」「旧投影统计未知」「缺 sampleRows 回退」用例全绿；后端 split_stats 不可解析→degrade
+        unknown（WARN 留痕）。
+      scenarioCategory: boundary
+  notProven:
+    - scenarioId: AC-DST-PRE-001
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、commitSha=baseCommit），
+        review.accepted=false；且 -CheckChangedPaths 因三实现文件在 allowedPaths 外而 FAIL。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。enumeration 缺口需批准人裁定
+        （扩卡列三路径，或改写实现面避开）。
+  crossCuttingChecks:
+    - AUTHN|未触认证链；getPreview 沿用既有 JWT 主体上下文；e2e 权限切片断言匿名 401
+    - AUTHZ|未改权限口径；previews 查询无 asset:read→403 先于任何存储访问（e2e 用例④实证）；未放宽查询过滤
+    - DB_FILTER|split_stats 读取仅按 preview_id 主键单行，未放宽任何查询条件；SELECT 增列不改 WHERE
+    - STATE|未改工作流状态枚举；split_stats 为只读投影分量，非状态
+    - IDEMPOTENCY|Job 单行读写（preview_id 主键）覆盖更新，不重复插入；无内存态可靠工作替代
+    - CONSISTENCY|统计与样例来自同一投影行；旧投影 NULL 前端空态承接，无跨源漂移
+    - ERRORS|无新增 ErrorCode；解析失败沿用既有降级 + WARN 通道（不抛未捕获异常、不伪造空成功）
+    - AUDIT|未新增审计事件（投影读取面，沿 068 批准人确立的预览族口径）
+    - NOTIFICATION|N/A - 无通知面变更
+    - TAXONOMY_I18N|新增 i18n 键（Split 选择器/统计卡片/未知空态/重新生成引导）zh/en 各 +15，双语齐备；
+      Split 目录白名单为配置项非字典（稳定分类），符合 DEC 口径
+    - OBSERVABILITY|沿用 PlatformMetrics 既有预览失败 reason 键；degrade unknown 走 LOG.warn；未新建指标/告警
+    - CONFIG|新增 aihub.preview.split-dirs / max-stats-rows / max-stats-files / max-stats-bytes 四键（application.yml
+      带 env 占位默认值，走既有 @ConfigurationProperties relaxed 绑定）；compose *.yml/.env 零改动；
+      注：application.yml 不在 allowedPaths（见 governance ①）
+    - SECRETS|per-Split sampleRows 与主样例同 sanitize/canary 路径（ContentSecurityTest PII/Secret canary 2 用例不回归）；
+      统计数值/目录名不含凭据、内部 Endpoint、对象键；e2e 泄漏红线用例通过；全程无令牌/口令进入代码/日志/本 EVD
+
+contractConsistency:
+  openapiMatched: true # getPreview splits/totals 增量分量随本卡实现落契约；redocly lint exit 0、纯新增分量非破坏
+  eventSchemaMatched: null # 不触达事件契约
+  migrationMatched: true # V44 forward-only 新增可空列，已在真实栈 postgres 应用（psql 实证列存在）
+  uiMatched: true # PreviewPanel Split 选择器/统计卡片/i18n 与投影结构同源；前端镜像已 --build 重建
+  runbookMatched: null # 本卡不改 runbook
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-078.md（本卡 §7 勾验终态）
+  logs:
+    - build-logs/mvnw-verify-078.txt（mvnw -q verify：835 用例 FAIL=0 ERR=0 SKIP=10）
+    - build-logs/vitest-078.txt（vitest run --maxWorkers=2：50 files / 239 tests passed，Duration 860s）
+    - backend/target/surefire-reports/（PreviewJobHandlerTest 13 / PreviewPropertiesTest 10 /
+      PreviewApplicationServiceStatsTest 5 / RenderTest 14 / ContentSecurityTest 截断3+控制13+canary2）
+  screenshots: []
+  traces: []
+  metrics:
+    - e2e preview-splits.spec.ts：4/4 passed（重建 frontend 镜像后）；与 artifact-content 合跑 8/8 passed (19.2s)
+    - 契约 diff numstat：97 增 1 删（两卡合计，getPreview 分量属纯新增）
+    - i18n：en/zh 各 +15 键
+  databaseQueries:
+    - SELECT column_name,data_type,is_nullable FROM information_schema.columns WHERE table_name='asset_preview' AND column_name='split_stats'（jsonb, YES）
+    - SELECT content, split_stats, jsonb_array_length(split_stats->'splits') FROM asset_preview WHERE ...(e2e078 行)（totals {7,3,166,false}, n_splits=2）
+  auditEvents:
+    - 本卡无审计面变更（getPreview 读取投影，无新事件）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - per-Split sampleRows 复用主样例脱敏路径，ContentSecurityTest PII/Secret canary 2 用例证明不回归；
+      e2e 泄漏红线用例（内部主机名/对象键/桶名不出现于页面数据）通过。
+    - 全程无令牌/口令/预签名查询串进入代码、日志或本 EVD（E2E_ADMIN_* 凭据仅命令级环境变量注入，未落盘）。
+
+limitations:
+  governanceNotes:
+    - >-
+      changedPathValidation FAILED 取证轮实跑 13 issue、登记落盘后复跑 14（终态以 completionValidation 明细为准）。
+      归因：① 卡 enumeration 缺口——本卡必要实现面三文件不在 allowedPaths（16 项）内：
+      PreviewQueryPort.java（PreviewRecord 增 splitStatsJson）、PreviewQueryRepository.java（SELECT 增
+      split_stats::text）、application.yml（split-dirs + max-stats-* 四键）。三者为 078 读取投影+配置的必需
+      改动，属卡起草枚举遗漏而非违规改动；据实登记，扩卡或改写实现面留批准人裁定，未隐式扩卡、未刷 digest 掩盖。
+      ② 兄弟卡 077 产物（同工作树未提交）：ArtifactContentPanel.tsx/.test.tsx、TASK/EVD-077。
+      ③ 非产品脏目录：build-logs/*、frontend/playwright-report/、frontend/test-results/（建议 .gitignore 收编）。
+      ④ iteration-plan-2026-09-24.md 立项登记（forbiddenPath 外）。
+    - >-
+      completionValidation FAILED（登记前实跑 23 issue = 越界路径 + governance changedPathValidation 非 PASS +
+      commitSha/dirtyWorktree/notProven/skippedTests/review 三项等设计内交接态失败；删去两份临时取证日志后
+      收口复跑坐实终态 22 issue = 上述 14 越界 + 8 项设计内交接态）。AI 不得自提交、不得自批（DEC-009），
+      EXPECTED_FAIL 与 071-076 交接态同口径。
+    - >-
+      工具缺陷登记：validate-task-card.ps1 L709-710 governance 正则 (?ms) dotall 下对 4 空格行数指数回溯，
+      本卡登记长注释后 -CheckCompletion 曾挂起（实测 6 行 <1s、10 行 >20s）；已将归因迁出 governance 块后
+      实跑通过。建议工具后续改为逐块解析（本卡未改 forbiddenPaths 外的工具，留批准人裁定）。
+  skippedTests:
+    - >-
+      mvnw verify 中 10 个 SKIP：AssetSearchPerformanceTest/DownloadTicketPerformanceTest/UploadTransferIT
+      等——testcontainers 经 npipe 探测 Docker 返回 400（Windows 命名管道环境既有条件跳过，074/075/076 同栈口径一致），
+      非本卡引入；对应运行态面由 Compose 全栈 E4 e2e 覆盖，不以此冒充 IT 通过。
+  assumptions:
+    - >-
+      存量 asset_preview 行 split_stats 保持 NULL，前端「统计未知」空态承接，不做数据回填（卡 §6.4）：
+      重新 generate 即产出新投影。V44 forward-only、列可空、不回滚。
+  environmentDifferences:
+    - >-
+      本机 vitest 默认并行负载下出现 31 用例 5s testTimeout 超时（全为 admin/version 等无关页面），
+      改 `vitest run --maxWorkers=2` 后 50 files / 239 tests 全绿 exit 0——属本机并行环境既有问题，
+      非本卡回归（本卡 PreviewPanel.test 14 + ArtifactContentPanel.test 7 定向全绿）。
+    - >-
+      E4 前端教训：frontend 镜像自带 nginx runtime 提供页面静态（外层 nginx 仅反代），前端改动必须
+      `docker compose up -d --build frontend` 重建；未重建会导致「后端新/前端旧」分裂使 UI e2e 假失败——
+      本卡 e2e 首跑即因陈旧前端失败，重建后 4/4 通过。
+    - >-
+      卡 §3 CONFIG 自述「不改 deploy/」但未将 application.yml / PreviewQueryPort / PreviewQueryRepository
+      三路径纳入 allowedPaths，而三者为 split_stats 读取投影 + 配置的必需实现面——属起草枚举遗漏，
+      实施未越权（未触 forbiddenPaths: deploy、V1、V2），已如实登记 changedPathValidation FAIL，
+      扩卡或改写实现面由批准人裁定（DEC-009 不隐式扩卡）。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true；enumeration 缺口待裁定

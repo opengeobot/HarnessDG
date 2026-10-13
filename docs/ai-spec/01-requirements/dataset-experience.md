@@ -179,6 +179,102 @@ acceptance:
 - 事件：讨论 mention/回复通知事件及 moderation 审计事件；
 - 实施时只能新增 V14+ 前向 Migration，具体版本由 Task Card 在领取时分配。
 
+## REQ-DST-FAV-001 资产个人收藏（草案，待人类评审）
+
+```yaml
+status: PROPOSED
+priority: MUST
+phase: P1
+decisions: [DEC-008]
+permissions: [asset:read]
+minimumEvidenceLevel: E4
+acceptance:
+  - AC-DST-FAV-001
+  - AC-DST-FAV-002
+  - AC-DST-FAV-003
+  - AC-DST-FAV-004
+```
+
+### 语义划界（评审焦点）
+
+- 收藏是 Principal 的**私有书签状态**，仅本人可见，不进入任何共享排行、热度评分或推荐流；
+  与本文档「明确非目标：公网匿名数据集社区、点赞排行和推荐流」不冲突的正向解释是：
+  收藏数据**不得**作为平台级排序/推荐输入，聚合曝光类计数（如“N 人收藏”）默认不开放；
+- 不新增 `asset:favorite` 权限位：收藏写入的前置是主体对该资产持有实时 `asset:read`
+  （能看见才能收藏），是否引入独立权限位由批准人在评审时裁定；
+- 收藏不改变资产可见性、授权或治理状态，不构成任何形式的业务关注或所有权声明。
+
+### 行为
+
+- 详情页与列表项提供收藏标记（加入/取消），标记状态与列表读取一致；
+- `GET /favorites` 返回本人收藏的、且当前仍有权读取的资产（游标分页，复用资产列表投影）；
+  已失去读取权的收藏项静默过滤，不报错、不泄露名称；
+- 写入使用幂等语义：`PUT /assets/{assetId}/favorite` 重复调用与 `DELETE` 对不存在的收藏均
+  返回幂等成功（204），不产生重复记录（`ux` 唯一键兜底）；
+- 收藏记录不参与搜索排序与 Facet 计数。
+
+### 数据、回收与审计
+
+- 新表 `asset_favorite`（`asset_id + principal_id` 唯一，含 `created_at`），仅前向 Flyway
+  Migration（V45+，版本由 Task Card 领取时分配）；
+- 资产物理回收（`PhysicalRecycleJobHandler` 级联清理）必须同步删除该资产的全部收藏记录；
+- 必审计事件：`ASSET_FAVORITE_ADDED`、`ASSET_FAVORITE_REMOVED`；
+- 错误：`ASSET_NOT_FOUND`（沿用防枚举语义）、`AUTH_PERMISSION_DENIED`。
+
+### 目标契约与页面
+
+- REST：`PUT/DELETE /assets/{assetId}/favorite`、`GET /favorites`；
+- 页面：`PAGE-AST-007`（我的收藏），详情页/列表标记并入 `PAGE-AST-001/003` 完成条件；
+- 本 REQ 为 `PROPOSED`：批准人评审通过并置 `READY` 前，不得据此开工。
+
+## REQ-DST-SUB-001 资产订阅独立资源与通知联动（草案，待人类评审）
+
+```yaml
+status: PROPOSED
+priority: MUST
+phase: P1
+decisions: [DEC-008]
+permissions: [asset:read]
+minimumEvidenceLevel: E4
+acceptance:
+  - AC-DST-SUB-001
+  - AC-DST-SUB-002
+  - AC-DST-SUB-003
+```
+
+### 现状基线（2026-10-10 取证）
+
+- 表 `asset_subscription`（V15，`asset_id + principal_id` 唯一）已存在，仅被讨论域写入：
+  `POST/GET /assets/{assetId}/discussions/subscription`（布尔切换语义）；
+- 通知侧已联动：`VersionApplicationService` 在版本发布时通过
+  `NotificationRecipientResolver.resolveSubscribers(assetId)` 向订阅者 fan-out
+  `VERSION_PUBLISHED` 通知；
+- 物理回收 `PhysicalRecycleJobHandler` 已级联 `DELETE FROM asset_subscription`；
+- 缺口是**独立订阅资源面**：无个人订阅列表、退订非幂等（toggle 语义）、无 UI 管理入口。
+
+### 行为
+
+- 订阅提升为独立资源：`PUT /assets/{assetId}/subscription`（订阅，幂等 204）、
+  `DELETE`（退订，对未订阅幂等 204）、`GET`（当前状态）；
+  既有讨论域布尔端点保留为兼容别名并内部委托同一应用服务，禁止两套状态；
+- `GET /subscriptions` 返回本人订阅列表（游标分页，复用资产列表投影，附最近一次
+  `VERSION_PUBLISHED` 通知时间可选字段，若实现成本高由评审裁定裁剪）；
+- 订阅写入前置实时 `asset:read`；权限撤销后订阅记录保留但列表静默过滤、通知投递按
+  实时授权在收件人解析处拒绝（不新增渠道列，语义保持“讨论/版本更新通知”单一通道）。
+
+### 数据与审计
+
+- 复用 `asset_subscription`，不加渠道语义列；如需列扩展另行前向 Migration 并单独评审；
+- 资产物理回收级联删除订阅记录（与收藏同一清理面）；
+- 必审计事件：`ASSET_SUBSCRIBED`、`ASSET_UNSUBSCRIBED`；
+- 错误：`ASSET_NOT_FOUND`（防枚举）、`AUTH_PERMISSION_DENIED`。
+
+### 目标契约与页面
+
+- REST：`PUT/DELETE/GET /assets/{assetId}/subscription`、`GET /subscriptions`；
+- 页面：`PAGE-COM-004`（我的订阅）；
+- 本 REQ 为 `PROPOSED`：批准人评审通过并置 `READY` 前，不得据此开工。
+
 ## REQ-DST-CLI-001 最小平台 CLI 的搜索、下载、创建与上传
 
 ```yaml

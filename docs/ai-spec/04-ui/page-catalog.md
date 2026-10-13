@@ -12,6 +12,7 @@
 | `PAGE-COM-001` | 全局 403 | 所有主体 | 所需 Permission/Scope、申请路径 | 不泄露私有资源；requestId 可复制 |
 | `PAGE-COM-002` | 全局 404 | 所有主体 | 返回安全位置 | 不回显未授权资源名称 |
 | `PAGE-COM-003` | `/notifications` | 已登录主体 | 游标列表、已读、关联资源跳转 | 只能看本人；停用资源安全回显 |
+| `PAGE-COM-004` | `/subscriptions` | 已登录主体（草案，待人类评审） | 我的订阅列表、退订、跳转资产 | 只能看本人；无权资产静默过滤不泄露；退订幂等；见 `REQ-DST-SUB-001` |
 
 ## 2. P0-B 管理页面
 
@@ -46,6 +47,7 @@
 | `PAGE-AST-004` | `/assets/:id/settings` | `asset:update/delete` | 元数据、Owner、治理、弃用/归档 | 乐观锁；高风险权限；影响提示；审计 |
 | `PAGE-AST-005` | `/assets/:id/access` | 授权读取/管理 | 角色、Team、ACL、最终权限解释 | 不只显示原始绑定；防自提权 |
 | `PAGE-AST-006` | `/assets/:id/lineage` | `asset:read` | 精确版本依赖图 | 权限过滤下不泄露不可见节点 |
+| `PAGE-AST-007` | `/favorites` | 已登录主体（草案，待人类评审；读取前置 `asset:read`） | 我的收藏列表、取消收藏、跳转资产 | 仅本人可见；无权资产静默过滤；不参与排序/推荐；见 `REQ-DST-FAV-001` |
 
 MODEL/DATASET 的创建与详情字段应由共享 Schema + 类型扩展驱动，不复制两套漂移表单。
 
@@ -62,6 +64,8 @@ MODEL/DATASET 的创建与详情字段应由共享 Schema + 类型扩展驱动�
 | `PAGE-DST-002` | `/assets/:id/discussions` | `asset:read/discuss/moderate` | Thread、回复、修订、撤回、锁定、通知 | 继承资产权限；不可信 Markdown；Tombstone；游标与审计 |
 | `PAGE-REV-001` | `/reviews` | `asset:review` | 待审队列、风险、SLA/状态 | 数据权限过滤；提交人与审核人规则 |
 | `PAGE-REV-002` | `/reviews/:requestId` | `asset:review` | 冻结 Commit、Diff、License/敏感/质量、批准/驳回 | 审批对象不可漂移；意见规则；高风险确认 |
+
+实施状态注记（2026-10-10，非完成判定，验收以 Evidence Manifest 为准）：`PAGE-VER-003`（TASK-P0BR-077，IMPLEMENTED_UNVERIFIED）——资产详情 Files Tab Tree 已可选中，新增 `ArtifactContentPanel` 经 `GET .../artifacts/{artifactId}/content` 代理以纯文本渲染白名单文本工件（csv/txt/md/json/jsonl/ndjson，1 MiB 上限超限引导下载票据；不显示 URL 查询串、对象键用户输入零参与），见 `EVD-P0BR-077-001`；`PAGE-DST-001`（TASK-P0BR-078，IMPLEMENTED_UNVERIFIED）——PreviewPanel 落地 Split Tab 选择器 + 统计卡片（行数/文件数/大小/列数 + generatedFrom 注记，含批准人批复的 per-Split 脱敏 sampleRows），旧投影（split_stats NULL）呈「统计未知」空态不伪造零值，见 `EVD-P0BR-078-001`。两卡 Completion 条件中的视觉基准与全量页面状态证据仍按 §6 要求待验证权威口径。
 
 ## 5. P4 Agent 接入页面
 

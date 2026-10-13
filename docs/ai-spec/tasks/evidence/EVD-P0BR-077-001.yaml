@@ -1,0 +1,268 @@
+schemaVersion: harnessdg.evidence/v1
+evidenceId: EVD-P0BR-077-001
+# 本卡 requiredEvidenceLevel 为 E4。批准人 2026-10-10 批复「批准两卡，按序实施（推荐）」
+# （回写发生于请示批复之后，非 AI 自批，DEC-009）。
+# 实施内容：契约先行新增 `GET /assets/{assetId}/versions/{versionId}/artifacts/{artifactId}/content`
+# （getArtifactContent，response 白名单 mediaType + format: binary）；后端校验链与 068
+# renderPreviewArtifact 完全同族（asset:read 权限先行→归属绑定→PUBLISHED→text 白名单
+# csv/txt/md/json/jsonl/ndjson→maxTextBytes 默认 1 MiB 预检+流式上限双保险→统一 404 防枚举），
+# 对象键复用 PreviewJobHandler.dvcObjectKey 既有算法（用户输入零参与）；零新增 ErrorCode、零迁移、
+# 零新增审计事件（沿 068 批准人确立的预览族口径）；前端 Files Tab Tree 可选中 + ArtifactContentPanel
+# （apiClient.getBlob → <pre> 纯文本，禁 dangerouslySetInnerHTML；超限引导走既有下载票据）+ i18n zh/en。
+# source.commitSha 指向 baseCommit：本卡改动尚未提交，提交由批准人处置后执行（AI 不自提交，DEC-009）。
+# 注：本卡与 TASK-P0BR-078 同工作树未提交（两卡同轮批准、共享 PreviewController/Service/Properties/
+# 契约/i18n/AssetDetailPage 实现面），验证在合并工作树上一次取证，两卡各自按归属切分证据。
+status: PASS
+
+task:
+  taskId: TASK-P0BR-077
+  requirements: [REQ-DST-DETAIL-001]
+  scenarios: [AC-DST-DETAIL-001, AC-DST-DETAIL-003]
+
+governance:
+  # 注意：各 result 行必须保持独立干净行、块内注释最小化——validate-task-card.ps1 L709-710 的
+  # governance 正则在 dotall 下按 4 空格行数指数级回溯，注释过多会使 -CheckCompletion 挂起。
+  specValidation:
+    command: ./docs/ai-spec/tools/validate-spec.ps1
+    result: PASS
+  taskValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-077.md
+    result: PASS
+  changedPathValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-077.md -CheckChangedPaths
+    result: FAIL
+  completionValidation:
+    command: ./docs/ai-spec/tools/validate-task-card.ps1 -TaskPath docs/ai-spec/tasks/TASK-P0BR-077.md -CheckCompletion
+    result: EXPECTED_FAIL
+
+source:
+  branch: ai
+  commitSha: a0227961e085a6feae627bff7fcc276937b63b6b # == baseCommit；本卡改动尚未提交
+  dirtyWorktree: true
+  dirtyPaths:
+    # —— 本卡（077）产品/契约/前端实现面 ——
+    - contracts/openapi/aihub-v1.yaml # 两卡合计 97 增 1 删（getArtifactContent + getPreview splits 分量）
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewProperties.java # maxTextBytes（两卡共享）
+    - backend/src/main/java/com/aihub/version/application/PreviewApplicationService.java # getArtifactContent 用例（两卡共享）
+    - backend/src/main/java/com/aihub/version/api/PreviewController.java # 流式 GET 端点（两卡共享）
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceContentTest.java
+    - frontend/src/features/assets/ArtifactContentPanel.tsx
+    - frontend/src/features/assets/ArtifactContentPanel.test.tsx
+    - frontend/src/features/assets/AssetDetailPage.tsx # Tree 可选中（与 078 Split 选择共享文件）
+    - frontend/src/shared/i18n/en.json # 两卡共享，各 +15
+    - frontend/src/shared/i18n/zh.json
+    - frontend/e2e/artifact-content.spec.ts
+    - frontend/e2e/fixtures/content-sample.csv
+    - frontend/e2e/fixtures/content-sample.txt
+    - frontend/e2e/fixtures/v2-sample.txt
+    # —— 兄弟卡（078）产物（同工作树，非本卡义务，登记以示完整）——
+    - backend/src/main/resources/db/migration/V44__preview_split_stats.sql
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewJobHandler.java
+    - backend/src/main/java/com/aihub/version/domain/PreviewQueryPort.java
+    - backend/src/main/java/com/aihub/version/infrastructure/PreviewQueryRepository.java
+    - backend/src/main/resources/application.yml
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceStatsTest.java
+    - backend/src/test/java/com/aihub/version/application/PreviewApplicationServiceRenderTest.java
+    - backend/src/test/java/com/aihub/version/infrastructure/PreviewJobHandlerTest.java
+    - backend/src/test/java/com/aihub/version/infrastructure/PreviewPropertiesTest.java
+    - frontend/src/features/assets/PreviewPanel.tsx
+    - frontend/src/features/assets/PreviewPanel.test.tsx
+    - frontend/e2e/preview-splits.spec.ts
+    - docs/ai-spec/tasks/TASK-P0BR-078.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-078-001.yaml
+    # —— 治理/文档 ——
+    - docs/ai-spec/02-delivery/work-breakdown.md
+    - docs/ai-spec/tasks/TASK-P0BR-077.md
+    - docs/ai-spec/tasks/evidence/EVD-P0BR-077-001.yaml
+    - docs/architecture/iteration-plan-2026-09-24.md
+    # —— 非产品脏目录（取证/构建产物，未 .gitignore）——
+    - build-logs/EVD-P0BR-077-base.yaml
+    - build-logs/mvnw-verify-077.txt
+    - build-logs/mvnw-verify-078.txt
+    - build-logs/vitest-078.txt
+    - frontend/playwright-report/index.html
+    - frontend/test-results/.last-run.json
+
+environment:
+  observedAt: 2026-10-10T09:28:12Z
+  os: Windows（PowerShell；Docker Desktop 已启动；容器 backend = openjdk 21.0.5 LTS）
+  timezone: Asia/Shanghai
+  java: 容器内 JDK 21.0.5
+  node: v20.19.2
+  pnpm: 10.33.4
+  docker: 29.1.2
+  composeServices: [aihub-backend-1, aihub-worker-1, aihub-frontend-1, aihub-nginx-1, aihub-postgres-1, aihub-minio-1, aihub-gitea-1]
+  # 7 服务全 Up（backend/postgres/minio/gitea healthy）；两卡共用同一重建栈：
+  # docker compose up -d --build frontend（frontend 镜像自带 nginx runtime）+ backend recreate→healthy
+
+execution:
+  workingDirectory: 仓库根 + backend/ + frontend/ + deploy/compose/
+  command: >-
+    ①契约先行：OpenAPI 新增 getArtifactContent 操作（path 三元组绑定、response content 白名单
+    mediaType + format: binary、x-error-codes 按 §2 列全、description 写明「内容为不可信数据必须纯文本
+    呈现」）；redocly lint 实跑 exit 0（3 warnings 均为既有规则、非本卡破坏）；非破坏取证
+    git diff --numstat = 97 增 1 删（两卡合计；本卡分量为纯新增路径，1 删属 078 getPreview 描述行改写）。
+    ②后端：PreviewProperties 增 maxTextBytes（默认 1 MiB，走既有 @ConfigurationProperties）；
+    PreviewApplicationService.getArtifactContent 校验链与 068 renderPreviewArtifact 同族——
+    asset:read 权限先行→asset↔version↔artifact 归属绑定→仅 PUBLISHED→mediaType 白名单
+    （text/plain、text/csv、text/markdown、application/json、application/x-ndjson、application/jsonl；
+    text/html 与 image/* 显式排除）→size>maxTextBytes 413 预检 + 流式上限双保险→统一 404 防枚举
+    （artifact 不属于 version / version 不属于 asset / 不存在三者同形）→对象键复用
+    PreviewJobHandler.dvcObjectKey（用户输入零参与）；PreviewController 流式 GET 纯适配器；
+    零新增 ErrorCode（复用 PREVIEW_UNSUPPORTED_FORMAT/PREVIEW_TOO_LARGE/PREVIEW_SOURCE_UNAVAILABLE
+    与既有 404/403/401）、零迁移、零新增审计事件（§9  AUDIT 裁定点未触发）。
+    ③前端：AssetDetailPage Files Tab Tree selectable 开启 + 选中叶子渲染 ArtifactContentPanel
+    （apiClient.getBlob → <pre> 纯文本渲染，禁 dangerouslySetInnerHTML；超限/不支持错误态引导走
+    既有下载票据；版本化 Query Key 随 Version 切换重置）；i18n zh/en 各 +15 键。
+    ④后端单测：PreviewApplicationServiceContentTest 20 用例（正常字节一致/白名单外 415/超限 413/
+    归属防枚举 404/对象缺失 SOURCE_UNAVAILABLE 不伪造空内容）+ 既有 ContentSecurityTest 截断/控制字符/
+    canary 与 RenderTest 14 全绿；mvnw -q verify 全量 surefire 835 用例 FAIL=0 ERR=0 SKIP=10
+    （两卡合并工作树一次取证；10 SKIP=testcontainers Windows npipe 既有条件跳过）。
+    ⑤前端四连：pnpm lint exit 0、pnpm typecheck exit 0、pnpm build exit 0（✓ built in 39.74s）；
+    vitest run --maxWorkers=2 → 50 files / 239 tests passed exit 0（本卡 ArtifactContentPanel.test
+    7 tests 定向全绿：200 纯文本渲染/415 与 413 错误态/防枚举 404 文案/超限下载引导/版本切换重置/泄漏断言）。
+    ⑥Compose E4：up -d --build frontend exit 0（教训固化：frontend 镜像自带 nginx runtime，前端改动必须重建）。
+    ⑦E2E 主证（真实栈 8080，凭据注入同 066/067/068 口径）：artifact-content.spec.ts 4 用例
+    （v1/v2 双版本上传→物化→发布→dvc-cache 注入链；UI 树选中→纯文本渲染→版本切换重置→错误文案→泄漏红线；
+    API 矩阵 200 字节一致性/415/413/404 防枚举/403/401）——与 078 preview-splits.spec.ts 合跑
+    **8/8 passed (19.2s)** exit 0；两卡各自单跑亦 4/4。
+  startedAt: 2026-10-10T06:40:00Z
+  finishedAt: 2026-10-10T09:28:12Z
+  exitCode: 0
+  result: PASS
+  evidenceLevel: E4
+  e3RealDependencies: []
+  e4EntryPoint: >-
+    全部 E4 断言经真实 Compose 全栈（8080 网关 + postgres + backend（新镜像）+ MinIO + Gitea）实跑；
+    API 矩阵经 fetch 直连 8080 断言状态码与字节一致性；前端产物经 --build frontend 重建生效。
+
+coverage:
+  proven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        E4：真实栈 fixture CSV/TXT 全链（上传→物化→发布→dvc-cache 注入）后，Files Tab 树选中叶子→
+        内容面板 <pre> 纯文本渲染字节内容与源 fixture 精确一致；页面数据不含内部主机名/对象键/桶名/
+        预签名查询串（泄漏红线断言）；UI 用例 + API 200 字节一致性用例双证。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        E2+E4：切换 Version 面板随版本化 Query Key 重置、不展示旧版本内容——ArtifactContentPanel.test
+        版本切换重置用例（E2）+ e2e v1/v2 双版本夹具 UI 用例（E4）。
+      scenarioCategory: normal
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >-
+        E4：无 asset:read 主体直连内容端点 403（先于任何存储访问）、匿名 401（过滤器 fail-closed）
+        ——e2e API 矩阵真实栈断言。
+      scenarioCategory: denial
+    - scenarioId: AC-DST-DETAIL-003
+      assertion: >-
+        E2：artifactId∉version / version∉asset / 不存在三者同一 404 语义（防枚举、无对象存在性差异泄露）；
+        白名单外 mediaType（image/png、application/octet-stream、text/html）415；size>maxTextBytes 413
+        （预检 + 流式上限双保险）；dvc-cache 对象缺失→PREVIEW_SOURCE_UNAVAILABLE 不伪造空内容——
+        PreviewApplicationServiceContentTest 20 用例全绿。
+      scenarioCategory: failure
+  notProven:
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        -CheckCompletion 未过：source 为交接态（dirtyWorktree=true、commitSha=baseCommit），
+        review.accepted=false。
+      reason: >-
+        DEC-009：提交与验收须由批准人/验证权威处置；AI 不得自提交、自批。
+    - scenarioId: AC-DST-DETAIL-001
+      assertion: >-
+        对象键解析「用户输入零参与」为代码结构论证（dvcObjectKey 仅由 artifact 记录的
+        storagePath/digest 派生，Controller 参数仅用于归属校验查询）+ 403/404 先行断言佐证，
+        未做渗透级路径遍历 e2e。
+      reason: >-
+        与 068 EVD 同口径登记（夹具注入 SigV4 PUT 模拟 DVC 物化产物，compose 栈未起 dvc CLI 链路）。
+  crossCuttingChecks:
+    - AUTHN|未触认证链；新端点走既有 JWT 过滤器 fail-closed（e2e 匿名 401 实证）；未在业务模块解析令牌
+    - AUTHZ|asset:read 在应用服务入口强制、先于任何存储访问（e2e 403 断言 + 单测验证 dvc 客户端零调用）；
+      统一 404 防枚举不泄露对象存在性
+    - DB_FILTER|无查询面变更；artifact 归属经既有仓储按 version/asset 绑定过滤
+    - STATE|未改状态机；PUBLISHED 门禁复用既有状态枚举判断
+    - IDEMPOTENCY|纯读 GET，无幂等面
+    - CONSISTENCY|无跨系统写路径；读 dvc-cache 对象缺失走稳定错误（不伪造空内容）
+    - ERRORS|零新增 ErrorCode（复用 PREVIEW_* 三项 + 既有 404/403/401 映射）
+    - AUDIT|零新增审计事件——沿 068 批准人确立的预览族口径；§9 裁定点未触发（批准人批复两卡按方案实施）
+    - NOTIFICATION|N/A - 无通知面
+    - TAXONOMY_I18N|新键（内容面板标题/错误文案/下载引导/纯文本免责）zh/en 各 +15 对称；无字典/标签面
+    - OBSERVABILITY|沿用 PlatformMetrics 既有 reason 键（limit_exceeded/unsupported_format/source_unavailable）；
+      未新建指标告警
+    - CONFIG|maxTextBytes 走 PreviewProperties 默认值（1 MiB），未在 application.yml 增显式键；
+      compose *.yml/.env 零改动（deploy/ 为 forbiddenPaths，全程未触）
+    - SECRETS|响应仅字节流 + Content-Type；对象键/内部 Endpoint/bucket/预签名查询串不进响应体/日志/页面
+      （e2e 泄漏红线断言）；凭据仅命令级 env 注入未落盘
+
+contractConsistency:
+  openapiMatched: true # getArtifactContent 已入契约；redocly lint exit 0；非破坏取证 97 增 1 删（本卡分量纯新增）
+  eventSchemaMatched: null # 不触达事件契约
+  migrationMatched: null # 本卡零迁移（§6.3 纯读代理；V44 属 078）
+  uiMatched: true # Tree 可选中/ArtifactContentPanel/i18n 与契约端点一致；前端镜像已重建
+  runbookMatched: null # 无运行手册面变更
+
+artifacts:
+  reports:
+    - docs/ai-spec/tasks/TASK-P0BR-077.md（本卡 §7 勾验终态）
+  logs:
+    - build-logs/mvnw-verify-077.txt（实施轮 mvnw -q verify 全量，surefire 无 FAIL/ERR）
+    - build-logs/EVD-P0BR-077-base.yaml（baseCommit 工作树基线快照取证）
+    - build-logs/vitest-078.txt（两卡合并工作树 vitest run --maxWorkers=2：50/239 passed exit 0）
+    - backend/target/surefire-reports/（PreviewApplicationServiceContentTest 20 等）
+  screenshots: []
+  traces: []
+  metrics:
+    - e2e artifact-content.spec.ts：4/4 passed；与 078 合跑 8/8 passed (19.2s)
+    - 契约 diff numstat：97 增 1 删（两卡合计，非破坏论证见 execution①）
+  databaseQueries:
+    - 本卡纯读代理无数据落库；物证以 e2e API 矩阵真实响应（200 字节一致/415/413/404/403/401）留痕
+  auditEvents:
+    - 本卡无审计面变更（§3 范围外第 3 条；沿 068 预览族口径）
+
+secrets:
+  redactionChecked: true
+  findings:
+    - e2e 泄漏红线用例断言页面数据不含内部主机名/对象键/桶名；全程无令牌/口令进入代码、日志或本 EVD。
+    - E2E_ADMIN_* 凭据自 .env 正则解析注入命令环境，未回显落盘。
+
+limitations:
+  governanceNotes:
+    - >-
+      changedPathValidation FAILED 收口轮实跑（初跑 15 issue；登记落盘后复跑 16，终态以 completionValidation
+      明细为准）：越界项 = 兄弟卡 078 产物（同工作树未提交：V44、PreviewJobHandler/PreviewQueryPort/
+      PreviewQueryRepository、application.yml、PreviewPanel、TASK/EVD-078）+ 非产品脏目录
+      （build-logs/*、frontend/playwright-report/、frontend/test-results/，建议 .gitignore 收编，留批准人裁定）
+      + iteration-plan-2026-09-24.md 立项登记。本卡对 application.yml 零直接改动（maxTextBytes 走
+      PreviewProperties 默认值），卡 §4 与 allowedPaths 的该张力一并留裁定。
+    - >-
+      completionValidation FAILED（终态实跑 24 issue = 上述 16 越界 + governance changedPathValidation 非 PASS
+      + commitSha/dirtyWorktree/notProven/skippedTests/review 三项等设计内交接态失败）。AI 不得自提交、
+      不得自批（DEC-009），EXPECTED_FAIL 与 071-076 交接态同口径。
+    - >-
+      工具缺陷登记：validate-task-card.ps1 L709-710 governance 正则 (?ms) dotall 下对 4 空格行数指数回溯，
+      本卡登记长注释后 -CheckCompletion 曾挂起（实测 6 行 <1s、10 行 >20s）；已将归因迁出 governance 块后
+      实跑通过。建议工具后续改为逐块解析（本卡未改 forbiddenPaths 外的工具，留批准人裁定）。
+  skippedTests:
+    - >-
+      mvnw verify 10 SKIP 与 078 同清单（testcontainers Windows npipe 既有条件跳过），非本卡引入；
+      运行态对应面由 Compose E4 e2e 覆盖，不冒充 IT 通过。
+  assumptions:
+    - >-
+      两卡同工作树未提交，合并验证一次取证按归属切分：契约 numstat/lint/build/e2e 合跑数为两卡合计口径，
+      单卡定向用例（ContentTest 20、ArtifactContentPanel.test 7、artifact-content 4 用例）为 077 独立证据。
+  environmentDifferences:
+    - >-
+      本机 vitest 默认并行 31 无关用例 5s 超时，`--maxWorkers=2` 口径 50/239 全绿；
+      `--reporter=basic` 在 vitest 4 已移除会启动失败（本卡曾误用产生 EXIT=1 假象，已排除为工具用法非代码问题）。
+    - >-
+      E4 前端教训：frontend 镜像自带 nginx runtime 提供页面静态，前端改动必须 `--build frontend` 重建
+      （未重建曾致 UI e2e 假失败，重建后全绿）。
+    - >-
+      frontend/src/shared/api/client.ts 的 getBlob 为既有通道（068 引入），本卡仅消费；该文件当前相对
+      baseCommit 零 diff，未列入 dirtyPaths 主清单。
+
+review:
+  recordedBy: AxeXie
+  reviewedBy: null
+  reviewedAt: null
+  accepted: false # AI 不得自批（DEC-009）；须由验证权威在代码提交为干净 Commit 后置 true

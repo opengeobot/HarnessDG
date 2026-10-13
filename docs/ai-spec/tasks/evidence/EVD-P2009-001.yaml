@@ -8,6 +8,35 @@ evidenceId: EVD-P2009-001
 # source.commitSha 指向 baseCommit：本卡变更尚未提交，提交由批准人处置后执行
 # （与 065-076 同一惯例，DEC-009 AI 不自提交）。
 status: PARTIAL
+# 复验轮（2026-10-12，Compose 真实栈）：AC-001/004 维持 PASS；AC-002/003 仍 BLOCKED
+# ——服务端工件下载票据 presign HTTP 500 未修（TASK-P0BR-070 仅覆盖上传 part presign 面）。
+# 本轮把根因坐实为「双重缺陷」，详见 rerun20261012 与 limitations.environmentDifferences。
+rerun20261012:
+  observedAt: 2026-10-12T14:20:00+08:00
+  headCommit: a022796
+  stack: 7 容器 Up / aihub-backend-1 healthy；镜像 created 2026-10-10T08:50（含 TASK-P0BR-070）
+  fixture: >-
+    历史 E4 物化版本 ver_01m4fhzxqpdsc0wkhzdhfh5ywg（1.0.1791523550，status=PUBLISHED，
+    manifestDigest=5c2a53d70f28be…，3 工件 a.txt 14B / big.bin 7000000B / sub/b.txt 13B，
+    sha256 与 dvcHash 齐备）
+  result: >-
+    AC-001 PASS（`dataset search --query p2009-e4 --limit 50 --output json` 与 REST
+    keyword 查询命中集合相等，n=4=n；无凭据泄漏）；AC-004 PASS（notoken/badtoken/未知
+    asset 三面 rc=2/2/3，pull 票据失败后 .part 文件残留 0，--include 无匹配 rc=3 干净
+    退出）；AC-002/003 仍 BLOCKED（逐工件票据 GET /versions/{vid}/download?artifactId=
+    三面全 HTTP 500 INTERNAL_ERROR；CLI pull 与 --resume 均 rc=7；同版本整版票据
+    GIT_DVC 仍 200 且含 gitCloneUrl——票据面不对称复现）。
+  probeCorrection: >-
+    首轮探针把关键字当位置参数传给 `dataset search`（CLI 契约仅识别 --query），
+    导致 cli 侧退化为无 keyword 全量 limit=20 而误判 AC-001 FAIL。按 usage 契约
+    （L86）以 --query 复跑后等价成立——判定为探针脚本缺陷，未据此改任何产品码。
+  serverSideFindings: >-
+    ①GET /api/v1/teams 与 GET /api/v1/principals 仍 500（EVD 遗留项①复测未修）；
+    ②backend 容器内 `wget http://localhost:9000` 连接失败、`http://minio:9000` 返回
+    200 —— presign 走公开端点的网络往返在容器内不可达，实锤第一层根因；
+    ③backend 日志栈顶 MinioStorageAdapter.presignDownload(L209) ←
+    DownloadApplicationService.issueTicket(L96) ← DownloadController(L37)，
+    Caused by: java.net.ConnectException: Failed to connect to localhost/[::1]:9000。
 
 task:
   taskId: TASK-P2-009
@@ -261,6 +290,27 @@ limitations:
       ②transfer 工件下载票据 presign 500（根因探针已定位 presign region 配置 +
       objectKey 布局 + UploadController 幂等消费面）——AC-002/003 复验依赖其修复；
       ③登录 token 时效 900s，长实验需单次完整运行。
+    - >-
+      2026-10-12 复验把 ②（presign 500）根因坐实为「双重缺陷」（均在本卡 allowedPaths
+      之外的 backend 主码，须另立后端修复卡）：
+      第一层·签发即失败——DownloadApplicationService.issueTicket L96 调
+      storagePort.presignDownload(resolveBucket, …) 时，presign 客户端走公开端点
+      （resolvePresignEndpoint = AIHUB_MINIO_PUBLIC_ENDPOINT = localhost:9000），
+      且 MinioConfiguration 的 presignMinioClient/presignDvcCacheMinioClient 未设
+      region，MinIO SDK getPresignedObjectUrl 遂向该端点发 GetBucketLocation 网络往返，
+      容器内 localhost:9000 不可达（本轮实测：backend 容器内 wget localhost:9000 连接失败、
+      minio:9000 返回 200）→ ConnectException → StorageException → 500。
+      同文件 s3Client/s3Presigner 显式 Region.US_EAST_1（纯本地签名）故上传 part presign
+      （TASK-P0BR-070）不受影响——即票据面不对称的直接来源。
+      第二层·键布局错配——即便修好端点/region，DownloadApplicationService.resolveObjectKey
+      L142 返回 assetId/version/path，而 dvc-cache 实际物化布局为
+      PreviewJobHandler.dvcObjectKey(dvcHash,path)=hash[0:2]/hash[2:]（068 预览链共用此
+      唯一实现，已读码坐实）；presign 不校验对象存在性，故修复第一层后该票据将稳定指向
+      不存在的键（GET 404/NoSuchKey），CLI 落盘 SHA-256 校验仍失败。resolveBucket 亦硬编码
+      "dvc-cache"（忽略 asset），须与物化桶核对。
+      修复须同时覆盖：presign 端点/region（消除 GetBucketLocation 往返，如注入内网可达
+      端点或显式 region）、resolveObjectKey 复用 dvcObjectKey 口径、以及桶归属；
+      本卡不动主码，据实维持 AC-002/003 BLOCKED。
     - >-
       CheckChangedPaths 758 项越界全部为 baseCommit(26c3985c)→HEAD(70f78747) 间
       已提交历史 + 其它卡未提交产物，属卡结构性漂移（baseCommit 陈旧）；重绑

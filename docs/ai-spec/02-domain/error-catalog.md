@@ -45,6 +45,7 @@ REQ-COM-001 要求：Error Catalog 每个 code 唯一绑定 HTTP status、i18nKe
 | ErrorCode | HTTP | i18nKey | retryable | alertLevel | 说明 |
 |-----------|------|---------|-----------|------------|------|
 | `AGENT_NOT_FOUND` | 404 | `error.agent.notFound` | false | NONE | Agent 不存在 |
+| `RATE_LIMIT_EXCEEDED` | 429 | `error.agent.rateLimitExceeded` | **true** | INFO | Agent/MCP 主体级限流触发 |
 
 ### 2.5 角色与权限（Role / Permission）
 
@@ -131,6 +132,8 @@ REQ-COM-001 要求：Error Catalog 每个 code 唯一绑定 HTTP status、i18nKe
 | `ASSET_STATE_NOT_ALLOWED` | 409 | `error.asset.stateNotAllowed` | false | INFO | 当前状态不允许该生命周期操作 |
 | `ASSET_HAS_ACTIVE_VERSIONS` | 409 | `error.asset.hasActiveVersions` | false | INFO | 存在活跃发布版本，不可归档 |
 | `ASSET_VERSION_CONFLICT` | 409 | `error.asset.versionConflict` | false | INFO | 目标版本已存在 |
+| `ASSET_COORDINATE_INVALID` | 400 | `error.asset.coordinateInvalid` | false | NONE | 资产坐标格式非法（namespace/name 不满足 `aih://` 规范） |
+| `ASSET_VERSION_SYNTAX_INVALID` | 400 | `error.asset.versionSyntaxInvalid` | false | NONE | 版本号语法不合法（MODEL 需 SemVer，DATASET 允许 SemVer 或日期） |
 
 ### 2.15 版本（Version）
 
@@ -145,6 +148,7 @@ REQ-COM-001 要求：Error Catalog 每个 code 唯一绑定 HTTP status、i18nKe
 |-----------|------|---------|-----------|------------|------|
 | `UPLOAD_SESSION_EXPIRED` | 409 | `error.upload.sessionExpired` | false | INFO | 上传会话已过期 |
 | `UPLOAD_SESSION_NOT_FOUND` | 404 | `error.upload.sessionNotFound` | false | NONE | 上传会话未找到 |
+| `UPLOAD_SIZE_EXCEEDED` | 400 | `error.upload.sizeExceeded` | false | NONE | 上传大小超过 20GiB 限制 |
 
 ### 2.17 讨论（Discussion）
 
@@ -199,34 +203,55 @@ REQ-COM-001 要求：Error Catalog 每个 code 唯一绑定 HTTP status、i18nKe
 |-----------|------|---------|-----------|------------|------|
 | `WEBHOOK_TARGET_FORBIDDEN` | 400 | `error.webhook.targetForbidden` | false | WARN | SSRF 防护拒绝内网/保留地址 |
 
+### 2.25 预览（Preview）
+
+| ErrorCode | HTTP | i18nKey | retryable | alertLevel | 说明 |
+|-----------|------|---------|-----------|------------|------|
+| `PREVIEW_NOT_FOUND` | 404 | `error.preview.notFound` | false | NONE | 预览投影不存在（与 `ASSET_NOT_FOUND` 同 404 防枚举语义族） |
+| `PREVIEW_UNSUPPORTED_FORMAT` | 415 | `error.preview.unsupportedFormat` | false | NONE | 预览媒体类型不在渲染白名单内 |
+| `PREVIEW_TOO_LARGE` | 413 | `error.preview.tooLarge` | false | NONE | 预览渲染超出 `maxRenderBytes` 上限 |
+| `PREVIEW_SOURCE_UNAVAILABLE` | 404 | `error.preview.sourceUnavailable` | false | WARN | 预览源对象不可用（与 `DVC_OBJECT_MISSING` 同族语义） |
+
 ## 3. 统计
 
 | 指标 | 值 |
 |------|----|
-| 错误码总数 | 56 |
-| retryable=true | 5（CONCURRENT_MODIFICATION, ASSET_REPOSITORY_PROVISION_FAILED, ASSET_CONCURRENT_MODIFICATION, GITEA_DEPENDENCY_UNAVAILABLE, MINIO_DEPENDENCY_UNAVAILABLE） |
+| 错误码总数 | 76 |
+| 文档已收录表行 | 76（与 `ErrorCode.java` 全量对齐） |
+| retryable=true | 6（CONCURRENT_MODIFICATION, ASSET_REPOSITORY_PROVISION_FAILED, ASSET_CONCURRENT_MODIFICATION, GITEA_DEPENDENCY_UNAVAILABLE, MINIO_DEPENDENCY_UNAVAILABLE, RATE_LIMIT_EXCEEDED） |
 | alertLevel=CRITICAL | 4（INTERNAL_ERROR, JOB_RETRY_EXHAUSTED, GITEA_DEPENDENCY_UNAVAILABLE, MINIO_DEPENDENCY_UNAVAILABLE） |
-| alertLevel=WARN | 10 |
-| alertLevel=INFO | 14 |
-| alertLevel=NONE | 28 |
+| alertLevel=WARN | 9 |
+| alertLevel=INFO | 13 |
+| alertLevel=NONE | 50 |
+
+> 统计口径：以 `ErrorCode.java` 枚举项为唯一计数源；上表数值随 §2 全表同步维护。
 
 ## 4. API 错误响应格式
 
-所有 API 错误响应统一使用 `ErrorResponse` schema（参见 OpenAPI `aihub-v1.yaml`）：
+所有 API 错误响应统一使用 `ApiError` schema（参见 OpenAPI `aihub-v1.yaml` 的
+`components.schemas.ApiError`，经 `components.responses.ErrorResponse` 引用）：
 
 ```json
 {
   "code": "ASSET_NOT_FOUND",
   "message": "资产不存在",
+  "i18nKey": "error.asset.notFound",
+  "details": {},
   "retryable": false,
-  "timestamp": "2026-07-06T12:00:00Z"
+  "requestId": "req_01J0000000000000000000000",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736"
 }
 ```
 
-- `code`：上表中的 ErrorCode 枚举值
-- `message`：按请求 `Accept-Language` 解析 i18nKey 后的本地化文本
-- `retryable`：客户端是否可安全重试
-- `timestamp`：服务器响应时间
+- `code`：上表中的 ErrorCode 枚举值（**必填**，客户端分支判断只依赖此字段）
+- `message`：可读错误信息（**必填**，不用于分支判断）
+- `i18nKey`：国际化文案 Key，前端据此解析本地化文本（可选）
+- `details`：结构化附加上下文，已脱敏，结构由错误码定义（可选）
+- `retryable`：客户端是否可安全重试（**必填**）
+- `requestId` / `traceId`：请求与分布式追踪上下文（**必填**）
+
+> `ApiError` **不含** `timestamp` 字段；`timestamp` 仅出现在统一成功响应 `ApiResponse` 中。
+> 服务端**不**依据 `Accept-Language` 渲染 `message`，本地化由客户端按 `code` / `i18nKey` 完成。
 
 ## 5. 前端额外错误 Key
 
