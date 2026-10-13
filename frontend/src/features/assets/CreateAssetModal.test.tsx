@@ -66,8 +66,11 @@ describe('CreateAssetModal', () => {
     // sensitivity is ControlledSelect, not free Input
     expect(screen.getByTestId('controlled-select-请选择敏感级别')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('L1')).not.toBeInTheDocument();
-    // architecture remains as Input
-    expect(screen.getByPlaceholderText('decoder-only')).toBeInTheDocument();
+    // architecture is now a Select with predefined options, not a free Input
+    expect(screen.queryByPlaceholderText('decoder-only')).not.toBeInTheDocument();
+    const archLabel = screen.getByText(/^架构|architecture$/i);
+    const archField = archLabel.closest('.ant-form-item');
+    expect(within(archField as HTMLElement).getByRole('combobox')).toBeInTheDocument();
   });
 
   it('DATASET 类型时渲染多选字典字段与敏感级别选择器', async () => {

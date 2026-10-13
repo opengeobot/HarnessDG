@@ -3,7 +3,7 @@
  * 时间: 2026-07-11
  * 作者: AxeXie
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,7 +12,6 @@ import {
   Empty,
   Flex,
   Form,
-  Input,
   Modal,
   Popconfirm,
   Select,
@@ -24,7 +23,9 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
+import { ControlledSelect, toPrincipalOptions } from '@/shared/components/ControlledSelect';
 import { useDocumentTitle } from '@/shared/hooks';
+import { searchAssets } from '@/features/assets/api';
 import {
   createResourceAcl,
   deleteResourceAcl,
@@ -46,10 +47,27 @@ export function ResourceAclsPage() {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
+  const [assetSearch, setAssetSearch] = useState('');
   const [form] = Form.useForm<AclFormValues>();
 
   const aclsQuery = useQuery({ queryKey: ['admin', 'resource-acls'], queryFn: listResourceAcls });
   const permsQuery = useQuery({ queryKey: ['admin', 'permissions'], queryFn: listPermissions });
+
+  // 资源 ID 远程搜索：与血缘页 childAssetId 相同的检索范式
+  const assetSearchQuery = useQuery({
+    queryKey: ['resource-acl-asset-search', assetSearch],
+    queryFn: () => searchAssets({ keyword: assetSearch, limit: 20 }),
+    enabled: modalOpen && assetSearch.length >= 1,
+  });
+
+  const assetOptions = useMemo(
+    () =>
+      (assetSearchQuery.data?.items ?? []).map((item) => ({
+        value: item.assetId,
+        label: `${item.displayName ?? item.name} (${item.assetId})`,
+      })),
+    [assetSearchQuery.data?.items],
+  );
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'resource-acls'] });
   const onError = (error: unknown) =>
@@ -159,13 +177,25 @@ export function ResourceAclsPage() {
           onFinish={(values) => createMutation.mutate(values)}
         >
           <Form.Item name="principalId" label={t('admin.resourceAcls.principalId')} rules={[{ required: true }]}>
-            <Input placeholder="prn_xxx" />
+            <ControlledSelect
+              apiUrl="/system/principals"
+              queryKey="principals-acl"
+              extractOptions={toPrincipalOptions}
+              placeholder={t('admin.resourceAcls.principalIdPlaceholder')}
+            />
           </Form.Item>
           <Form.Item name="resourceType" label={t('admin.resourceAcls.resourceType')} rules={[{ required: true }]}>
-            <Input placeholder="ASSET" />
+            <Select options={[{ value: 'ASSET', label: 'ASSET' }]} placeholder={t('admin.resourceAcls.resourceTypePlaceholder')} />
           </Form.Item>
           <Form.Item name="resourceId" label={t('admin.resourceAcls.resourceId')} rules={[{ required: true }]}>
-            <Input placeholder="ast_xxx" />
+            <Select
+              showSearch
+              filterOption={false}
+              onSearch={setAssetSearch}
+              options={assetOptions}
+              loading={assetSearchQuery.isFetching}
+              placeholder={t('admin.resourceAcls.resourceIdPlaceholder')}
+            />
           </Form.Item>
           <Form.Item name="permissionCodes" label={t('admin.resourceAcls.permissions')} rules={[{ required: true }]}>
             <Select

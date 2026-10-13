@@ -31,6 +31,7 @@ import {
   disableAgent,
   enableAgent,
   listAgents,
+  listPermissions,
   updateAgentToolAllowlist,
 } from '../api';
 import type { AgentView, CreateAgentRequest, CreatedAgent, PrincipalStatus } from '../types';
@@ -40,6 +41,21 @@ const STATUS_COLOR: Record<PrincipalStatus, string> = {
   LOCKED: 'orange',
   DISABLED: 'default',
 };
+
+// MCP 工具白名单候选：与后端 AgentController 注册的 tool 名称一一对应
+const MCP_TOOLS = [
+  'asset_search',
+  'asset_get',
+  'asset_list_versions',
+  'asset_get_version',
+  'asset_request_download',
+  'asset_create_draft',
+  'asset_create_upload_session',
+  'asset_complete_upload',
+  'asset_get_upload_status',
+  'asset_publish_version',
+  'asset_delete',
+];
 
 export function AgentsPage() {
   const { t } = useTranslation();
@@ -54,6 +70,13 @@ export function AgentsPage() {
   const [allowlistForm] = Form.useForm<{ tools: string[] }>();
 
   const query = useQuery({ queryKey: ['admin', 'agents'], queryFn: listAgents });
+  const permsQuery = useQuery({ queryKey: ['admin', 'permissions'], queryFn: listPermissions });
+
+  const permissionOptions = (permsQuery.data ?? []).map((perm) => ({
+    value: perm.permissionCode,
+    label: perm.permissionCode,
+  }));
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
   const onError = (error: unknown) =>
     message.error(isApiError(error) ? error.message : t('common.operationFailed'));
@@ -215,7 +238,13 @@ export function AgentsPage() {
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="scopes" label={t('admin.agents.grantScopes')}>
-            <Select mode="tags" placeholder={t('admin.agents.scopesPlaceholder')} />
+            <Select
+              mode="multiple"
+              optionFilterProp="label"
+              options={permissionOptions}
+              loading={permsQuery.isLoading}
+              placeholder={t('admin.agents.scopesPlaceholder')}
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -263,7 +292,12 @@ export function AgentsPage() {
           }}
         >
           <Form.Item name="tools" label={t('admin.agents.allowedTools')}>
-            <Select mode="tags" placeholder={t('admin.agents.toolPlaceholder')} />
+            <Select
+              mode="multiple"
+              optionFilterProp="label"
+              options={MCP_TOOLS.map((tool) => ({ value: tool, label: tool }))}
+              placeholder={t('admin.agents.toolPlaceholder')}
+            />
           </Form.Item>
         </Form>
       </Modal>

@@ -22,9 +22,22 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
+import {
+  ControlledSelect,
+  type SelectOption,
+} from '@/shared/components/ControlledSelect';
 import { useDocumentTitle } from '@/shared/hooks';
 import { createTag, disableTag, enableTag, listTags, updateTag } from '../api';
 import type { CreateTagRequest, TagScopeType, TagView } from '../types';
+
+// 标签颜色候选：与 AntD 预设色板一致，避免自由输入非法色值
+const TAG_COLORS = ['#1677ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2'];
+
+const toOrganizationOptions = (data: unknown): SelectOption[] =>
+  (data as Array<{ organizationId: string; name: string }>).map((o) => ({
+    value: o.organizationId,
+    label: `${o.name} (${o.organizationId})`,
+  }));
 
 export function TagsPage() {
   const { t } = useTranslation();
@@ -181,7 +194,12 @@ export function TagsPage() {
             {({ getFieldValue }) =>
               getFieldValue('scopeType') === 'ORGANIZATION' ? (
                 <Form.Item name="scopeId" label={t('admin.tags.orgId')} rules={[{ required: true }]}>
-                  <Input placeholder={t('admin.tags.orgIdPlaceholder')} />
+                  <ControlledSelect
+                    apiUrl="/system/organizations"
+                    queryKey="organizations-tag"
+                    extractOptions={toOrganizationOptions}
+                    placeholder={t('admin.tags.orgIdPlaceholder')}
+                  />
                 </Form.Item>
               ) : null
             }
@@ -196,7 +214,11 @@ export function TagsPage() {
             <Input />
           </Form.Item>
           <Form.Item name="color" label={t('admin.tags.color')}>
-            <Input placeholder="#1677ff" />
+            <Select
+              allowClear
+              placeholder={t('admin.tags.colorPlaceholder')}
+              options={TAG_COLORS.map((c) => ({ value: c, label: c }))}
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -227,7 +249,11 @@ export function TagsPage() {
             <Input />
           </Form.Item>
           <Form.Item name="color" label={t('admin.tags.color')}>
-            <Input placeholder="#1677ff" />
+            <Select
+              allowClear
+              placeholder={t('admin.tags.colorPlaceholder')}
+              options={TAG_COLORS.map((c) => ({ value: c, label: c }))}
+            />
           </Form.Item>
         </Form>
       </Modal>

@@ -40,12 +40,15 @@ const mockEnableAgent = vi.fn().mockResolvedValue({});
 const mockDisableAgent = vi.fn().mockResolvedValue({});
 const mockUpdateAllowlist = vi.fn().mockResolvedValue({});
 
+const mockListPermissions = vi.fn().mockResolvedValue([]);
+
 vi.mock('../api', () => ({
   listAgents: (...args: unknown[]) => mockListAgents(...args),
   createAgent: (...args: unknown[]) => mockCreateAgent(...args),
   enableAgent: (...args: unknown[]) => mockEnableAgent(...args),
   disableAgent: (...args: unknown[]) => mockDisableAgent(...args),
   updateAgentToolAllowlist: (...args: unknown[]) => mockUpdateAllowlist(...args),
+  listPermissions: (...args: unknown[]) => mockListPermissions(...args),
 }));
 
 describe('AgentsPage', () => {

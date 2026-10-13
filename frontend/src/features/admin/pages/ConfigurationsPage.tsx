@@ -4,7 +4,7 @@
  * 时间: 2026-07-01
  * 作者: AxeXie
  */
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,7 +13,9 @@ import {
   Flex,
   Form,
   Input,
+  InputNumber,
   Modal,
+  Select,
   Table,
   Tag,
   Typography,
@@ -23,7 +25,60 @@ import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
 import { useDocumentTitle } from '@/shared/hooks';
 import { listConfigurations, updateConfiguration } from '../api';
-import type { ConfigurationView } from '../types';
+import type { ConfigurationView, ConfigValueType } from '../types';
+
+/** 编辑弹窗内表单值：控件类型随 valueType 变化，JSON 以文本形态承载 */
+type ConfigFormValues = { value?: string | number | boolean; confirmation?: string };
+
+/** 将后端配置值转换为表单控件初始值 */
+function toFormValue(valueType: ConfigValueType, value: unknown): string | number | boolean | undefined {
+  if (valueType === 'JSON') {
+    return JSON.stringify(value, null, 2);
+  }
+  if (valueType === 'INTEGER' || valueType === 'LONG') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  if (valueType === 'BOOLEAN') {
+    return typeof value === 'boolean' ? value : undefined;
+  }
+  return value == null ? undefined : String(value);
+}
+
+/** 将表单控件值规范化为提交给后端的类型化值 */
+function toSubmitValue(valueType: ConfigValueType, raw: unknown): unknown {
+  if (valueType === 'JSON') {
+    return JSON.parse(String(raw));
+  }
+  if (valueType === 'INTEGER' || valueType === 'LONG') {
+    return Number(raw);
+  }
+  if (valueType === 'BOOLEAN') {
+    return raw === true;
+  }
+  return String(raw);
+}
+
+/** 按配置值类型渲染对应输入控件：可枚举类型一律使用下拉框 */
+function renderValueEditor(valueType: ConfigValueType | undefined): ReactElement {
+  if (valueType === 'BOOLEAN') {
+    return (
+      <Select
+        options={[
+          { value: true, label: 'true' },
+          { value: false, label: 'false' },
+        ]}
+      />
+    );
+  }
+  if (valueType === 'INTEGER' || valueType === 'LONG') {
+    return <InputNumber style={{ width: '100%' }} precision={0} />;
+  }
+  if (valueType === 'JSON') {
+    return <Input.TextArea rows={6} />;
+  }
+  return <Input />;
+}
 
 export function ConfigurationsPage() {
   const { t } = useTranslation();
@@ -32,7 +87,7 @@ export function ConfigurationsPage() {
   const queryClient = useQueryClient();
 
   const [editing, setEditing] = useState<ConfigurationView | null>(null);
-  const [form] = Form.useForm<{ value: string; confirmation?: string }>();
+  const [form] = Form.useForm<ConfigFormValues>();
 
   const query = useQuery({ queryKey: ['admin', 'configurations'], queryFn: listConfigurations });
 
@@ -50,19 +105,6 @@ export function ConfigurationsPage() {
     },
     onError: (error) => message.error(isApiError(error) ? error.message : t('common.operationFailed')),
   });
-
-  const parseValue = (raw: string, valueType: ConfigurationView['valueType']): unknown => {
-    if (valueType === 'JSON') {
-      return JSON.parse(raw);
-    }
-    if (valueType === 'INTEGER' || valueType === 'LONG') {
-      return Number(raw);
-    }
-    if (valueType === 'BOOLEAN') {
-      return raw === 'true';
-    }
-    return raw;
-  };
 
   const columns: ColumnsType<ConfigurationView> = [
     { title: t('admin.configurations.configKey'), dataIndex: 'configKey', key: 'configKey' },
@@ -98,11 +140,10 @@ export function ConfigurationsPage() {
           size="small"
           onClick={() => {
             setEditing(record);
-            const initial =
-              record.valueType === 'JSON'
-                ? JSON.stringify(record.value, null, 2)
-                : String(record.value ?? '');
-            form.setFieldsValue({ value: initial, confirmation: undefined });
+            form.setFieldsValue({
+              value: toFormValue(record.valueType, record.value),
+              confirmation: undefined,
+            });
           }}
         >
           {t('common.edit')}
@@ -150,7 +191,7 @@ export function ConfigurationsPage() {
               return;
             }
             try {
-              const parsed = parseValue(values.value, editing.valueType);
+              const parsed = toSubmitValue(editing.valueType, values.value);
               updateMutation.mutate({
                 configKey: editing.configKey,
                 value: parsed,
@@ -162,12 +203,20 @@ export function ConfigurationsPage() {
             }
           }}
         >
-          <Form.Item name="value" label={t('admin.configurations.valueLabel', { type: editing?.valueType })} rules={[{ required: true }]}>
-            {editing?.valueType === 'JSON' ? (
-              <Input.TextArea rows={6} />
-            ) : (
-              <Input />
-            )}
+          <Form.Item
+            name="value"
+            label={t('admin.configurations.valueLabel', { type: editing?.valueType })}
+            rules={[
+              {
+                // BOOLEAN 的 false 是合法值，内置 required 会误判为空，改用显式空值校验
+                validator: (_, v) =>
+                  v === undefined || v === null || v === ''
+                    ? Promise.reject(new Error(t('admin.configurations.valueRequired')))
+                    : Promise.resolve(),
+              },
+            ]}
+          >
+            {renderValueEditor(editing?.valueType)}
           </Form.Item>
           <Form.Item
             name="confirmation"

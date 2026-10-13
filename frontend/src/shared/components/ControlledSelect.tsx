@@ -23,6 +23,23 @@ export interface SelectOption {
   label: string;
 }
 
+/** /system/principals 返回的主体摘要（对齐契约 PrincipalSummary） */
+export interface PrincipalSummary {
+  principalId: string;
+  principalType: string;
+  subject: string;
+  displayName?: string | null;
+  status?: string;
+}
+
+/** 将主体列表转换为下拉选项：显示名优先，退回 subject。 */
+export function toPrincipalOptions(data: unknown): SelectOption[] {
+  return (data as PrincipalSummary[]).map((p) => ({
+    value: p.principalId,
+    label: `${p.displayName || p.subject} (${p.principalId})`,
+  }));
+}
+
 /**
  * 受控下拉选择器。
  *

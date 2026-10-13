@@ -12,7 +12,6 @@ import {
   Empty,
   Flex,
   Form,
-  Input,
   Popconfirm,
   Select,
   Space,
@@ -24,6 +23,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useTranslation } from 'react-i18next';
 import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
+import { ControlledSelect, toPrincipalOptions } from '@/shared/components/ControlledSelect';
 import { createAssetAccess, deleteAssetAccess, getAsset, listAssetAccess } from './api';
 import type { ResourceAclView } from './types';
 
@@ -147,7 +147,13 @@ export function AssetAccessPage() {
             name="principalId"
             rules={[{ required: true, message: t('assets.access.principalRequired') }]}
           >
-            <Input placeholder={t('assets.access.principalPlaceholder')} style={{ width: 220 }} />
+            <ControlledSelect
+              apiUrl="/system/principals"
+              queryKey="principals-grant"
+              extractOptions={toPrincipalOptions}
+              placeholder={t('assets.access.principalPlaceholder')}
+              style={{ width: 260 }}
+            />
           </Form.Item>
           <Form.Item
             name="permissionCodes"

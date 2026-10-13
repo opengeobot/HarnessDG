@@ -3,10 +3,17 @@
  * 时间: 2026-07-11
  * 作者: AxeXie
  */
-import { Form, Input, Select } from 'antd';
+import { Form, Input, InputNumber, Select } from 'antd';
 import type { FormInstance } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
+import {
+  ARCHITECTURE_OPTIONS,
+  PARAMETER_SCALE_OPTIONS,
+  PRECISION_OPTIONS,
+  RUNTIME_OPTIONS,
+  WEIGHT_FORMAT_OPTIONS,
+} from './profileOptions';
 import type { AssetType, CreateAssetRequest, Visibility } from '../assets/types';
 
 export interface CreateAssetFormValues {
@@ -255,29 +262,19 @@ export function CreateAssetFormFields({ form }: CreateAssetFormFieldsProps) {
             />
           </Form.Item>
           <Form.Item name="architecture" label={t('assets.detail.architecture')}>
-            <Input placeholder="decoder-only" />
+            <Select options={ARCHITECTURE_OPTIONS} placeholder={t('assets.create.pickOption')} allowClear />
           </Form.Item>
           <Form.Item name="parameterScale" label={t('assets.detail.parameterScale')}>
-            <Input placeholder="7B" />
+            <Select options={PARAMETER_SCALE_OPTIONS} placeholder={t('assets.create.pickOption')} allowClear />
           </Form.Item>
           <Form.Item name="precision" label={t('assets.detail.precision')}>
-            <Select
-              mode="tags"
-              placeholder="fp16, bf16, int8"
-              options={[
-                { value: 'fp16', label: 'fp16' },
-                { value: 'bf16', label: 'bf16' },
-                { value: 'int8', label: 'int8' },
-                { value: 'fp32', label: 'fp32' },
-              ]}
-              allowClear
-            />
+            <Select options={PRECISION_OPTIONS} placeholder={t('assets.create.pickOption')} allowClear />
           </Form.Item>
           <Form.Item name="weightFormat" label={t('assets.detail.weightFormat')}>
-            <Input placeholder="safetensors" />
+            <Select options={WEIGHT_FORMAT_OPTIONS} placeholder={t('assets.create.pickOption')} allowClear />
           </Form.Item>
           <Form.Item name="runtime" label={t('assets.detail.runtime')}>
-            <Input placeholder="vllm" />
+            <Select options={RUNTIME_OPTIONS} placeholder={t('assets.create.pickOption')} allowClear />
           </Form.Item>
           <Form.Item name="modelSensitivity" label={t('assets.detail.sensitivity')}>
             <ControlledSelect
@@ -374,10 +371,10 @@ export function CreateAssetFormFields({ form }: CreateAssetFormFieldsProps) {
             />
           </Form.Item>
           <Form.Item name="sampleCount" label={t('assets.detail.sampleCount')}>
-            <Input type="number" placeholder="10000" />
+            <InputNumber min={0} precision={0} style={{ width: '100%' }} placeholder="10000" />
           </Form.Item>
           <Form.Item name="totalBytes" label={t('assets.detail.totalBytes')}>
-            <Input type="number" placeholder="1073741824" />
+            <InputNumber min={0} precision={0} style={{ width: '100%' }} placeholder="1073741824" />
           </Form.Item>
           <Form.Item name="datasetSensitivity" label={t('assets.detail.sensitivity')}>
             <ControlledSelect

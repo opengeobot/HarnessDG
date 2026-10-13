@@ -3,7 +3,7 @@
  * 时间: 2026-07-05
  * 作者: AxeXie
  */
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -15,6 +15,7 @@ import {
   Flex,
   Form,
   Input,
+  InputNumber,
   Popconfirm,
   Select,
   Skeleton,
@@ -34,11 +35,19 @@ import { useDocumentTitle } from '@/shared/hooks';
 import { isApiError } from '@/shared/api';
 import { ControlledSelect, type SelectOption } from '@/shared/components/ControlledSelect';
 import {
+  ARCHITECTURE_OPTIONS,
+  PARAMETER_SCALE_OPTIONS,
+  PRECISION_OPTIONS,
+  RUNTIME_OPTIONS,
+  WEIGHT_FORMAT_OPTIONS,
+} from './profileOptions';
+import {
   archiveAsset,
   deleteAsset,
   deprecateAsset,
   getAsset,
   restoreAsset,
+  searchAssets,
   updateAsset,
 } from './api';
 import type { AssetView, UpdateAssetRequest } from './types';
@@ -70,6 +79,25 @@ export function AssetSettingsPage() {
   const [form] = Form.useForm();
   const [profileForm] = Form.useForm();
   const [deprecateForm] = Form.useForm();
+  const [replacementSearch, setReplacementSearch] = useState('');
+
+  // 替代资产远程搜索：与血缘页 childAssetId 相同的检索范式
+  const replacementSearchQuery = useQuery({
+    queryKey: ['asset-settings-replacement-search', replacementSearch],
+    queryFn: () => searchAssets({ keyword: replacementSearch, limit: 20 }),
+    enabled: replacementSearch.length >= 1,
+  });
+
+  const replacementOptions = useMemo(
+    () =>
+      (replacementSearchQuery.data?.items ?? [])
+        .filter((item) => item.assetId !== assetId)
+        .map((item) => ({
+          value: item.assetId,
+          label: `${item.displayName ?? item.name} (${item.assetId})`,
+        })),
+    [replacementSearchQuery.data?.items, assetId],
+  );
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
@@ -337,19 +365,19 @@ export function AssetSettingsPage() {
                   />
                 </Form.Item>
                 <Form.Item name="architecture" label={t('assets.detail.architecture')}>
-                  <Input />
+                  <Select options={ARCHITECTURE_OPTIONS} allowClear />
                 </Form.Item>
                 <Form.Item name="parameterScale" label={t('assets.detail.parameterScale')}>
-                  <Input />
+                  <Select options={PARAMETER_SCALE_OPTIONS} allowClear />
                 </Form.Item>
                 <Form.Item name="precision" label={t('assets.detail.precision')}>
-                  <Input />
+                  <Select options={PRECISION_OPTIONS} allowClear />
                 </Form.Item>
                 <Form.Item name="weightFormat" label={t('assets.detail.weightFormat')}>
-                  <Input />
+                  <Select options={WEIGHT_FORMAT_OPTIONS} allowClear />
                 </Form.Item>
                 <Form.Item name="runtime" label={t('assets.detail.runtime')}>
-                  <Input />
+                  <Select options={RUNTIME_OPTIONS} allowClear />
                 </Form.Item>
                 <Form.Item name="sensitivityCode" label={t('assets.detail.sensitivity')}>
                   <ControlledSelect
@@ -439,10 +467,10 @@ export function AssetSettingsPage() {
                   />
                 </Form.Item>
                 <Form.Item name="sampleCount" label={t('assets.detail.sampleCount')}>
-                  <Input type="number" />
+                  <InputNumber min={0} precision={0} style={{ width: '100%' }} />
                 </Form.Item>
                 <Form.Item name="totalBytes" label={t('assets.detail.totalBytes')}>
-                  <Input type="number" />
+                  <InputNumber min={0} precision={0} style={{ width: '100%' }} />
                 </Form.Item>
                 <Form.Item name="sensitivityCode" label={t('assets.detail.sensitivity')}>
                   <ControlledSelect
@@ -516,7 +544,16 @@ export function AssetSettingsPage() {
                   <TextArea rows={2} placeholder={t('assets.deprecation.notePlaceholder')} />
                 </Form.Item>
                 <Form.Item name="replacementAssetId" label={t('assets.deprecation.replacement')}>
-                  <Input placeholder="ast_xxx" />
+                  <Select
+                    showSearch
+                    filterOption={false}
+                    onSearch={setReplacementSearch}
+                    options={replacementOptions}
+                    loading={replacementSearchQuery.isFetching}
+                    notFoundContent={null}
+                    allowClear
+                    placeholder={t('assets.deprecation.replacementPlaceholder')}
+                  />
                 </Form.Item>
               </Form>
             </>

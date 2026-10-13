@@ -24,6 +24,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
+import { ControlledSelect, toPrincipalOptions } from '@/shared/components/ControlledSelect';
 import { useDocumentTitle } from '@/shared/hooks';
 import { usePermission } from '@/app/permission';
 import {
@@ -223,10 +224,16 @@ export function OrganizationsPage() {
           form={memberForm}
           layout="inline"
           style={{ marginBottom: 16 }}
-          onFinish={(values) => addMemberMutation.mutate(values.principalId.trim())}
+          onFinish={(values) => addMemberMutation.mutate(String(values.principalId).trim())}
         >
           <Form.Item name="principalId" rules={[{ required: true, message: t('admin.organizations.principalIdRequired') }]}>
-            <Input placeholder={t('admin.organizations.principalIdPlaceholder')} style={{ width: 280 }} />
+            <ControlledSelect
+              apiUrl="/system/principals"
+              queryKey="principals-org-member"
+              extractOptions={toPrincipalOptions}
+              placeholder={t('admin.organizations.principalIdPlaceholder')}
+              style={{ width: 300 }}
+            />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={addMemberMutation.isPending}>

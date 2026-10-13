@@ -27,6 +27,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { isApiError } from '@/shared/api';
 import { QueryBoundary } from '@/shared/components';
+import { ControlledSelect, toPrincipalOptions } from '@/shared/components/ControlledSelect';
 import { useDocumentTitle } from '@/shared/hooks';
 import {
   addTeamMember,
@@ -311,7 +312,13 @@ export function TeamsPage() {
           onFinish={(values) => addMemberMutation.mutate(values)}
         >
           <Form.Item name="principalId" rules={[{ required: true, message: t('admin.organizations.principalIdRequired') }]}>
-            <Input placeholder={t('admin.organizations.principalIdPlaceholder')} style={{ width: 200 }} />
+            <ControlledSelect
+              apiUrl="/system/principals"
+              queryKey="principals-team-member"
+              extractOptions={toPrincipalOptions}
+              placeholder={t('admin.organizations.principalIdPlaceholder')}
+              style={{ width: 260 }}
+            />
           </Form.Item>
           <Form.Item name="role" initialValue="MEMBER">
             <Select style={{ width: 120 }} options={[

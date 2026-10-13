@@ -42,6 +42,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('./api', () => ({
+  searchAssets: vi.fn().mockResolvedValue({ items: [] }),
   getAsset: (...args: unknown[]) => mockGetAsset(...args),
   updateAsset: (...args: unknown[]) => mockUpdateAsset(...args),
   deprecateAsset: (...args: unknown[]) => mockDeprecate(...args),
