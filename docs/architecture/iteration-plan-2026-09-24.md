@@ -3695,6 +3695,15 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 - 收束：→ 本项与 ①—99 一并不在本轮 AI 自决实施范围内。稳定 ID 交叉引用闭合面：ID 定义面全通过，
   差集集中于审计事件命名谱系（⑳）与 Evidence 账本形态（㉑）。
 
+### 100. error-catalog ↔ ErrorCode.java ↔ OpenAPI 全量三向对账：码集与四属性 76/76 全一致，一处契约完整性缺口（新增差集候选㉒）——2026-10-14，取证基准 HEAD `cf3c658`
+
+- (a0) 取证面（k100a/b/c，物证 `build-logs/ci-k100{a,b,c}-results.txt`，Git 忽略）：§99 仅对了 dataset-experience 引用的 10 码子集，本轮扩展为全量——catalog 全表 ↔ `ErrorCode.java` 全枚举双向集合差＋逐码四属性（HTTP status/i18nKey/retryable/alertLevel）对账＋OpenAPI `x-error-codes` 引用面闭合。
+- (a1) **通过面（实测成立）**：catalog 码 76 ↔ Java 枚举 76，双向集合差**空**（k100a[3][4]，k100b 提取器首轮报 3 个 catalog-only 系多行枚举格式漏匹配，逐码 grep 复核实存：`ORGANIZATION_MEMBER_ALREADY_EXISTS` L94、`ASSET_REPOSITORY_PROVISION_FAILED` L158、`ASSET_CONCURRENT_MODIFICATION` L162 均为参数换行写法）；四属性 76/76 全一致（STATUS 唯一差异 `PREVIEW_TOO_LARGE|413|?PAYLOAD_TOO_LARGE` 为脚本映射表漏项，413=PAYLOAD_TOO_LARGE 实一致；RETRY 4 行 `**true**|true` 为 catalog 粗体标记剥离后同值）；OpenAPI 135 行 `x-error-codes` 提取 57 个 distinct 引用码，**幻影码=0**（全部 ∈ catalog，k100c[2]）；messageKey 三面一致（catalog↔枚举↔无资源文件——后端 `MessageSource`/`messages*.properties` 零命中，架构为后端透传 i18nKey、前端翻译，`ApiError.i18nKey` 字段在位，与「资源文件缺失」非矛盾而是设计形态）。
+- (a2) **差集候选㉒＝19 个 catalog 码未被任何端点 `x-error-codes` 引用（契约完整性缺口）**：`ASSET_COORDINATE_INVALID`、`ASSET_REPOSITORY_PROVISION_FAILED`、`ASSET_STATE_NOT_ALLOWED`、`ASSET_VERSION_SYNTAX_INVALID`、`COMMENT_TOO_LARGE`、`DISCUSSION_LOCKED`、`DISCUSSION_NOT_FOUND`、`DVC_OBJECT_MISSING`、`GITEA_DEPENDENCY_UNAVAILABLE`、`INTERNAL_ERROR`、`JOB_RETRY_EXHAUSTED`、`MINIO_DEPENDENCY_UNAVAILABLE`、`PASSWORD_CHANGE_REQUIRED`、`PRINCIPAL_NOT_FOUND`、`PROJECT_NOT_FOUND`、`RATE_LIMIT_EXCEEDED`、`UPLOAD_SESSION_NOT_FOUND`、`UPLOAD_SIZE_EXCEEDED`、`WEBHOOK_TARGET_FORBIDDEN`（k100c[3]）。其中 `INTERNAL_ERROR`/`RATE_LIMIT_EXCEEDED`/依赖类/`ASSET_REPOSITORY_PROVISION_FAILED` 属全局兜底或中间件形态，端点级不声明尚属合理；但 `DISCUSSION_NOT_FOUND`/`COMMENT_TOO_LARGE`/`DISCUSSION_LOCKED`/`ASSET_STATE_NOT_ALLOWED` 等在对应域端点实际可返回而契约未声明，属 OpenAPI 完整性差集——implementation-status/traceability 无此登记，与 ⑳（讨论锁态抛 `ASSET_STATE_NOT_ALLOWED` 而非 `DISCUSSION_LOCKED`，L722/773 已录）同域互证。
+- (a3) 轻微备注（不单列候选）：catalog 表头声明「权威源：ErrorCode.java」（L118），即文档跟代码走；⑰⑱⑳ 类问题在此文件不存在——对账全绿恰说明该 catalog 维护纪律良好，㉒ 的缺口在契约声明面而非账面对。
+- 偏差：㉒ 的处置（补 x-error-codes 声明还是接受全局兜底形态）属契约改动，需 Task Card 与人批；本轮仅落账。
+- 收束：→ 本项与 ①—99 一并不在本轮 AI 自决实施范围内。error-catalog 全量三向对账：码集/四属性/OpenAPI 引用零幻影三个主面全绿，差集一处（㉒ 端点级错误声明完整性）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
