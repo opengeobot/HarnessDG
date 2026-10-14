@@ -3713,6 +3713,15 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 - 偏差备注（不单列候选）：下载票据 Modal（`AssetDetailPage` L675-681）完整展示 `presignedUrl`（含签名查询串）——catalog「不显示预签名查询串」措辞仅系于 `PAGE-UPL-002`/`PAGE-VER-003`，票据归 `PAGE-VER-002`「下载票据按权」，字面不直接冲突但张力存在；DEC-014 面板四要素中「预签名 URL 示例」未在快速使用面板出现（仅三段 CLI）。均待人类评审裁定口径。
 - 收束：→ 本项与 ①—100 一并不在本轮 AI 自决实施范围内。page-catalog 三面补核：路由面（⑯已闭环）、非路由页完成条件面（㉓）、证据可证性面（㉔）。
 
+### 102. user-journey-catalog 全量账本对账：§8 拆任务硬规则执行面＋JRN↔可执行验证面映射（新增差集候选㉕㉖）——2026-10-14，取证基准 HEAD `ca1e510`
+
+- (a0) 取证面（k102a，物证 `build-logs/ci-k102-results.txt`，Git 忽略）：journey-catalog 实测全集 **31 个 JRN**（P0B 10＋P1 5＋P2 4＋P3 3＋P4 5＋P5 4；plan 此前无整域对账，仅 ㊺㊻㊾/P4 节 4 处 REQ 权威链单点引用，本轮不重复）↔ 126 张 Task Card（§8 L90 硬规则「每个任务必须引用本目录中的 Journey ID、Requirement ID 和 Acceptance Scenario ID」）↔ 130 个 Evidence Manifest ↔ 各 wave exit-catalog ↔ `verify-journey.sh`/`verify-case-mapping.md` 可执行验证面四向对账。
+- (a1) **通过面（实测成立）**：REQ 文档（01-requirements）27 处 JRN 引用**幻影=0**（k102a[4b]，全部 ∈ catalog 全集）；`validate-spec.ps1` L129-131/L161 对 JRN 定义与引用形态有机械检查在位；`verify-journey.sh` 实存且 CI 挂钩（`ci.yml` journey-e2e job，main push 强制、PR continue-on-error，mapping L85/L136）；`verify-case-mapping.md` 已登记 PRD-V ↔ 函数 ↔ 仓库 verify.sh V 的近似语义漂移（L102-121，「仓库 V05=JWT vs journey V05=创建模型」类同号异义**已有账面**，不另列）。
+- (a2) **差集候选㉕＝§8「每个任务必须引用 Journey ID」硬规则在账本面基本未执行**：126 张 Task Card 仅 **5 张**提及任何 JRN（TASK-P1-009/P2-002/P2-007/P2-010/P4-010，且全部是 wave 出口串联任务而非功能任务）；逐 ID 计：25/31 旅程零 Task 挂靠，10 个 JRN-P0B-* 在 P0-B 已宣称 VERIFIED 的情况下**无任何 Task 引用**；EVD 面 130 个仅 2 个文件触及 JRN 字样（EVD-P1009 系 `JRN-P1-001..004` 范围记法、EVD-P2010 命中的实为场景 ID `AC-P2-JRN-001` 非旅程 ID）。与 §8 L89「不允许以后端＋前端任务数量替代旅程完成」的意图正面对撞——账本面上旅程恰恰全部由出口任务单点代表。㉔（PAGE 证据面）同构的旅程域缺口。
+- (a3) **差集候选㉖＝JRN↔可执行验证面无账本映射（AGENTS.md 点名 blocker 的覆盖证明缺失）**：`verify-journey.sh` 全文 **JRN-* 字样零命中**——其 18 个 `journey_vNN_*` 函数实现的是 PRD §13.2 V 编号旅程（V18、V20-V24 无函数），与 journey-catalog 的 31 个 JRN 之间无任何一侧建立映射；mapping 文档仅闭合 PRD-V ↔ 函数面。AGENTS.md 将「authenticated P1–P5 business journeys (`verify-journey.sh`)」列为 P1-P5 剩余 blocker，但**账本无法证明该脚本覆盖哪些 JRN**——29/31 旅程（除 P1-001/P2-001/P2-004 经 Task 文本间接挂钩外）无可执行验证面挂靠。E5 三旅程（P5-002/003/004）㊺㊻㊾ 节已有散证，唯缺口在映射账面而非纯演练本身。
+- 偏差备注（不单列候选）：(i) Task 内 `JRN-P1-001..004` 范围记法未逐 ID 显式引用，per-ID 机械计数在该处欠计——口径本身亦属 §8 执行形态问题；(ii) JRN-P2-002/003 仅出现在 decision-log L130 权威链，零 Task/零 EVD；(iii) validator 不校验 §8 的任务引用规则（121 张无 JRN 的 Task 照常过验证），归 ⑬ TaskCardGate 形态错配域互证。
+- 收束：→ 本项与 ①—101 一并不在本轮 AI 自决实施范围内。journey-catalog 四向对账：REQ 引用幻影零（通过），差集两处——§8 拆任务规则执行面（㉕）、JRN↔verify 旅程映射面（㉖）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
