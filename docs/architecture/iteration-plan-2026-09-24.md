@@ -3558,6 +3558,28 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—90 一并不在本轮 AI 自决实施范围内（本节为 ⑦ 窗口内已请款复验面的执行记录＋对 90 自错的事实更正，未新增实施面）。
 
+### 92. E4 窗口残余物证面收口：playwright e2e 全量 126/126 全绿＋verify-schema 六断言复验（含 §90 偏差③ 的 web-login-gate 幻影更正）——2026-10-14，取证基准 HEAD `55261d1`
+
+**触发与性质**：goal 续轮在 E4 窗口内继续核对「文档点名的验证资产 vs 现势窗口物证」差集，命中两个未账面：① CI 强制作业 `verify-schema`（`.github/workflows/ci.yml` L196/L234 挂接、`docs/runbooks/verify-case-mapping.md` L83 映射账）从未在本窗口留证；② §90 偏差③ 点名的 playwright e2e。本节为该两面执行记录＋对 §90 偏差③ 的事实更正，仍属 ⑦ 请款谱系的窗口物证，未新增实施面。
+
+**(a1) playwright e2e 全量复验——126 tests / 25 spec 全 passed，0 failed / 0 skipped，exit=0**：
+- 覆盖面：`frontend/e2e/` 全部 25 个 spec（auth、spa-deep-link、permission、publish-flow、version-management、mcp-integration、review-workflow、upload-flow、lineage、preview×2、admin×3、dataset、asset、discussion、discoverability、error-paths、agent-management、user-management、settings-form、profile、i18n、artifact-content），`baseURL=http://localhost:8080` 真实 nginx 栈口径（playwright.config.ts 头注 TASK-P0BR-073），workers=1 顺序执行，总耗时 3.1m。
+- 凭据注入谱系与 CI `playwright-e2e` 作业**完全一致**（ci.yml L287-294：从与栈同源的 `deploy/compose/.env` 解析 `AIHUB_BOOTSTRAP_ADMIN_*` → `E2E_ADMIN_USERNAME/PASSWORD`，值不落日志）。机械事实：现势栈管理员口令＝`.env` 原 bootstrap 值本身（curl 探测两候选：回退后缀形态 401、原值 200），§91 谱系的 `Journey-E2E-01!` 后缀回退假设在**本栈**不适用。
+- 执行物证：`build-logs/e2e-full-wrap.log`（首跑 auth.spec 单跑 4 passed 另见 `e2e-auth-wrap.log`；全量尾行「126 passed (3.1m)」）；真实退出码落盘实锤 `build-logs/e2e-exit.txt`＝0。首跑未带凭据时 auth.spec 4 skipped 为 `bootstrapCredentials()` 设计行为（support.ts L1-10），带 CI 同款环境变量后全部实跑。
+- `upload-flow` 用例经 `docker cp` 向 aihub-minio-1 注入分片夹具（日志可见），属测试夹具设计行为，未动 compose 定义。
+
+**(a2) verify-schema.sh 窗口复验——6 断言全 PASS，exit=0**：`build-logs/verify-schema-20261014.log`＋`verify-schema-exit.txt`＝0。断言面：V28（AssetSearchDao DEPRECATED 降权源码断言）＋V04（迁移完整性 ≥33＋18 关键表）＋V16（版本 Schema）＋V17（发布审批 Schema）＋V21（告警 Schema）＋V22（Outbox 事件表），尾行「Schema 验收未发现失败项」。口径维护：此为 CI 强制轻量子集，与 verify.sh 37 项、journey 18 项是不同覆盖面，互不替代。
+
+**(a3) §90 偏差③ 更正（web-login-gate 幻影）**：偏差③ 所写 `verify-web-login-gate.sh` 经全仓 Grep 仅 plan 自身该行 1 命中——**脚本不存在**，与 (a5) 的 `verify-e5-drills.sh` 同错型（幽灵文件声明，历史快照不回写、以本节为权威更正）。Web 登录门的真实验收资产＝e2e `auth.spec.ts`（AC-P0B-UI-001 四场景：未登录重定向/登录成功/错误凭据不泄露存在性/登出清 Token）＋`spa-deep-link.spec.ts`，两者已于 (a1) 全绿。「登录门脚本未执行」的正确表述＝「登录门无独立脚本、由 e2e 覆盖且已复验全绿」。
+
+**(a4) 新发现 docs↔项目差异（登记，不回写）**：`docs/architecture/implementation-status-2026-07-10.md` 全文对 playwright/e2e **零提及**（Grep `playwright|e2e/` 0 命中），而 CI 存在 `playwright-e2e` 强制作业、`frontend/e2e/` 存在 25 spec 资产——现势状态文档遗漏了这项 E4 UI 验收证据资产的存在。是否据此回写 implementation-status/AGENTS.md 与 ⑦ 剩余面同属人类裁定通道，本节仅登记差异事实。
+
+**偏差与 unproven**：① 物证落 `build-logs/`（Git 忽略），未入受控 `.trae/evidence/` 通道（§90 偏差①同型）；② 126 全绿证明「现势 HEAD 的 UI 验收面可复现」，不翻转 §13 粒度口径——e2e 非 P1–P5 业务 AC 全覆盖，「P1–P5 不得 VERIFIED」维持；③ 口令探测 curl 曾向真实栈发 1 次 401 失败登录（会进 auth 失败审计流水，属正常安全事件）；④ 无批准人。
+
+**整改待批状态更新**：§90 偏差③ 两半项就此收口——「playwright e2e 全量未执行」→ 已执行全绿；「`verify-web-login-gate.sh` 未执行」→ (a3) 幻影更正。新增 **⑩ implementation-status 缺失 playwright 证据线的回写裁定**（(a4)），并入 ⑦/⑨ 人类通道。
+
+→ 本项与 ①—91 一并不在本轮 AI 自决实施范围内。至此，AGENTS.md L5-L7 点名的可执行复验面在本窗口全部留有物证：verify.sh（37 全绿）、journey（18 全绿）、E5 三演练（§91）、verify-schema（(a2)）、playwright e2e（(a1)）；余 blocker 全部收敛为人类裁定/人类执行项（声明回写、restore 演练、⑩、`-CheckCompletion`、E5 剩余登记）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
