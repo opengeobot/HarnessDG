@@ -3580,6 +3580,24 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—91 一并不在本轮 AI 自决实施范围内。至此，AGENTS.md L5-L7 点名的可执行复验面在本窗口全部留有物证：verify.sh（37 全绿）、journey（18 全绿）、E5 三演练（§91）、verify-schema（(a2)）、playwright e2e（(a1)）；余 blocker 全部收敛为人类裁定/人类执行项（声明回写、restore 演练、⑩、`-CheckCompletion`、E5 剩余登记）。
 
+### 93. AGENTS.md「Validation」命令族窗口复验：前端四连＋后端 mvnw verify 干净 rc=0（含 vitest 并发超时与 testcontainers 探测异常两项环境定性）——2026-10-14，取证基准 HEAD `825b8bf`
+
+**触发与性质**：goal 续轮清点 AGENTS.md「Validation」代码块六条命令在窗口的物证覆盖：`verify.sh`/`verify-journey` 已有（§90/91 谱系），余四条前端命令与 `./mvnw verify` 从未在本窗口留证。本节为该五面的执行记录，属 §90—92 同谱系窗口物证执行，未新增实施面。
+
+**(a1) 前端四连（落盘包装 `build-logs/validation-front.sh`，RESULT 行脚本内展开可信）**：`pnpm lint` exit=0、`pnpm typecheck` exit=0、`pnpm build` exit=0（`tsc -b && vite build`，日志 `validation-front-20261014.log` 尾行）。`pnpm test`（`vitest run` 默认并发）exit=1：20 文件/34 用例失败——**定性为本机资源争用伪影，非产品缺陷**，定罪三步：① 失败单跑（LoginPage.test.tsx）5 passed；② 失败形态 33/34＝「Test timed out」（`failshape.txt`）；③ `vitest run --maxWorkers=2` 重跑 **50 文件/239 用例全 passed（507.39s，`vitest-lowcc.log`）**。CPU 饥饿佐证：默认并发 import 累计 5856s vs 低并发 836s（放大 ~7 倍），antd 重组件 import 可达 19.4s、吃掉默认 5s timeout 大半。谱系：`build-logs/` 中 067/069/070/072/074/078 各有 serial/低并发全绿历史日志——本机满并发超时是**反复出现且已用低并发收口的已知环境模式**；vite.config.ts 与 setup.ts 均无 timeout/并发配置（环境项非缺陷项），CI（ubuntu-latest）不受影响。
+
+**(a2) 后端 mvnw verify——干净 rc=0 实锤（93c）**：`./mvnw -q verify`（在线、国内镜像）10:30–10:38 完整跑通，脚本内落盘退出码 **0**（`mvnw-verify-93c-exit.txt`），日志 1855 行、maven 级 `[ERROR]` 行 0（`mvnw-93c-audit.txt`）。对账：SUREFIRE tests=835 failures=0 errors=0 skipped=10（139 报告）；FAILSAFE tests=123 failures=0 errors=0 **skipped=123**（21 报告，时间戳全落 10:36–10:38 本次窗口）；fat jar（140MB）10:37:47 repackage 成功——93b 的失败点正是本条。
+- **离线变体账（93b）**：`-o` 复跑 rc=1，根因＝`spring-boot:repackage` 插件侧构件（maven-shade-plugin 3.5.0、spring-core 6.2.7 等）本地仓缺失且离线不可解析（`mvnw-fail-find.txt`）——属本地仓完备性的环境事实，在线跑即消除；93b 的 surefire 账与 93c 完全一致（835/0/0/10）。
+- **failsafe 全 skip 机理（新发现）**：`@Testcontainers(disabledWithoutDocker = true)` 广布 IT 类（ApplicationContextSmokeIT 头注明示设计意图「保证 ./mvnw verify 在无 Docker 网络时仍可通过」）；而 testcontainers 1.21.0 对本机 Docker Desktop 的探测返回**全零 Info JSON＋BadRequestException 400**（日志实锤），判「无有效 Docker 环境」→ 123 IT 全 skip。93c 中两种策略同征：`UnixSocketClientProviderStrategy`（`/var/run/docker-cli.sock`）与 `NpipeSocketClientProviderStrategy`（`.testcontainers.properties` 钉死，2026-08-11 生成）均 400——**与钉死策略无关，Docker Desktop 的 docker_cli 管道应答即异常**。同时现势 `docker version`＝Server 29.1.2、compose 栈 running(7)——docker CLI 正常但 testcontainers 探测失败。推论：`./mvnw verify` 的 IT 层在本机窗口执行中从未真实运行＝**CI-only 覆盖**，此为 docs↔项目差集候选（AGENTS.md/声明文档未记载 IT 的本机不可执行性）。
+
+**(a3) PowerShell 包装器 exit 伪影谱系第三变体**：`bash -c "...; echo exit=$?"` 中 `$?` 被 PowerShell 先行展开为布尔 → `mvnw-verify-93-exit.txt` 内容＝「exit=True」（污染直证）。同族三变体现已实锤齐备：① `${PIPESTATUS[0]}` 先行展开（§90(a3)）；② 内联 bash -c 中 `'...'` 拼接 ParserError（§92 轮）；③ `$?`→True（本轮）。**标准对策唯一化：exit 判定必须落盘进 .sh 脚本内执行**（validation-front.sh／e2e-run.sh／mvnw-verify-online.sh 均验证可信）。
+
+**偏差与 unproven**：① 物证落 `build-logs/`（Git 忽略），未入受控 `.trae/evidence/` 通道（§90 偏差①同型）；② 首跑（93）日志止于 failsafe 开局（10:06:00）且 exit 文件被 (a3) 伪影污染——首跑整体退出码不可考，以 93b（rc=1、根因钉死离线插件解析）＋93c（rc=0、完整对账）两轮替代收口；③ failsafe skip 账来自报告文件（XML 为单测计数、不记 JUnit skip 原因），「disabledWithoutDocker×探测失败」机理为日志＋注解广布的推理链，直证需 CI 对照；④ vitest 低并发全绿为本机时点账，不翻转 §13 粒度口径；⑤ testcontainers 探测异常**是否登记为运维/环境项**留人类裁定（改 strategy/删 properties/升 testcontainers 均触本机环境，不属本窗口自决面）；⑥ 无批准人。
+
+**整改待批状态更新**：新增 **⑪ IT 层本机从未真跑（CI-only）的差集登记与 testcontainers 探测异常处置裁定**（(a2) 发现），并入 ⑦/⑨/⑩ 人类通道。
+
+→ 本项与 ①—92 一并不在本轮 AI 自决实施范围内。至此 AGENTS.md「Validation」六条命令在本窗口全部留有直接物证：mvnw verify（(a2) rc=0）、lint/typecheck/build（(a1) exit=0）、test（(a1) 超时定性＋低并发全绿）、compose verify.sh（§90）、journey（§90）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
