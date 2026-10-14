@@ -3669,6 +3669,32 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 - 偏差：REQ-DST-FAV/SUB 两件 PROPOSED 的批准/置 READY、⑲ 的补实施或需求回改均属人类通道；本轮仅落账。
 - 收束：→ 本项与 ①—97 一并不在本轮 AI 自决实施范围内。DEC-008 需求面两面核毕：文内自证「现状基线」六条全中（治理文档自我描述质量良好），差集一处（⑲ CLI inspect 缺位且无账面登记）；AGENTS.md Required reading 七文件点名面至此全部至少核过一轮（设计文档/manifest/protocol/ADR×2/traceability 见 §95-97、dataset-experience 见本轮）。
 
+### 99. dataset-experience 稳定 ID 交叉引用闭合面核检：ID 定义面全通过，审计事件命名谱系四面漂移（新增差集候选⑳㉑）——2026-10-14，取证基准 HEAD `46215b9`
+
+- (a0) 取证面（k99a/k99b，物证 `build-logs/ci-k99{a,b}-results.txt`，Git 忽略）：核 REQ-DST-* 引用的
+  PAGE-*/AC-*/错误码/审计事件四类稳定 ID 在 catalog 与代码双向闭合。
+- 通过面：PAGE-* 9/9 在 page-catalog 有定义；AC-DST-* 37/37 在 05-acceptance catalog 有定义；
+  dataset-experience 引用错误码 10/10 双面对账（error-catalog ↔ ErrorCode.java）全中；
+  前端路由 `/favorites` `/subscriptions` 零命中（与 PROPOSED 未实施一致）；exit-catalog 对
+  FAV/SUB 行已标注「草案，待人类评审」（§3b），门禁形态正确。
+- 差集面（审计事件三面命名漂移＋契约声明未发射）：需求文本（dataset-experience L167-168）六事件
+  `DISCUSSION_CREATED/COMMENT_CREATED/COMMENT_REVISED/COMMENT_RETRACTED/DISCUSSION_LOCKED/DISCUSSION_MODERATED`；
+  OpenAPI（aihub-v1.yaml L2227-2580）八条 `x-audit-event` 用 `COMMENT_EDITED/THREAD_LOCKED/THREAD_UNLOCKED/
+  COMMENT_HIDDEN/COMMENT_UNHIDDEN`；实现（DiscussionApplicationService `auditDiscussion` 发射共 5 处：
+  L96/L135/L209/L226/L258）无 `COMMENT_EDITED`/`COMMENT_UNHIDDEN`/`THREAD_UNLOCKED` 对应发射——
+  `editComment`(L178-191)、`unhideComment`(L233-244)、`unlockThread`(L264-) 三写路径**保留状态变更但零审计**，
+  契约已声明事件而实现未发射。TASK-P1-012 crossCuttingPlan L38 又用第三套名 `COMMENT_MODERATED`（契约面不存在）。
+  `COMMENT_REVISED`/`DISCUSSION_MODERATED` 在契约与实现两面均无同名对应（近似语义分散于 EDITED/HIDDEN/UNHIDDEN）。
+- 候选登记⑳（人类门禁处置，本轮不动）：讨论域审计事件需求↔契约↔实现↔TaskCard **四面命名漂移**＋
+  三处契约声明的审计发射缺失（COMMENT_EDITED/COMMENT_UNHIDDEN/THREAD_UNLOCKED）。处置属对外契约/审计面改动，
+  AI 不自决：或回写需求文本对齐既成三面、或补发射改契约，均需 Task Card 与人批。
+- 候选登记㉑（人类门禁处置）：`EVD-P1012-001.yaml` 账面自相矛盾——同一 5 个 DISC 场景**同时**列入
+  `coverage.proven`（assertion 形态、scenarioId 字符串已非规范 ID）与 `coverage.notProven`（规范 ID）；
+  `evidenceLevel: E3` 低于 TaskCard `requiredEvidenceLevel: E4`；taskValidation/completionValidation 均 null。
+  status=PARTIAL 尚属诚实，但 proven 列表形态不符合 evidence 模板语义（proven 应为场景 ID 级断言绑定）。
+- 收束：→ 本项与 ①—99 一并不在本轮 AI 自决实施范围内。稳定 ID 交叉引用闭合面：ID 定义面全通过，
+  差集集中于审计事件命名谱系（⑳）与 Evidence 账本形态（㉑）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
