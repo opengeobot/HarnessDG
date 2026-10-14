@@ -3618,6 +3618,22 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—93 一并不在本轮 AI 自决实施范围内。至此 CI 作业族六面在本窗口留有物证：Compose config（(a1) rc=0）、Contracts lint（(a1) rc=0）、MCP contract（(a2) 结构 rc=0＋测试 13/13）、Task Card Gate（(a3) 机制复现＋形态错配定性）、Security 三扫描（(a4) CI-only 定性）、Perf smoke（(a5) 4/4 PASS）；两项幻影/错配发现（⑫⑬）与三项 CI-only 账（⑪ 谱系）全部收敛为人类裁定项。
 
+### 95. 治理声明断言簇核面：AGENTS.md/README 的「CI 尚未接入门禁」断言 vs ci.yml 实况——spec-gate 幻影镜像实锤（新增差集候选⑭）——2026-10-14，取证基准 HEAD `492c4f7`
+
+**触发与性质**：§90—94 将 AGENTS.md 点名的命令面与 CI 作业族全部留证后，goal 差集的其余未覆盖面收敛为「治理文档断言簇 vs 仓库实况」核面。本节选取 AGENTS.md L47-49、docs/ai-spec/README L123-124、protocol §11、AUD-018 四处同源声明（TASK-GOV-008 门禁缺口叙述）逐条对账，全部静态取证＋一次 pwsh 实跑，物证 `build-logs/ci-k95{a,b,c}-results.txt`。
+
+**(a1) 声明簇对账——「尚未接入」已被实况超越**：ci.yml L114-125 `spec-gate` 作业（阻断式，无 continue-on-error）实跑 `./tools/validate-spec.ps1`，由 `8a75e4d`（2026-07-05）引入；L323-350 `task-card-gate` 实跑规范位 `./docs/ai-spec/tools/validate-task-card.ps1 -CheckChangedPaths`，由 `98e6608`（2026-07-11）引入但 L356 `continue-on-error: true` 非阻断。故 AUD-018「ci.yml 未调用 validate-spec.ps1、Task 范围校验」前半已被实况推翻（两者均已调用），README L123「尚未接入这些检查」为**过期声明**；仅「完成 Evidence 校验（-CheckCompletion）未接入」与 AGENTS.md L49「non-blocking」限定仍与实况相合。
+
+**(a2) 新差集候选⑭：CI spec-gate 幻影镜像**：CI 引用的 `tools/validate-spec.ps1`（仓库根，79 行，`8a75e4d` 后未再演化）与 AGENTS.md L33 指示的规范位 `docs/ai-spec/tools/validate-spec.ps1`（276 行）**内容漂移 325 行**——镜像仅做文件存在性＋字节数检查（6 需求文档＋3 治理文档＋openapi 文件＋state-machines），无稳定 ID、无交叉引用、无任务卡校验。本机 pwsh 实跑镜像 rc=0「AI Spec Gate: PASSED」（`ci-k95b-root-validate.log`），与 §93 规范位 validate-spec PASS（148/752）并存说明当前两口径恰好同绿，但 **CI 绿灯检验的是弱化镜像，非治理规程指定的规范校验器**——与 ⑫ 同谱系（CI 门禁引用对象≠治理文档指定对象）。
+
+**(a3) TASK-GOV-008 无卡承继确认**：Glob `tasks/TASK-GOV-*.md` 仅 GOV-007（与 §85 P-2 登记一致，非新发现）；其「受保护 CI required checks」缺口叙述经 (a1) 修正后仍部分成立（task-card-gate 非阻断＋-CheckCompletion 未接入＋无 required check 配置证据）。
+
+**偏差与 unproven**：① 本机无法验证 GitHub 分支保护设置（required checks 实况属仓库托管面，unproven）；② 镜像规范位「恰好同绿」是当前快照结论，不代表历史各提交同绿；③ 声明回写（README L123、AUD-018 处置、AGENTS.md L47-49 措辞）属人类通道——§93 收束线已列「声明回写」为余留人类项，本节仅落事实账不动治理文档；④ 无批准人。
+
+**整改待批状态更新**：新增**⑭ CI spec-gate 引用弱化镜像脚本与规范校验器漂移 325 行**（(a2)），并入 ⑦/⑨/⑩/⑪/⑫/⑬ 人类通道；连带人类裁定项：README/AUD-018 过期声明的回写口径。
+
+→ 本项与 ①—94 一并不在本轮 AI 自决实施范围内。治理声明断言簇四文件（AGENTS.md/README/protocol/AUD-018）的 TASK-GOV-008 叙述完成实况对账：两处过期（「未调用」）、一处限定存活（「非阻断」）、一项幻影镜像（⑭）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
