@@ -3634,6 +3634,24 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—94 一并不在本轮 AI 自决实施范围内。治理声明断言簇四文件（AGENTS.md/README/protocol/AUD-018）的 TASK-GOV-008 叙述完成实况对账：两处过期（「未调用」）、一处限定存活（「非阻断」）、一项幻影镜像（⑭）。
 
+### 96. AGENTS.md「Current phase」状态段核面：Evidence 账面 130 份机械清点——「E4 notProven」总账措辞与件级账漂移＋一件已人批证据的后手改动（新增差集候选⑮⑯）——2026-10-14，取证基准 HEAD `af5fd6b`
+
+**触发与性质**：§95 核完门禁缺口断言簇后，本轮推进到 AGENTS.md L5-L7 状态段剩余断言：「wave exit Evidence Manifests are PARTIAL（E3 proven, E4 notProven）」「P1–P5 IMPLEMENTED_UNVERIFIED」。对 `docs/ai-spec/tasks/evidence/` 全量 130 份 EVD 做机械清点（`ci-k96a/b-results.txt`）＋已批件归属与后手改动核查（`ci-k96c/d-results.txt`）。Flyway 面附带对账：迁移目录现存 V1–V44（44 文件），implementation-status §11「最新 V41」为 09-23 日期快照口径、后续 §12–19 有续账，无矛盾。
+
+**(a1) 件级账分布**：status＝PASS 70 / PARTIAL 36 / DRAFT 24；`execution.evidenceLevel`＝E4 51 / E3 42 / E2 28 / E5 6 / E1 5 / 复合 3。status×level 交叉中 **PASS|E4＝34 件**（清单：P0BR 系 29 件含 049–078 段＋P0B-V01-V12＋P1015/P1018/P2006/P3010）。E5 级件 6 份与 §90—91 演练资产账相容。
+
+**(a2) 差集候选⑯——「E4 notProven」措辞与件级账漂移**：AGENTS.md L7 以偏全称「wave exit Evidence Manifests are PARTIAL (E3 proven, E4 notProven)」，但件级账自 `6d6e263`（09-23，EVD-P2006 翻转 E4 PASS/notProven 清零）起已有 34 件 PASS|E4。波次退出**聚合口径**与**证据文件粒度**已不同步——要么波次清单未随翻转回写，要么总账措辞过期。与 ⑦/⑨ 的「声明回写」同属人类通道，本节日仅落事实账。
+
+**(a3) 差集候选⑮——已人批证据件的后手改动**：`accepted: true` 共 6 件（EVD-P1015/1016/1017/1018/P2013/P3010），全部 `reviewedBy: User (plan execution authorization 2026-07-12)`、经 `f974ad4` 入账——DEC-009「人类置位」形式要件成立。但其中 **EVD-P3010（已批件）在 `ede5c76`（09-24）被后手改动**（`commitSha: pending-commit → 178ee6b` 单行补全；改动者 git author＝xieyong，与 AI 会话共用身份、归属不可判）。补全 commitSha 属良性维护，但「人批后账被再改」这一治理形态是否需要复审置位，属人类裁定。EVD-P1018 在 `6d6e263` 亦有快照追加注记（accepted 位未动）。
+
+**(a4) E4 物证指针的受控性复核（承 §67-D）**：implementation-status §11 权威行日志指针 `.trae/evidence/verify-sh-e4-20260923.log` 实存于磁盘（Test-Path True）但命中 `.gitignore:2`（`git check-ignore` 实锤）——受控仓库内 `git ls-files .trae/` 零文件，即**声明文档引用的 E4 完整日志从未入库**，可复核性依赖单机。§67-D 已登记，本节补机械证据链；与 §90—95 物证落 `build-logs/` 的偏差①同谱系（受控证据通道缺失）。
+
+**偏差与 unproven**：① 「波次 exit Evidence Manifest」若另有聚合文件则本节日以 EVD 件级账代审，聚合面逐波核对未做（Grep 未发现独立波次清单文件，unproven）；② `ede5c76` 改动者是否 AI 不可判（git 身份共用）；③ 34 件 PASS|E4 各自 artifact 指针的逐一可复验性超出本节范围；④ 无批准人。
+
+**整改待批状态更新**：新增 **⑮ 已人批证据件后手改动的复审口径**（(a3)）与 **⑯ AGENTS.md L7 波次 E4 总账措辞与件级账同步**（(a2)，并入 ⑦/⑨ 声明回写人类通道）；⑭ 之外 CI/治理引用面再得一证（(a4) 受控证据通道缺失）。
+
+→ 本项与 ①—95 一并不在本轮 AI 自决实施范围内。AGENTS.md 状态段三大断言簇至此核毕两面（门禁缺口＝§95、证据总账＝§96）：件级账 PASS|E4 34 件、人批件 6 件、后手改动 1 件、E4 日志指针不受控 1 处。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
