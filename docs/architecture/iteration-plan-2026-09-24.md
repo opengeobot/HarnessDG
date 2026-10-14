@@ -3538,6 +3538,26 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—89 一并不在本轮 AI 自决实施范围内（本节仅执行 ⑦ 已请款的复跑物证，未新增实施面）。
 
+### 91. 更正 §90(a5)：E5 演练资产实际存在且已在窗口内复验三个（⑧ 撤回；restore 演练留人类确认）——2026-10-14，取证基准 HEAD `24cf305`
+
+**更正对象**：§90 (a5)「`verify-e5-drills.sh` 与 `**/*e5*drill*` Glob 双零命中——演练脚本从未落地」及整改待批新增项 ⑧。**该结论错误**，成因是命名谱系误设：演练脚本实名 `p5-*-drill.sh`（非 `*e5*drill*`），两个 Glob 零命中只证伪了模式、未证伪存在。`git ls-tree -r --name-only HEAD` 命中四件且 `--diff-filter=D` 历史零删除：`deploy/observability/p5-ops-fault-drill.sh`、`deploy/security/p5-security-drill.sh`、`deploy/compose/scripts/p5-restore-drill.sh`、`deploy/compose/scripts/p5-preview/preview-pressure-drill.sh`；`docs/runbooks/ops.md` L83-87 另有 E5 演练记录表（`44bbc67`，PASS=18 FAIL=0 SKIP=3，EVD-P5006-001 承托）在 §90 立项前已可 Grep 触及。**⑧ 就此撤回**；(a5) 原文按「历史快照不回写」原则不动，以本节为权威更正。
+
+**(a1) 演练复验执行物证（E4 窗口内，栈 running(7) 全程未 down）**：
+- **security**：`build-logs/e5-security-drill-20261014.log`（＋r2 复跑）——**PASS=6 FAIL=0 SKIP=1，exit=0 落盘实锤**（`e5-security-exit.txt`＝0）。SKIP 项＝gitleaks/semgrep 缺位（本机未装，脚本自设 redaction-canary 替代且 PASS）；live 注入断言（2xx＋JSON-only＋存储回读）在真实栈通过。首轮包装器报 exit=1 与 §90(a3) 同型：裸 exit 落盘复测＝0，定性伪影。
+- **ops 故障**：`build-logs/e5-ops-drill-20261014.log`——**PASS=19 FAIL=0 SKIP=3，exit=0**（`e5-ops-exit.txt`＝0），与 ops.md 记录谱系一致（3 个 SKIP 均为该文档 L93-95 已登记的结构性 SKIP：live 停库自指、Prometheus 401、host 级 backup 链）。**18→19 差异机械归因**：`62c92f0`（晚于记录锚点 `44bbc67`，`merge-base --is-ancestor` 实锤）给脚本新增 ephemeral-jwt fail-closed 断言（本次日志 `[PASS] ephemeral-jwt fail-closed… 401`），属脚本演进非结果差异。backend 经 override 临时改 3s 告警间隔后由 trap cleanup 恢复，演练后网关复测 200。
+- **preview 压力**：`build-logs/e5-preview-drill-20261014.log`——**PASS=7 FAIL=0 SKIP=0，exit=0**。场景 A（64m cgroup 隔离、主栈探测 6/6 无外溢）、场景 B（超限→3 次尝试→DEAD、无部分产物、PII 金丝雀零泄漏）、恢复断言全过；副本经 `docker run` 临时容器实现，脚本头注自证非侵入（不改 compose.yaml）。
+- 三演练后栈终态：`docker compose ls`＝running(7)、`/actuator/health` 200。
+
+**(a2) restore 演练未执行（自限，非缺位）**：`p5-restore-drill.sh` 设计上要求显式 `DRILL_CONFIRM=yes` 并执行 `docker compose down -v` **销毁全部 Volume**（L23-27/L128），且 `docs/runbooks/backup-restore.md` L7 明账「完整 E5 演练需在独立环境中执行并记录 RPO/RTO 证据」——当前窗口承载 §90 的 verify/journey 物证与共享开发卷数据，破坏性销毁超出 ⑦ 请款面与本 AI 自决边界。执行与否属人类确认项。
+
+**(a3) blocker 实质改判**：AGENTS.md L7「E5 drill re-verification」的正确现势表述＝**演练资产存在、四个中三个（security/ops/preview）已于 2026-10-14 在 HEAD `24cf305` 谱系全绿复验（exit 均有落盘实锤），余 restore 一个待人类确认执行环境**；ops.md 演练记录表是否增补本次行、以及是否据此回写声明文档，与 ⑦ 剩余面同属人类裁定通道。
+
+**偏差与 unproven**：① 物证同样落 `build-logs/`（Git 忽略），未入受控 `.trae/evidence/` 通道（§90 偏差①同型）；② security 演练的 live 注入在真实栈留下 `e5-security-drill` 话题及评论行（脚本设计行为，原文存储＋前端转义模型），未清理；③ ops 演练基线显示 `job_task` 仍有 57 条真实 DEAD 行（L97 既有运维发现，本次未处置——`:retry` 属人工高风险动作）；④ preview 演练依赖 `docker.m.daocloud.io` 镜像本地缓存（本次命中，无外拉）；⑤ 无批准人。
+
+**整改待批状态更新**：⑧ **撤回**（其事实前提被 (a1) 证伪）；新增 **⑨ restore 演练执行确认＋三个已复验演练的 runbook/声明回写裁定**——与 ⑦ 剩余面（声明文档回写）一并留人类处置。
+
+→ 本项与 ①—90 一并不在本轮 AI 自决实施范围内（本节为 ⑦ 窗口内已请款复验面的执行记录＋对 90 自错的事实更正，未新增实施面）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
