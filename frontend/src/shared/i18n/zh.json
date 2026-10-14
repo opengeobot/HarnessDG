@@ -777,7 +777,7 @@
       "resource": "资源",
       "result": "结果",
       "errorCode": "错误码",
-      "principalPlaceholder": "主体 ID",
+      "principalPlaceholder": "搜索并选择主体",
       "actionPlaceholder": "动作",
       "resourceIdPlaceholder": "资源 ID",
       "reset": "重置"

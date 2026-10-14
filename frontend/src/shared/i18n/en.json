@@ -777,7 +777,7 @@
       "resource": "Resource",
       "result": "Result",
       "errorCode": "Error Code",
-      "principalPlaceholder": "Principal ID",
+      "principalPlaceholder": "Search and select a principal",
       "actionPlaceholder": "Action",
       "resourceIdPlaceholder": "Resource ID",
       "reset": "Reset"

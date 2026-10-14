@@ -9,6 +9,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Button, Flex, Form, Input, Space, Table, Tag, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { QueryBoundary } from '@/shared/components';
+import { ControlledSelect, toPrincipalOptions } from '@/shared/components/ControlledSelect';
 import { useDocumentTitle } from '@/shared/hooks';
 import { listAuditLogs } from '../api';
 import type { AuditLogView, AuditResult, ListAuditLogsParams } from '../types';
@@ -74,7 +75,14 @@ export function AuditLogsPage() {
         }
       >
         <Form.Item name="principalId">
-          <Input allowClear placeholder={t('admin.auditLogs.principalPlaceholder')} style={{ width: 200 }} />
+          <ControlledSelect
+            apiUrl="/system/principals"
+            queryKey="principals-audit-filter"
+            extractOptions={toPrincipalOptions}
+            allowClear
+            placeholder={t('admin.auditLogs.principalPlaceholder')}
+            style={{ width: 220 }}
+          />
         </Form.Item>
         <Form.Item name="action">
           <Input allowClear placeholder={t('admin.auditLogs.actionPlaceholder')} style={{ width: 180 }} />
