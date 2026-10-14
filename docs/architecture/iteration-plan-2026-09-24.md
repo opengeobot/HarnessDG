@@ -3704,6 +3704,15 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 - 偏差：㉒ 的处置（补 x-error-codes 声明还是接受全局兜底形态）属契约改动，需 Task Card 与人批；本轮仅落账。
 - 收束：→ 本项与 ①—99 一并不在本轮 AI 自决实施范围内。error-catalog 全量三向对账：码集/四属性/OpenAPI 引用零幻影三个主面全绿，差集一处（㉒ 端点级错误声明完整性）。
 
+### 101. page-catalog 未覆盖面补核：COM-001/002 非路由页完成条件＋§6 页面状态证据可证性（新增差集候选㉓㉔）——2026-10-14，取证基准 HEAD `2ee6c55`
+
+- (a0) 取证面（k101a，物证 `build-logs/ci-k101-results.txt`，Git 忽略）：第⑯项（L498-569）已完成 40 条可映射路由↔`routes.tsx` 四类 24 条差集与 L38「缺入口」断言证伪（导航一级项齐备，`navigation.ts` L37/40/41 复证），本轮不重复；补核⑯自述排除的三面——(i) `PAGE-COM-001/002` 两条「非路由页」的完成条件、(ii) `PAGE-AST-003` DEC-014 面板内容面（⑯仅记 query-tab 形态）、(iii) §6 页面状态证据七项要求的账本可证性。
+- (a1) **通过面（实测成立）**：`PAGE-COM-002`（404）完成条件「不回显未授权资源名称」——`NotFoundPage.tsx` L148-158 固定 i18n 文案＋返回 `/assets`，URL 内容零回显 ✓；`PAGE-AST-003` DEC-014「快速使用」面板实存——`AssetDetailPage` L423-453 git clone/dvc pull/aih CLI 三段代码片段，测试守护在位（`AssetDetailPage.test.tsx` L126-129）✓；`PAGE-COM-001` 的「不泄露私有资源」半边 ✓（403 仅回显所需 Scope 名）；组件测试广度和路由表结构回归（`routes.test.tsx` 重复注册防护＋`/access` 守卫口径锁定）形态良好。
+- (a2) **差集候选㉓＝PAGE-COM-001 完成条件「申请路径」与「requestId 可复制」三面缺位（设计缺口，非纯编码缺口）**：403 实现 `RouteGuard.tsx` L50-61 ——(1) 「申请权限」按钮**永远 `disabled`**（L56 无任何跳转/联动）；(2) 页面**无 requestId 展示**（permission 目录 grep `requestId` 零命中，catalog L12 明列「requestId 可复制」）；(3) OpenAPI 无平台权限申请端点（`CreateAssetAccessRequest` L4680 是资产访问申请，非 Permission/Scope 申请）。三面对照：完成条件在需求文本、契约、实现三层同时无着落——与 ⑯ C-6「申请路径」仅记口径漂移不同，本轮坐实其**无可申请目标**。
+- (a3) **差集候选㉔＝§6 每 Page ID 七项证据要求在账本面不可证**：130 个 Evidence Manifest 仅 4 个引用任何 `PAGE-*`（EVD-P0BR-067/068/069、EVD-P1008；其中 068 行还把 PAGE-DST-002 误标为「Preview Tab 图片渲染」——DST-002 实为讨论页，口径登记本身有漂移）；126 张 Task Card 仅 12 张绑定 PAGE-*；组件测试内 PAGE-ID 映射注释**零**（k101a[8]）→「每个 Page ID 至少关联一个组件/Hook 测试」无机械核对面。七项中实测：视觉基准零（⑯外已录 UI-007，L1771）；§6 第 6 条「LocalStorage/console/error report 的 Secret 检查」在 e2e **零场景**（k101a[7]）；zh/en「每个 Page ID 两种关键状态」仅 4 个 spec 触及 locale；五态断言散在 13 个 spec 但非 per-Page-ID 口径。→ 处置（补 per-Page-ID 证据矩阵 vs 收敛 §6 措辞为 Journey 级）属规范层裁定。
+- 偏差备注（不单列候选）：下载票据 Modal（`AssetDetailPage` L675-681）完整展示 `presignedUrl`（含签名查询串）——catalog「不显示预签名查询串」措辞仅系于 `PAGE-UPL-002`/`PAGE-VER-003`，票据归 `PAGE-VER-002`「下载票据按权」，字面不直接冲突但张力存在；DEC-014 面板四要素中「预签名 URL 示例」未在快速使用面板出现（仅三段 CLI）。均待人类评审裁定口径。
+- 收束：→ 本项与 ①—100 一并不在本轮 AI 自决实施范围内。page-catalog 三面补核：路由面（⑯已闭环）、非路由页完成条件面（㉓）、证据可证性面（㉔）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
