@@ -3516,6 +3516,28 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—89 一并不在本轮 AI 自决实施范围内。
 
+### 90. E4 复验窗口实际执行（89⑦ 物证回账：环境前提由「不可行」翻转为「已跑且双脚本全绿」；声明文档回写通道仍属人类）——2026-10-14，取证基准 HEAD `b593270`
+
+**触发与性质**：goal 续轮复核现势：`docker info` 实测 daemon 不可达（`dockerDesktopLinuxEngine` npipe 报错，与 89(a) 环境账同态）→ 经 `Start-Process` 拉起 Docker Desktop 后 60s 内就绪（Server 28.7.0）。89 收束条款约束的是**静态差集取证**不再开新节；本节不是新取证谱系，而是 89 整改待批 ⑦ 所请「安排一次 Docker 窗口重跑 `verify.sh`＋`verify-journey.sh`」的**环境窗口执行记录**——窗口由 AI 实际打开并产出物证，而 ⑦ 的后半处置（以新物证回写 AGENTS.md/implementation-status 声明时点）按 ⑦ 原文与 ⑮-D 自缚条款**仍留人类裁定**，本轮未触碰两份声明文档。
+
+**(a1) compose 静态校验**：`docker compose config --quiet` EXIT=0；服务面 6（control-plane/postgres/gitea/minio/backend/web/worker）。
+
+**(a2) 全栈拉起**：本地镜像齐备无外拉（backend:local、control-plane:local、web:local、gitea/gitea:1.24.7、minio RELEASE.2025-09-07、postgres:16.14-alpine）；`compose up -d` EXIT=0；`compose ps` 6/6 healthy；网关 `http://localhost:8080/actuator/health` curl 实测 200。
+
+**(a3) verify.sh 双轮＋exit 实锤**：run1（`build-logs/verify-sh-20261014.log`）与 run2（`verify-sh-20261014-rerun.log`）均 **37 断言 PASS、0 FAIL、0 SKIP**，尾行「验收未发现失败项」；两轮经 PowerShell tee/重定向包装器的 exit=1 经对照实验（Git Bash 单引号同管道复现 exit=0，`${PIPESTATUS}` 在双引号下被 PowerShell 先行展开）判定为**包装器伪影而非被测脚本失败**；第三轮裸跑（stdout→/dev/null，`echo $?` 落盘 `build-logs/verify-exit.txt`）实锤 **VERIFY_EXIT=0**。37 口径与 89(a3) 定装一致（38 行=37 断言＋1 汇总）。
+**(a4) verify-journey.sh**：`build-logs/verify-journey-20261014.log`——**18 PASS / 0 SKIP / 0 FAIL，JOURNEY_EXIT=0**（六条核心业务旅程 PRD-Journey-{AssetLifecycle|DatasetPublish|McpInvoke|PreviewGrant|ReviewWorkflow|Subscription}＋授权 fail-closed/ACL/版本不可变/PAT/MCP 发布阻断/版本转移/P2 波次/范围收紧/幂等并发/不可变撤回/P4 Skill/ACL 撤销传播/P5 ops/PRD-V28 AI 写默认拒绝）。AGENTS.md L7「journey 未验」blocker 的**运行物证面就此具备**；但 §13 粒度口径维持——六旅程通过≠P1–P5 业务 AC 全覆盖，「P1–P5 不得 VERIFIED」表述不因本节翻转。
+**(a5) E5 演练面机械事实**：`verify-e5-drills.sh` 与 `**/*e5*drill*` Glob **双零命中**——AGENTS.md L7「E5 drill re-verification」的隐含预设（演练资产存在待复验）不成立，该 blocker 当前不可执行的原因是**演练脚本从未落地**，等待的是「创建＋批准」而非「执行」。此为环境事实记录，创建本身属新 Task 域、AI 不自批。
+
+**已核验**：① daemon 就绪、config EXIT=0、6/6 healthy、网关 200 四层环境链；② 双轮日志逐行 Grep 计数（PASS=37、FAIL/SKIP 零命中）＋第三轮 exit 文件实锤；③ journey 日志 18/0/0＋EXIT=0；④ E5 脚本缺失的两种 Glob 交叉；⑤ HEAD `b593270` 工作树干净锚点。
+
+**偏差与 unproven**：① 物证落 `build-logs/`（Git 忽略路径），未入受控 `.trae/evidence/` 通道——受控归档格式与是否承托声明回写留人类定夺；② 43 提交间隔中 V\* 断言面是否被实质改动仍未逐提交审，本节全绿证明「现势 HEAD 的 compose＋journey 面可复现」，不自动构成 AGENTS.md L5 文本回写授权；③ playwright e2e 全量与 `verify-web-login-gate.sh` 未在窗口内执行（非 ⑦ 请款面）；④ 无批准人。
+
+**整改待批状态更新**：⑦ **物证采集子项已执行**（本节 (a1)—(a4)），剩余处置＝人类裁定是否据此回写 AGENTS.md/implementation-status 时点；新增 **⑧ E5 演练脚本从未存在**（(a5)），「E5 复验」blocker 的正确表述应为「E5 演练资产待创建＋批准＋执行」。
+
+**收束条款维护**：89 的「不再开新取证节」对静态差集谱系继续有效；后续每轮推进仍以待批池（86①—④、87①—④、88⑤⑥、89⑦剩余面＋本节⑧）的人类处置为前置。
+
+→ 本项与 ①—89 一并不在本轮 AI 自决实施范围内（本节仅执行 ⑦ 已请款的复跑物证，未新增实施面）。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
