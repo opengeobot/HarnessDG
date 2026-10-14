@@ -3652,6 +3652,15 @@ L76/85/96/113 使用**裸字面量** `requirePermission(…, "asset:read")` 而�
 
 → 本项与 ①—95 一并不在本轮 AI 自决实施范围内。AGENTS.md 状态段三大断言簇至此核毕两面（门禁缺口＝§95、证据总账＝§96）：件级账 PASS|E4 34 件、人批件 6 件、后手改动 1 件、E4 日志指针不受控 1 处。
 
+### 97. traceability 矩阵逐项对账核面：矩阵主体断言实测成立，两处账面偏差（新增差集候选⑰⑱）——2026-10-14，取证基准 HEAD `0840b80`
+
+- (a1) **通过面（实测成立）**：`p0-platform-foundation-traceability.md`「实现状态（2026-07-01）」表所引迁移 V1–V20 与（2026-07-10）表所引 V21–V34 全部实存（k97a[1]/k97b[1]）；表/列级断言抽核全中——V29 `asset_relation`、V28 `reconciliation_checkpoint`、V32 `owner_team_id` NOT NULL backfill（UPDATE＋SET NOT NULL 均在文内）、V33 `jti_digest`、V34 PAT 约束扩展、V26/V27 `frozen_source_commit`（k97b[2][4][5]）；测试类断言 24 项抽查 24 项实存（`TagValidationServiceTest` 位于 `taxonomy/tag/application/`，与矩阵 `**` 双星通配相符；k97a[3]/Glob 复核）；前端 `DiscussionPanel.tsx`、后端 `McpController.java`/`SystemAgentController.java`、`contracts/mcp/tools.yaml` 均实存（k97a[4]/k97b[7][8]）。
+- (a2) **差集候选⑰＝矩阵 L101 表名断言与 V15 实文矛盾**：「实现状态（2026-07-10）」明细行称 `V15`：`discussion_thread`、`discussion_comment`、`discussion_subscription`——V15 实文建表为 `asset_discussion`、`asset_comment`、`asset_comment_revision`、`asset_subscription`，全库无任何名为 thread/comment/subscription 的表（`discussion_thread` 仅命中约束名 `ux_discussion_thread`，k97b[3]）。同文档 L56 行写法正确（`asset_discussion`/`asset_comment`），即**治理文档内部自相矛盾**，且 AGENTS.md Required reading 第 6 条点名该文件。引入点 `3982240`(07-05)/`46a3837`(07-10)，`76e7f97`(09-16) 同步时未纠正。
+- (a3) **差集候选⑱＝受控文档的 Evidence 权威指针指向不受控文件**：矩阵 L112「Evidence 验证参见 `.trae/specs/gap-analysis-code-vs-design/gap-list.md`」——该文件本地实存（455 行）但被 `.gitignore:2` 的 `.trae/` 忽略、`git ls-files .trae/` 零文件（k97a[6]）。受 Git 治理的追踪矩阵把验收证据的落点声明为**任何 clone 都不存在**的路径，与 ⑭（幻影镜像）、§96(a4)（E4 日志不入库存指针）同谱系：声明的检验/证据对象不受版本控制。`.gitignore` 该行自 `5b5f56c`(07-02) 即存在，非近期变更。
+- (a4) 轻微备注（不单列候选）：「实现状态（2026-07-30）」V04 行「Flyway V1–V34（阈值 ≥33）」与现存 V44（V37–V41 重排见 implementation-status L285）为快照滞后；`verify.sh:839` 阈值 `< 33` 为下限型断言，V44 下仍通过，无实际破坏。
+- 偏差：⑰⑱ 的登记/纠正（改矩阵文本还是改 V15 注释、gap-list 是否入库）均属治理文档回写，DEC-009 人类通道；本轮仅落账。
+- 收束：→ 本项与 ①—96 一并不在本轮 AI 自决实施范围内。traceability 矩阵两面核毕：迁移/测试/契约锚点主体成立（a1），账面偏差两处（⑰内部矛盾、⑱不受控指针）；连同 §95—96 构成 AGENTS.md「Required reading」与「Current phase」点名文档的全部已核面。
+
 ## 5. 本轮实施范围声明
 
 按用户目标「整理成迭代计划进行实施」：本文档即迭代计划产出。
